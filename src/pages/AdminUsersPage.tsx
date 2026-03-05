@@ -39,6 +39,11 @@ export default function AdminUsersPage() {
   const [editPassword, setEditPassword] = useState('');
   const [editGcId, setEditGcId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
+  }, []);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -191,18 +196,20 @@ export default function AdminUsersPage() {
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleToggleAdmin(u.id)}
-                    title={u.roles.includes('admin') ? 'Remover admin' : 'Tornar admin'}
-                  >
-                    {u.roles.includes('admin') ? (
-                      <ShieldOff className="h-4 w-4" />
-                    ) : (
-                      <Shield className="h-4 w-4" />
-                    )}
-                  </Button>
+                  {u.id !== currentUserId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleAdmin(u.id)}
+                      title={u.roles.includes('admin') ? 'Remover admin' : 'Tornar admin'}
+                    >
+                      {u.roles.includes('admin') ? (
+                        <ShieldOff className="h-4 w-4" />
+                      ) : (
+                        <Shield className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

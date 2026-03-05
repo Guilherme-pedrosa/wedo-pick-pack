@@ -138,8 +138,8 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 2: Fetch open purchase orders
-  onProgress?.('Buscando pedidos de compra…', 0, 1);
+  // PHASE 2a: Fetch purchase orders for selected statuses (quantity cross-reference)
+  onProgress?.('Buscando pedidos de compra selecionados…', 0, 1);
   const allOrdensCompra: GCOrdemCompra[] = [];
   for (const sid of situacaoCompraIds) {
     let page = 1;
@@ -152,7 +152,25 @@ export async function buildListaCompras(
     }
   }
 
-  // Build purchase-orders map
+  // PHASE 2b: Fetch ALL purchase orders (all statuses) to derive supplier info
+  onProgress?.('Buscando fornecedores via pedidos de compra…', 0, 1);
+  const allStatusCompra = await getStatusCompras();
+  const allOrdensForSupplier: GCOrdemCompra[] = [];
+  const fetchedSids = new Set(situacaoCompraIds);
+  for (const status of allStatusCompra) {
+    if (fetchedSids.has(status.id)) continue; // already fetched above
+    let page = 1;
+    while (true) {
+      const res = await listOrdensCompra(status.id, page);
+      allOrdensForSupplier.push(...res.data);
+      if (page >= res.meta.total_paginas) break;
+      page++;
+      if (!isUsingMock()) await new Promise(r => setTimeout(r, 400));
+    }
+  }
+  const todasOrdens = [...allOrdensCompra, ...allOrdensForSupplier];
+
+  // Build purchase-orders map (only from selected statuses for qty cross-ref)
   const compraMap = new Map<string, {
     qtd: number;
     ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
@@ -171,9 +189,9 @@ export async function buildListaCompras(
     }
   }
 
-  // Build supplier map derived from purchase orders (API doesn't expose supplier on product reads)
+  // Build supplier map from ALL purchase orders (all statuses/all time)
   const fornecedorPorProduto = new Map<string, { fornecedor_id: string; nome_fornecedor: string }>();
-  for (const ordem of allOrdensCompra) {
+  for (const ordem of todasOrdens) {
     for (const p of ordem.produtos || []) {
       const pid = p.produto.produto_id;
       if (!fornecedorPorProduto.has(pid)) {

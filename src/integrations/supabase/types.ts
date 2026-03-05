@@ -35,6 +35,75 @@ export type Database = {
         }
         Relationships: []
       }
+      separations: {
+        Row: {
+          client_name: string
+          concluded_at: string
+          created_at: string
+          id: string
+          invalidated: boolean
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          items_confirmed: number
+          items_total: number
+          operator_name: string
+          order_code: string
+          order_id: string
+          order_type: string
+          started_at: string
+          status_id: string
+          status_name: string
+          target_status_id: string
+          target_status_name: string
+          total_value: string
+          user_id: string
+        }
+        Insert: {
+          client_name: string
+          concluded_at?: string
+          created_at?: string
+          id?: string
+          invalidated?: boolean
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          items_confirmed?: number
+          items_total?: number
+          operator_name?: string
+          order_code: string
+          order_id: string
+          order_type: string
+          started_at: string
+          status_id: string
+          status_name: string
+          target_status_id: string
+          target_status_name?: string
+          total_value?: string
+          user_id: string
+        }
+        Update: {
+          client_name?: string
+          concluded_at?: string
+          created_at?: string
+          id?: string
+          invalidated?: boolean
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          items_confirmed?: number
+          items_total?: number
+          operator_name?: string
+          order_code?: string
+          order_id?: string
+          order_type?: string
+          started_at?: string
+          status_id?: string
+          status_name?: string
+          target_status_id?: string
+          target_status_name?: string
+          total_value?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

@@ -11,6 +11,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
+import SeparationsPage from "./pages/SeparationsPage";
 import LoginPage from "./pages/LoginPage";
 import SetupPage from "./pages/SetupPage";
 import NotFound from "./pages/NotFound";
@@ -66,6 +67,7 @@ function AuthenticatedApp() {
       <Routes>
         <Route path="/" element={<Navigate to="/checkout" replace />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/separations" element={<SeparationsPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route
           path="/admin/users"

@@ -20,10 +20,16 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
   });
 
   if (error) {
-    const msg = error.message || 'Unknown error';
-    if (msg.includes('429') || msg.includes('RATE_LIMIT')) throw new Error('RATE_LIMIT');
-    if (msg.includes('401') || msg.includes('403') || msg.includes('AUTH_ERROR')) throw new Error('AUTH_ERROR');
-    throw new Error(msg);
+    throw new Error(error.message || 'Erro de conexão com o servidor');
+  }
+
+  // Check GC API status embedded in response
+  const gcStatus = (data as any)?.gc_status;
+  if (gcStatus && gcStatus !== 200) {
+    const gcMsg = (data as any)?.data?.mensagem || (data as any)?.error || '';
+    if (gcStatus === 429) throw new Error('RATE_LIMIT');
+    if (gcStatus === 401 || gcStatus === 403) throw new Error('AUTH_ERROR');
+    throw new Error(gcMsg || `Erro ${gcStatus} no GestãoClick`);
   }
 
   return data as T;

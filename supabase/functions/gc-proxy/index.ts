@@ -59,27 +59,22 @@ Deno.serve(async (req: Request) => {
       console.error(`GC API error body: ${responseBody}`);
     }
 
-    if (response.status === 429) {
-      return new Response(
-        JSON.stringify({ error: 'RATE_LIMIT' }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Always return 200 to the client with the GC status embedded
+    // so supabase.functions.invoke doesn't swallow the response body
+    let parsedBody;
+    try {
+      parsedBody = JSON.parse(responseBody);
+    } catch {
+      parsedBody = { raw: responseBody };
     }
 
-    if (response.status === 401 || response.status === 403) {
-      return new Response(
-        JSON.stringify({ error: 'AUTH_ERROR' }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    return new Response(responseBody, {
-      status: response.status,
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json',
-      },
-    });
+    return new Response(
+      JSON.stringify({ gc_status: response.status, ...parsedBody }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('GC Proxy error:', message);

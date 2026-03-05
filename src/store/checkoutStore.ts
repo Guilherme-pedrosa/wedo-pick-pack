@@ -8,8 +8,6 @@ interface CheckoutConfig {
   defaultOSConclusionStatus: string;
   defaultVendaConclusionStatus: string;
   operatorName: string;
-  accessToken: string;
-  secretToken: string;
 }
 
 interface CheckoutStore {
@@ -49,8 +47,6 @@ export const useCheckoutStore = create<CheckoutStore>()(
         defaultOSConclusionStatus: '',
         defaultVendaConclusionStatus: '',
         operatorName: '',
-        accessToken: '',
-        secretToken: '',
       },
       startSession: (tipo, order) => {
         const session: PickingSession = {

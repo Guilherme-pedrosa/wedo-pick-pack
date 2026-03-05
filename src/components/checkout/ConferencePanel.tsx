@@ -18,7 +18,7 @@ export default function ConferencePanel() {
   const config = useCheckoutStore(s => s.config);
 
   const [scanCode, setScanCode] = useState('');
-  const [scanQty, setScanQty] = useState(1);
+  const [scanQty, setScanQty] = useState<number | string>(1);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
   const [conclusionOpen, setConclusionOpen] = useState(false);
@@ -100,11 +100,13 @@ export default function ConferencePanel() {
   }, [session, confirmItem]);
 
   const handleScan = useCallback(() => {
-    processScan(scanCode, scanQty);
+    const itemCount = session?.items.length || 0;
+    const effectiveQty = itemCount > 20 ? (Number(scanQty) || 1) : 1;
+    processScan(scanCode, effectiveQty);
     setScanCode('');
     setScanQty(1);
     scanRef.current?.focus();
-  }, [scanCode, scanQty, processScan]);
+  }, [scanCode, scanQty, processScan, session?.items.length]);
 
   const handlePrint = () => {
     if (!session) return;
@@ -239,7 +241,8 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                 <Input
                   type="number"
                   value={scanQty}
-                  onChange={e => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={e => setScanQty(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
+                  onBlur={() => { if (scanQty === '' || Number(scanQty) < 1) setScanQty(1); }}
                   min={1}
                   className="text-base sm:text-lg py-3 text-center"
                 />
@@ -261,7 +264,8 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onScan={(code) => {
-          processScan(code, scanQty);
+          const itemCount = session?.items.length || 0;
+          processScan(code, itemCount > 20 ? (Number(scanQty) || 1) : 1);
           scanRef.current?.focus();
         }}
       />

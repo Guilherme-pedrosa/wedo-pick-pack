@@ -8,17 +8,26 @@ interface CheckoutConfig {
   defaultOSConclusionStatus: string;
   defaultVendaConclusionStatus: string;
   operatorName: string;
+  accessPassword: string;
+}
+
+interface AuthState {
+  isLoggedIn: boolean;
+  currentOperator: string;
 }
 
 interface CheckoutStore {
   session: PickingSession | null;
   concludedSessions: string[];
   config: CheckoutConfig;
+  auth: AuthState;
   startSession: (tipo: OrderType, order: Order) => void;
   confirmItem: (itemId: string, qtd?: number) => void;
   concludeSession: () => void;
   cancelSession: () => void;
   setConfig: (config: Partial<CheckoutConfig>) => void;
+  login: (operator: string) => void;
+  logout: () => void;
 }
 
 function parseGCQuantity(val: string | number): number {
@@ -55,6 +64,11 @@ export const useCheckoutStore = create<CheckoutStore>()(
         defaultOSConclusionStatus: '',
         defaultVendaConclusionStatus: '',
         operatorName: '',
+        accessPassword: '',
+      },
+      auth: {
+        isLoggedIn: false,
+        currentOperator: '',
       },
       startSession: (tipo, order) => {
         const session: PickingSession = {
@@ -103,6 +117,15 @@ export const useCheckoutStore = create<CheckoutStore>()(
         set((state) => ({
           config: { ...state.config, ...partial },
         }));
+      },
+      login: (operator: string) => {
+        set((state) => ({
+          auth: { isLoggedIn: true, currentOperator: operator },
+          config: { ...state.config, operatorName: operator },
+        }));
+      },
+      logout: () => {
+        set({ auth: { isLoggedIn: false, currentOperator: '' }, session: null });
       },
     }),
     {

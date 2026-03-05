@@ -18,6 +18,7 @@ export default function ConfigPage() {
   const setConfig = useCheckoutStore(s => s.setConfig);
 
   const [operatorName, setOperatorName] = useState(config.operatorName);
+  const [accessPassword, setAccessPassword] = useState(config.accessPassword);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -56,6 +57,7 @@ export default function ConfigPage() {
   const handleSave = () => {
     setConfig({
       operatorName,
+      accessPassword,
       osStatusToShow,
       vendaStatusToShow,
       defaultOSConclusionStatus: defaultOSStatus,
@@ -106,16 +108,26 @@ export default function ConfigPage() {
         )}
       </Card>
 
-      {/* Operator */}
+      {/* Operador & Segurança */}
       <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Operador</h2>
+        <h2 className="text-lg font-semibold">Operador & Acesso</h2>
         <div className="space-y-2">
-          <Label>Nome do operador</Label>
+          <Label>Nome do operador atual</Label>
           <Input
             value={operatorName}
             onChange={e => setOperatorName(e.target.value)}
             placeholder="Nome que aparecerá nos relatórios"
           />
+        </div>
+        <div className="space-y-2">
+          <Label>Senha de acesso ao sistema</Label>
+          <Input
+            type="password"
+            value={accessPassword}
+            onChange={e => setAccessPassword(e.target.value)}
+            placeholder="Deixe vazio para acesso sem senha"
+          />
+          <p className="text-xs text-muted-foreground">Todos os operadores usarão esta mesma senha para entrar.</p>
         </div>
       </Card>
 

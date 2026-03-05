@@ -54,6 +54,11 @@ Deno.serve(async (req: Request) => {
     const response = await fetch(targetUrl, fetchOptions);
     const responseBody = await response.text();
 
+    console.log(`GC API ${httpMethod} ${path} -> ${response.status}`);
+    if (!response.ok) {
+      console.error(`GC API error body: ${responseBody}`);
+    }
+
     if (response.status === 429) {
       return new Response(
         JSON.stringify({ error: 'RATE_LIMIT' }),

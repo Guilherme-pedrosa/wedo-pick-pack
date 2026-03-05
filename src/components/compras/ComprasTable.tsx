@@ -17,6 +17,11 @@ function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function formatQty(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('qtd_efetiva_a_comprar');
   const [sortAsc, setSortAsc] = useState(false);
@@ -111,16 +116,16 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                   <TableCell className="text-xs text-muted-foreground">{item.grupo || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.sigla_unidade}</TableCell>
                   <TableCell className={`text-sm font-medium ${item.estoque_atual < item.qtd_necessaria ? 'text-destructive' : 'text-green-700'}`}>
-                    {item.estoque_atual}
+                    {formatQty(item.estoque_atual)}
                   </TableCell>
-                  <TableCell className="text-sm">{item.qtd_necessaria}</TableCell>
+                  <TableCell className="text-sm">{formatQty(item.qtd_necessaria)}</TableCell>
                   {/* Em Pedido */}
                   <TableCell className="text-sm">
                     {qtdJaEmCompra === 0 ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
                       <div className="flex items-center gap-1">
-                        <span className="font-medium">{qtdJaEmCompra}</span>
+                        <span className="font-medium">{formatQty(qtdJaEmCompra)}</span>
                         {qtdJaEmCompra >= (item.qtd_a_comprar ?? 0) ? (
                           <Badge className="bg-green-100 text-green-800 border-green-200 text-[10px] px-1">✅ Coberto</Badge>
                         ) : (
@@ -137,7 +142,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                   </TableCell>
                   {/* A Comprar (efetivo) */}
                   <TableCell className={`text-sm font-bold ${qtdEfetiva > 0 ? 'text-destructive' : 'text-green-700'}`}>
-                    {qtdEfetiva > 0 ? qtdEfetiva : '—'}
+                    {qtdEfetiva > 0 ? formatQty(qtdEfetiva) : '—'}
                   </TableCell>
                   <TableCell className="text-sm">
                     {item.ultimo_preco > 0 ? formatBRL(item.ultimo_preco) : <span className="text-muted-foreground">—</span>}
@@ -189,9 +194,9 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
         <TableFooter>
           <TableRow className="font-bold">
              <TableCell colSpan={5} className="text-right text-xs">TOTAL</TableCell>
-            <TableCell className="text-sm">{totalNecessario}</TableCell>
-            <TableCell className="text-sm text-amber-700">{totalEmPedido > 0 ? totalEmPedido : '—'}</TableCell>
-            <TableCell className="text-sm text-destructive">{totalEfetivo}</TableCell>
+            <TableCell className="text-sm">{formatQty(totalNecessario)}</TableCell>
+            <TableCell className="text-sm text-amber-700">{totalEmPedido > 0 ? formatQty(totalEmPedido) : '—'}</TableCell>
+            <TableCell className="text-sm text-destructive">{formatQty(totalEfetivo)}</TableCell>
             <TableCell />
             <TableCell className="text-sm">{formatBRL(totalEstimativa)}</TableCell>
             <TableCell colSpan={2} />

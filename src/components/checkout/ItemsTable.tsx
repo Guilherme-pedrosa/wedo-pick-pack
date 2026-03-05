@@ -10,6 +10,8 @@ interface Props {
 export default function ItemsTable({ items }: Props) {
   const confirmItem = useCheckoutStore(s => s.confirmItem);
 
+  const fmtQtd = (n: number) => n % 1 === 0 ? String(n) : n.toFixed(3).replace('.', ',');
+
   const pending = items.filter(i => !i.conferido).sort((a, b) => a.nome_produto.localeCompare(b.nome_produto));
   const confirmed = items.filter(i => i.conferido);
   const sorted = [...pending, ...confirmed];
@@ -58,10 +60,10 @@ export default function ItemsTable({ items }: Props) {
               </td>
               <td className="py-2.5 px-3 text-center font-medium">
                 {item.conferido
-                  ? `${item.qtd_total}/${item.qtd_total}`
-                  : `${item.qtd_conferida}/${item.qtd_total}`}
+                  ? `${fmtQtd(item.qtd_total)}/${fmtQtd(item.qtd_total)}`
+                  : `${fmtQtd(item.qtd_conferida)}/${fmtQtd(item.qtd_total)}`}
               </td>
-              <td className="py-2.5 px-3 text-center">{item.qtd_total}</td>
+              <td className="py-2.5 px-3 text-center">{fmtQtd(item.qtd_total)}</td>
               <td className="py-2.5 px-3 text-center text-muted-foreground">{item.sigla_unidade}</td>
               <td className="py-2.5 px-3 text-center">
                 {item.conferido ? (

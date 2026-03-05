@@ -1,62 +1,35 @@
 import { GCOrdemServico, GCVenda, GCSituacao, GCMeta } from './types';
 import { MOCK_OS, MOCK_VENDAS, MOCK_STATUS_OS, MOCK_STATUS_VENDA } from './mockData';
+import { supabase } from '@/integrations/supabase/client';
 
-function getTokens() {
-  // Try env first, then localStorage
-  const stored = localStorage.getItem('wedo-checkout-store');
-  let lsAccess = '';
-  let lsSecret = '';
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      lsAccess = parsed?.state?.config?.accessToken || '';
-      lsSecret = parsed?.state?.config?.secretToken || '';
-    } catch {}
-  }
-  return {
-    accessToken: import.meta.env.VITE_GC_ACCESS_TOKEN || lsAccess,
-    secretToken: import.meta.env.VITE_GC_SECRET_TOKEN || lsSecret,
-  };
-}
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
 export function isUsingMock(): boolean {
-  const { accessToken } = getTokens();
-  return !accessToken;
+  return !SUPABASE_PROJECT_ID;
 }
 
-function getBaseUrl(): string {
-  return import.meta.env.VITE_GC_API_URL || 'https://api.gestaoclick.com';
-}
+async function apiRequest<T>(path: string, options?: { method?: string; body?: string }): Promise<T> {
+  const method = options?.method || 'GET';
+  
+  const { data, error } = await supabase.functions.invoke('gc-proxy', {
+    method: method as 'GET' | 'POST' | 'PUT' | 'DELETE',
+    body: {
+      path,
+      method,
+      payload: options?.body ? JSON.parse(options.body) : undefined,
+    },
+  });
 
-function getHeaders(): Record<string, string> {
-  const { accessToken, secretToken } = getTokens();
-  return {
-    'access-token': accessToken,
-    'secret-access-token': secretToken,
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
-}
-
-async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${getBaseUrl()}${path}`;
-  try {
-    const res = await fetch(url, {
-      ...options,
-      headers: { ...getHeaders(), ...options?.headers },
-    });
-    if (res.status === 429) throw new Error('RATE_LIMIT');
-    if (res.status === 401 || res.status === 403) throw new Error('AUTH_ERROR');
-    if (!res.ok) throw new Error(`HTTP_${res.status}`);
-    return res.json();
-  } catch (err: unknown) {
-    if (err instanceof Error && ['RATE_LIMIT', 'AUTH_ERROR'].includes(err.message)) throw err;
-    if (err instanceof TypeError) throw new Error('NETWORK_ERROR');
-    throw err;
+  if (error) {
+    const msg = error.message || 'Unknown error';
+    if (msg.includes('429') || msg.includes('RATE_LIMIT')) throw new Error('RATE_LIMIT');
+    if (msg.includes('401') || msg.includes('403') || msg.includes('AUTH_ERROR')) throw new Error('AUTH_ERROR');
+    throw new Error(msg);
   }
+
+  return data as T;
 }
 
-// Delay for mock
 const mockDelay = () => new Promise(r => setTimeout(r, 300));
 
 // --- LIST ---
@@ -67,10 +40,9 @@ export async function listOS(situacaoId?: string, pagina = 1): Promise<{ data: G
     if (situacaoId) data = data.filter(o => o.situacao_id === situacaoId);
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
-  const params = new URLSearchParams({ pagina: String(pagina) });
-  if (situacaoId) params.set('situacao_id', situacaoId);
-  const res = await apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(`/api/ordens_servicos?${params}`);
-  return res;
+  let path = `/api/ordens_servicos?pagina=${pagina}`;
+  if (situacaoId) path += `&situacao_id=${situacaoId}`;
+  return apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(path);
 }
 
 export async function listVendas(situacaoId?: string, pagina = 1): Promise<{ data: GCVenda[]; meta: GCMeta }> {
@@ -80,10 +52,9 @@ export async function listVendas(situacaoId?: string, pagina = 1): Promise<{ dat
     if (situacaoId) data = data.filter(v => v.situacao_id === situacaoId);
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
-  const params = new URLSearchParams({ pagina: String(pagina) });
-  if (situacaoId) params.set('situacao_id', situacaoId);
-  const res = await apiRequest<{ data: GCVenda[]; meta: GCMeta }>(`/api/vendas?${params}`);
-  return res;
+  let path = `/api/vendas?pagina=${pagina}`;
+  if (situacaoId) path += `&situacao_id=${situacaoId}`;
+  return apiRequest<{ data: GCVenda[]; meta: GCMeta }>(path);
 }
 
 // --- GET SINGLE ---

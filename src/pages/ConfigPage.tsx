@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
-import { getStatusOS, getStatusVendas } from '@/api/gestaoclick';
+import { getStatusOS, getStatusVendas, isUsingMock } from '@/api/gestaoclick';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,17 +10,13 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Eye, EyeOff, CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ConfigPage() {
   const config = useCheckoutStore(s => s.config);
   const setConfig = useCheckoutStore(s => s.setConfig);
 
-  const [accessToken, setAccessToken] = useState(config.accessToken);
-  const [secretToken, setSecretToken] = useState(config.secretToken);
-  const [showAccess, setShowAccess] = useState(false);
-  const [showSecret, setShowSecret] = useState(false);
   const [operatorName, setOperatorName] = useState(config.operatorName);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [testing, setTesting] = useState(false);
@@ -33,11 +29,11 @@ export default function ConfigPage() {
   const osStatuses = useQuery({ queryKey: ['statuses', 'os'], queryFn: getStatusOS });
   const vendaStatuses = useQuery({ queryKey: ['statuses', 'venda'], queryFn: getStatusVendas });
 
+  const mock = isUsingMock();
+
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
-    // Temporarily save tokens
-    setConfig({ accessToken, secretToken });
     try {
       const statuses = await getStatusOS();
       setTestResult({ ok: true, msg: `✓ Conexão OK — ${statuses.length} situações encontradas` });
@@ -59,8 +55,6 @@ export default function ConfigPage() {
 
   const handleSave = () => {
     setConfig({
-      accessToken,
-      secretToken,
       operatorName,
       osStatusToShow,
       vendaStatusToShow,
@@ -74,51 +68,34 @@ export default function ConfigPage() {
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
 
-      {/* Credentials */}
+      {/* Connection Status */}
       <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Credenciais GestãoClick</h2>
+        <h2 className="text-lg font-semibold">Conexão GestãoClick</h2>
 
-        <div className="space-y-2">
-          <Label>Access Token</Label>
-          <div className="relative">
-            <Input
-              type={showAccess ? 'text' : 'password'}
-              value={accessToken}
-              onChange={e => setAccessToken(e.target.value)}
-              placeholder="Seu access token"
-            />
-            <button
-              type="button"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowAccess(!showAccess)}
-            >
-              {showAccess ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+        {mock ? (
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <Info className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-800">Modo demonstração ativo</p>
+              <p className="text-amber-700 mt-1">
+                As credenciais do GestãoClick são gerenciadas pelo Lovable Cloud.
+                Os tokens já estão configurados como secrets no servidor.
+              </p>
+            </div>
           </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Secret Token</Label>
-          <div className="relative">
-            <Input
-              type={showSecret ? 'text' : 'password'}
-              value={secretToken}
-              onChange={e => setSecretToken(e.target.value)}
-              placeholder="Seu secret token"
-            />
-            <button
-              type="button"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              onClick={() => setShowSecret(!showSecret)}
-            >
-              {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
+        ) : (
+          <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg p-4">
+            <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-green-800">Credenciais configuradas no Cloud</p>
+              <p className="text-green-700 mt-1">
+                Os tokens do GestãoClick estão armazenados de forma segura no servidor via Lovable Cloud.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
-        <p className="text-xs text-muted-foreground">Tokens são salvos no localStorage do navegador</p>
-
-        <Button variant="outline" onClick={handleTestConnection} disabled={testing} className="gap-2">
+        <Button variant="outline" onClick={handleTestConnection} disabled={testing || mock} className="gap-2">
           🔗 {testing ? 'Testando…' : 'Testar Conexão'}
         </Button>
         {testResult && (

@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SeparationsPage() {
@@ -20,7 +20,8 @@ export default function SeparationsPage() {
     refetchInterval: 30000,
   });
 
-  const validCount = separations.filter(s => !s.invalidated).length;
+  const validSeparations = separations.filter(s => !s.invalidated);
+  const validCount = validSeparations.length;
   const invalidCount = separations.filter(s => s.invalidated).length;
 
   const syncWithGC = useCallback(async () => {
@@ -41,7 +42,6 @@ export default function SeparationsPage() {
           ? await getOS(sep.order_id)
           : await getVenda(sep.order_id);
 
-        // If the current status in GC is NOT the target status we set, it was reverted
         if (order.situacao_id !== sep.target_status_id) {
           const reason = `Status alterado no GC: "${order.nome_situacao}" (era "${sep.target_status_name}")`;
           await invalidateSeparation(sep.id, reason);
@@ -53,7 +53,6 @@ export default function SeparationsPage() {
 
       setSyncProgress({ checked: i + 1, total: active.length });
 
-      // Rate limit: wait between requests
       if (i < active.length - 1) {
         await new Promise(r => setTimeout(r, 1100));
       }
@@ -61,8 +60,6 @@ export default function SeparationsPage() {
 
     await refetch();
     setSyncing(false);
-
-    // Also invalidate the separated IDs cache used by OrderQueue
     queryClient.invalidateQueries({ queryKey: ['valid-separated-ids'] });
 
     if (invalidated > 0) {
@@ -71,6 +68,10 @@ export default function SeparationsPage() {
       toast.success('Todas as separações estão válidas!');
     }
   }, [separations, refetch, queryClient]);
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   const formatTime = (iso: string) => {
     try {
@@ -91,9 +92,17 @@ export default function SeparationsPage() {
     }
   };
 
+  const todayFormatted = new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Screen-only controls */}
+      <div className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <PackageCheck className="h-6 w-6 text-primary" />
@@ -122,11 +131,31 @@ export default function SeparationsPage() {
             {syncing ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <AlertTriangle className="h-4 w-4 mr-1.5" />}
             Verificar no GC
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrint}
+            disabled={isLoading || separations.length === 0}
+          >
+            <Printer className="h-4 w-4 mr-1.5" />
+            Imprimir
+          </Button>
+        </div>
+      </div>
+
+      {/* Print header - only visible when printing */}
+      <div className="hidden print:block print:mb-6">
+        <div className="text-center border-b-2 border-foreground pb-3 mb-4">
+          <h1 className="text-2xl font-bold">📦 Relatório de Separações</h1>
+          <p className="text-sm mt-1">{todayFormatted}</p>
+          <p className="text-sm">
+            {validCount} separação(ões) válida(s) • {invalidCount} invalidada(s)
+          </p>
         </div>
       </div>
 
       {syncing && (
-        <div className="space-y-1">
+        <div className="space-y-1 print:hidden">
           <Progress value={syncProgress.total > 0 ? (syncProgress.checked / syncProgress.total) * 100 : 0} className="h-2" />
           <p className="text-xs text-muted-foreground text-center">
             Verificando {syncProgress.checked}/{syncProgress.total} separações no GestãoClick…
@@ -135,20 +164,67 @@ export default function SeparationsPage() {
       )}
 
       {isLoading && (
-        <div className="text-center text-muted-foreground py-12">
+        <div className="text-center text-muted-foreground py-12 print:hidden">
           <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
           Carregando separações…
         </div>
       )}
 
       {!isLoading && separations.length === 0 && (
-        <Card className="p-8 text-center">
+        <Card className="p-8 text-center print:hidden">
           <PackageCheck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
           <p className="text-muted-foreground">Nenhuma separação realizada hoje</p>
         </Card>
       )}
 
-      <div className="space-y-3">
+      {/* Print-friendly table - only visible when printing */}
+      <div className="hidden print:block">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b-2 border-foreground">
+              <th className="text-left py-2 px-1">Tipo</th>
+              <th className="text-left py-2 px-1">Código</th>
+              <th className="text-left py-2 px-1">Cliente</th>
+              <th className="text-center py-2 px-1">Itens</th>
+              <th className="text-right py-2 px-1">Valor</th>
+              <th className="text-left py-2 px-1">Status</th>
+              <th className="text-left py-2 px-1">Operador</th>
+              <th className="text-center py-2 px-1">Hora</th>
+              <th className="text-center py-2 px-1">Situação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {separations.map((sep, i) => (
+              <tr key={sep.id} className={`border-b ${sep.invalidated ? 'line-through opacity-50' : ''}`}>
+                <td className="py-1.5 px-1 font-medium">{sep.order_type === 'os' ? 'OS' : 'VD'}</td>
+                <td className="py-1.5 px-1 font-bold">#{sep.order_code}</td>
+                <td className="py-1.5 px-1 max-w-[200px] truncate">{sep.client_name}</td>
+                <td className="py-1.5 px-1 text-center">{sep.items_confirmed}/{sep.items_total}</td>
+                <td className="py-1.5 px-1 text-right">R$ {sep.total_value}</td>
+                <td className="py-1.5 px-1 text-xs">{sep.status_name} → {sep.target_status_name}</td>
+                <td className="py-1.5 px-1">{sep.operator_name || '—'}</td>
+                <td className="py-1.5 px-1 text-center">{formatTime(sep.concluded_at)}</td>
+                <td className="py-1.5 px-1 text-center">{sep.invalidated ? '❌' : '✅'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Print summary */}
+        <div className="mt-4 pt-3 border-t-2 border-foreground text-sm">
+          <div className="flex justify-between">
+            <span><strong>Total de separações:</strong> {separations.length}</span>
+            <span><strong>Válidas:</strong> {validCount}</span>
+            <span><strong>Invalidadas:</strong> {invalidCount}</span>
+            <span><strong>Valor total (válidas):</strong> R$ {
+              validSeparations.reduce((sum, s) => sum + parseFloat(s.total_value || '0'), 0).toFixed(2)
+            }</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Screen cards */}
+      <div className="space-y-3 print:hidden">
         {separations.map(sep => (
           <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDuration={formatDuration} />
         ))}

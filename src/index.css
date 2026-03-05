@@ -121,16 +121,19 @@
 }
 
 @media print {
-  body * {
-    visibility: hidden;
+  /* Hide header, nav, toasts, and other non-content elements */
+  header, nav, .sonner-toaster, [data-sonner-toaster] {
+    display: none !important;
   }
-  .print-area, .print-area * {
-    visibility: visible;
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-  .print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+
+  /* Ensure print content flows naturally */
+  * {
+    box-shadow: none !important;
   }
 }

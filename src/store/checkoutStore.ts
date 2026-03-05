@@ -21,6 +21,14 @@ interface CheckoutStore {
   setConfig: (config: Partial<CheckoutConfig>) => void;
 }
 
+function parseGCQuantity(val: string | number): number {
+  if (typeof val === 'number') return val;
+  // GC API returns quantities like "1.000" meaning 1, "2.000" meaning 2, "0.800" meaning 0.8
+  // These use dot as decimal separator already, so parseFloat works correctly
+  const num = parseFloat(val);
+  return isNaN(num) ? 0 : num;
+}
+
 function buildItems(order: Order): PickingItem[] {
   return (order.produtos || []).map((p, i) => ({
     id: `${order.id}-${i}-${Date.now()}`,
@@ -30,7 +38,7 @@ function buildItems(order: Order): PickingItem[] {
     codigo_produto: p.produto.codigo_produto,
     codigo_barras: p.produto.codigo_barras,
     sigla_unidade: p.produto.sigla_unidade,
-    qtd_total: p.produto.quantidade,
+    qtd_total: parseGCQuantity(p.produto.quantidade),
     qtd_conferida: 0,
     conferido: false,
   }));

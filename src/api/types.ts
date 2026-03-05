@@ -11,7 +11,7 @@ export interface GCProdutoItem {
   codigo_produto: string;
   codigo_barras: string;
   sigla_unidade: string;
-  quantidade: number;
+  quantidade: number | string;
   valor_venda?: string;
 }
 

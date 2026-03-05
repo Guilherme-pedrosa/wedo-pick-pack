@@ -15,8 +15,9 @@ Deno.serve(async (req: Request) => {
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
   // Verify caller is authenticated
-  const authHeader = req.headers.get('authorization');
+  const authHeader = req.headers.get('Authorization') || req.headers.get('authorization');
   if (!authHeader) {
+    console.error('No authorization header found');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -28,20 +29,23 @@ Deno.serve(async (req: Request) => {
   // Validate the JWT token explicitly
   const token = authHeader.replace('Bearer ', '');
   const supabaseUser = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
-    global: { headers: { authorization: authHeader } },
+    global: { headers: { Authorization: authHeader } },
   });
 
-  const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser(token);
-  if (callerError || !caller) {
+  const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
+  if (claimsError || !claimsData?.claims?.sub) {
+    console.error('JWT validation failed:', claimsError?.message || 'no claims');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
+  const callerId = claimsData.claims.sub as string;
+
   // Check if caller is admin
   const { data: isAdmin } = await supabaseAdmin.rpc('has_role', {
-    _user_id: caller.id,
+    _user_id: callerId,
     _role: 'admin',
   });
 
@@ -130,7 +134,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Prevent self-deletion
-      if (userId === caller.id) {
+      if (userId === callerId) {
         return new Response(JSON.stringify({ error: 'Cannot delete yourself' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

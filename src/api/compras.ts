@@ -183,7 +183,7 @@ export async function buildListaCompras(
   }
   const todasOrdens = [...allOrdensCompra, ...allOrdensForSupplier];
 
-  // Build purchase-orders map from ALL orders (all statuses) for qty cross-ref
+  // Build purchase-orders map from SELECTED statuses only (user controls which count)
   const compraMap = new Map<string, {
     qtd: number;
     ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
@@ -192,7 +192,7 @@ export async function buildListaCompras(
     qtd: number;
     ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
   }>();
-  for (const ordem of todasOrdens) {
+  for (const ordem of allOrdensCompra) {
     for (const p of ordem.produtos || []) {
       const produtoId = normalizeId(p.produto.produto_id);
       if (!produtoId) continue;

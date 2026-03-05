@@ -14,8 +14,8 @@ import { toast } from 'sonner';
 
 export default function OrcamentosPanel() {
   const { config, setConfig, isScanning, setScanning, setProgress, setResult, progress } = useComprasStore();
-  const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>(config.situacoesOrcamentoSelecionadas);
-  const [selectedCompra, setSelectedCompra] = useState<string[]>(config.situacoesCompraEmAndamento);
+  const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>(config.situacoesOrcamentoSelecionadas ?? []);
+  const [selectedCompra, setSelectedCompra] = useState<string[]>(config.situacoesCompraEmAndamento ?? []);
   const [orcamentos, setOrcamentos] = useState<GCOrcamento[]>([]);
   const [loadingOrc, setLoadingOrc] = useState(false);
 

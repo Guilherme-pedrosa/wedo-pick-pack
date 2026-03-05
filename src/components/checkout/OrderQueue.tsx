@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts } from '@/api/gestaoclick';
+import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders } from '@/api/gestaoclick';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OrderQueue() {
@@ -19,6 +20,9 @@ export default function OrderQueue() {
   const [page, setPage] = useState(1);
   const [confirmSwitch, setConfirmSwitch] = useState<{ tipo: OrderType; id: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [stockScanning, setStockScanning] = useState(false);
+  const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
+  const [stockFilter, setStockFilter] = useState<Set<string> | null>(null); // null = not scanned
 
   const session = useCheckoutStore(s => s.session);
   const concludedSessions = useCheckoutStore(s => s.concludedSessions);
@@ -47,13 +51,39 @@ export default function OrderQueue() {
     ? orders.filter(o => configStatuses.includes(o.situacao_id))
     : orders;
 
+  // Stock filter
+  const filteredByStock = stockFilter
+    ? filteredByConfig.filter(o => stockFilter.has(o.id))
+    : filteredByConfig;
+
   // Client-side search
   const filtered = search.trim()
-    ? filteredByConfig.filter(o =>
+    ? filteredByStock.filter(o =>
         o.codigo.toLowerCase().includes(search.toLowerCase()) ||
         o.nome_cliente.toLowerCase().includes(search.toLowerCase())
       )
-    : filteredByConfig;
+    : filteredByStock;
+
+  const handleStockScan = useCallback(async () => {
+    if (filteredByConfig.length === 0) {
+      toast.warning('Nenhum pedido para varrer');
+      return;
+    }
+    setStockScanning(true);
+    setStockProgress({ checked: 0, total: 0 });
+    try {
+      const result = await checkStockForOrders(filteredByConfig, (checked, total) => {
+        setStockProgress({ checked, total });
+      });
+      setStockFilter(result);
+      const removed = filteredByConfig.length - result.size;
+      toast.success(`Varredura concluída! ${result.size} pedidos com estoque, ${removed} sem estoque completo.`);
+    } catch (err) {
+      toast.error('Erro durante varredura de estoque');
+    } finally {
+      setStockScanning(false);
+    }
+  }, [filteredByConfig]);
 
   const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
     if (session && session.refId !== id && !session.concludedAt) {
@@ -144,15 +174,46 @@ export default function OrderQueue() {
           className="text-sm"
         />
 
-        <Button
-          variant="outline"
-          className="w-full text-sm gap-1.5"
-          onClick={() => ordersQuery.refetch()}
-          disabled={ordersQuery.isFetching}
-        >
-          <RefreshCw className={`h-4 w-4 ${ordersQuery.isFetching ? 'animate-spin' : ''}`} />
-          Atualizar lista
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 text-sm gap-1.5"
+            onClick={() => { ordersQuery.refetch(); setStockFilter(null); }}
+            disabled={ordersQuery.isFetching}
+          >
+            <RefreshCw className={`h-4 w-4 ${ordersQuery.isFetching ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 text-sm gap-1.5"
+            onClick={handleStockScan}
+            disabled={stockScanning || ordersQuery.isLoading}
+          >
+            <PackageSearch className={`h-4 w-4 ${stockScanning ? 'animate-pulse' : ''}`} />
+            Varredura de estoque
+          </Button>
+        </div>
+
+        {stockScanning && (
+          <div className="space-y-1">
+            <Progress value={stockProgress.total > 0 ? (stockProgress.checked / stockProgress.total) * 100 : 0} className="h-2" />
+            <p className="text-xs text-muted-foreground text-center">
+              Verificando estoque… {stockProgress.checked}/{stockProgress.total} produtos
+            </p>
+          </div>
+        )}
+
+        {stockFilter && !stockScanning && (
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Mostrando {stockFilter.size} pedidos com estoque
+            </p>
+            <Button variant="ghost" size="sm" className="text-xs h-6 px-2" onClick={() => setStockFilter(null)}>
+              Limpar filtro
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Order list */}

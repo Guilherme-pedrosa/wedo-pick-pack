@@ -202,6 +202,73 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   });
 }
 
+// --- STOCK CHECK ---
+export interface ProductStockInfo {
+  produto_id: string;
+  estoque: number;
+}
+
+export async function getProductStock(produtoId: string): Promise<ProductStockInfo | null> {
+  try {
+    const res = await apiRequest<{ data: { id: string; estoque: string | number } }>(`/api/produtos/${produtoId}`);
+    const estoque = typeof res.data.estoque === 'number' ? res.data.estoque : parseFloat(res.data.estoque || '0');
+    return { produto_id: res.data.id, estoque: isNaN(estoque) ? 0 : estoque };
+  } catch {
+    return null;
+  }
+}
+
+/** Check stock for a list of orders. Returns Set of order IDs that have full stock. */
+export async function checkStockForOrders(
+  orders: Array<GCOrdemServico | GCVenda>,
+  onProgress?: (checked: number, total: number) => void,
+): Promise<Set<string>> {
+  // Collect all unique produto_ids across all orders
+  const productOrderMap = new Map<string, { orderId: string; qty: number }[]>();
+  
+  for (const order of orders) {
+    for (const p of order.produtos || []) {
+      const pid = p.produto.produto_id;
+      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
+      if (!productOrderMap.has(pid)) productOrderMap.set(pid, []);
+      productOrderMap.get(pid)!.push({ orderId: order.id, qty });
+    }
+  }
+
+  const uniqueIds = [...productOrderMap.keys()];
+  const stockMap = new Map<string, number>();
+  const total = uniqueIds.length;
+  let checked = 0;
+
+  // Fetch 3 at a time (rate limit)
+  for (let i = 0; i < uniqueIds.length; i += 3) {
+    const batch = uniqueIds.slice(i, i + 3);
+    const results = await Promise.all(batch.map(id => getProductStock(id)));
+    for (const r of results) {
+      if (r) stockMap.set(r.produto_id, r.estoque);
+    }
+    checked += batch.length;
+    onProgress?.(checked, total);
+    if (i + 3 < uniqueIds.length) {
+      await new Promise(r => setTimeout(r, 1100)); // respect rate limit
+    }
+  }
+
+  // Determine which orders have full stock
+  const fullStockOrders = new Set<string>();
+  for (const order of orders) {
+    const allInStock = (order.produtos || []).every(p => {
+      const pid = p.produto.produto_id;
+      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
+      const available = stockMap.get(pid) ?? 0;
+      return available >= qty;
+    });
+    if (allInStock) fullStockOrders.add(order.id);
+  }
+
+  return fullStockOrders;
+}
+
 // --- PRODUCT DETAILS (for barcode enrichment) ---
 interface GCProductDetail {
   id: string;

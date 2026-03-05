@@ -60,7 +60,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
   const date = new Date(result.scannedAt).toLocaleDateString('pt-BR');
   const html = `<!DOCTYPE html><html><head><title>Lista de Compras - WeDo</title></head><body style="font-family:Arial,sans-serif;padding:20px">
     <h1 style="text-align:center;margin-bottom:4px">🛒 WeDo — Lista de Compras</h1>
-    <p style="text-align:center;color:#666">${date} · ${result.totalOrcamentos} orçamentos · ${result.totalProdutosSemEstoque} itens para comprar${result.totalItensCobertosporPedido > 0 ? ` · ${result.totalItensCobertosporPedido} cobertos por pedido` : ''} · Estimativa: ${formatBRL(result.estimativaTotal)}</p>
+    <p style="text-align:center;color:#666">${date} · ${result.totalOrcamentos} orçamentos · ${result.totalProdutosSemEstoque} itens para comprar${(result.totalItensCobertosporPedido ?? 0) > 0 ? ` · ${result.totalItensCobertosporPedido} cobertos por pedido` : ''} · Estimativa: ${formatBRL(result.estimativaTotal)}</p>
     <table style="width:100%;border-collapse:collapse;margin-top:16px">
       <thead><tr style="background:#f3f4f6">
         <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Código</th>
@@ -121,6 +121,10 @@ export default function ComprasResultPanel() {
 
   if (!result) return null;
 
+  // Backward compat: old persisted results may lack new fields
+  const itensCobertos = result.itensCobertosporPedido ?? [];
+  const totalCobertos = result.totalItensCobertosporPedido ?? 0;
+
   const scannedDate = new Date(result.scannedAt).toLocaleString('pt-BR');
 
   return (
@@ -165,7 +169,7 @@ export default function ComprasResultPanel() {
             <div className="p-2 rounded-lg bg-amber-100"><Clock className="h-5 w-5 text-amber-700" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Pedido em aberto</p>
-              <p className="text-xl font-bold text-amber-700">{result.totalItensCobertosporPedido}</p>
+              <p className="text-xl font-bold text-amber-700">{totalCobertos}</p>
             </div>
           </Card>
           <Card className="p-3 flex items-center gap-3">
@@ -200,16 +204,16 @@ export default function ComprasResultPanel() {
         )}
 
         {/* Covered by purchase orders */}
-        {result.itensCobertosporPedido.length > 0 && (
+        {itensCobertos.length > 0 && (
           <Collapsible open={cobertosExpanded} onOpenChange={setCobertosExpanded}>
             <CollapsibleTrigger asChild>
               <Button variant="ghost" className="w-full justify-between text-sm">
-                <span>🔄 Itens cobertos por pedidos de compra ({result.itensCobertosporPedido.length})</span>
+                <span>🔄 Itens cobertos por pedidos de compra ({itensCobertos.length})</span>
                 <ChevronDown className={`h-4 w-4 transition-transform ${cobertosExpanded ? 'rotate-180' : ''}`} />
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <ComprasTable items={result.itensCobertosporPedido} showCoveredStyle />
+              <ComprasTable items={itensCobertos} showCoveredStyle />
             </CollapsibleContent>
           </Collapsible>
         )}

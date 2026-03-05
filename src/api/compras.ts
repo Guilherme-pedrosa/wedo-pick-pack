@@ -127,9 +127,37 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
     if (situacaoId) data = data.filter(c => c.situacao_id === situacaoId);
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
+
   let path = `/api/compras?pagina=${pagina}`;
   if (situacaoId) path += `&situacao_id=${situacaoId}`;
-  return apiRequest<{ data: GCOrdemCompra[]; meta: GCMeta }>(path);
+
+  const raw = await apiRequest<{ data: any[]; meta: GCMeta }>(path);
+
+  const data: GCOrdemCompra[] = (raw.data || []).map((row: any) => {
+    const compra = row?.Compra ?? row;
+    return {
+      id: String(compra?.id ?? ''),
+      codigo: String(compra?.codigo ?? ''),
+      fornecedor_id: String(compra?.fornecedor_id ?? ''),
+      nome_fornecedor: String(compra?.nome_fornecedor ?? ''),
+      data_emissao: String(compra?.data_emissao ?? ''),
+      situacao_id: String(compra?.situacao_id ?? ''),
+      nome_situacao: String(compra?.nome_situacao ?? ''),
+      valor_total: String(compra?.valor_total ?? '0'),
+      produtos: (compra?.produtos || []).map((p: any) => ({
+        produto: {
+          id: String(p?.produto?.id ?? ''),
+          produto_id: String(p?.produto?.produto_id ?? ''),
+          variacao_id: String(p?.produto?.variacao_id ?? p?.produto?.estoque_id ?? ''),
+          nome_produto: String(p?.produto?.nome_produto ?? ''),
+          quantidade: p?.produto?.quantidade ?? '0',
+          valor_custo: String(p?.produto?.valor_custo ?? '0'),
+        },
+      })),
+    };
+  });
+
+  return { data, meta: raw.meta };
 }
 
 // --- MAIN ENGINE ---

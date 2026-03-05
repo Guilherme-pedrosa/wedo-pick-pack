@@ -107,15 +107,17 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
   const payload = {
     cliente_id: rawOrder.cliente_id,
     codigo: rawOrder.codigo,
-    data: rawOrder.data,
+    data: (rawOrder as GCOrdemServico).data_entrada || rawOrder.data,
     situacao_id: newStatusId,
     vendedor_id: rawOrder.vendedor_id,
     observacoes: rawOrder.observacoes || '',
-    observacoes_interna: rawOrder.observacoes_interna || '',
+    observacoes_interna: (rawOrder as GCOrdemServico).observacoes_interna || '',
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
     produtos: rawOrder.produtos,
     servicos: rawOrder.servicos || [],
+    atributos: (rawOrder as any).atributos || [],
+    equipamentos: (rawOrder as any).equipamentos || [],
   };
   await apiRequest(`/api/ordens_servicos/${id}`, {
     method: 'PUT',

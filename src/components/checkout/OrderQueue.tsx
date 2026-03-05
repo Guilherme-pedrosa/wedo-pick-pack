@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders } from '@/api/gestaoclick';
+import { getValidSeparatedOrderIds } from '@/api/separations';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -25,10 +26,17 @@ export default function OrderQueue() {
   const [stockFilter, setStockFilter] = useState<Set<string> | null>(null); // null = not scanned
 
   const session = useCheckoutStore(s => s.session);
-  const concludedSessions = useCheckoutStore(s => s.concludedSessions);
   const startSession = useCheckoutStore(s => s.startSession);
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
+
+  // Fetch valid (non-invalidated) separated order IDs from DB
+  const separatedQuery = useQuery({
+    queryKey: ['valid-separated-ids'],
+    queryFn: getValidSeparatedOrderIds,
+    refetchInterval: 15000, // re-check every 15s
+  });
+  const separatedIds = separatedQuery.data || new Set<string>();
 
   const statusQuery = useQuery({
     queryKey: ['statuses', activeType],
@@ -119,7 +127,7 @@ export default function OrderQueue() {
     if (session && session.refId === order.id && session.tipo === activeType && !session.concludedAt) {
       return <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs">Em andamento</Badge>;
     }
-    if (concludedSessions.includes(order.id)) {
+    if (separatedIds.has(order.id)) {
       return <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">Concluído ✓</Badge>;
     }
     return <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs">Aguardando</Badge>;
@@ -178,7 +186,7 @@ export default function OrderQueue() {
           <Button
             variant="outline"
             className="flex-1 text-sm gap-1.5"
-            onClick={() => { ordersQuery.refetch(); setStockFilter(null); }}
+            onClick={() => { ordersQuery.refetch(); separatedQuery.refetch(); setStockFilter(null); }}
             disabled={ordersQuery.isFetching}
           >
             <RefreshCw className={`h-4 w-4 ${ordersQuery.isFetching ? 'animate-spin' : ''}`} />

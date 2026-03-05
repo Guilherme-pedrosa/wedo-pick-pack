@@ -77,6 +77,25 @@ export async function getTodaySeparations(): Promise<SeparationRecord[]> {
   return (data || []) as unknown as SeparationRecord[];
 }
 
+/** Returns a Set of order IDs that have valid (non-invalidated) separations today */
+export async function getValidSeparatedOrderIds(): Promise<Set<string>> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayISO = today.toISOString();
+
+  const { data, error } = await supabase
+    .from('separations')
+    .select('order_id')
+    .gte('concluded_at', todayISO)
+    .eq('invalidated', false);
+
+  if (error) {
+    console.error('Error fetching valid separations:', error);
+    return new Set();
+  }
+  return new Set((data || []).map(d => (d as any).order_id));
+}
+
 export async function invalidateSeparation(id: string, reason: string): Promise<boolean> {
   const { error } = await supabase
     .from('separations')

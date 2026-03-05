@@ -86,15 +86,19 @@ export default function ConferencePanel() {
       toast.error(`${match.nome_produto} — já completamente conferido`);
     } else {
       const remaining = match.qtd_total - match.qtd_conferida;
-      const toConfirm = Math.min(qty, remaining);
-      confirmItem(match.id, toConfirm);
-      const newQtd = match.qtd_conferida + toConfirm;
-      if (newQtd >= match.qtd_total) {
-        setFeedback({ type: 'success', msg: `✓ ${match.nome_produto} — completo!` });
-        toast.success(`✓ ${match.nome_produto} — completo!`);
+      if (qty > remaining) {
+        setFeedback({ type: 'error', msg: `${match.nome_produto} — quantidade informada (${qty}) excede o restante (${remaining})` });
+        toast.error(`Quantidade informada (${qty}) excede o restante na OS (${remaining})`);
       } else {
-        setFeedback({ type: 'success', msg: `✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total} conferidos` });
-        toast.success(`✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total}`);
+        confirmItem(match.id, qty);
+        const newQtd = match.qtd_conferida + qty;
+        if (newQtd >= match.qtd_total) {
+          setFeedback({ type: 'success', msg: `✓ ${match.nome_produto} — completo!` });
+          toast.success(`✓ ${match.nome_produto} — completo!`);
+        } else {
+          setFeedback({ type: 'success', msg: `✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total} conferidos` });
+          toast.success(`✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total}`);
+        }
       }
     }
   }, [session, confirmItem]);

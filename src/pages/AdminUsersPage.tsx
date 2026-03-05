@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UserPlus, Trash2, Shield, ShieldOff, Loader2, Users } from 'lucide-react';
+import { UserPlus, Trash2, Shield, ShieldOff, Loader2, Users, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface UserEntry {
@@ -30,6 +30,15 @@ export default function AdminUsersPage() {
   const [newGcId, setNewGcId] = useState('');
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Edit state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUser, setEditUser] = useState<UserEntry | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editGcId, setEditGcId] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -108,6 +117,38 @@ export default function AdminUsersPage() {
     }
   };
 
+  const openEdit = (u: UserEntry) => {
+    setEditUser(u);
+    setEditName(u.name);
+    setEditEmail(u.email);
+    setEditGcId(u.gc_usuario_id || '');
+    setEditPassword('');
+    setEditOpen(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editUser) return;
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = { action: 'update', userId: editUser.id };
+      if (editName !== editUser.name) body.name = editName;
+      if (editEmail !== editUser.email) body.email = editEmail;
+      if (editGcId !== (editUser.gc_usuario_id || '')) body.gc_usuario_id = editGcId;
+      if (editPassword) body.password = editPassword;
+
+      const { data, error } = await supabase.functions.invoke('admin-users', { body });
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+      toast.success('Usuário atualizado');
+      setEditOpen(false);
+      fetchUsers();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao atualizar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -142,6 +183,14 @@ export default function AdminUsersPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEdit(u)}
+                    title="Editar"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -218,6 +267,39 @@ export default function AdminUsersPage() {
             <Button onClick={handleCreate} disabled={creating} className="gap-2">
               {creating && <Loader2 className="h-4 w-4 animate-spin" />}
               Criar Usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input value={editName} onChange={e => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>E-mail</Label>
+              <Input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Nova Senha (deixe em branco para manter)</Label>
+              <Input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="••••••••" />
+            </div>
+            <div className="space-y-2">
+              <Label>ID Usuário GestãoClick</Label>
+              <Input value={editGcId} onChange={e => setEditGcId(e.target.value)} placeholder="Ex: 1028512" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button onClick={handleUpdate} disabled={saving} className="gap-2">
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>

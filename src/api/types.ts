@@ -127,6 +127,7 @@ export interface GCProdutoDetalhe {
   estoque: string | number;
   valor_custo: string;
   movimenta_estoque: string;
+  nome_grupo?: string;
   fornecedores: Array<{ id: string }>;
   variacoes?: Array<{
     variacao: {
@@ -178,6 +179,7 @@ export interface ItemCompra {
   nome_produto: string;
   codigo_produto: string;
   sigla_unidade: string;
+  grupo?: string;
   estoque_atual: number;
   qtd_necessaria: number;
   qtd_a_comprar: number;

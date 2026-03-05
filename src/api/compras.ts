@@ -69,7 +69,9 @@ function normalizeId(value: string | number | null | undefined): string {
 }
 
 function makeProdutoKey(produtoId: string | number | null | undefined, variacaoId: string | number | null | undefined): string {
-  return `${normalizeId(produtoId)}::${normalizeId(variacaoId)}`;
+  const pid = normalizeId(produtoId);
+  const vid = normalizeId(variacaoId);
+  return vid ? `${pid}::${vid}` : pid;
 }
 
 // --- STATUS ORCAMENTOS ---

@@ -37,12 +37,12 @@ function AuthenticatedApp() {
     });
   }, [loading, user]);
 
-  // Sync operator name from profile
+  // Sync operator info from profile
   useEffect(() => {
-    if (profile?.name) {
+    if (profile) {
       setConfig({ operatorName: profile.name, gcUsuarioId: profile.gc_usuario_id || '' });
     }
-  }, [profile?.name, setConfig]);
+  }, [profile?.name, profile?.gc_usuario_id, setConfig]);
 
   if (loading || needsSetup === null) {
     return (

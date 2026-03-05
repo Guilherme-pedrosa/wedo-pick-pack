@@ -69,7 +69,7 @@ export async function listOS(situacaoId?: string, pagina = 1): Promise<{ data: G
   }
   const params = new URLSearchParams({ pagina: String(pagina) });
   if (situacaoId) params.set('situacao_id', situacaoId);
-  const res = await apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(`/ordens_servico?${params}`);
+  const res = await apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(`/api/ordens_servicos?${params}`);
   return res;
 }
 
@@ -82,7 +82,7 @@ export async function listVendas(situacaoId?: string, pagina = 1): Promise<{ dat
   }
   const params = new URLSearchParams({ pagina: String(pagina) });
   if (situacaoId) params.set('situacao_id', situacaoId);
-  const res = await apiRequest<{ data: GCVenda[]; meta: GCMeta }>(`/vendas?${params}`);
+  const res = await apiRequest<{ data: GCVenda[]; meta: GCMeta }>(`/api/vendas?${params}`);
   return res;
 }
 
@@ -94,7 +94,7 @@ export async function getOS(id: string): Promise<GCOrdemServico> {
     if (!found) throw new Error('NOT_FOUND');
     return { ...found };
   }
-  return apiRequest<GCOrdemServico>(`/ordens_servico/${id}`);
+  return apiRequest<GCOrdemServico>(`/api/ordens_servicos/${id}`);
 }
 
 export async function getVenda(id: string): Promise<GCVenda> {
@@ -104,7 +104,7 @@ export async function getVenda(id: string): Promise<GCVenda> {
     if (!found) throw new Error('NOT_FOUND');
     return { ...found };
   }
-  return apiRequest<GCVenda>(`/vendas/${id}`);
+  return apiRequest<GCVenda>(`/api/vendas/${id}`);
 }
 
 // --- STATUSES ---
@@ -113,7 +113,7 @@ export async function getStatusOS(): Promise<GCSituacao[]> {
     await mockDelay();
     return [...MOCK_STATUS_OS];
   }
-  const res = await apiRequest<{ data: GCSituacao[] }>('/situacoes_os');
+  const res = await apiRequest<{ data: GCSituacao[] }>('/api/situacoes_ordens_servicos');
   return res.data;
 }
 
@@ -122,7 +122,7 @@ export async function getStatusVendas(): Promise<GCSituacao[]> {
     await mockDelay();
     return [...MOCK_STATUS_VENDA];
   }
-  const res = await apiRequest<{ data: GCSituacao[] }>('/situacoes_vendas');
+  const res = await apiRequest<{ data: GCSituacao[] }>('/api/situacoes_vendas');
   return res.data;
 }
 
@@ -145,7 +145,7 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     produtos: rawOrder.produtos,
     servicos: rawOrder.servicos || [],
   };
-  await apiRequest(`/ordens_servico/${id}`, {
+  await apiRequest(`/api/ordens_servicos/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
@@ -168,7 +168,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     produtos: rawOrder.produtos,
     servicos: rawOrder.servicos || [],
   };
-  await apiRequest(`/vendas/${id}`, {
+  await apiRequest(`/api/vendas/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });

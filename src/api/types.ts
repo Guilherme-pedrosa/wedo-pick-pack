@@ -92,3 +92,87 @@ export interface PickingSession {
   startedAt: string;
   concludedAt?: string;
 }
+
+// --- COMPRAS MODULE ---
+
+export interface GCOrcamentoProduto {
+  produto_id: string;
+  variacao_id: string;
+  nome_produto: string;
+  codigo_produto: string;
+  sigla_unidade: string;
+  quantidade: string | number;
+  valor_custo?: string;
+  movimenta_estoque?: string;
+}
+
+export interface GCOrcamento {
+  id: string;
+  codigo: string;
+  cliente_id: string;
+  nome_cliente: string;
+  vendedor_id?: string;
+  data: string;
+  situacao_id: string;
+  nome_situacao: string;
+  valor_total: string;
+  produtos: Array<{ produto: GCOrcamentoProduto }>;
+}
+
+export interface GCProdutoDetalhe {
+  id: string;
+  nome: string;
+  codigo_interno: string;
+  codigo_barra: string;
+  estoque: string | number;
+  valor_custo: string;
+  movimenta_estoque: string;
+  fornecedores: Array<{ id: string }>;
+  variacoes?: Array<{
+    variacao: {
+      id: string;
+      nome: string;
+      estoque: string | number;
+    };
+  }>;
+}
+
+export interface GCFornecedor {
+  id: string;
+  nome: string;
+  telefone?: string;
+  email?: string;
+}
+
+export interface ItemCompra {
+  produto_id: string;
+  variacao_id: string;
+  nome_produto: string;
+  codigo_produto: string;
+  sigla_unidade: string;
+  estoque_atual: number;
+  qtd_necessaria: number;
+  qtd_a_comprar: number;
+  ultimo_preco: number;
+  estimativa: number;
+  movimenta_estoque: boolean;
+  fornecedor_id?: string;
+  fornecedor_nome?: string;
+  fornecedor_telefone?: string;
+  orcamentos: Array<{
+    id: string;
+    codigo: string;
+    qtd: number;
+    nome_cliente: string;
+  }>;
+}
+
+export interface ComprasResult {
+  itensList: ItemCompra[];
+  itensOkList: ItemCompra[];
+  totalOrcamentos: number;
+  totalProdutosSemEstoque: number;
+  totalProdutosOk: number;
+  estimativaTotal: number;
+  scannedAt: string;
+}

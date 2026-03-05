@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import AppHeader from "@/components/layout/AppHeader";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
+import ComprasPage from "./pages/ComprasPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
 import LoginPage from "./pages/LoginPage";
@@ -68,6 +69,7 @@ function AuthenticatedApp() {
         <Route path="/" element={<Navigate to="/checkout" replace />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/separations" element={<SeparationsPage />} />
+        <Route path="/compras" element={<ComprasPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route
           path="/admin/users"

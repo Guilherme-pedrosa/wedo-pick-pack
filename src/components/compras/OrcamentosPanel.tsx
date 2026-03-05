@@ -29,12 +29,10 @@ export default function OrcamentosPanel() {
     queryFn: getStatusCompras,
   });
 
-  // Auto-select purchase order statuses that don't move stock (tipo_lancamento "0")
+  // Auto-select ALL purchase order statuses (user deselects finalized/cancelled)
   useEffect(() => {
     if (statusCompraQuery.data && (config.situacoesCompraEmAndamento ?? []).length === 0) {
-      const autoSelect = statusCompraQuery.data
-        .filter(s => s.tipo_lancamento === '0')
-        .map(s => s.id);
+      const autoSelect = statusCompraQuery.data.map(s => s.id);
       if (autoSelect.length > 0) {
         setSelectedCompra(autoSelect);
         setConfig({ situacoesCompraEmAndamento: autoSelect });
@@ -137,7 +135,7 @@ export default function OrcamentosPanel() {
           <h3 className="text-xs font-bold text-foreground">Pedidos de Compra — Cruzamento</h3>
         </div>
         <p className="text-[11px] text-muted-foreground leading-tight">
-          Situações que indicam que a peça já está sendo comprada. Itens cobertos não entrarão na lista.
+          Marque todos os status de compra em andamento (Ex: Em Cotação, Comprado Ag. Chegada). Desmarque apenas finalizados ou cancelados.
         </p>
 
         {statusCompraQuery.isLoading ? (
@@ -154,9 +152,6 @@ export default function OrcamentosPanel() {
                   disabled={isScanning}
                 />
                 <span>{s.nome}</span>
-                {s.tipo_lancamento === '0' && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 text-muted-foreground">Não lança est.</Badge>
-                )}
               </label>
             ))}
           </div>

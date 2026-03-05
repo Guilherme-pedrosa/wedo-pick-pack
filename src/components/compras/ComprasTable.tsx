@@ -3,22 +3,22 @@ import { ItemCompra } from '@/api/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 
-type SortKey = 'codigo_produto' | 'nome_produto' | 'estoque_atual' | 'qtd_necessaria' | 'qtd_a_comprar' | 'ultimo_preco' | 'estimativa' | 'fornecedor_nome';
+type SortKey = 'codigo_produto' | 'nome_produto' | 'estoque_atual' | 'qtd_necessaria' | 'qtd_efetiva_a_comprar' | 'qtd_ja_em_compra' | 'ultimo_preco' | 'estimativa' | 'fornecedor_nome';
 
 interface Props {
   items: ItemCompra[];
   showOkStyle?: boolean;
+  showCoveredStyle?: boolean;
 }
 
 function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-export default function ComprasTable({ items, showOkStyle }: Props) {
-  const [sortKey, setSortKey] = useState<SortKey>('qtd_a_comprar');
+export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey>('qtd_efetiva_a_comprar');
   const [sortAsc, setSortAsc] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
@@ -36,28 +36,20 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
   }, [items, sortKey, sortAsc]);
 
   const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortKey(key);
-      setSortAsc(false);
-    }
+    if (sortKey === key) setSortAsc(!sortAsc);
+    else { setSortKey(key); setSortAsc(false); }
   };
 
   const toggleRow = (id: string) => {
     setExpandedRows(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
   const SortHeader = ({ label, col }: { label: string; col: SortKey }) => (
-    <TableHead
-      className="cursor-pointer select-none hover:bg-muted/50 text-xs whitespace-nowrap"
-      onClick={() => handleSort(col)}
-    >
+    <TableHead className="cursor-pointer select-none hover:bg-muted/50 text-xs whitespace-nowrap" onClick={() => handleSort(col)}>
       <span className="flex items-center gap-1">
         {label}
         {sortKey === col && (sortAsc ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
@@ -66,12 +58,15 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
   );
 
   const totalNecessario = items.reduce((s, i) => s + i.qtd_necessaria, 0);
-  const totalAComprar = items.reduce((s, i) => s + i.qtd_a_comprar, 0);
+  const totalEfetivo = items.reduce((s, i) => s + i.qtd_efetiva_a_comprar, 0);
+  const totalEmPedido = items.reduce((s, i) => s + i.qtd_ja_em_compra, 0);
   const totalEstimativa = items.reduce((s, i) => s + i.estimativa, 0);
 
   if (items.length === 0) {
     return <p className="text-sm text-muted-foreground text-center py-6">Nenhum item nesta categoria</p>;
   }
+
+  const rowBg = showOkStyle ? 'bg-green-50/50' : showCoveredStyle ? 'bg-amber-50/50' : '';
 
   return (
     <div className="overflow-x-auto border rounded-lg">
@@ -83,7 +78,8 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
             <TableHead className="text-xs">UN</TableHead>
             <SortHeader label="Estoque" col="estoque_atual" />
             <SortHeader label="Necessário" col="qtd_necessaria" />
-            <SortHeader label="A Comprar" col="qtd_a_comprar" />
+            <SortHeader label="Em Pedido" col="qtd_ja_em_compra" />
+            <SortHeader label="A Comprar" col="qtd_efetiva_a_comprar" />
             <SortHeader label="Últ. Preço" col="ultimo_preco" />
             <SortHeader label="Estimativa" col="estimativa" />
             <SortHeader label="Fornecedor" col="fornecedor_nome" />
@@ -94,9 +90,10 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
           {sorted.map(item => {
             const key = `${item.produto_id}::${item.variacao_id}`;
             const isExpanded = expandedRows.has(key);
+            const hasOrdens = item.ordens_compra.length > 0;
             return (
-              <>
-                <TableRow key={key} className={showOkStyle ? 'bg-green-50/50' : ''}>
+              <> 
+                <TableRow key={key} className={rowBg}>
                   <TableCell className="font-mono text-xs">{item.codigo_produto}</TableCell>
                   <TableCell className="text-sm max-w-[200px]">
                     <span className="block truncate">{item.nome_produto}</span>
@@ -111,8 +108,30 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
                     {item.estoque_atual}
                   </TableCell>
                   <TableCell className="text-sm">{item.qtd_necessaria}</TableCell>
-                  <TableCell className={`text-sm font-bold ${item.qtd_a_comprar > 0 ? 'text-destructive' : 'text-green-700'}`}>
-                    {item.qtd_a_comprar > 0 ? item.qtd_a_comprar : '—'}
+                  {/* Em Pedido */}
+                  <TableCell className="text-sm">
+                    {item.qtd_ja_em_compra === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">{item.qtd_ja_em_compra}</span>
+                        {item.qtd_ja_em_compra >= item.qtd_a_comprar ? (
+                          <Badge className="bg-green-100 text-green-800 border-green-200 text-[10px] px-1">✅ Coberto</Badge>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[10px] px-1">⚠️ Parcial</Badge>
+                        )}
+                        {hasOrdens && (
+                          <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={() => toggleRow(key)}>
+                            {item.ordens_compra.length}p
+                            {isExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
+                  {/* A Comprar (efetivo) */}
+                  <TableCell className={`text-sm font-bold ${item.qtd_efetiva_a_comprar > 0 ? 'text-destructive' : 'text-green-700'}`}>
+                    {item.qtd_efetiva_a_comprar > 0 ? item.qtd_efetiva_a_comprar : '—'}
                   </TableCell>
                   <TableCell className="text-sm">
                     {item.ultimo_preco > 0 ? formatBRL(item.ultimo_preco) : <span className="text-muted-foreground">—</span>}
@@ -122,9 +141,7 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
                     {item.fornecedor_nome ? (
                       <div>
                         <span className="font-medium">{item.fornecedor_nome}</span>
-                        {item.fornecedor_telefone && (
-                          <span className="block text-muted-foreground">{item.fornecedor_telefone}</span>
-                        )}
+                        {item.fornecedor_telefone && <span className="block text-muted-foreground">{item.fornecedor_telefone}</span>}
                       </div>
                     ) : (
                       <span className="text-muted-foreground">Sem fornecedor</span>
@@ -140,16 +157,19 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
                     </div>
                   </TableCell>
                 </TableRow>
-                {isExpanded && (
-                  <TableRow key={`${key}-detail`} className="bg-muted/30">
-                    <TableCell colSpan={10} className="py-2 px-6">
+                {/* Expanded purchase orders detail */}
+                {isExpanded && hasOrdens && (
+                  <TableRow key={`${key}-orders`} className="bg-amber-50/30">
+                    <TableCell colSpan={11} className="py-2 px-6">
                       <div className="space-y-1">
-                        {item.orcamentos.map(orc => (
-                          <div key={orc.id} className="flex items-center gap-4 text-xs">
-                            <Badge variant="outline" className="text-[10px]">ORC</Badge>
-                            <span className="font-mono font-medium">{orc.codigo}</span>
-                            <span className="text-muted-foreground truncate max-w-[200px]">{orc.nome_cliente}</span>
-                            <span className="font-medium">Qtd: {orc.qtd}</span>
+                        <p className="text-[10px] font-bold text-muted-foreground mb-1">PEDIDOS DE COMPRA</p>
+                        {item.ordens_compra.map(oc => (
+                          <div key={oc.id} className="flex items-center gap-4 text-xs">
+                            <Badge variant="outline" className="text-[10px] bg-amber-50">PC</Badge>
+                            <span className="font-mono font-medium">{oc.codigo}</span>
+                            <span className="text-muted-foreground truncate max-w-[160px]">{oc.nome_fornecedor}</span>
+                            <span className="font-medium">Qtd: {oc.qtd}</span>
+                            <Badge variant="outline" className="text-[10px]">{oc.situacao}</Badge>
                           </div>
                         ))}
                       </div>
@@ -164,7 +184,8 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
           <TableRow className="font-bold">
             <TableCell colSpan={4} className="text-right text-xs">TOTAL</TableCell>
             <TableCell className="text-sm">{totalNecessario}</TableCell>
-            <TableCell className="text-sm text-destructive">{totalAComprar}</TableCell>
+            <TableCell className="text-sm text-amber-700">{totalEmPedido > 0 ? totalEmPedido : '—'}</TableCell>
+            <TableCell className="text-sm text-destructive">{totalEfetivo}</TableCell>
             <TableCell />
             <TableCell className="text-sm">{formatBRL(totalEstimativa)}</TableCell>
             <TableCell colSpan={2} />

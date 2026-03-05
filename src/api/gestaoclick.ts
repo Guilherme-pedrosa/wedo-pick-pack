@@ -99,11 +99,18 @@ export async function getStatusVendas(): Promise<GCSituacao[]> {
 }
 
 // --- UPDATE STATUS ---
-export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string): Promise<void> {
+export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
     return;
   }
+  const obsInterna = rawOrder.observacoes_interna || '';
+  const separator = obsInterna.trim() ? '\n' : '';
+  const now = new Date().toLocaleString('pt-BR');
+  const operatorNote = operatorName
+    ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
+    : '';
+
   const payload = {
     cliente_id: rawOrder.cliente_id,
     codigo: rawOrder.codigo,
@@ -111,7 +118,7 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     situacao_id: newStatusId,
     vendedor_id: rawOrder.vendedor_id,
     observacoes: rawOrder.observacoes || '',
-    observacoes_interna: rawOrder.observacoes_interna || '',
+    observacoes_interna: obsInterna + operatorNote,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
     produtos: rawOrder.produtos,
@@ -125,11 +132,18 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
   });
 }
 
-export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string): Promise<void> {
+export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
     return;
   }
+  const obsInterna = (rawOrder as any).observacoes_interna || '';
+  const separator = obsInterna.trim() ? '\n' : '';
+  const now = new Date().toLocaleString('pt-BR');
+  const operatorNote = operatorName
+    ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
+    : '';
+
   const payload = {
     tipo: 'produto',
     cliente_id: rawOrder.cliente_id,
@@ -137,6 +151,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     data: rawOrder.data,
     situacao_id: newStatusId,
     vendedor_id: rawOrder.vendedor_id,
+    observacoes_interna: obsInterna + operatorNote,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
     produtos: rawOrder.produtos,

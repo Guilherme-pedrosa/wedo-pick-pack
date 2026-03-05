@@ -24,12 +24,14 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+  // Validate the JWT token explicitly
+  const token = authHeader.replace('Bearer ', '');
   const supabaseUser = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { authorization: authHeader } },
   });
 
-  // Get caller's user
-  const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser();
+  const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser(token);
   if (callerError || !caller) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,

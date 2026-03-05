@@ -130,16 +130,14 @@ export default function ComprasTable({ items, showOkStyle }: Props) {
                       <span className="text-muted-foreground">Sem fornecedor</span>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs gap-1"
-                      onClick={() => toggleRow(key)}
-                    >
-                      {item.orcamentos.length}x
-                      {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    </Button>
+                  <TableCell className="text-xs max-w-[200px]">
+                    <div className="flex flex-wrap gap-1">
+                      {item.orcamentos.map(orc => (
+                        <Badge key={orc.id} variant="outline" className="text-[10px] font-mono whitespace-nowrap">
+                          {orc.codigo} ({orc.qtd})
+                        </Badge>
+                      ))}
+                    </div>
                   </TableCell>
                 </TableRow>
                 {isExpanded && (

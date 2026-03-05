@@ -35,6 +35,7 @@ export interface GCOrdemServico {
   servicos?: unknown[];
   equipamentos?: unknown[];
   pagamentos?: unknown[];
+  atributos?: unknown[];
 }
 
 export interface GCVenda {

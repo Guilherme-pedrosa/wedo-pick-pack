@@ -25,25 +25,20 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
     ? config.defaultOSConclusionStatus
     : config.defaultVendaConclusionStatus;
 
-  const [selectedStatus, setSelectedStatus] = useState(defaultStatus || '');
+  const hasDefault = !!defaultStatus;
+  const [selectedStatus, setSelectedStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Sync selectedStatus with config default
+  const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
 
   const statusQuery = useQuery({
     queryKey: ['statuses-conclusion', session?.tipo],
     queryFn: () => session?.tipo === 'os' ? getStatusOS() : getStatusVendas(),
-    enabled: open && !defaultStatus,
+    enabled: open,
   });
 
-  const defaultStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome;
-
-  // Also fetch name for configured status
-  const statusNameQuery = useQuery({
-    queryKey: ['status-name', defaultStatus, session?.tipo],
-    queryFn: () => session?.tipo === 'os' ? getStatusOS() : getStatusVendas(),
-    enabled: open && !!defaultStatus,
-  });
-  
-  const configuredStatusName = statusNameQuery.data?.find(s => s.id === defaultStatus)?.nome || `Status #${defaultStatus}`;
+  const configuredStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome || (hasDefault ? `Status #${defaultStatus}` : '');
 
   if (!session) return null;
 

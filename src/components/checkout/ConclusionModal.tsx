@@ -56,16 +56,16 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   };
 
   const handleConfirm = async () => {
-    if (!selectedStatus) {
+    if (!effectiveStatus) {
       toast.error('Selecione um status');
       return;
     }
     setSubmitting(true);
     try {
       if (session.tipo === 'os') {
-        await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, selectedStatus, config.operatorName);
+        await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, effectiveStatus, config.operatorName);
       } else {
-        await updateVendaStatus(session.refId, session.rawOrder as GCVenda, selectedStatus, config.operatorName);
+        await updateVendaStatus(session.refId, session.rawOrder as GCVenda, effectiveStatus, config.operatorName);
       }
       concludeSession();
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
@@ -137,7 +137,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>
           <Button
             onClick={handleConfirm}
-            disabled={submitting || !selectedStatus}
+            disabled={submitting || !effectiveStatus}
             className="bg-success text-success-foreground hover:bg-success/90"
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

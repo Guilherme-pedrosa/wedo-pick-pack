@@ -61,15 +61,24 @@ Deno.serve(async (req: Request) => {
 
     // Always return 200 to the client with the GC status embedded
     // so supabase.functions.invoke doesn't swallow the response body
-    let parsedBody;
+    let parsedBody: Record<string, unknown>;
     try {
       parsedBody = JSON.parse(responseBody);
     } catch {
       parsedBody = { raw: responseBody };
     }
 
+    // Use a wrapper to avoid key collisions with GC response
+    const wrappedResponse = {
+      _proxy: {
+        gc_http_status: response.status,
+        ok: response.ok,
+      },
+      ...parsedBody,
+    };
+
     return new Response(
-      JSON.stringify({ gc_status: response.status, ...parsedBody }),
+      JSON.stringify(wrappedResponse),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

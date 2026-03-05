@@ -1,41 +1,40 @@
 import { useState } from 'react';
-import { useCheckoutStore } from '@/store/checkoutStore';
+import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { PackageCheck, LogIn } from 'lucide-react';
+import { PackageCheck, LogIn, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
-  const config = useCheckoutStore(s => s.config);
-  const login = useCheckoutStore(s => s.login);
-
-  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim()) {
-      toast.error('Digite seu nome');
+    if (!email.trim() || !password.trim()) {
+      toast.error('Preencha e-mail e senha');
       return;
     }
 
-    if (!config.accessPassword) {
-      // No password configured — just login with name
-      login(name.trim());
-      toast.success(`Bem-vindo, ${name.trim()}!`);
-      return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.includes('Invalid login')) {
+          toast.error('E-mail ou senha incorretos');
+        } else {
+          toast.error(error.message);
+        }
+      }
+    } catch {
+      toast.error('Erro ao conectar');
+    } finally {
+      setLoading(false);
     }
-
-    if (password !== config.accessPassword) {
-      toast.error('Senha incorreta');
-      return;
-    }
-
-    login(name.trim());
-    toast.success(`Bem-vindo, ${name.trim()}!`);
   };
 
   return (
@@ -44,39 +43,44 @@ export default function LoginPage() {
         <div className="text-center space-y-2">
           <PackageCheck className="h-12 w-12 text-primary mx-auto" />
           <h1 className="text-2xl font-bold text-foreground">WeDo Checkout</h1>
-          <p className="text-sm text-muted-foreground">Identifique-se para iniciar</p>
+          <p className="text-sm text-muted-foreground">Entre com seu e-mail e senha</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="operator-name">Nome do operador</Label>
+            <Label htmlFor="email">E-mail</Label>
             <Input
-              id="operator-name"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Seu nome"
+              id="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="seu@email.com"
               autoFocus
-              autoComplete="off"
+              autoComplete="email"
             />
           </div>
 
-          {config.accessPassword && (
-            <div className="space-y-2">
-              <Label htmlFor="access-password">Senha de acesso</Label>
-              <Input
-                id="access-password"
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Digite a senha"
-              />
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="password">Senha</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Sua senha"
+              autoComplete="current-password"
+            />
+          </div>
 
-          <Button type="submit" className="w-full gap-2">
-            <LogIn className="h-4 w-4" /> Entrar
+          <Button type="submit" className="w-full gap-2" disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+            Entrar
           </Button>
         </form>
+
+        <p className="text-xs text-center text-muted-foreground">
+          Solicite seu acesso a um administrador
+        </p>
       </Card>
     </div>
   );

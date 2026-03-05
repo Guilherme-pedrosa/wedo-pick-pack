@@ -1,14 +1,21 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Settings, Package, LogOut } from 'lucide-react';
+import { Settings, Package, LogOut, Users } from 'lucide-react';
 import { isUsingMock } from '@/api/gestaoclick';
-import { useCheckoutStore } from '@/store/checkoutStore';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 
-export default function AppHeader() {
+interface Props {
+  isAdmin: boolean;
+  userName: string;
+}
+
+export default function AppHeader({ isAdmin, userName }: Props) {
   const location = useLocation();
   const mock = isUsingMock();
-  const currentOperator = useCheckoutStore(s => s.auth.currentOperator);
-  const logout = useCheckoutStore(s => s.logout);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   return (
     <>
@@ -48,28 +55,36 @@ export default function AppHeader() {
               }`}
             >
               <Settings className="h-3.5 w-3.5" />
-              Configurações
+              Config
             </Link>
+            {isAdmin && (
+              <Link
+                to="/admin/users"
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  location.pathname === '/admin/users'
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'text-blue-200 hover:text-primary-foreground hover:bg-secondary/50'
+                }`}
+              >
+                <Users className="h-3.5 w-3.5" />
+                Usuários
+              </Link>
+            )}
           </nav>
 
           <div className="flex items-center gap-3 text-sm">
             <span className={`inline-block w-2 h-2 rounded-full ${mock ? 'bg-red-400' : 'bg-green-400'}`} />
-            <span className="text-blue-200">{mock ? 'Modo Demo' : 'GC Conectado'}</span>
-            {currentOperator && (
-              <>
-                <span className="text-blue-200">·</span>
-                <span className="text-blue-100 font-medium">{currentOperator}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-blue-200 hover:text-primary-foreground hover:bg-secondary/50 h-7 px-2"
-                  onClick={logout}
-                  title="Sair"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </Button>
-              </>
-            )}
+            <span className="text-blue-200 hidden sm:inline">{mock ? 'Demo' : 'GC'}</span>
+            <span className="text-blue-100 font-medium">{userName}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-200 hover:text-primary-foreground hover:bg-secondary/50 h-7 px-2"
+              onClick={handleLogout}
+              title="Sair"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
       </header>

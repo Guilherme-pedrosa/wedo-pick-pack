@@ -39,6 +39,26 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
 
 const mockDelay = () => new Promise(r => setTimeout(r, 300));
 
+function parseDecimal(value: string | number | null | undefined): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (value == null) return 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+
+  // pt-BR: 1.234,56 -> 1234.56
+  if (raw.includes(',') && raw.includes('.')) {
+    return parseFloat(raw.replace(/\./g, '').replace(',', '.')) || 0;
+  }
+
+  // pt-BR: 123,45 -> 123.45
+  if (raw.includes(',')) {
+    return parseFloat(raw.replace(',', '.')) || 0;
+  }
+
+  // en-US / plain: 1234.56
+  return parseFloat(raw) || 0;
+}
+
 // --- STATUS ORCAMENTOS ---
 export async function getStatusOrcamentos(): Promise<GCSituacao[]> {
   if (isUsingMock()) { await mockDelay(); return [...MOCK_STATUS_ORCAMENTO]; }
@@ -140,9 +160,7 @@ export async function buildListaCompras(
   for (const ordem of allOrdensCompra) {
     for (const p of ordem.produtos || []) {
       const key = `${p.produto.produto_id}::${p.produto.variacao_id}`;
-      const qty = typeof p.produto.quantidade === 'number'
-        ? p.produto.quantidade
-        : parseFloat(String(p.produto.quantidade)) || 0;
+      const qty = parseDecimal(p.produto.quantidade);
       if (!compraMap.has(key)) compraMap.set(key, { qtd: 0, ordens: [] });
       const entry = compraMap.get(key)!;
       entry.qtd += qty;
@@ -164,9 +182,7 @@ export async function buildListaCompras(
   for (const orc of allOrcamentos) {
     for (const p of orc.produtos || []) {
       const key = `${p.produto.produto_id}::${p.produto.variacao_id}`;
-      const qty = typeof p.produto.quantidade === 'number'
-        ? p.produto.quantidade
-        : parseFloat(String(p.produto.quantidade)) || 0;
+      const qty = parseDecimal(p.produto.quantidade);
       if (!productMap.has(key)) {
         productMap.set(key, {
           produto_id: p.produto.produto_id, variacao_id: p.produto.variacao_id,
@@ -222,12 +238,12 @@ export async function buildListaCompras(
       if (entry.variacao_id && detail.variacoes?.length) {
         const v = detail.variacoes.find(v => String(v.variacao.id) === String(entry.variacao_id));
         estoqueAtual = v
-          ? (typeof v.variacao.estoque === 'number' ? v.variacao.estoque : parseFloat(String(v.variacao.estoque)) || 0)
-          : (typeof detail.estoque === 'number' ? detail.estoque : parseFloat(String(detail.estoque)) || 0);
+          ? parseDecimal(v.variacao.estoque)
+          : parseDecimal(detail.estoque);
       } else {
-        estoqueAtual = typeof detail.estoque === 'number' ? detail.estoque : parseFloat(String(detail.estoque)) || 0;
+        estoqueAtual = parseDecimal(detail.estoque);
       }
-      valorCusto = parseFloat(detail.valor_custo || '0') || 0;
+      valorCusto = parseDecimal(detail.valor_custo);
     }
 
     const compraEntry = compraMap.get(key);

@@ -1,4 +1,4 @@
-import { GCOrdemServico, GCVenda, GCSituacao, GCMeta } from './types';
+import { GCOrdemServico, GCVenda, GCSituacao, GCMeta, GCProdutoItem } from './types';
 import { MOCK_OS, MOCK_VENDAS, MOCK_STATUS_OS, MOCK_STATUS_VENDA } from './mockData';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -143,5 +143,62 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   await apiRequest(`/api/vendas/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
+  });
+}
+
+// --- PRODUCT DETAILS (for barcode enrichment) ---
+interface GCProductDetail {
+  id: string;
+  codigo_barra: string;
+  codigo_interno: string;
+  nome: string;
+  variacoes?: Array<{ variacao: { id: string; codigo: string } }>;
+}
+
+async function getProductDetail(produtoId: string): Promise<GCProductDetail | null> {
+  try {
+    const res = await apiRequest<{ data: GCProductDetail }>(`/api/produtos/${produtoId}`);
+    return res.data;
+  } catch {
+    return null;
+  }
+}
+
+export async function enrichOrderProducts(
+  produtos: Array<{ produto: GCProdutoItem }>
+): Promise<Array<{ produto: GCProdutoItem }>> {
+  if (isUsingMock() || !produtos?.length) return produtos;
+
+  // Deduplicate produto_ids
+  const uniqueIds = [...new Set(produtos.map(p => p.produto.produto_id))];
+  
+  // Fetch all product details in parallel
+  const details = await Promise.all(uniqueIds.map(id => getProductDetail(id)));
+  const detailMap = new Map<string, GCProductDetail>();
+  details.forEach(d => { if (d) detailMap.set(d.id, d); });
+
+  return produtos.map(({ produto }) => {
+    const detail = detailMap.get(produto.produto_id);
+    if (!detail) return { produto };
+
+    // Find variation code if applicable
+    let codigoBarras = detail.codigo_barra || '';
+    const codigoProduto = detail.codigo_interno || '';
+
+    if (produto.variacao_id && detail.variacoes) {
+      const variacao = detail.variacoes.find(v => v.variacao.id === produto.variacao_id);
+      if (variacao?.variacao.codigo) {
+        // Use variation code as product code if available
+        if (!codigoBarras) codigoBarras = '';
+      }
+    }
+
+    return {
+      produto: {
+        ...produto,
+        codigo_produto: codigoProduto,
+        codigo_barras: codigoBarras,
+      },
+    };
   });
 }

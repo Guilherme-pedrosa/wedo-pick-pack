@@ -57,9 +57,9 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
     setSubmitting(true);
     try {
       if (session.tipo === 'os') {
-        await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, selectedStatus);
+        await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, selectedStatus, config.operatorName);
       } else {
-        await updateVendaStatus(session.refId, session.rawOrder as GCVenda, selectedStatus);
+        await updateVendaStatus(session.refId, session.rawOrder as GCVenda, selectedStatus, config.operatorName);
       }
       concludeSession();
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');

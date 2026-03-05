@@ -127,13 +127,19 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
     : '';
 
+  const obs = rawOrder.observacoes || '';
+  const obsSeparator = obs.trim() ? '\n' : '';
+  const obsNote = operatorName
+    ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
+    : '';
+
   const payload = {
     cliente_id: rawOrder.cliente_id,
     codigo: rawOrder.codigo,
     data: rawOrder.data_entrada || rawOrder.data,
     situacao_id: newStatusId,
     vendedor_id: rawOrder.vendedor_id,
-    observacoes: rawOrder.observacoes || '',
+    observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
@@ -160,6 +166,12 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
     : '';
 
+  const obs = (rawOrder as any).observacoes || '';
+  const obsSeparator = obs.trim() ? '\n' : '';
+  const obsNote = operatorName
+    ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
+    : '';
+
   const payload = {
     tipo: 'produto',
     cliente_id: rawOrder.cliente_id,
@@ -167,6 +179,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     data: rawOrder.data,
     situacao_id: newStatusId,
     vendedor_id: rawOrder.vendedor_id,
+    observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',

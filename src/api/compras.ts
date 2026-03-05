@@ -171,6 +171,20 @@ export async function buildListaCompras(
     }
   }
 
+  // Build supplier map derived from purchase orders (API doesn't expose supplier on product reads)
+  const fornecedorPorProduto = new Map<string, { fornecedor_id: string; nome_fornecedor: string }>();
+  for (const ordem of allOrdensCompra) {
+    for (const p of ordem.produtos || []) {
+      const pid = p.produto.produto_id;
+      if (!fornecedorPorProduto.has(pid)) {
+        fornecedorPorProduto.set(pid, {
+          fornecedor_id: ordem.fornecedor_id,
+          nome_fornecedor: ordem.nome_fornecedor,
+        });
+      }
+    }
+  }
+
   // PHASE 3: Aggregate budget quantities per product
   const productMap = new Map<string, {
     produto_id: string; variacao_id: string; nome_produto: string;
@@ -197,11 +211,10 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 4: Fetch stock + cost + suppliers
+  // PHASE 4: Fetch stock + cost (supplier derived from purchase orders above)
   const uniqueKeys = [...productMap.keys()];
   const total = uniqueKeys.length;
   const detailCache = new Map<string, GCProdutoDetalhe | null>();
-  const fornecedorCache = new Map<string, GCFornecedor | null>();
 
   for (let i = 0; i < uniqueKeys.length; i += 2) {
     const batch = uniqueKeys.slice(i, i + 2);
@@ -211,13 +224,6 @@ export async function buildListaCompras(
       if (!detailCache.has(entry.produto_id)) {
         const detail = await getProdutoDetalhe(entry.produto_id);
         detailCache.set(entry.produto_id, detail);
-        if (detail?.fornecedores?.length) {
-          const fid = String(detail.fornecedores[0].id);
-          if (!fornecedorCache.has(fid)) {
-            const forn = await getFornecedor(fid);
-            fornecedorCache.set(fid, forn);
-          }
-        }
       }
     }));
     if (i + 2 < uniqueKeys.length && !isUsingMock()) await new Promise(r => setTimeout(r, 500));
@@ -255,16 +261,10 @@ export async function buildListaCompras(
     const qtdEfetivaAComprar = Math.max(0, deficit - qtdJaEmCompra);
     const estimativa = qtdEfetivaAComprar * valorCusto;
 
-    let fornecedorNome: string | undefined;
-    let fornecedorTelefone: string | undefined;
-    let fornecedorId: string | undefined;
-    if (detail?.fornecedores?.length) {
-      const fid = String(detail.fornecedores[0].id);
-      fornecedorId = fid;
-      const forn = fornecedorCache.get(fid);
-      fornecedorNome = forn?.nome;
-      fornecedorTelefone = forn?.telefone;
-    }
+    // Supplier derived from purchase orders
+    const fornecedorInfo = fornecedorPorProduto.get(entry.produto_id);
+    const fornecedorNome = fornecedorInfo?.nome_fornecedor;
+    const fornecedorId = fornecedorInfo?.fornecedor_id;
 
     allItems.push({
       produto_id: entry.produto_id,
@@ -282,7 +282,7 @@ export async function buildListaCompras(
       movimenta_estoque: movimentaEstoque,
       fornecedor_id: fornecedorId,
       fornecedor_nome: fornecedorNome,
-      fornecedor_telefone: fornecedorTelefone,
+      fornecedor_telefone: undefined,
       orcamentos: entry.orcamentos,
       ordens_compra: ordensCompra,
     });

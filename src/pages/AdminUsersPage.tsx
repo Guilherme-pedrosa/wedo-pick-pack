@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useCheckoutStore } from '@/store/checkoutStore';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,8 @@ export default function AdminUsersPage() {
   const [editGcId, setEditGcId] = useState('');
   const [saving, setSaving] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  const setConfig = useCheckoutStore(s => s.setConfig);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null));
@@ -145,6 +148,9 @@ export default function AdminUsersPage() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       toast.success('Usuário atualizado');
+      if (editUser.id === currentUserId) {
+        setConfig({ operatorName: editName, gcUsuarioId: editGcId });
+      }
       setEditOpen(false);
       fetchUsers();
     } catch (err: any) {

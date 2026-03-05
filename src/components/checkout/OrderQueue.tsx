@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas } from '@/api/gestaoclick';
+import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts } from '@/api/gestaoclick';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -67,6 +67,9 @@ export default function OrderQueue() {
     setLoading(true);
     try {
       const order = tipo === 'os' ? await getOS(id) : await getVenda(id);
+      // Enrich products with barcode/code details
+      const enrichedProdutos = await enrichOrderProducts(order.produtos);
+      order.produtos = enrichedProdutos;
       startSession(tipo, order);
     } catch (err) {
       toast.error('Erro ao carregar pedido');

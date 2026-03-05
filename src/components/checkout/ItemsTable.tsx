@@ -26,7 +26,8 @@ export default function ItemsTable({ items }: Props) {
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase tracking-wider">
             <th className="py-2 px-3">Produto</th>
-            <th className="py-2 px-3">Localização</th>
+            <th className="py-2 px-3">Código</th>
+            <th className="py-2 px-3">Cód. Barras</th>
             <th className="py-2 px-3 text-center">Conferidos</th>
             <th className="py-2 px-3 text-center">Total</th>
             <th className="py-2 px-3 text-center">Unid</th>
@@ -49,7 +50,12 @@ export default function ItemsTable({ items }: Props) {
                   <span className={item.conferido ? 'text-green-800' : 'font-medium'}>{item.nome_produto}</span>
                 </div>
               </td>
-              <td className="py-2.5 px-3 text-muted-foreground font-mono text-xs">{item.codigo_produto}</td>
+              <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
+                {item.codigo_produto || '—'}
+              </td>
+              <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
+                {item.codigo_barras || '—'}
+              </td>
               <td className="py-2.5 px-3 text-center font-medium">
                 {item.conferido
                   ? `${item.qtd_total}/${item.qtd_total}`

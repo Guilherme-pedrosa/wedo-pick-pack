@@ -3,19 +3,78 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { useCheckoutStore } from "@/store/checkoutStore";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import AppHeader from "@/components/layout/AppHeader";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 import LoginPage from "./pages/LoginPage";
+import SetupPage from "./pages/SetupPage";
 import NotFound from "./pages/NotFound";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const isLoggedIn = useCheckoutStore(s => s.auth.isLoggedIn);
-  if (!isLoggedIn) return <LoginPage />;
-  return <>{children}</>;
+function AuthenticatedApp() {
+  const { user, profile, isAdmin, loading } = useAuth();
+  const setConfig = useCheckoutStore(s => s.setConfig);
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
+
+  // Check if any admin exists
+  useEffect(() => {
+    if (loading) return;
+    if (user) {
+      setNeedsSetup(false);
+      return;
+    }
+
+    // Check if setup is needed (no admins)
+    supabase.rpc('has_any_admin').then(({ data }) => {
+      setNeedsSetup(data === false);
+    });
+  }, [loading, user]);
+
+  // Sync operator name from profile
+  useEffect(() => {
+    if (profile?.name) {
+      setConfig({ operatorName: profile.name });
+    }
+  }, [profile?.name, setConfig]);
+
+  if (loading || needsSetup === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (needsSetup) {
+    return <SetupPage onComplete={() => setNeedsSetup(false)} />;
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return (
+    <>
+      <AppHeader isAdmin={isAdmin} userName={profile?.name || user.email || ''} />
+      <Routes>
+        <Route path="/" element={<Navigate to="/checkout" replace />} />
+        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/config" element={<ConfigPage />} />
+        <Route
+          path="/admin/users"
+          element={isAdmin ? <AdminUsersPage /> : <Navigate to="/checkout" replace />}
+        />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
+  );
 }
 
 const App = () => (
@@ -24,28 +83,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/checkout" replace />} />
-          <Route
-            path="/checkout"
-            element={
-              <AuthGuard>
-                <AppHeader />
-                <CheckoutPage />
-              </AuthGuard>
-            }
-          />
-          <Route
-            path="/config"
-            element={
-              <AuthGuard>
-                <AppHeader />
-                <ConfigPage />
-              </AuthGuard>
-            }
-          />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthenticatedApp />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

@@ -5,10 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { PackageCheck, Scan, Clock, X, Printer } from 'lucide-react';
+import { PackageCheck, Scan, Clock, X, Printer, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import ItemsTable from './ItemsTable';
 import ConclusionModal from './ConclusionModal';
+import BarcodeScannerModal from './BarcodeScannerModal';
 
 export default function ConferencePanel() {
   const session = useCheckoutStore(s => s.session);
@@ -22,6 +23,7 @@ export default function ConferencePanel() {
   const [elapsed, setElapsed] = useState('00:00');
   const [conclusionOpen, setConclusionOpen] = useState(false);
   const [forced, setForced] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
 
   // Timer
@@ -70,10 +72,10 @@ export default function ConferencePanel() {
     return () => clearTimeout(t);
   }, [feedback]);
 
-  const handleScan = useCallback(() => {
-    if (!session || !scanCode.trim()) return;
+  const processScan = useCallback((code: string, qty: number) => {
+    if (!session || !code.trim()) return;
 
-    const match = matchItemByCode(scanCode, session.items);
+    const match = matchItemByCode(code, session.items);
     if (!match) {
       setFeedback({ type: 'error', msg: 'Código não encontrado nesta OS/Venda' });
       toast.error('Código não encontrado nesta OS/Venda');
@@ -84,7 +86,7 @@ export default function ConferencePanel() {
       toast.error(`${match.nome_produto} — já completamente conferido`);
     } else {
       const remaining = match.qtd_total - match.qtd_conferida;
-      const toConfirm = Math.min(scanQty, remaining);
+      const toConfirm = Math.min(qty, remaining);
       confirmItem(match.id, toConfirm);
       const newQtd = match.qtd_conferida + toConfirm;
       if (newQtd >= match.qtd_total) {
@@ -95,10 +97,14 @@ export default function ConferencePanel() {
         toast.success(`✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total}`);
       }
     }
+  }, [session, confirmItem]);
+
+  const handleScan = useCallback(() => {
+    processScan(scanCode, scanQty);
     setScanCode('');
     setScanQty(1);
     scanRef.current?.focus();
-  }, [session, scanCode, scanQty, confirmItem]);
+  }, [scanCode, scanQty, processScan]);
 
   const handlePrint = () => {
     if (!session) return;
@@ -196,36 +202,49 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
       </div>
 
       {/* Scan zone */}
-      <div className="border-2 border-secondary bg-blue-50 m-4 rounded-lg p-4">
-        <div className="flex gap-3">
+      <div className="border-2 border-secondary bg-secondary/10 m-4 rounded-lg p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <div className="flex-1 space-y-1">
             <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Scan className="h-3.5 w-3.5" /> Código do item — scan ou digitar
+              <Scan className="h-3.5 w-3.5" /> Código do item
             </label>
-            <Input
-              ref={scanRef}
-              value={scanCode}
-              onChange={e => setScanCode(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
-              placeholder="Leia o código de barras ou digite o código do produto…"
-              className="text-lg py-3 border-2 border-secondary focus:border-secondary"
-              autoComplete="off"
-              spellCheck={false}
-              autoFocus
-            />
+            <div className="flex gap-2">
+              <Input
+                ref={scanRef}
+                value={scanCode}
+                onChange={e => setScanCode(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
+                placeholder="Código de barras ou produto…"
+                className="text-base sm:text-lg py-3 border-2 border-secondary focus:border-secondary"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+              />
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-[50px] w-[50px] shrink-0"
+                onClick={() => setCameraOpen(true)}
+                title="Escanear com câmera"
+              >
+                <Camera className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
-          <div className="w-24 space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Qtd</label>
-            <Input
-              type="number"
-              value={scanQty}
-              onChange={e => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
-              min={1}
-              className="text-lg py-3 text-center"
-            />
-          </div>
-          <div className="flex items-end">
-            <Button onClick={handleScan} className="h-[50px] px-6">OK</Button>
+          <div className="flex gap-2 sm:gap-3">
+            <div className="w-20 space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Qtd</label>
+              <Input
+                type="number"
+                value={scanQty}
+                onChange={e => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
+                min={1}
+                className="text-base sm:text-lg py-3 text-center"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={handleScan} className="h-[50px] px-6">OK</Button>
+            </div>
           </div>
         </div>
         {feedback && (
@@ -234,6 +253,15 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
           </p>
         )}
       </div>
+
+      <BarcodeScannerModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onScan={(code) => {
+          processScan(code, scanQty);
+          scanRef.current?.focus();
+        }}
+      />
 
       {/* Progress */}
       <div className="px-4 pb-2">

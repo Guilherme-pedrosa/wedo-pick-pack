@@ -1,4 +1,4 @@
-import { GCSituacao, GCOrdemServico, GCVenda } from './types';
+import { GCSituacao, GCOrdemServico, GCVenda, GCOrcamento, GCProdutoDetalhe, GCFornecedor } from './types';
 
 export const MOCK_STATUS_OS: GCSituacao[] = [
   { id: "12113", nome: "Em aberto" },
@@ -73,3 +73,56 @@ export const MOCK_VENDAS: GCVenda[] = [
     ]
   }
 ];
+
+// --- COMPRAS MODULE MOCKS ---
+
+export const MOCK_STATUS_ORCAMENTO: GCSituacao[] = [
+  { id: "6919", nome: "Confirmado" },
+  { id: "6917", nome: "Em aberto" },
+  { id: "6918", nome: "Em andamento" },
+  { id: "6920", nome: "Cancelado" },
+];
+
+export const MOCK_ORCAMENTOS: GCOrcamento[] = [
+  {
+    id: "3001", codigo: "ORC-2024-001", cliente_id: "701",
+    nome_cliente: "Restaurante Bom Sabor Ltda", vendedor_id: "10",
+    data: "2026-03-04", situacao_id: "6919", nome_situacao: "Confirmado",
+    valor_total: "2.350,00",
+    produtos: [
+      { produto: { produto_id: "p001", variacao_id: "", nome_produto: "Grelha inox 60cm", codigo_produto: "GRL-001", sigla_unidade: "UND", quantidade: 3, movimenta_estoque: "1" } },
+      { produto: { produto_id: "p004", variacao_id: "", nome_produto: "Compressor Embraco 1/4HP", codigo_produto: "CMP-EMB-025", sigla_unidade: "UND", quantidade: 2, movimenta_estoque: "1" } },
+    ]
+  },
+  {
+    id: "3002", codigo: "ORC-2024-002", cliente_id: "702",
+    nome_cliente: "Hotel Grand Palace", vendedor_id: "10",
+    data: "2026-03-05", situacao_id: "6919", nome_situacao: "Confirmado",
+    valor_total: "1.890,00",
+    produtos: [
+      { produto: { produto_id: "p004", variacao_id: "", nome_produto: "Compressor Embraco 1/4HP", codigo_produto: "CMP-EMB-025", sigla_unidade: "UND", quantidade: 1, movimenta_estoque: "1" } },
+      { produto: { produto_id: "p006", variacao_id: "", nome_produto: "Borracha porta câmara fria 60x180cm", codigo_produto: "BOR-CF-6018", sigla_unidade: "UND", quantidade: 4, movimenta_estoque: "1" } },
+    ]
+  },
+  {
+    id: "3003", codigo: "ORC-2024-003", cliente_id: "703",
+    nome_cliente: "Padaria Central Eireli", vendedor_id: "11",
+    data: "2026-03-05", situacao_id: "6919", nome_situacao: "Confirmado",
+    valor_total: "780,00",
+    produtos: [
+      { produto: { produto_id: "p003", variacao_id: "", nome_produto: "Termostato KSD301", codigo_produto: "TRM-KSD", sigla_unidade: "UND", quantidade: 5, movimenta_estoque: "1" } },
+    ]
+  },
+];
+
+export const MOCK_PRODUTOS_DETALHE: Record<string, GCProdutoDetalhe> = {
+  "p001": { id: "p001", nome: "Grelha inox 60cm", codigo_interno: "GRL-001", codigo_barra: "7891234560001", estoque: 1, valor_custo: "85.00", movimenta_estoque: "1", fornecedores: [{ id: "f001" }] },
+  "p003": { id: "p003", nome: "Termostato KSD301", codigo_interno: "TRM-KSD", codigo_barra: "7891234560003", estoque: 10, valor_custo: "22.50", movimenta_estoque: "1", fornecedores: [{ id: "f002" }] },
+  "p004": { id: "p004", nome: "Compressor Embraco 1/4HP", codigo_interno: "CMP-EMB-025", codigo_barra: "7891234560004", estoque: 0, valor_custo: "420.00", movimenta_estoque: "1", fornecedores: [{ id: "f001" }] },
+  "p006": { id: "p006", nome: "Borracha porta câmara fria 60x180cm", codigo_interno: "BOR-CF-6018", codigo_barra: "7891234560006", estoque: 2, valor_custo: "48.00", movimenta_estoque: "1", fornecedores: [{ id: "f002" }] },
+};
+
+export const MOCK_FORNECEDORES: Record<string, GCFornecedor> = {
+  "f001": { id: "f001", nome: "Frigelar Distribuidora Ltda", telefone: "(11) 3344-5566", email: "compras@frigelar.com.br" },
+  "f002": { id: "f002", nome: "Insumos Técnicos WeDo", telefone: "(11) 99988-7766", email: "pedidos@insumoswedo.com.br" },
+};

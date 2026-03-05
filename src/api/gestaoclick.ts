@@ -23,16 +23,26 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
     throw new Error(error.message || 'Erro de conexão com o servidor');
   }
 
-  // Check GC API status embedded in response
-  const gcStatus = (data as any)?.gc_status;
-  if (gcStatus && gcStatus !== 200) {
-    const gcMsg = (data as any)?.data?.mensagem || (data as any)?.error || '';
-    if (gcStatus === 429) throw new Error('RATE_LIMIT');
-    if (gcStatus === 401 || gcStatus === 403) throw new Error('AUTH_ERROR');
-    throw new Error(gcMsg || `Erro ${gcStatus} no GestãoClick`);
+  const response = data as any;
+
+  // Check proxy metadata for GC API errors
+  const proxyMeta = response?._proxy;
+  const gcOk = proxyMeta?.ok;
+  const gcHttpStatus = proxyMeta?.gc_http_status;
+
+  // Also check GC's own status field in body
+  const gcBodyStatus = response?.status; // "success" or "error"
+  const gcBodyCode = response?.code; // numeric status from GC
+
+  if (gcOk === false || gcBodyStatus === 'error' || (gcBodyCode && gcBodyCode >= 400)) {
+    const gcMsg = response?.data?.mensagem || response?.data?.erro || response?.error || '';
+    const statusCode = gcHttpStatus || gcBodyCode || 0;
+    if (statusCode === 429) throw new Error('RATE_LIMIT');
+    if (statusCode === 401 || statusCode === 403) throw new Error('AUTH_ERROR');
+    throw new Error(gcMsg || `Erro ${statusCode} no GestãoClick`);
   }
 
-  return data as T;
+  return response as T;
 }
 
 const mockDelay = () => new Promise(r => setTimeout(r, 300));

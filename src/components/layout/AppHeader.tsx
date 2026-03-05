@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Settings, Package, LogOut, Users } from 'lucide-react';
+import { Settings, Package, LogOut, Users, PackageCheck } from 'lucide-react';
 import { isUsingMock } from '@/api/gestaoclick';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,17 @@ export default function AppHeader({ isAdmin, userName }: Props) {
               }`}
             >
               Checkout
+            </Link>
+            <Link
+              to="/separations"
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                location.pathname === '/separations'
+                  ? 'bg-secondary text-secondary-foreground'
+                  : 'text-blue-200 hover:text-primary-foreground hover:bg-secondary/50'
+              }`}
+            >
+              <PackageCheck className="h-3.5 w-3.5" />
+              Separações
             </Link>
             <Link
               to="/config"

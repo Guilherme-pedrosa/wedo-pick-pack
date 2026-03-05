@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
 import { GCOrdemServico, GCVenda } from '@/api/types';
+import { createSeparation } from '@/api/separations';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,6 +21,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   const session = useCheckoutStore(s => s.session);
   const config = useCheckoutStore(s => s.config);
   const concludeSession = useCheckoutStore(s => s.concludeSession);
+  const queryClient = useQueryClient();
 
   const defaultStatus = session?.tipo === 'os'
     ? config.defaultOSConclusionStatus
@@ -67,7 +69,29 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
       } else {
         await updateVendaStatus(session.refId, session.rawOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
       }
+
+      // Find target status name
+      const targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
+
+      // Save separation record to DB
+      await createSeparation({
+        order_type: session.tipo,
+        order_id: session.refId,
+        order_code: session.codigo,
+        client_name: session.nomeCliente,
+        status_name: session.nomeSituacao,
+        status_id: session.situacaoId,
+        target_status_id: effectiveStatus,
+        target_status_name: targetStatusName,
+        total_value: session.valorTotal,
+        items_total: session.items.length,
+        items_confirmed: session.items.filter(i => i.conferido).length,
+        operator_name: config.operatorName,
+        started_at: session.startedAt,
+      });
+
       concludeSession();
+      queryClient.invalidateQueries({ queryKey: ['today-separations'] });
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
       onClose();
     } catch (err: unknown) {

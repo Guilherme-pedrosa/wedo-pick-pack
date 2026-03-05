@@ -1,0 +1,95 @@
+import { supabase } from '@/integrations/supabase/client';
+
+export interface SeparationRecord {
+  id: string;
+  user_id: string;
+  order_type: 'os' | 'venda';
+  order_id: string;
+  order_code: string;
+  client_name: string;
+  status_name: string;
+  status_id: string;
+  target_status_id: string;
+  target_status_name: string;
+  total_value: string;
+  items_total: number;
+  items_confirmed: number;
+  operator_name: string;
+  started_at: string;
+  concluded_at: string;
+  invalidated: boolean;
+  invalidated_at: string | null;
+  invalidated_reason: string | null;
+  created_at: string;
+}
+
+export interface CreateSeparationInput {
+  order_type: 'os' | 'venda';
+  order_id: string;
+  order_code: string;
+  client_name: string;
+  status_name: string;
+  status_id: string;
+  target_status_id: string;
+  target_status_name: string;
+  total_value: string;
+  items_total: number;
+  items_confirmed: number;
+  operator_name: string;
+  started_at: string;
+}
+
+export async function createSeparation(input: CreateSeparationInput): Promise<SeparationRecord | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('separations')
+    .insert({
+      user_id: user.id,
+      ...input,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating separation:', error);
+    return null;
+  }
+  return data as unknown as SeparationRecord;
+}
+
+export async function getTodaySeparations(): Promise<SeparationRecord[]> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayISO = today.toISOString();
+
+  const { data, error } = await supabase
+    .from('separations')
+    .select('*')
+    .gte('concluded_at', todayISO)
+    .order('concluded_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching separations:', error);
+    return [];
+  }
+  return (data || []) as unknown as SeparationRecord[];
+}
+
+export async function invalidateSeparation(id: string, reason: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('separations')
+    .update({
+      invalidated: true,
+      invalidated_at: new Date().toISOString(),
+      invalidated_reason: reason,
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error invalidating separation:', error);
+    return false;
+  }
+  return true;
+}

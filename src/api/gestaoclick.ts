@@ -64,7 +64,8 @@ export async function getOS(id: string): Promise<GCOrdemServico> {
     if (!found) throw new Error('NOT_FOUND');
     return { ...found };
   }
-  return apiRequest<GCOrdemServico>(`/api/ordens_servicos/${id}`);
+  const res = await apiRequest<{ data: GCOrdemServico }>(`/api/ordens_servicos/${id}`);
+  return res.data;
 }
 
 export async function getVenda(id: string): Promise<GCVenda> {
@@ -74,7 +75,8 @@ export async function getVenda(id: string): Promise<GCVenda> {
     if (!found) throw new Error('NOT_FOUND');
     return { ...found };
   }
-  return apiRequest<GCVenda>(`/api/vendas/${id}`);
+  const res = await apiRequest<{ data: GCVenda }>(`/api/vendas/${id}`);
+  return res.data;
 }
 
 // --- STATUSES ---

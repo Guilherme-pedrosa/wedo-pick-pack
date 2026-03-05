@@ -170,12 +170,12 @@ export async function buildListaCompras(
   }
   const todasOrdens = [...allOrdensCompra, ...allOrdensForSupplier];
 
-  // Build purchase-orders map (only from selected statuses for qty cross-ref)
+  // Build purchase-orders map from ALL orders (all statuses) for qty cross-ref
   const compraMap = new Map<string, {
     qtd: number;
     ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
   }>();
-  for (const ordem of allOrdensCompra) {
+  for (const ordem of todasOrdens) {
     for (const p of ordem.produtos || []) {
       const key = `${p.produto.produto_id}::${p.produto.variacao_id}`;
       const qty = parseDecimal(p.produto.quantidade);

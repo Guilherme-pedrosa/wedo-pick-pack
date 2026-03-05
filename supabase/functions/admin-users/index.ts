@@ -129,15 +129,32 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    if (action === 'update_gc_id') {
-      const { userId, gc_usuario_id } = body;
+    if (action === 'update') {
+      const { userId, name, gc_usuario_id, email, password } = body;
       if (!userId) {
         return new Response(JSON.stringify({ error: 'userId is required' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      await supabaseAdmin.from('profiles').update({ gc_usuario_id: gc_usuario_id || null }).eq('id', userId);
+
+      // Update profile fields
+      const profileUpdate: Record<string, unknown> = {};
+      if (name !== undefined) profileUpdate.name = name;
+      if (gc_usuario_id !== undefined) profileUpdate.gc_usuario_id = gc_usuario_id || null;
+      if (Object.keys(profileUpdate).length > 0) {
+        await supabaseAdmin.from('profiles').update(profileUpdate).eq('id', userId);
+      }
+
+      // Update auth email/password if provided
+      const authUpdate: Record<string, unknown> = {};
+      if (email) authUpdate.email = email;
+      if (password) authUpdate.password = password;
+      if (Object.keys(authUpdate).length > 0) {
+        const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(userId, authUpdate);
+        if (authErr) throw authErr;
+      }
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

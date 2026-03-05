@@ -216,8 +216,8 @@ export async function buildListaCompras(
     allItems.push({
       produto_id: entry.produto_id,
       variacao_id: entry.variacao_id,
-      nome_produto: entry.nome_produto,
-      codigo_produto: entry.codigo_produto,
+      nome_produto: detail?.nome || entry.nome_produto,
+      codigo_produto: detail?.codigo_interno || entry.codigo_produto,
       sigla_unidade: entry.sigla_unidade,
       estoque_atual: estoqueAtual,
       qtd_necessaria: qtdNecessaria,

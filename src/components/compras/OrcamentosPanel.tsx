@@ -31,7 +31,7 @@ export default function OrcamentosPanel() {
 
   // Auto-select purchase order statuses that don't move stock (tipo_lancamento "0")
   useEffect(() => {
-    if (statusCompraQuery.data && config.situacoesCompraEmAndamento.length === 0) {
+    if (statusCompraQuery.data && (config.situacoesCompraEmAndamento ?? []).length === 0) {
       const autoSelect = statusCompraQuery.data
         .filter(s => s.tipo_lancamento === '0')
         .map(s => s.id);

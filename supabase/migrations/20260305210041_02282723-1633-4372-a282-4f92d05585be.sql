@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN gc_usuario_id TEXT DEFAULT NULL;

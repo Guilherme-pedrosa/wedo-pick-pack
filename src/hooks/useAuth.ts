@@ -4,14 +4,14 @@ import type { User } from '@supabase/supabase-js';
 
 interface AuthState {
   user: User | null;
-  profile: { name: string } | null;
+  profile: { name: string; gc_usuario_id?: string | null } | null;
   isAdmin: boolean;
   loading: boolean;
 }
 
 export function useAuth(): AuthState {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<{ name: string } | null>(null);
+  const [profile, setProfile] = useState<{ name: string; gc_usuario_id?: string | null } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -27,7 +27,7 @@ export function useAuth(): AuthState {
           setTimeout(async () => {
             const { data: profileData } = await supabase
               .from('profiles')
-              .select('name')
+              .select('name, gc_usuario_id')
               .eq('id', u.id)
               .maybeSingle();
             setProfile(profileData);

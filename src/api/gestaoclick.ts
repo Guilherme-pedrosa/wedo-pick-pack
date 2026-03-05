@@ -115,7 +115,7 @@ export async function getStatusVendas(): Promise<GCSituacao[]> {
 }
 
 // --- UPDATE STATUS ---
-export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string): Promise<void> {
+export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
     return;
@@ -137,7 +137,7 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     ? `Separação por: ${operatorName} em ${now}`
     : '';
 
-  const payload = {
+  const payload: Record<string, any> = {
     cliente_id: rawOrder.cliente_id,
     codigo: rawOrder.codigo,
     data: rawOrder.data_entrada || rawOrder.data,
@@ -145,7 +145,6 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     vendedor_id: rawOrder.vendedor_id,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
-    observacao_situacao: statusObservation,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
     produtos: rawOrder.produtos,
@@ -153,13 +152,14 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     atributos: rawOrder.atributos || [],
     equipamentos: rawOrder.equipamentos || [],
   };
+  if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
   await apiRequest(`/api/ordens_servicos/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
 
-export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string): Promise<void> {
+export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string, gcUsuarioId?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
     return;
@@ -181,7 +181,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     ? `Separação por: ${operatorName} em ${now}`
     : '';
 
-  const payload = {
+  const payload: Record<string, any> = {
     tipo: 'produto',
     cliente_id: rawOrder.cliente_id,
     codigo: rawOrder.codigo,
@@ -190,12 +190,12 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     vendedor_id: rawOrder.vendedor_id,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
-    observacao_situacao: statusObservation,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
     produtos: rawOrder.produtos,
     servicos: rawOrder.servicos || [],
   };
+  if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
   await apiRequest(`/api/vendas/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),

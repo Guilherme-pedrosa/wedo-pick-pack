@@ -15,6 +15,7 @@ interface UserEntry {
   name: string;
   email: string;
   roles: string[];
+  gc_usuario_id: string | null;
   created_at: string;
 }
 
@@ -26,6 +27,7 @@ export default function AdminUsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<string>('user');
+  const [newGcId, setNewGcId] = useState('');
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -55,7 +57,7 @@ export default function AdminUsersPage() {
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('admin-users', {
-        body: { action: 'create', email: newEmail, password: newPassword, name: newName, role: newRole },
+        body: { action: 'create', email: newEmail, password: newPassword, name: newName, role: newRole, gc_usuario_id: newGcId || undefined },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
@@ -65,6 +67,7 @@ export default function AdminUsersPage() {
       setNewPassword('');
       setNewName('');
       setNewRole('user');
+      setNewGcId('');
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao criar usuário');
@@ -134,6 +137,9 @@ export default function AdminUsersPage() {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">{u.email}</p>
+                  {u.gc_usuario_id && (
+                    <p className="text-xs text-muted-foreground">GC ID: {u.gc_usuario_id}</p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -200,6 +206,11 @@ export default function AdminUsersPage() {
                   <SelectItem value="admin">Administrador</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>ID Usuário GestãoClick</Label>
+              <Input value={newGcId} onChange={e => setNewGcId(e.target.value)} placeholder="Ex: 1028512 (GET /api/usuarios)" />
+              <p className="text-xs text-muted-foreground">ID do usuário no GC para atribuir mudanças de situação</p>
             </div>
           </div>
           <DialogFooter>

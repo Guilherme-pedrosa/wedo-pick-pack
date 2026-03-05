@@ -149,6 +149,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
   const allConfirmed = session.items.every(i => i.conferido);
   const confirmedCount = session.items.filter(i => i.conferido).length;
   const totalCount = session.items.length;
+  const showQtyField = totalCount > 20;
   const progress = totalCount > 0 ? Math.round((confirmedCount / totalCount) * 100) : 0;
   const hasAnyConfirmed = session.items.some(i => i.qtd_conferida > 0);
 
@@ -231,21 +232,23 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
               </Button>
             </div>
           </div>
-          <div className="flex gap-2 sm:gap-3">
-            <div className="w-20 space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Qtd</label>
-              <Input
-                type="number"
-                value={scanQty}
-                onChange={e => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
-                min={1}
-                className="text-base sm:text-lg py-3 text-center"
-              />
+          {showQtyField && (
+            <div className="flex gap-2 sm:gap-3">
+              <div className="w-20 space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Qtd</label>
+                <Input
+                  type="number"
+                  value={scanQty}
+                  onChange={e => setScanQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  min={1}
+                  className="text-base sm:text-lg py-3 text-center"
+                />
+              </div>
+              <div className="flex items-end">
+                <Button onClick={handleScan} className="h-[50px] px-6">OK</Button>
+              </div>
             </div>
-            <div className="flex items-end">
-              <Button onClick={handleScan} className="h-[50px] px-6">OK</Button>
-            </div>
-          </div>
+          )}
         </div>
         {feedback && (
           <p className={`mt-2 text-sm font-medium ${feedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>

@@ -40,7 +40,7 @@ function AuthenticatedApp() {
   // Sync operator name from profile
   useEffect(() => {
     if (profile?.name) {
-      setConfig({ operatorName: profile.name });
+      setConfig({ operatorName: profile.name, gcUsuarioId: profile.gc_usuario_id || '' });
     }
   }, [profile?.name, setConfig]);
 

@@ -8,6 +8,7 @@ interface CheckoutConfig {
   defaultOSConclusionStatus: string;
   defaultVendaConclusionStatus: string;
   operatorName: string;
+  gcUsuarioId: string;
 }
 
 interface CheckoutStore {
@@ -53,6 +54,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
         defaultOSConclusionStatus: '',
         defaultVendaConclusionStatus: '',
         operatorName: '',
+        gcUsuarioId: '',
       },
       startSession: (tipo, order) => {
         const session: PickingSession = {

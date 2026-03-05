@@ -63,9 +63,9 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
     setSubmitting(true);
     try {
       if (session.tipo === 'os') {
-        await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, effectiveStatus, config.operatorName);
+        await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, effectiveStatus, config.operatorName, config.gcUsuarioId);
       } else {
-        await updateVendaStatus(session.refId, session.rawOrder as GCVenda, effectiveStatus, config.operatorName);
+        await updateVendaStatus(session.refId, session.rawOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
       }
       concludeSession();
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');

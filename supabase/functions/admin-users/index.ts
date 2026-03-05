@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
       // List all users with profiles and roles
       const { data: profiles, error } = await supabaseAdmin
         .from('profiles')
-        .select('id, name, created_at');
+        .select('id, name, gc_usuario_id, created_at');
 
       if (error) throw error;
 
@@ -92,7 +92,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'create') {
-      const { email, password, name, role } = body;
+      const { email, password, name, role, gc_usuario_id } = body;
 
       if (!email || !password || !name) {
         return new Response(JSON.stringify({ error: 'email, password, and name are required' }), {
@@ -111,6 +111,11 @@ Deno.serve(async (req: Request) => {
 
       if (createError) throw createError;
 
+      // Update profile with gc_usuario_id if provided
+      if (gc_usuario_id && newUser.user) {
+        await supabaseAdmin.from('profiles').update({ gc_usuario_id }).eq('id', newUser.user.id);
+      }
+
       // Assign role
       if (role && newUser.user) {
         await supabaseAdmin.from('user_roles').insert({
@@ -120,6 +125,20 @@ Deno.serve(async (req: Request) => {
       }
 
       return new Response(JSON.stringify({ user: { id: newUser.user?.id, email, name } }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'update_gc_id') {
+      const { userId, gc_usuario_id } = body;
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'userId is required' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      await supabaseAdmin.from('profiles').update({ gc_usuario_id: gc_usuario_id || null }).eq('id', userId);
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

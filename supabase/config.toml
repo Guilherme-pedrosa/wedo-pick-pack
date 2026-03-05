@@ -2,3 +2,9 @@ project_id = "yfqbhyadogytswelopsl"
 
 [functions.gc-proxy]
 verify_jwt = false
+
+[functions.setup-admin]
+verify_jwt = false
+
+[functions.admin-users]
+verify_jwt = false

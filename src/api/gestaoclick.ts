@@ -12,7 +12,6 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
   const method = options?.method || 'GET';
   
   const { data, error } = await supabase.functions.invoke('gc-proxy', {
-    method: method as 'GET' | 'POST' | 'PUT' | 'DELETE',
     body: {
       path,
       method,

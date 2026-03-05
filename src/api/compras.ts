@@ -282,6 +282,13 @@ export async function buildListaCompras(
   }
   onProgress?.('Cruzando pedidos de compra…', total, total);
 
+  // DEBUG: Log maps for troubleshooting
+  console.log('[COMPRAS DEBUG] compraMap keys:', [...compraMap.keys()]);
+  console.log('[COMPRAS DEBUG] compraMapByProduto keys:', [...compraMapByProduto.keys()]);
+  console.log('[COMPRAS DEBUG] productMap keys:', [...productMap.keys()]);
+  console.log('[COMPRAS DEBUG] allOrdensCompra count:', allOrdensCompra.length);
+  console.log('[COMPRAS DEBUG] todasOrdens count:', todasOrdens.length);
+
   // PHASE 5: Build ItemCompra list with cross-reference
   const allItems: ItemCompra[] = [];
 
@@ -304,9 +311,24 @@ export async function buildListaCompras(
       valorCusto = parseDecimal(detail.valor_custo);
     }
 
-    const compraEntry = compraMap.get(key) ?? compraMapByProduto.get(entry.produto_id);
+    // Lookup — try exact key first, fall back to produto_id only
+    const fullKey = makeProdutoKey(entry.produto_id, entry.variacao_id);
+    const pidOnly = String(entry.produto_id).trim();
+
+    const compraEntry =
+      compraMap.get(fullKey) ??
+      compraMapByProduto.get(pidOnly);
+
+    // De-duplicate ordens_compra (fallback may have dupes)
+    const rawOrdens = compraEntry?.ordens ?? [];
+    const seenOrdemIds = new Set<string>();
+    const ordensCompra = rawOrdens.filter(o => {
+      if (seenOrdemIds.has(o.id)) return false;
+      seenOrdemIds.add(o.id);
+      return true;
+    });
+
     const qtdJaEmCompra = compraEntry?.qtd ?? 0;
-    const ordensCompra = compraEntry?.ordens ?? [];
 
     const qtdNecessaria = entry.qtd_total;
     const deficit = Math.max(0, qtdNecessaria - estoqueAtual);

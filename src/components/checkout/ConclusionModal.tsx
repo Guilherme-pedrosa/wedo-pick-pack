@@ -31,8 +31,19 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   const statusQuery = useQuery({
     queryKey: ['statuses-conclusion', session?.tipo],
     queryFn: () => session?.tipo === 'os' ? getStatusOS() : getStatusVendas(),
-    enabled: open,
+    enabled: open && !defaultStatus,
   });
+
+  const defaultStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome;
+
+  // Also fetch name for configured status
+  const statusNameQuery = useQuery({
+    queryKey: ['status-name', defaultStatus, session?.tipo],
+    queryFn: () => session?.tipo === 'os' ? getStatusOS() : getStatusVendas(),
+    enabled: open && !!defaultStatus,
+  });
+  
+  const configuredStatusName = statusNameQuery.data?.find(s => s.id === defaultStatus)?.nome || `Status #${defaultStatus}`;
 
   if (!session) return null;
 
@@ -104,19 +115,28 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
           )}
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Novo status no GestãoClick:</label>
-          <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione o status" />
-            </SelectTrigger>
-            <SelectContent>
-              {(statusQuery.data || []).map(s => (
-                <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {defaultStatus ? (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Novo status no GestãoClick:</label>
+            <div className="bg-muted rounded-md px-3 py-2 text-sm font-medium">
+              {configuredStatusName}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Novo status no GestãoClick:</label>
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o status" />
+              </SelectTrigger>
+              <SelectContent>
+                {(statusQuery.data || []).map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>

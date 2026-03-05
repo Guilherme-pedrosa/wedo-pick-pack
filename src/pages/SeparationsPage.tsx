@@ -62,12 +62,15 @@ export default function SeparationsPage() {
     await refetch();
     setSyncing(false);
 
+    // Also invalidate the separated IDs cache used by OrderQueue
+    queryClient.invalidateQueries({ queryKey: ['valid-separated-ids'] });
+
     if (invalidated > 0) {
       toast.warning(`${invalidated} separação(ões) invalidada(s) por mudança de status no GC`);
     } else {
       toast.success('Todas as separações estão válidas!');
     }
-  }, [separations, refetch]);
+  }, [separations, refetch, queryClient]);
 
   const formatTime = (iso: string) => {
     try {

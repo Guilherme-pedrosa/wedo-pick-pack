@@ -194,6 +194,14 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // Prevent self-demotion
+      if (userId === callerId) {
+        return new Response(JSON.stringify({ error: 'Você não pode alterar sua própria permissão de admin' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Check if user already has admin role
       const { data: existing } = await supabaseAdmin
         .from('user_roles')

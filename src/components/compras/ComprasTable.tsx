@@ -57,10 +57,10 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
     </TableHead>
   );
 
-  const totalNecessario = items.reduce((s, i) => s + i.qtd_necessaria, 0);
-  const totalEfetivo = items.reduce((s, i) => s + i.qtd_efetiva_a_comprar, 0);
-  const totalEmPedido = items.reduce((s, i) => s + i.qtd_ja_em_compra, 0);
-  const totalEstimativa = items.reduce((s, i) => s + i.estimativa, 0);
+  const totalNecessario = items.reduce((s, i) => s + (i.qtd_necessaria ?? 0), 0);
+  const totalEfetivo = items.reduce((s, i) => s + (i.qtd_efetiva_a_comprar ?? i.qtd_a_comprar ?? 0), 0);
+  const totalEmPedido = items.reduce((s, i) => s + (i.qtd_ja_em_compra ?? 0), 0);
+  const totalEstimativa = items.reduce((s, i) => s + (i.estimativa ?? 0), 0);
 
   if (items.length === 0) {
     return <p className="text-sm text-muted-foreground text-center py-6">Nenhum item nesta categoria</p>;
@@ -90,7 +90,11 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
           {sorted.map(item => {
             const key = `${item.produto_id}::${item.variacao_id}`;
             const isExpanded = expandedRows.has(key);
-            const hasOrdens = item.ordens_compra.length > 0;
+            const ordensCompra = item.ordens_compra ?? [];
+            const hasOrdens = ordensCompra.length > 0;
+            const qtdJaEmCompra = item.qtd_ja_em_compra ?? 0;
+            const qtdEfetiva = item.qtd_efetiva_a_comprar ?? item.qtd_a_comprar ?? 0;
+            const orcamentos = item.orcamentos ?? [];
             return (
               <> 
                 <TableRow key={key} className={rowBg}>
@@ -110,19 +114,19 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                   <TableCell className="text-sm">{item.qtd_necessaria}</TableCell>
                   {/* Em Pedido */}
                   <TableCell className="text-sm">
-                    {item.qtd_ja_em_compra === 0 ? (
+                    {qtdJaEmCompra === 0 ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
                       <div className="flex items-center gap-1">
-                        <span className="font-medium">{item.qtd_ja_em_compra}</span>
-                        {item.qtd_ja_em_compra >= item.qtd_a_comprar ? (
+                        <span className="font-medium">{qtdJaEmCompra}</span>
+                        {qtdJaEmCompra >= (item.qtd_a_comprar ?? 0) ? (
                           <Badge className="bg-green-100 text-green-800 border-green-200 text-[10px] px-1">✅ Coberto</Badge>
                         ) : (
                           <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[10px] px-1">⚠️ Parcial</Badge>
                         )}
                         {hasOrdens && (
                           <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={() => toggleRow(key)}>
-                            {item.ordens_compra.length}p
+                            {ordensCompra.length}p
                             {isExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
                           </Button>
                         )}
@@ -130,8 +134,8 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                     )}
                   </TableCell>
                   {/* A Comprar (efetivo) */}
-                  <TableCell className={`text-sm font-bold ${item.qtd_efetiva_a_comprar > 0 ? 'text-destructive' : 'text-green-700'}`}>
-                    {item.qtd_efetiva_a_comprar > 0 ? item.qtd_efetiva_a_comprar : '—'}
+                  <TableCell className={`text-sm font-bold ${qtdEfetiva > 0 ? 'text-destructive' : 'text-green-700'}`}>
+                    {qtdEfetiva > 0 ? qtdEfetiva : '—'}
                   </TableCell>
                   <TableCell className="text-sm">
                     {item.ultimo_preco > 0 ? formatBRL(item.ultimo_preco) : <span className="text-muted-foreground">—</span>}
@@ -149,7 +153,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                   </TableCell>
                   <TableCell className="text-xs max-w-[200px]">
                     <div className="flex flex-wrap gap-1">
-                      {item.orcamentos.map(orc => (
+                      {orcamentos.map(orc => (
                         <Badge key={orc.id} variant="outline" className="text-[10px] font-mono whitespace-nowrap">
                           {orc.codigo} ({orc.qtd})
                         </Badge>
@@ -163,7 +167,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                     <TableCell colSpan={11} className="py-2 px-6">
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground mb-1">PEDIDOS DE COMPRA</p>
-                        {item.ordens_compra.map(oc => (
+                        {ordensCompra.map(oc => (
                           <div key={oc.id} className="flex items-center gap-4 text-xs">
                             <Badge variant="outline" className="text-[10px] bg-amber-50">PC</Badge>
                             <span className="font-mono font-medium">{oc.codigo}</span>

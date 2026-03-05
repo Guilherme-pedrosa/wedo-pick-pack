@@ -4,6 +4,7 @@ import { ComprasResult } from '@/api/types';
 
 interface ComprasConfig {
   situacoesOrcamentoSelecionadas: string[];
+  situacoesCompraEmAndamento: string[];
 }
 
 interface ComprasProgress {
@@ -30,7 +31,7 @@ export const useComprasStore = create<ComprasStore>()(
       result: null,
       isScanning: false,
       progress: { step: '', checked: 0, total: 0 },
-      config: { situacoesOrcamentoSelecionadas: [] },
+      config: { situacoesOrcamentoSelecionadas: [], situacoesCompraEmAndamento: [] },
       setResult: (r) => set({ result: r }),
       setScanning: (b) => set({ isScanning: b }),
       setProgress: (p) => set({ progress: p }),

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   ShoppingCart, ShoppingBag, AlertTriangle, CheckCircle2, DollarSign,
-  Download, Printer, Loader2, ChevronDown, RefreshCw,
+  Download, Printer, Loader2, ChevronDown, RefreshCw, Clock,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -15,27 +15,27 @@ function formatBRL(value: number): string {
 }
 
 function exportCSV(itensList: ItemCompra[], scannedAt: string) {
-  const header = ['Código', 'Produto', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos'];
+  const header = ['Código', 'Produto', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra'];
   const rows = itensList.map(i => [
     i.codigo_produto,
     i.nome_produto,
     i.sigla_unidade,
     i.estoque_atual,
     i.qtd_necessaria,
-    i.qtd_a_comprar,
+    i.qtd_efetiva_a_comprar,
+    i.qtd_ja_em_compra,
     i.ultimo_preco.toFixed(2).replace('.', ','),
     i.estimativa.toFixed(2).replace('.', ','),
     i.fornecedor_nome || '',
     i.fornecedor_telefone || '',
     i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
+    i.ordens_compra.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
   ]);
   const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `lista-compras-${scannedAt.slice(0, 10)}.csv`;
-  a.click();
+  a.href = url; a.download = `lista-compras-${scannedAt.slice(0, 10)}.csv`; a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -48,7 +48,8 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.sigla_unidade}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;color:${i.estoque_atual < i.qtd_necessaria ? 'red' : 'green'}">${i.estoque_atual}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.qtd_necessaria}</td>
-      <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;font-weight:bold;color:red">${i.qtd_a_comprar}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.qtd_ja_em_compra > 0 ? i.qtd_ja_em_compra : '—'}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;font-weight:bold;color:red">${i.qtd_efetiva_a_comprar}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:right">${i.ultimo_preco > 0 ? formatBRL(i.ultimo_preco) : '—'}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:right;font-weight:bold">${formatBRL(i.estimativa)}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${i.fornecedor_nome || '—'}<br><small>${i.fornecedor_telefone || ''}</small></td>
@@ -59,7 +60,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
   const date = new Date(result.scannedAt).toLocaleDateString('pt-BR');
   const html = `<!DOCTYPE html><html><head><title>Lista de Compras - WeDo</title></head><body style="font-family:Arial,sans-serif;padding:20px">
     <h1 style="text-align:center;margin-bottom:4px">🛒 WeDo — Lista de Compras</h1>
-    <p style="text-align:center;color:#666">${date} · ${result.totalOrcamentos} orçamentos · ${result.totalProdutosSemEstoque} itens para comprar · Estimativa: ${formatBRL(result.estimativaTotal)}</p>
+    <p style="text-align:center;color:#666">${date} · ${result.totalOrcamentos} orçamentos · ${result.totalProdutosSemEstoque} itens para comprar${result.totalItensCobertosporPedido > 0 ? ` · ${result.totalItensCobertosporPedido} cobertos por pedido` : ''} · Estimativa: ${formatBRL(result.estimativaTotal)}</p>
     <table style="width:100%;border-collapse:collapse;margin-top:16px">
       <thead><tr style="background:#f3f4f6">
         <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Código</th>
@@ -67,6 +68,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
         <th style="padding:6px 8px;border:1px solid #ddd">UN</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Estoque</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Necessário</th>
+        <th style="padding:6px 8px;border:1px solid #ddd">Em Pedido</th>
         <th style="padding:6px 8px;border:1px solid #ddd">A Comprar</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Últ. Preço</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Estimativa</th>
@@ -79,18 +81,14 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
   </body></html>`;
 
   const w = window.open('', '_blank');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-    w.print();
-  }
+  if (w) { w.document.write(html); w.document.close(); w.print(); }
 }
 
 export default function ComprasResultPanel() {
   const { result, isScanning, progress, clearResult } = useComprasStore();
   const [okExpanded, setOkExpanded] = useState(false);
+  const [cobertosExpanded, setCobertosExpanded] = useState(false);
 
-  // Empty state
   if (!result && !isScanning) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8">
@@ -103,7 +101,6 @@ export default function ComprasResultPanel() {
     );
   }
 
-  // Scanning state
   if (isScanning) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8">
@@ -113,14 +110,9 @@ export default function ComprasResultPanel() {
         {progress.total > 0 && (
           <div className="w-64">
             <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all"
-                style={{ width: `${(progress.checked / progress.total) * 100}%` }}
-              />
+              <div className="h-full bg-primary transition-all" style={{ width: `${(progress.checked / progress.total) * 100}%` }} />
             </div>
-            <p className="text-xs text-center text-muted-foreground mt-1">
-              {progress.checked}/{progress.total}
-            </p>
+            <p className="text-xs text-center text-muted-foreground mt-1">{progress.checked}/{progress.total}</p>
           </div>
         )}
       </div>
@@ -133,12 +125,11 @@ export default function ComprasResultPanel() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Fixed header */}
+      {/* Header */}
       <div className="p-4 border-b border-border bg-card flex items-center justify-between shrink-0">
         <div>
           <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5 text-primary" />
-            Lista de Compras
+            <ShoppingCart className="h-5 w-5 text-primary" /> Lista de Compras
           </h2>
           <p className="text-xs text-muted-foreground">{scannedDate}</p>
         </div>
@@ -155,38 +146,37 @@ export default function ComprasResultPanel() {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Card className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100">
-              <ShoppingBag className="h-5 w-5 text-blue-700" />
-            </div>
+            <div className="p-2 rounded-lg bg-blue-100"><ShoppingBag className="h-5 w-5 text-blue-700" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Orçamentos</p>
               <p className="text-xl font-bold text-foreground">{result.totalOrcamentos}</p>
             </div>
           </Card>
           <Card className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-red-100">
-              <AlertTriangle className="h-5 w-5 text-red-700" />
-            </div>
+            <div className="p-2 rounded-lg bg-red-100"><AlertTriangle className="h-5 w-5 text-red-700" /></div>
             <div>
               <p className="text-xs text-muted-foreground">A Comprar</p>
               <p className="text-xl font-bold text-destructive">{result.totalProdutosSemEstoque}</p>
             </div>
           </Card>
           <Card className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-100">
-              <CheckCircle2 className="h-5 w-5 text-green-700" />
+            <div className="p-2 rounded-lg bg-amber-100"><Clock className="h-5 w-5 text-amber-700" /></div>
+            <div>
+              <p className="text-xs text-muted-foreground">Pedido em aberto</p>
+              <p className="text-xl font-bold text-amber-700">{result.totalItensCobertosporPedido}</p>
             </div>
+          </Card>
+          <Card className="p-3 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-green-100"><CheckCircle2 className="h-5 w-5 text-green-700" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Com Estoque</p>
               <p className="text-xl font-bold text-green-700">{result.totalProdutosOk}</p>
             </div>
           </Card>
           <Card className="p-3 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100">
-              <DollarSign className="h-5 w-5 text-purple-700" />
-            </div>
+            <div className="p-2 rounded-lg bg-purple-100"><DollarSign className="h-5 w-5 text-purple-700" /></div>
             <div>
               <p className="text-xs text-muted-foreground">Estimativa</p>
               <p className="text-xl font-bold text-purple-700">{formatBRL(result.estimativaTotal)}</p>
@@ -194,12 +184,10 @@ export default function ComprasResultPanel() {
           </Card>
         </div>
 
-        {/* Main table - items to purchase */}
+        {/* Main table */}
         {result.itensList.length > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-foreground mb-2">
-              Itens para compra ({result.itensList.length})
-            </h3>
+            <h3 className="text-sm font-bold text-foreground mb-2">Itens para compra ({result.itensList.length})</h3>
             <ComprasTable items={result.itensList} />
           </div>
         )}
@@ -207,11 +195,26 @@ export default function ComprasResultPanel() {
         {result.itensList.length === 0 && (
           <Card className="p-6 text-center">
             <CheckCircle2 className="h-10 w-10 text-green-600 mx-auto mb-2" />
-            <p className="font-medium text-foreground">Todos os itens possuem estoque suficiente!</p>
+            <p className="font-medium text-foreground">Todos os itens possuem estoque suficiente ou estão cobertos por pedidos!</p>
           </Card>
         )}
 
-        {/* Collapsible OK items */}
+        {/* Covered by purchase orders */}
+        {result.itensCobertosporPedido.length > 0 && (
+          <Collapsible open={cobertosExpanded} onOpenChange={setCobertosExpanded}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between text-sm">
+                <span>🔄 Itens cobertos por pedidos de compra ({result.itensCobertosporPedido.length})</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${cobertosExpanded ? 'rotate-180' : ''}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <ComprasTable items={result.itensCobertosporPedido} showCoveredStyle />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {/* OK items */}
         {result.itensOkList.length > 0 && (
           <Collapsible open={okExpanded} onOpenChange={setOkExpanded}>
             <CollapsibleTrigger asChild>

@@ -1,4 +1,4 @@
-import { GCSituacao, GCOrdemServico, GCVenda, GCOrcamento, GCProdutoDetalhe, GCFornecedor } from './types';
+import { GCSituacao, GCOrdemServico, GCVenda, GCOrcamento, GCProdutoDetalhe, GCFornecedor, GCSituacaoCompra, GCOrdemCompra } from './types';
 
 export const MOCK_STATUS_OS: GCSituacao[] = [
   { id: "12113", nome: "Em aberto" },
@@ -126,3 +126,34 @@ export const MOCK_FORNECEDORES: Record<string, GCFornecedor> = {
   "f001": { id: "f001", nome: "Frigelar Distribuidora Ltda", telefone: "(11) 3344-5566", email: "compras@frigelar.com.br" },
   "f002": { id: "f002", nome: "Insumos Técnicos WeDo", telefone: "(11) 99988-7766", email: "pedidos@insumoswedo.com.br" },
 };
+
+// --- COMPRAS (Purchase Orders) MOCKS ---
+
+export const MOCK_STATUS_COMPRA: GCSituacaoCompra[] = [
+  { id: "15", nome: "Confirmada", padrao: "0", tipo_lancamento: "1" },
+  { id: "13", nome: "Em aberto", padrao: "1", tipo_lancamento: "0" },
+  { id: "14", nome: "Em andamento", padrao: "0", tipo_lancamento: "0" },
+  { id: "16", nome: "Cancelada", padrao: "0", tipo_lancamento: "0" },
+  { id: "4010", nome: "Finalizado", padrao: "0", tipo_lancamento: "1" },
+];
+
+export const MOCK_ORDENS_COMPRA: GCOrdemCompra[] = [
+  {
+    id: "9001", codigo: "PC-001",
+    fornecedor_id: "f001", nome_fornecedor: "Frigelar Distribuidora Ltda",
+    data_emissao: "2026-03-03", situacao_id: "13", nome_situacao: "Em aberto",
+    valor_total: "840,00",
+    produtos: [
+      { produto: { id: "item1", produto_id: "p004", variacao_id: "", nome_produto: "Compressor Embraco 1/4HP", quantidade: "2.00", valor_custo: "420.00" } },
+    ]
+  },
+  {
+    id: "9002", codigo: "PC-002",
+    fornecedor_id: "f002", nome_fornecedor: "Insumos Técnicos WeDo",
+    data_emissao: "2026-03-04", situacao_id: "14", nome_situacao: "Em andamento",
+    valor_total: "192,00",
+    produtos: [
+      { produto: { id: "item2", produto_id: "p006", variacao_id: "", nome_produto: "Borracha porta câmara fria", quantidade: "4.00", valor_custo: "48.00" } },
+    ]
+  },
+];

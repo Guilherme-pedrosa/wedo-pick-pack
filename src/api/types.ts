@@ -144,6 +144,34 @@ export interface GCFornecedor {
   email?: string;
 }
 
+export interface GCCompraProduto {
+  id: string;
+  produto_id: string;
+  variacao_id: string;
+  nome_produto: string;
+  quantidade: string | number;
+  valor_custo: string;
+}
+
+export interface GCOrdemCompra {
+  id: string;
+  codigo: string;
+  fornecedor_id: string;
+  nome_fornecedor: string;
+  data_emissao: string;
+  situacao_id: string;
+  nome_situacao: string;
+  valor_total: string;
+  produtos: Array<{ produto: GCCompraProduto }>;
+}
+
+export interface GCSituacaoCompra {
+  id: string;
+  nome: string;
+  padrao: string;
+  tipo_lancamento: string; // "0"=Não lança "1"=Est+Fin "2"=Só Est "3"=Só Fin
+}
+
 export interface ItemCompra {
   produto_id: string;
   variacao_id: string;
@@ -153,6 +181,8 @@ export interface ItemCompra {
   estoque_atual: number;
   qtd_necessaria: number;
   qtd_a_comprar: number;
+  qtd_ja_em_compra: number;
+  qtd_efetiva_a_comprar: number;
   ultimo_preco: number;
   estimativa: number;
   movimenta_estoque: boolean;
@@ -165,14 +195,23 @@ export interface ItemCompra {
     qtd: number;
     nome_cliente: string;
   }>;
+  ordens_compra: Array<{
+    id: string;
+    codigo: string;
+    qtd: number;
+    nome_fornecedor: string;
+    situacao: string;
+  }>;
 }
 
 export interface ComprasResult {
   itensList: ItemCompra[];
   itensOkList: ItemCompra[];
+  itensCobertosporPedido: ItemCompra[];
   totalOrcamentos: number;
   totalProdutosSemEstoque: number;
   totalProdutosOk: number;
+  totalItensCobertosporPedido: number;
   estimativaTotal: number;
   scannedAt: string;
 }

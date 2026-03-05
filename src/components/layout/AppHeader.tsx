@@ -1,10 +1,14 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Settings, Package } from 'lucide-react';
+import { Settings, Package, LogOut } from 'lucide-react';
 import { isUsingMock } from '@/api/gestaoclick';
+import { useCheckoutStore } from '@/store/checkoutStore';
+import { Button } from '@/components/ui/button';
 
 export default function AppHeader() {
   const location = useLocation();
   const mock = isUsingMock();
+  const currentOperator = useCheckoutStore(s => s.auth.currentOperator);
+  const logout = useCheckoutStore(s => s.logout);
 
   return (
     <>
@@ -48,9 +52,24 @@ export default function AppHeader() {
             </Link>
           </nav>
 
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-3 text-sm">
             <span className={`inline-block w-2 h-2 rounded-full ${mock ? 'bg-red-400' : 'bg-green-400'}`} />
             <span className="text-blue-200">{mock ? 'Modo Demo' : 'GC Conectado'}</span>
+            {currentOperator && (
+              <>
+                <span className="text-blue-200">·</span>
+                <span className="text-blue-100 font-medium">{currentOperator}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-blue-200 hover:text-primary-foreground hover:bg-secondary/50 h-7 px-2"
+                  onClick={logout}
+                  title="Sair"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </header>

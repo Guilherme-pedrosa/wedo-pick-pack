@@ -59,6 +59,19 @@ function parseDecimal(value: string | number | null | undefined): number {
   return parseFloat(raw) || 0;
 }
 
+function normalizeId(value: string | number | null | undefined): string {
+  if (value == null) return '';
+  const raw = String(value).trim();
+  if (!raw) return '';
+  const lowered = raw.toLowerCase();
+  if (lowered === '0' || lowered === 'null' || lowered === 'undefined') return '';
+  return raw;
+}
+
+function makeProdutoKey(produtoId: string | number | null | undefined, variacaoId: string | number | null | undefined): string {
+  return `${normalizeId(produtoId)}::${normalizeId(variacaoId)}`;
+}
+
 // --- STATUS ORCAMENTOS ---
 export async function getStatusOrcamentos(): Promise<GCSituacao[]> {
   if (isUsingMock()) { await mockDelay(); return [...MOCK_STATUS_ORCAMENTO]; }
@@ -175,14 +188,29 @@ export async function buildListaCompras(
     qtd: number;
     ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
   }>();
+  const compraMapByProduto = new Map<string, {
+    qtd: number;
+    ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
+  }>();
   for (const ordem of todasOrdens) {
     for (const p of ordem.produtos || []) {
-      const key = `${p.produto.produto_id}::${p.produto.variacao_id}`;
+      const produtoId = normalizeId(p.produto.produto_id);
+      if (!produtoId) continue;
+      const key = makeProdutoKey(produtoId, p.produto.variacao_id);
       const qty = parseDecimal(p.produto.quantidade);
+
       if (!compraMap.has(key)) compraMap.set(key, { qtd: 0, ordens: [] });
       const entry = compraMap.get(key)!;
       entry.qtd += qty;
       entry.ordens.push({
+        id: ordem.id, codigo: ordem.codigo, qtd: qty,
+        nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao,
+      });
+
+      if (!compraMapByProduto.has(produtoId)) compraMapByProduto.set(produtoId, { qtd: 0, ordens: [] });
+      const byProdutoEntry = compraMapByProduto.get(produtoId)!;
+      byProdutoEntry.qtd += qty;
+      byProdutoEntry.ordens.push({
         id: ordem.id, codigo: ordem.codigo, qtd: qty,
         nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao,
       });
@@ -193,7 +221,8 @@ export async function buildListaCompras(
   const fornecedorPorProduto = new Map<string, { fornecedor_id: string; nome_fornecedor: string }>();
   for (const ordem of todasOrdens) {
     for (const p of ordem.produtos || []) {
-      const pid = p.produto.produto_id;
+      const pid = normalizeId(p.produto.produto_id);
+      if (!pid) continue;
       if (!fornecedorPorProduto.has(pid)) {
         fornecedorPorProduto.set(pid, {
           fornecedor_id: ordem.fornecedor_id,
@@ -213,11 +242,14 @@ export async function buildListaCompras(
 
   for (const orc of allOrcamentos) {
     for (const p of orc.produtos || []) {
-      const key = `${p.produto.produto_id}::${p.produto.variacao_id}`;
+      const produtoId = normalizeId(p.produto.produto_id);
+      if (!produtoId) continue;
+      const variacaoId = normalizeId(p.produto.variacao_id);
+      const key = makeProdutoKey(produtoId, variacaoId);
       const qty = parseDecimal(p.produto.quantidade);
       if (!productMap.has(key)) {
         productMap.set(key, {
-          produto_id: p.produto.produto_id, variacao_id: p.produto.variacao_id,
+          produto_id: produtoId, variacao_id: variacaoId,
           nome_produto: p.produto.nome_produto, codigo_produto: p.produto.codigo_produto,
           sigla_unidade: p.produto.sigla_unidade, movimenta_estoque: p.produto.movimenta_estoque ?? '1',
           qtd_total: 0, orcamentos: [],
@@ -270,7 +302,7 @@ export async function buildListaCompras(
       valorCusto = parseDecimal(detail.valor_custo);
     }
 
-    const compraEntry = compraMap.get(key);
+    const compraEntry = compraMap.get(key) ?? compraMapByProduto.get(entry.produto_id);
     const qtdJaEmCompra = compraEntry?.qtd ?? 0;
     const ordensCompra = compraEntry?.ordens ?? [];
 

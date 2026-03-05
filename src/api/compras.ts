@@ -290,6 +290,7 @@ export async function buildListaCompras(
       nome_produto: detail?.nome || entry.nome_produto,
       codigo_produto: detail?.codigo_interno || entry.codigo_produto,
       sigla_unidade: entry.sigla_unidade,
+      grupo: detail?.nome_grupo,
       estoque_atual: estoqueAtual,
       qtd_necessaria: qtdNecessaria,
       qtd_a_comprar: deficit,

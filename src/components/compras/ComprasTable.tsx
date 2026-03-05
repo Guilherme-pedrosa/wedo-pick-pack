@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 
-type SortKey = 'codigo_produto' | 'nome_produto' | 'estoque_atual' | 'qtd_necessaria' | 'qtd_efetiva_a_comprar' | 'qtd_ja_em_compra' | 'ultimo_preco' | 'estimativa' | 'fornecedor_nome';
+type SortKey = 'codigo_produto' | 'nome_produto' | 'grupo' | 'estoque_atual' | 'qtd_necessaria' | 'qtd_efetiva_a_comprar' | 'qtd_ja_em_compra' | 'ultimo_preco' | 'estimativa' | 'fornecedor_nome';
 
 interface Props {
   items: ItemCompra[];
@@ -75,6 +75,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
           <TableRow>
             <SortHeader label="Código" col="codigo_produto" />
             <SortHeader label="Produto" col="nome_produto" />
+            <SortHeader label="Grupo" col="grupo" />
             <TableHead className="text-xs">UN</TableHead>
             <SortHeader label="Estoque" col="estoque_atual" />
             <SortHeader label="Necessário" col="qtd_necessaria" />
@@ -107,6 +108,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                       </Badge>
                     )}
                   </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{item.grupo || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.sigla_unidade}</TableCell>
                   <TableCell className={`text-sm font-medium ${item.estoque_atual < item.qtd_necessaria ? 'text-destructive' : 'text-green-700'}`}>
                     {item.estoque_atual}
@@ -164,7 +166,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                 {/* Expanded purchase orders detail */}
                 {isExpanded && hasOrdens && (
                   <TableRow key={`${key}-orders`} className="bg-amber-50/30">
-                    <TableCell colSpan={11} className="py-2 px-6">
+                    <TableCell colSpan={12} className="py-2 px-6">
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground mb-1">PEDIDOS DE COMPRA</p>
                         {ordensCompra.map(oc => (
@@ -186,7 +188,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
         </TableBody>
         <TableFooter>
           <TableRow className="font-bold">
-            <TableCell colSpan={4} className="text-right text-xs">TOTAL</TableCell>
+             <TableCell colSpan={5} className="text-right text-xs">TOTAL</TableCell>
             <TableCell className="text-sm">{totalNecessario}</TableCell>
             <TableCell className="text-sm text-amber-700">{totalEmPedido > 0 ? totalEmPedido : '—'}</TableCell>
             <TableCell className="text-sm text-destructive">{totalEfetivo}</TableCell>

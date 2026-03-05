@@ -73,6 +73,10 @@ export default function OrcamentosPanel() {
 
   const handleGenerate = async () => {
     if (selectedSituacoes.length === 0) return;
+    if (selectedCompra.length === 0) {
+      toast.error('Selecione ao menos 1 status em "Pedidos de Compra — Cruzamento"');
+      return;
+    }
     setScanning(true);
     setProgress({ step: 'Iniciando…', checked: 0, total: 0 });
     try {
@@ -135,7 +139,7 @@ export default function OrcamentosPanel() {
           <h3 className="text-xs font-bold text-foreground">Pedidos de Compra — Cruzamento</h3>
         </div>
         <p className="text-[11px] text-muted-foreground leading-tight">
-          Marque todos os status de compra em andamento (Ex: Em Cotação, Comprado Ag. Chegada). Desmarque apenas finalizados ou cancelados.
+          Marque todos os status de compra em andamento (Ex: Em Cotação, Comprado Ag. Chegada). Desmarque apenas finalizados ou cancelados. Selecionados: {selectedCompra.length}.
         </p>
 
         {statusCompraQuery.isLoading ? (
@@ -223,7 +227,7 @@ export default function OrcamentosPanel() {
           </div>
         )}
         <Button className="w-full gap-2" size="lg" onClick={handleGenerate}
-          disabled={selectedSituacoes.length === 0 || isScanning}>
+          disabled={selectedSituacoes.length === 0 || selectedCompra.length === 0 || isScanning}>
           {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
           🛒 Gerar Lista de Compras
         </Button>

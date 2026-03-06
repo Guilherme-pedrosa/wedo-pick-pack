@@ -134,6 +134,15 @@ export interface GCOrcamento {
       modelo?: string;
     };
   }>;
+  atributos?: Array<{
+    atributo: {
+      id: string;
+      atributo_id: string;
+      descricao: string;
+      conteudo: string;
+      tipo: string;
+    };
+  }>;
 }
 
 export interface OrcamentoConvertidoWarning {

@@ -113,6 +113,10 @@ export default function RastreadorPage() {
   const formatDate = formatDateBR;
 
   function getEquipamento(orc: GCOrcamento): string {
+    // Try atributos first (campo extra "Equipamento")
+    const attr = orc.atributos?.find(a => a.atributo.descricao?.toLowerCase() === 'equipamento');
+    if (attr?.atributo.conteudo) return attr.atributo.conteudo;
+    // Fallback to equipamentos array
     const eq = orc.equipamentos?.[0]?.equipamento;
     if (!eq?.equipamento) return '';
     const parts = [eq.equipamento, eq.marca, eq.modelo].filter(Boolean);

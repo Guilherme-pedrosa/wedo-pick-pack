@@ -104,7 +104,7 @@ export default function ConferencePanel() {
   }, [session, confirmItem]);
 
   const handleScan = useCallback(() => {
-    const hasLargeQty = session?.items.some(i => i.qtd_total > 20);
+    const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
     const effectiveQty = hasLargeQty ? (Number(scanQty) || 1) : 1;
     processScan(scanCode, effectiveQty);
     setScanCode('');
@@ -155,7 +155,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
   const allConfirmed = session.items.every(i => i.conferido);
   const confirmedCount = session.items.filter(i => i.conferido).length;
   const totalCount = session.items.length;
-  const showQtyField = session.items.some(i => i.qtd_total > 20);
+  const showQtyField = session.items.some(i => i.qtd_total >= 5);
   const progress = totalCount > 0 ? Math.round((confirmedCount / totalCount) * 100) : 0;
   const hasAnyConfirmed = session.items.some(i => i.qtd_conferida > 0);
 
@@ -266,7 +266,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onScan={(code) => {
-          const hasLargeQty = session?.items.some(i => i.qtd_total > 20);
+          const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
           processScan(code, hasLargeQty ? (Number(scanQty) || 1) : 1);
           scanRef.current?.focus();
         }}

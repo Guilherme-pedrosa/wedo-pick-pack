@@ -122,8 +122,16 @@
 
 @media print {
   /* Hide header, nav, toasts, and other non-content elements */
-  header, nav, .sonner-toaster, [data-sonner-toaster] {
+  header, nav, .sonner-toaster, [data-sonner-toaster], .no-print-content {
     display: none !important;
+  }
+
+  .print-content {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   body {
@@ -135,5 +143,12 @@
   /* Ensure print content flows naturally */
   * {
     box-shadow: none !important;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
   }
 }

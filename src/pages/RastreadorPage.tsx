@@ -65,6 +65,7 @@ export default function RastreadorPage() {
   const [result, setResult] = useState<RastreadorResult | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPrintView, setIsPrintView] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   const statusQuery = useQuery({
     queryKey: ['status-orcamentos'],

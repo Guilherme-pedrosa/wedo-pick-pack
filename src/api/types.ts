@@ -170,6 +170,7 @@ export interface GCOrdemCompra {
   fornecedor_id: string;
   nome_fornecedor: string;
   data_emissao: string;
+  data_previsao?: string;
   situacao_id: string;
   nome_situacao: string;
   valor_total: string;

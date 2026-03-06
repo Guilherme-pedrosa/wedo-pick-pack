@@ -25,19 +25,26 @@ export function useAuth(): AuthState {
         if (u) {
           // Fetch profile and roles with setTimeout to avoid deadlock
           setTimeout(async () => {
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('name, gc_usuario_id')
-              .eq('id', u.id)
-              .maybeSingle();
-            setProfile(profileData);
+            try {
+              const { data: profileData } = await supabase
+                .from('profiles')
+                .select('name, gc_usuario_id')
+                .eq('id', u.id)
+                .maybeSingle();
+              setProfile(profileData);
 
-            const { data: roleData } = await supabase
-              .from('user_roles')
-              .select('role')
-              .eq('user_id', u.id);
-            setIsAdmin(roleData?.some(r => r.role === 'admin') ?? false);
-            setLoading(false);
+              const { data: roleData } = await supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', u.id);
+              setIsAdmin(roleData?.some(r => r.role === 'admin') ?? false);
+            } catch (err) {
+              console.error('Error fetching profile/roles:', err);
+              setProfile(null);
+              setIsAdmin(false);
+            } finally {
+              setLoading(false);
+            }
           }, 0);
         } else {
           setProfile(null);

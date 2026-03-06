@@ -116,7 +116,17 @@ export interface GCOrcamento {
   situacao_id: string;
   nome_situacao: string;
   valor_total: string;
+  situacao_financeiro?: string;
+  situacao_estoque?: string;
   produtos: Array<{ produto: GCOrcamentoProduto }>;
+}
+
+export interface OrcamentoConvertidoWarning {
+  orcamento_id: string;
+  codigo: string;
+  nome_cliente: string;
+  situacao_financeiro: string;
+  situacao_estoque: string;
 }
 
 export interface GCProdutoDetalhe {
@@ -210,6 +220,7 @@ export interface ComprasResult {
   itensList: ItemCompra[];
   itensOkList: ItemCompra[];
   itensCobertosporPedido: ItemCompra[];
+  orcamentosConvertidos: OrcamentoConvertidoWarning[];
   totalOrcamentos: number;
   totalProdutosSemEstoque: number;
   totalProdutosOk: number;

@@ -187,7 +187,7 @@ export async function buildListaCompras(
 
   // PHASE 1b: Detect converted budgets
   const orcamentosConvertidos: OrcamentoConvertidoWarning[] = allOrcamentos
-    .filter(o => o.situacao_financeiro === '1' && o.situacao_estoque === '1')
+    .filter(o => o.situacao_financeiro === '1' || o.situacao_estoque === '1')
     .map(o => ({
       orcamento_id: o.id,
       codigo: o.codigo,

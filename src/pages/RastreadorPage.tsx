@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos } from '@/api/compras';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo } from '@/api/rastreador';
@@ -10,9 +10,50 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import {
   Search, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight,
-  PackageCheck, Clock, RefreshCw,
+  PackageCheck, Clock, RefreshCw, Download, Printer,
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+function exportCSV(result: RastreadorResult) {
+  const header = ['Status', 'Código ORC', 'Cliente', 'Data', 'Itens Prontos', 'Total Itens', 'Produto', 'Qtd Necessária', 'Estoque Disponível', 'Estoque Total', 'Item Pronto'];
+  const rows: string[][] = [];
+
+  const addRows = (entries: OrcamentoReadiness[], status: string) => {
+    for (const e of entries) {
+      for (const item of e.itens) {
+        rows.push([
+          status,
+          e.orcamento.codigo,
+          e.orcamento.nome_cliente,
+          e.orcamento.data,
+          String(e.itensProntos),
+          String(e.totalItens),
+          item.nome_produto,
+          String(item.qtd_necessaria),
+          String(item.estoque_disponivel),
+          String(item.estoque_total),
+          item.pronto ? 'Sim' : 'Não',
+        ]);
+      }
+    }
+  };
+
+  addRows(result.orcamentosProntos, 'Pronto para OS');
+  addRows(result.orcamentosPendentes, 'Aguardando peças');
+
+  const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `rastreador-orcamentos-${result.scannedAt.slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function formatDateBR(d: string) {
+  try { const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; } catch { return d; }
+}
 
 export default function RastreadorPage() {
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
@@ -20,6 +61,7 @@ export default function RastreadorPage() {
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [result, setResult] = useState<RastreadorResult | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isPrintView, setIsPrintView] = useState(false);
 
   const statusQuery = useQuery({
     queryKey: ['status-orcamentos'],
@@ -54,9 +96,15 @@ export default function RastreadorPage() {
     }
   };
 
-  const formatDate = (d: string) => {
-    try { const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; } catch { return d; }
+  const handlePrint = () => {
+    setIsPrintView(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrintView(false);
+    }, 300);
   };
+
+  const formatDate = formatDateBR;
 
   const OrcamentoCard = ({ entry, ready }: { entry: OrcamentoReadiness; ready: boolean }) => {
     const expanded = expandedId === entry.orcamento.id;

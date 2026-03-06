@@ -35,9 +35,14 @@ function AuthenticatedApp() {
     }
 
     // Check if setup is needed (no admins)
-    supabase.rpc('has_any_admin').then(({ data }) => {
+    supabase.rpc('has_any_admin').then(({ data, error }) => {
+      if (error) {
+        console.error('Error checking admin status:', error);
+        setNeedsSetup(false);
+        return;
+      }
       setNeedsSetup(data === false);
-    });
+    }).catch(() => setNeedsSetup(false));
   }, [loading, user]);
 
   // Sync operator info from profile

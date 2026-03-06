@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos } from '@/api/compras';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo } from '@/api/rastreador';
+import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -111,8 +112,16 @@ export default function RastreadorPage() {
 
   const formatDate = formatDateBR;
 
+  function getEquipamento(orc: GCOrcamento): string {
+    const eq = orc.equipamentos?.[0]?.equipamento;
+    if (!eq?.equipamento) return '';
+    const parts = [eq.equipamento, eq.marca, eq.modelo].filter(Boolean);
+    return parts.join(' · ');
+  }
+
   const OrcamentoCard = ({ entry, ready }: { entry: OrcamentoReadiness; ready: boolean }) => {
     const expanded = expandedId === entry.orcamento.id;
+    const equip = getEquipamento(entry.orcamento);
     return (
       <Card
         className={`p-3 border-l-4 cursor-pointer transition-colors hover:bg-muted/50 ${
@@ -129,6 +138,14 @@ export default function RastreadorPage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm">#{entry.orcamento.codigo}</span>
+                {equip && (
+                  <span
+                    className="text-xs text-muted-foreground font-medium truncate max-w-[160px]"
+                    title={equip}
+                  >
+                    {equip}
+                  </span>
+                )}
                 <Badge
                   variant={ready ? 'default' : 'secondary'}
                   className={`text-[10px] px-1.5 ${ready ? 'bg-green-600' : 'bg-amber-600 text-white'}`}

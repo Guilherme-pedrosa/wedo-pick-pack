@@ -33,7 +33,14 @@ export interface GCOrdemServico {
   condicao_pagamento?: string;
   produtos: Array<{ produto: GCProdutoItem }>;
   servicos?: unknown[];
-  equipamentos?: unknown[];
+  equipamentos?: Array<{
+    equipamento: {
+      equipamento: string;
+      serie?: string;
+      marca?: string;
+      modelo?: string;
+    };
+  }>;
   pagamentos?: unknown[];
   atributos?: unknown[];
 }
@@ -119,6 +126,14 @@ export interface GCOrcamento {
   situacao_financeiro?: string;
   situacao_estoque?: string;
   produtos: Array<{ produto: GCOrcamentoProduto }>;
+  equipamentos?: Array<{
+    equipamento: {
+      equipamento: string;
+      serie?: string;
+      marca?: string;
+      modelo?: string;
+    };
+  }>;
 }
 
 export interface OrcamentoConvertidoWarning {

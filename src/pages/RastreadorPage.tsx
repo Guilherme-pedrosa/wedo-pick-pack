@@ -171,8 +171,78 @@ export default function RastreadorPage() {
     );
   };
 
+  // Print view
+  if (isPrintView && result) {
+    const renderSection = (title: string, entries: OrcamentoReadiness[]) => (
+      entries.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-base font-bold mb-2 border-b pb-1">{title} ({entries.length})</h2>
+          {entries.map(e => (
+            <div key={e.orcamento.id} className="mb-4">
+              <div className="flex justify-between items-baseline mb-1">
+                <span className="font-semibold text-sm">
+                  #{e.orcamento.codigo} — {e.orcamento.nome_cliente}
+                </span>
+                <span className="text-xs">{formatDate(e.orcamento.data)} | {e.itensProntos}/{e.totalItens} itens OK</span>
+              </div>
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-0.5 pr-2">Produto</th>
+                    <th className="text-right py-0.5 px-2">Precisa</th>
+                    <th className="text-right py-0.5 px-2">Disponível</th>
+                    <th className="text-right py-0.5 px-2">Total</th>
+                    <th className="text-center py-0.5 pl-2">OK?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {e.itens.map((item, idx) => (
+                    <tr key={idx} className="border-b border-gray-200">
+                      <td className="py-0.5 pr-2">{item.nome_produto}</td>
+                      <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
+                      <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
+                      <td className="text-right py-0.5 px-2">{item.estoque_total}</td>
+                      <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )
+    );
+
+    return (
+      <div className="p-6 bg-white text-black print-content">
+        <h1 className="text-xl font-bold mb-1">Rastreador de Orçamentos</h1>
+        <p className="text-xs text-gray-500 mb-4">
+          Gerado em {new Date(result.scannedAt).toLocaleString('pt-BR')} |
+          {result.totalProntos} prontos de {result.totalOrcamentos} analisados
+        </p>
+        {renderSection('✅ Prontos para virar OS', result.orcamentosProntos)}
+        {result.conflitos.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-base font-bold mb-2 border-b pb-1">⚠️ Conflitos de Estoque ({result.conflitos.length})</h2>
+            {result.conflitos.map(c => (
+              <div key={c.produto_key} className="mb-2 text-xs">
+                <span className="font-medium">{c.nome_produto}</span> — Estoque: {c.estoque_total}, Demanda: {c.demanda_total}
+                <div className="ml-4">
+                  {c.orcamentos_envolvidos.map(o => (
+                    <div key={o.id}>#{o.codigo} — {o.nome_cliente} — precisa {o.qtd}</div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {renderSection('⏳ Aguardando peças', result.orcamentosPendentes)}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background no-print-content">
       {/* Top controls */}
       <div className="bg-card border-b border-border p-4 space-y-3">
         <div className="flex items-center gap-2">
@@ -223,7 +293,7 @@ export default function RastreadorPage() {
               </Button>
               <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
                 <Printer className="h-3.5 w-3.5" />
-                Imprimir / PDF
+                PDF
               </Button>
             </>
           )}

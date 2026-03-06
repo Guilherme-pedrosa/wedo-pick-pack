@@ -64,17 +64,8 @@ export default function ItemsTable({ items }: Props) {
                     ? `${fmtQtd(item.qtd_total)}/${fmtQtd(item.qtd_total)}`
                     : `${fmtQtd(item.qtd_conferida)}/${fmtQtd(item.qtd_total)}`}
                 </div>
-                {item.conferido ? (
+                {item.conferido && (
                   <span className="text-green-600 text-xs">{formatTime(item.confirmed_at)}</span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-7 mt-1"
-                    onClick={() => confirmItem(item.id, 1)}
-                  >
-                    Confirmar
-                  </Button>
                 )}
               </div>
             </div>
@@ -128,17 +119,8 @@ export default function ItemsTable({ items }: Props) {
               <td className="py-2.5 px-3 text-center">{fmtQtd(item.qtd_total)}</td>
               <td className="py-2.5 px-3 text-center text-muted-foreground">{item.sigla_unidade}</td>
               <td className="py-2.5 px-3 text-center">
-                {item.conferido ? (
+                {item.conferido && (
                   <span className="text-green-600 text-xs">{formatTime(item.confirmed_at)}</span>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-7"
-                    onClick={() => confirmItem(item.id, 1)}
-                  >
-                    Confirmar
-                  </Button>
                 )}
               </td>
             </tr>

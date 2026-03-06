@@ -9,9 +9,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Search, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight,
-  PackageCheck, Clock, RefreshCw, Download, Printer, User,
+  PackageCheck, Clock, RefreshCw, Download, Printer, User, Filter,
 } from 'lucide-react';
 import { toast } from 'sonner';
 

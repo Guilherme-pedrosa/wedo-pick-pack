@@ -170,11 +170,15 @@ export async function buildListaCompras(
   // PHASE 1: Fetch all approved budgets
   onProgress?.('Buscando orçamentos aprovados…', 0, 1);
   const allOrcamentos: GCOrcamento[] = [];
+  const situacaoOrcSet = new Set(situacaoOrcIds);
   for (const sid of situacaoOrcIds) {
     let page = 1;
     while (true) {
       const res = await listOrcamentos(sid, page);
-      allOrcamentos.push(...res.data);
+      // Client-side filter: GestãoClick API may ignore situacao_id param
+      const filtered = res.data.filter(o => situacaoOrcSet.has(String(o.situacao_id)));
+      allOrcamentos.push(...filtered);
+      console.log(`[COMPRAS] listOrcamentos sid=${sid} page=${page}: ${res.data.length} returned, ${filtered.length} after filter`);
       if (page >= res.meta.total_paginas) break;
       page++;
       if (!isUsingMock()) await new Promise(r => setTimeout(r, 400));

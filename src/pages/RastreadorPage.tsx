@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos } from '@/api/compras';
-import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness } from '@/api/rastreador';
+import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo } from '@/api/rastreador';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -109,8 +109,11 @@ export default function RastreadorPage() {
                   <span>Precisa: {item.qtd_necessaria}</span>
                   <span>|</span>
                   <span className={item.pronto ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
-                    Estoque: {item.estoque_atual}
+                    Disp: {item.estoque_disponivel}
                   </span>
+                  {item.estoque_disponivel !== item.estoque_total && (
+                    <span className="text-muted-foreground">(total: {item.estoque_total})</span>
+                  )}
                 </div>
               </div>
             ))}
@@ -225,7 +228,43 @@ export default function RastreadorPage() {
                     <OrcamentoCard key={entry.orcamento.id} entry={entry} ready />
                   ))}
                 </div>
-              </div>
+            </div>
+            )}
+
+            {/* Conflicts */}
+            {result.conflitos.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    <h2 className="text-sm font-bold text-foreground">
+                      Conflitos de estoque ({result.conflitos.length})
+                    </h2>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Peças disputadas por múltiplos orçamentos — o estoque não atende todos.
+                  </p>
+                  <div className="space-y-2">
+                    {result.conflitos.map(c => (
+                      <Card key={c.produto_key} className="p-3 border-l-4 border-l-red-500">
+                        <p className="font-medium text-sm">{c.nome_produto}</p>
+                        <div className="flex gap-3 text-xs text-muted-foreground mt-1">
+                          <span>Estoque: <strong className="text-foreground">{c.estoque_total}</strong></span>
+                          <span>Demanda total: <strong className="text-red-500">{c.demanda_total}</strong></span>
+                        </div>
+                        <div className="mt-2 space-y-0.5">
+                          {c.orcamentos_envolvidos.map(o => (
+                            <div key={o.id} className="text-xs text-muted-foreground">
+                              #{o.codigo} — {o.nome_cliente} — precisa {o.qtd}
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
 
             <Separator />

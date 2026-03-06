@@ -212,12 +212,21 @@ export default function RastreadorPage() {
             Rastrear Orçamentos
           </Button>
           {result && (
-            <Button variant="outline" size="sm" onClick={handleScan} disabled={scanning} className="gap-1.5">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Atualizar
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleScan} disabled={scanning} className="gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Atualizar
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => exportCSV(result)} className="gap-1.5">
+                <Download className="h-3.5 w-3.5" />
+                CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5">
+                <Printer className="h-3.5 w-3.5" />
+                Imprimir / PDF
+              </Button>
+            </>
           )}
-        </div>
 
         {scanning && (
           <div className="space-y-1">

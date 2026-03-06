@@ -77,7 +77,7 @@ export default function AppHeader({ isAdmin, userName }: Props) {
               }`}
             >
               <Search className="h-3.5 w-3.5" />
-              Cruzamento
+              Rastreador
             </Link>
             <Link
               to="/config"

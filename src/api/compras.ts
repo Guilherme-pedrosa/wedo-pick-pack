@@ -141,7 +141,6 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
       fornecedor_id: String(compra?.fornecedor_id ?? ''),
       nome_fornecedor: String(compra?.nome_fornecedor ?? ''),
       data_emissao: String(compra?.data_emissao ?? ''),
-      data_previsao: compra?.data_previsao ? String(compra.data_previsao) : undefined,
       situacao_id: String(compra?.situacao_id ?? ''),
       nome_situacao: String(compra?.nome_situacao ?? ''),
       valor_total: String(compra?.valor_total ?? '0'),

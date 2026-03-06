@@ -161,19 +161,15 @@ export async function rastrearOrcamentos(
     }
   }
 
-  // Phase 6: Allocate stock cumulatively (first-come by budget order)
-  // Clone stock for allocation
-  const remainingStock = new Map(stockMap);
+  // Phase 6: Smart allocation - prioritize budgets that can be 100% fulfilled
+  // Sort budgets by "readiness score": budgets where all items have stock get priority
+  // Among those, prefer budgets with fewer missing items (closer to 100%)
 
-  const prontos: OrcamentoReadiness[] = [];
-  const pendentes: OrcamentoReadiness[] = [];
-
-  for (const orc of uniqueOrcamentos) {
-    const itens: OrcamentoReadiness['itens'] = [];
-
-    // First pass: check if ALL items can be fulfilled with remaining stock
+  // Pre-compute readiness score for each budget
+  const scoredOrcamentos = uniqueOrcamentos.map(orc => {
+    let totalItems = 0;
+    let itemsWithStock = 0;
     const itemsNeeded: Array<{ key: string; qtd: number }> = [];
-    let canFulfill = true;
 
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
@@ -181,8 +177,36 @@ export async function rastrearOrcamentos(
       if (!pid) continue;
       const key = makeKey(pid, vid);
       const qtd = parseDecimal(p.produto.quantidade);
-      const available = remainingStock.get(key) ?? 0;
+      const stock = stockMap.get(key) ?? 0;
+      totalItems++;
+      if (stock >= qtd) itemsWithStock++;
       itemsNeeded.push({ key, qtd });
+    }
+
+    // Score: ratio of items that have enough total stock (ignoring allocation)
+    const readinessRatio = totalItems > 0 ? itemsWithStock / totalItems : 0;
+
+    return { orc, readinessRatio, totalItems, itemsWithStock, itemsNeeded };
+  });
+
+  // Sort: highest readiness first (100% ready budgets first), then by fewer total items (simpler orders first)
+  scoredOrcamentos.sort((a, b) => {
+    if (b.readinessRatio !== a.readinessRatio) return b.readinessRatio - a.readinessRatio;
+    return a.totalItems - b.totalItems;
+  });
+
+  // Allocate stock cumulatively in priority order
+  const remainingStock = new Map(stockMap);
+  const prontos: OrcamentoReadiness[] = [];
+  const pendentes: OrcamentoReadiness[] = [];
+
+  for (const { orc, itemsNeeded } of scoredOrcamentos) {
+    const itens: OrcamentoReadiness['itens'] = [];
+
+    // Check if ALL items can be fulfilled with remaining stock
+    let canFulfill = true;
+    for (const { key, qtd } of itemsNeeded) {
+      const available = remainingStock.get(key) ?? 0;
       if (available < qtd) canFulfill = false;
     }
 

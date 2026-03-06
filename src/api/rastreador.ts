@@ -9,17 +9,27 @@ export interface OrcamentoReadiness {
     nome_produto: string;
     codigo_produto: string;
     qtd_necessaria: number;
-    estoque_atual: number;
+    estoque_total: number;      // stock total (real)
+    estoque_disponivel: number;  // stock remaining after prior budgets consumed it
     pronto: boolean;
   }>;
   totalItens: number;
   itensProntos: number;
-  pronto: boolean; // all items in stock
+  pronto: boolean;
+}
+
+export interface ConflictInfo {
+  produto_key: string;
+  nome_produto: string;
+  estoque_total: number;
+  demanda_total: number;
+  orcamentos_envolvidos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }>;
 }
 
 export interface RastreadorResult {
   orcamentosProntos: OrcamentoReadiness[];
   orcamentosPendentes: OrcamentoReadiness[];
+  conflitos: ConflictInfo[];
   totalOrcamentos: number;
   totalProntos: number;
   scannedAt: string;
@@ -94,18 +104,17 @@ export async function rastrearOrcamentos(
   }
   onProgress?.('Analisando resultados…', total, total);
 
-  // Phase 4: Evaluate each budget
-  const prontos: OrcamentoReadiness[] = [];
-  const pendentes: OrcamentoReadiness[] = [];
+  // Phase 4: Build real stock map (key -> stock quantity)
+  function makeKey(pid: string, vid: string) { return vid ? `${pid}::${vid}` : pid; }
 
+  const stockMap = new Map<string, number>(); // key -> real stock
   for (const orc of uniqueOrcamentos) {
-    const itens: OrcamentoReadiness['itens'] = [];
-
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
       const vid = normalizeId(p.produto.variacao_id);
-      const qtd = parseDecimal(p.produto.quantidade);
       if (!pid) continue;
+      const key = makeKey(pid, vid);
+      if (stockMap.has(key)) continue;
 
       const detail = detailCache.get(pid);
       let estoque = 0;
@@ -117,6 +126,75 @@ export async function rastrearOrcamentos(
           estoque = parseDecimal(detail.estoque);
         }
       }
+      stockMap.set(key, estoque);
+    }
+  }
+
+  // Phase 5: Compute total demand per product across all budgets (for conflict detection)
+  const demandMap = new Map<string, { total: number; nome: string; orcamentos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }> }>();
+  for (const orc of uniqueOrcamentos) {
+    for (const p of orc.produtos || []) {
+      const pid = normalizeId(p.produto.produto_id);
+      const vid = normalizeId(p.produto.variacao_id);
+      if (!pid) continue;
+      const key = makeKey(pid, vid);
+      const qtd = parseDecimal(p.produto.quantidade);
+      if (!demandMap.has(key)) demandMap.set(key, { total: 0, nome: p.produto.nome_produto, orcamentos: [] });
+      const entry = demandMap.get(key)!;
+      entry.total += qtd;
+      entry.orcamentos.push({ id: orc.id, codigo: orc.codigo, nome_cliente: orc.nome_cliente, qtd });
+    }
+  }
+
+  // Detect conflicts: products where total demand > stock AND multiple budgets need it
+  const conflitos: ConflictInfo[] = [];
+  for (const [key, demand] of demandMap) {
+    const stock = stockMap.get(key) ?? 0;
+    if (demand.total > stock && demand.orcamentos.length > 1) {
+      conflitos.push({
+        produto_key: key,
+        nome_produto: demand.nome,
+        estoque_total: stock,
+        demanda_total: demand.total,
+        orcamentos_envolvidos: demand.orcamentos,
+      });
+    }
+  }
+
+  // Phase 6: Allocate stock cumulatively (first-come by budget order)
+  // Clone stock for allocation
+  const remainingStock = new Map(stockMap);
+
+  const prontos: OrcamentoReadiness[] = [];
+  const pendentes: OrcamentoReadiness[] = [];
+
+  for (const orc of uniqueOrcamentos) {
+    const itens: OrcamentoReadiness['itens'] = [];
+
+    // First pass: check if ALL items can be fulfilled with remaining stock
+    const itemsNeeded: Array<{ key: string; qtd: number }> = [];
+    let canFulfill = true;
+
+    for (const p of orc.produtos || []) {
+      const pid = normalizeId(p.produto.produto_id);
+      const vid = normalizeId(p.produto.variacao_id);
+      if (!pid) continue;
+      const key = makeKey(pid, vid);
+      const qtd = parseDecimal(p.produto.quantidade);
+      const available = remainingStock.get(key) ?? 0;
+      itemsNeeded.push({ key, qtd });
+      if (available < qtd) canFulfill = false;
+    }
+
+    // Build item details
+    for (const p of orc.produtos || []) {
+      const pid = normalizeId(p.produto.produto_id);
+      const vid = normalizeId(p.produto.variacao_id);
+      if (!pid) continue;
+      const key = makeKey(pid, vid);
+      const qtd = parseDecimal(p.produto.quantidade);
+      const available = remainingStock.get(key) ?? 0;
+      const stockTotal = stockMap.get(key) ?? 0;
 
       itens.push({
         produto_id: pid,
@@ -124,27 +202,35 @@ export async function rastrearOrcamentos(
         nome_produto: p.produto.nome_produto,
         codigo_produto: p.produto.codigo_produto,
         qtd_necessaria: qtd,
-        estoque_atual: estoque,
-        pronto: estoque >= qtd,
+        estoque_total: stockTotal,
+        estoque_disponivel: available,
+        pronto: available >= qtd,
       });
     }
 
-    const allReady = itens.length > 0 && itens.every(i => i.pronto);
+    // If budget can be fully fulfilled, consume stock
+    if (canFulfill && itens.length > 0) {
+      for (const { key, qtd } of itemsNeeded) {
+        remainingStock.set(key, (remainingStock.get(key) ?? 0) - qtd);
+      }
+    }
+
     const entry: OrcamentoReadiness = {
       orcamento: orc,
       itens,
       totalItens: itens.length,
       itensProntos: itens.filter(i => i.pronto).length,
-      pronto: allReady,
+      pronto: canFulfill && itens.length > 0,
     };
 
-    if (allReady) prontos.push(entry);
+    if (entry.pronto) prontos.push(entry);
     else pendentes.push(entry);
   }
 
   return {
     orcamentosProntos: prontos,
     orcamentosPendentes: pendentes,
+    conflitos,
     totalOrcamentos: uniqueOrcamentos.length,
     totalProntos: prontos.length,
     scannedAt: new Date().toISOString(),

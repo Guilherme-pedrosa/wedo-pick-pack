@@ -11,6 +11,7 @@ import AppHeader from "@/components/layout/AppHeader";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import ComprasPage from "./pages/ComprasPage";
+import RastreadorPage from "./pages/RastreadorPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
 import LoginPage from "./pages/LoginPage";
@@ -70,6 +71,7 @@ function AuthenticatedApp() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/separations" element={<SeparationsPage />} />
         <Route path="/compras" element={<ComprasPage />} />
+        <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route
           path="/admin/users"

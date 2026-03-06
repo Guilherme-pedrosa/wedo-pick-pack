@@ -42,7 +42,7 @@ function AuthenticatedApp() {
         return;
       }
       setNeedsSetup(data === false);
-    }).catch(() => setNeedsSetup(false));
+    });
   }, [loading, user]);
 
   // Sync operator info from profile

@@ -4,11 +4,12 @@ import ComprasTable from './ComprasTable';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Badge } from '@/components/ui/badge';
 import {
   ShoppingCart, ShoppingBag, AlertTriangle, CheckCircle2, DollarSign,
-  Download, Printer, Loader2, ChevronDown, RefreshCw, Clock,
+  Download, Printer, Loader2, ChevronDown, RefreshCw, Clock, X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -88,6 +89,13 @@ export default function ComprasResultPanel() {
   const { result, isScanning, progress, clearResult } = useComprasStore();
   const [okExpanded, setOkExpanded] = useState(false);
   const [cobertosExpanded, setCobertosExpanded] = useState(false);
+  const [convertidosDismissed, setConvertidosDismissed] = useState(false);
+
+  const convertidos = result?.orcamentosConvertidos ?? [];
+  const convertedOrcamentoIds = useMemo(
+    () => new Set(convertidos.map(c => c.orcamento_id)),
+    [convertidos]
+  );
 
   if (!result && !isScanning) {
     return (
@@ -149,6 +157,53 @@ export default function ComprasResultPanel() {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Converted budgets warning */}
+        {convertidos.length > 0 && !convertidosDismissed && (
+          <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-amber-900">
+                  Atenção — {convertidos.length} orçamento(s) já convertido(s)
+                </h3>
+                <p className="text-sm text-amber-800 mt-1">
+                  Os orçamentos abaixo já geraram Venda ou OS no GestãoClick. Verifique antes de prosseguir com a compra.
+                </p>
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {convertidos.map(c => (
+                    <Badge
+                      key={c.orcamento_id}
+                      className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-mono"
+                    >
+                      {c.codigo} — {c.nome_cliente}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConvertidosDismissed(true)}
+                    className="gap-1.5"
+                  >
+                    <X className="h-3.5 w-3.5" /> Ignorar e continuar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+                    onClick={() => {
+                      const el = document.getElementById('compras-table-section');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" /> Revisar orçamentos
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Card className="p-3 flex items-center gap-3">
@@ -190,9 +245,9 @@ export default function ComprasResultPanel() {
 
         {/* Main table */}
         {result.itensList.length > 0 && (
-          <div>
+          <div id="compras-table-section">
             <h3 className="text-sm font-bold text-foreground mb-2">Itens para compra ({result.itensList.length})</h3>
-            <ComprasTable items={result.itensList} />
+            <ComprasTable items={result.itensList} convertedOrcamentoIds={convertedOrcamentoIds} />
           </div>
         )}
 

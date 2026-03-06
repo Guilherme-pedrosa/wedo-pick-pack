@@ -3,6 +3,7 @@ import { ItemCompra } from '@/api/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 
 type SortKey = 'codigo_produto' | 'nome_produto' | 'grupo' | 'estoque_atual' | 'qtd_necessaria' | 'qtd_efetiva_a_comprar' | 'qtd_ja_em_compra' | 'ultimo_preco' | 'estimativa' | 'fornecedor_nome';
@@ -11,6 +12,7 @@ interface Props {
   items: ItemCompra[];
   showOkStyle?: boolean;
   showCoveredStyle?: boolean;
+  convertedOrcamentoIds?: Set<string>;
 }
 
 function formatBRL(value: number): string {
@@ -22,7 +24,7 @@ function formatQty(value: number): string {
   return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: Props) {
+export default function ComprasTable({ items, showOkStyle, showCoveredStyle, convertedOrcamentoIds }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('qtd_efetiva_a_comprar');
   const [sortAsc, setSortAsc] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -160,11 +162,31 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle }: P
                   </TableCell>
                   <TableCell className="text-xs max-w-[200px]">
                     <div className="flex flex-wrap gap-1">
-                      {orcamentos.map(orc => (
-                        <Badge key={orc.id} variant="outline" className="text-[10px] font-mono whitespace-nowrap">
-                          {orc.codigo} ({orc.qtd})
-                        </Badge>
-                      ))}
+                      {orcamentos.map(orc => {
+                        const isConverted = convertedOrcamentoIds?.has(orc.id);
+                        return (
+                          <TooltipProvider key={orc.id}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] font-mono whitespace-nowrap ${isConverted ? 'bg-amber-100 text-amber-800 border-amber-300' : ''}`}
+                                >
+                                  {orc.codigo} ({orc.qtd})
+                                  {isConverted && (
+                                    <span className="ml-1 text-[9px] font-semibold text-amber-700">• Convertido</span>
+                                  )}
+                                </Badge>
+                              </TooltipTrigger>
+                              {isConverted && (
+                                <TooltipContent>
+                                  <p>Este orçamento já gerou Venda ou OS no GestãoClick</p>
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
+                        );
+                      })}
                     </div>
                   </TableCell>
                 </TableRow>

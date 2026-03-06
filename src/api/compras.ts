@@ -82,15 +82,20 @@ export async function getStatusOrcamentos(): Promise<GCSituacao[]> {
 }
 
 // --- LIST ORCAMENTOS ---
-export async function listOrcamentos(situacaoId?: string, pagina = 1): Promise<{ data: GCOrcamento[]; meta: GCMeta }> {
+export async function listOrcamentos(situacaoId?: string, pagina = 1, nomeCliente?: string): Promise<{ data: GCOrcamento[]; meta: GCMeta }> {
   if (isUsingMock()) {
     await mockDelay();
     let data = [...MOCK_ORCAMENTOS];
     if (situacaoId) data = data.filter(o => o.situacao_id === situacaoId);
+    if (nomeCliente) {
+      const q = nomeCliente.toLowerCase();
+      data = data.filter(o => o.nome_cliente.toLowerCase().includes(q));
+    }
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
   let path = `/api/orcamentos?pagina=${pagina}`;
   if (situacaoId) path += `&situacao_id=${situacaoId}`;
+  if (nomeCliente) path += `&nome=${encodeURIComponent(nomeCliente)}`;
   return apiRequest<{ data: GCOrcamento[]; meta: GCMeta }>(path);
 }
 

@@ -227,6 +227,7 @@ export default function RastreadorPage() {
               </Button>
             </>
           )}
+        </div>
 
         {scanning && (
           <div className="space-y-1">

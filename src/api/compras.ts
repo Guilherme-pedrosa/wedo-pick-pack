@@ -1,7 +1,7 @@
 import {
   GCSituacao, GCMeta, GCOrcamento, GCProdutoDetalhe, GCFornecedor,
   GCOrdemCompra, GCSituacaoCompra,
-  ItemCompra, ComprasResult,
+  ItemCompra, ComprasResult, OrcamentoConvertidoWarning,
 } from './types';
 import {
   MOCK_STATUS_ORCAMENTO, MOCK_ORCAMENTOS, MOCK_PRODUTOS_DETALHE, MOCK_FORNECEDORES,
@@ -183,6 +183,21 @@ export async function buildListaCompras(
       page++;
       if (!isUsingMock()) await new Promise(r => setTimeout(r, 400));
     }
+  }
+
+  // PHASE 1b: Detect converted budgets
+  const orcamentosConvertidos: OrcamentoConvertidoWarning[] = allOrcamentos
+    .filter(o => o.situacao_financeiro === '1' && o.situacao_estoque === '1')
+    .map(o => ({
+      orcamento_id: o.id,
+      codigo: o.codigo,
+      nome_cliente: o.nome_cliente,
+      situacao_financeiro: o.situacao_financeiro!,
+      situacao_estoque: o.situacao_estoque!,
+    }));
+
+  if (orcamentosConvertidos.length > 0) {
+    console.log(`[COMPRAS] Phase 1b: ${orcamentosConvertidos.length} orçamento(s) já convertido(s)`);
   }
 
   // PHASE 2a: Fetch purchase orders for selected statuses (quantity cross-reference)
@@ -404,6 +419,7 @@ export async function buildListaCompras(
     itensList,
     itensOkList,
     itensCobertosporPedido: itensCobertos,
+    orcamentosConvertidos,
     totalOrcamentos: allOrcamentos.length,
     totalProdutosSemEstoque: itensList.length,
     totalProdutosOk: itensOkList.length,

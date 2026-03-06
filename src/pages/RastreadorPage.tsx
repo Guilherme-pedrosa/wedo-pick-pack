@@ -258,36 +258,52 @@ export default function RastreadorPage() {
           Selecione as situações e (opcionalmente) filtre por cliente para verificar quais orçamentos podem virar OS.
         </p>
 
-        <div className="relative">
-          <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Filtrar por nome do cliente…"
-            value={nomeCliente}
-            onChange={e => setNomeCliente(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleScan()}
-            disabled={scanning}
-            className="h-8 text-sm pl-8"
-          />
-        </div>
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1.5 h-7 px-2 text-xs text-muted-foreground hover:text-foreground">
+              <Filter className="h-3.5 w-3.5" />
+              Filtros
+              {filtersOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              {(nomeCliente || selectedSituacoes.length > 0) && !filtersOpen && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1">
+                  {selectedSituacoes.length + (nomeCliente ? 1 : 0)}
+                </Badge>
+              )}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-1">
+            <div className="relative">
+              <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Filtrar por nome do cliente…"
+                value={nomeCliente}
+                onChange={e => setNomeCliente(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleScan()}
+                disabled={scanning}
+                className="h-8 text-sm pl-8"
+              />
+            </div>
 
-        {statusQuery.isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações…
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-3">
-            {(statusQuery.data || []).map(s => (
-              <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                <Checkbox
-                  checked={selectedSituacoes.includes(s.id)}
-                  onCheckedChange={() => toggleSituacao(s.id)}
-                  disabled={scanning}
-                />
-                {s.nome}
-              </label>
-            ))}
-          </div>
-        )}
+            {statusQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações…
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {(statusQuery.data || []).map(s => (
+                  <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={selectedSituacoes.includes(s.id)}
+                      onCheckedChange={() => toggleSituacao(s.id)}
+                      disabled={scanning}
+                    />
+                    {s.nome}
+                  </label>
+                ))}
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
 
         <div className="flex items-center gap-2">
           <Button

@@ -6,11 +6,12 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import {
   Search, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight,
-  PackageCheck, Clock, RefreshCw, Download, Printer,
+  PackageCheck, Clock, RefreshCw, Download, Printer, User,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -57,6 +58,7 @@ function formatDateBR(d: string) {
 
 export default function RastreadorPage() {
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
+  const [nomeCliente, setNomeCliente] = useState('');
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [result, setResult] = useState<RastreadorResult | null>(null);
@@ -82,6 +84,7 @@ export default function RastreadorPage() {
     try {
       const res = await rastrearOrcamentos(
         selectedSituacoes,
+        nomeCliente.trim() || undefined,
         (step, checked, total) => setProgress({ step, checked, total }),
       );
       setResult(res);
@@ -250,8 +253,20 @@ export default function RastreadorPage() {
           <h1 className="text-lg font-bold text-foreground">Rastreador de Orçamentos</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Selecione as situações para verificar quais orçamentos já possuem todas as peças em estoque e podem virar OS.
+          Selecione as situações e (opcionalmente) filtre por cliente para verificar quais orçamentos podem virar OS.
         </p>
+
+        <div className="relative">
+          <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Filtrar por nome do cliente…"
+            value={nomeCliente}
+            onChange={e => setNomeCliente(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleScan()}
+            disabled={scanning}
+            className="h-8 text-sm pl-8"
+          />
+        </div>
 
         {statusQuery.isLoading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

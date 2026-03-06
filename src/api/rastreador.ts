@@ -56,6 +56,7 @@ export { getStatusOrcamentos };
 
 export async function rastrearOrcamentos(
   situacaoIds: string[],
+  nomeCliente?: string,
   onProgress?: (step: string, checked: number, total: number) => void,
 ): Promise<RastreadorResult> {
   // Phase 1: Fetch budgets
@@ -66,7 +67,7 @@ export async function rastrearOrcamentos(
   for (const sid of situacaoIds) {
     let page = 1;
     while (true) {
-      const res = await listOrcamentos(sid, page);
+      const res = await listOrcamentos(sid, page, nomeCliente);
       const filtered = res.data.filter(o => situacaoSet.has(String(o.situacao_id)));
       allOrcamentos.push(...filtered);
       if (page >= res.meta.total_paginas) break;
@@ -76,7 +77,12 @@ export async function rastrearOrcamentos(
   }
 
   // Deduplicate
-  const uniqueOrcamentos = [...new Map(allOrcamentos.map(o => [o.id, o])).values()];
+  const deduped = [...new Map(allOrcamentos.map(o => [o.id, o])).values()];
+
+  // Client-side fallback filter (in case API ignores nome param)
+  const uniqueOrcamentos = nomeCliente
+    ? deduped.filter(o => o.nome_cliente.toLowerCase().includes(nomeCliente.toLowerCase()))
+    : deduped;
 
   // Phase 2: Collect unique product IDs
   const uniqueProductIds = new Set<string>();

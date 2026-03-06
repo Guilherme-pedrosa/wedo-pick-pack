@@ -18,6 +18,7 @@ export default function OrcamentosPanel() {
   const [selectedCompra, setSelectedCompra] = useState<string[]>(config.situacoesCompraEmAndamento ?? []);
   const [orcamentos, setOrcamentos] = useState<GCOrcamento[]>([]);
   const [loadingOrc, setLoadingOrc] = useState(false);
+  const [hydrated, setHydrated] = useState(useComprasStore.persist.hasHydrated());
 
   const statusQuery = useQuery({
     queryKey: ['status-orcamentos'],
@@ -29,8 +30,20 @@ export default function OrcamentosPanel() {
     queryFn: getStatusCompras,
   });
 
+  useEffect(() => {
+    const unsub = useComprasStore.persist.onFinishHydration(() => setHydrated(true));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setSelectedSituacoes(config.situacoesOrcamentoSelecionadas ?? []);
+    setSelectedCompra(config.situacoesCompraEmAndamento ?? []);
+  }, [hydrated, config.situacoesOrcamentoSelecionadas, config.situacoesCompraEmAndamento]);
+
   // Auto-select ALL purchase order statuses (user deselects finalized/cancelled)
   useEffect(() => {
+    if (!hydrated) return;
     if (statusCompraQuery.data && (config.situacoesCompraEmAndamento ?? []).length === 0) {
       const autoSelect = statusCompraQuery.data.map(s => s.id);
       if (autoSelect.length > 0) {
@@ -38,7 +51,7 @@ export default function OrcamentosPanel() {
         setConfig({ situacoesCompraEmAndamento: autoSelect });
       }
     }
-  }, [statusCompraQuery.data]);
+  }, [hydrated, statusCompraQuery.data, config.situacoesCompraEmAndamento, setConfig]);
 
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev => {

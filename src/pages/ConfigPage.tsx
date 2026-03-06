@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, isUsingMock } from '@/api/gestaoclick';
@@ -25,6 +25,20 @@ export default function ConfigPage() {
   const [vendaStatusToShow, setVendaStatusToShow] = useState<string[]>(config.vendaStatusToShow);
   const [defaultOSStatus, setDefaultOSStatus] = useState(config.defaultOSConclusionStatus);
   const [defaultVendaStatus, setDefaultVendaStatus] = useState(config.defaultVendaConclusionStatus);
+
+  useEffect(() => {
+    setOperatorName(config.operatorName);
+    setOsStatusToShow(config.osStatusToShow ?? []);
+    setVendaStatusToShow(config.vendaStatusToShow ?? []);
+    setDefaultOSStatus(config.defaultOSConclusionStatus ?? '');
+    setDefaultVendaStatus(config.defaultVendaConclusionStatus ?? '');
+  }, [
+    config.operatorName,
+    config.osStatusToShow,
+    config.vendaStatusToShow,
+    config.defaultOSConclusionStatus,
+    config.defaultVendaConclusionStatus,
+  ]);
 
   const osStatuses = useQuery({ queryKey: ['statuses', 'os'], queryFn: getStatusOS });
   const vendaStatuses = useQuery({ queryKey: ['statuses', 'venda'], queryFn: getStatusVendas });

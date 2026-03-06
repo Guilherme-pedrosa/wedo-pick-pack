@@ -1,7 +1,8 @@
 import { PickingItem } from '@/api/types';
 import { useCheckoutStore } from '@/store/checkoutStore';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Props {
   items: PickingItem[];
@@ -9,6 +10,7 @@ interface Props {
 
 export default function ItemsTable({ items }: Props) {
   const confirmItem = useCheckoutStore(s => s.confirmItem);
+  const isMobile = useIsMobile();
 
   const fmtQtd = (n: number) => n % 1 === 0 ? String(n) : n.toFixed(3).replace('.', ',');
 
@@ -21,6 +23,66 @@ export default function ItemsTable({ items }: Props) {
     const d = new Date(iso);
     return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   };
+
+  if (isMobile) {
+    return (
+      <div className="space-y-2">
+        {sorted.map(item => (
+          <div
+            key={item.id}
+            className={`rounded-lg border p-3 transition-colors ${
+              item.conferido
+                ? 'bg-green-50 border-green-200'
+                : 'border-l-4 border-l-amber-400 border-border'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1">
+                  {item.conferido ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                  ) : (
+                    <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                  )}
+                  <span className={`text-sm font-medium truncate ${item.conferido ? 'text-green-800' : ''}`}>
+                    {item.nome_produto}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground ml-5.5">
+                  {item.codigo_produto && (
+                    <span className="font-mono">Cód: {item.codigo_produto}</span>
+                  )}
+                  {item.codigo_barras && (
+                    <span className="font-mono">EAN: {item.codigo_barras}</span>
+                  )}
+                  <span>{item.sigla_unidade}</span>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-sm font-bold">
+                  {item.conferido
+                    ? `${fmtQtd(item.qtd_total)}/${fmtQtd(item.qtd_total)}`
+                    : `${fmtQtd(item.qtd_conferida)}/${fmtQtd(item.qtd_total)}`}
+                </div>
+                {item.conferido ? (
+                  <span className="text-green-600 text-xs">{formatTime(item.confirmed_at)}</span>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7 mt-1"
+                    onClick={() => confirmItem(item.id, 1)}
+                  >
+                    Confirmar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-x-auto">

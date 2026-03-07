@@ -74,9 +74,9 @@ function isConvertedBudgetFlag(value: unknown): boolean {
   return normalized === 'true' || normalized === 'sim' || normalized === 'yes';
 }
 
-function hasLinkedOsOrVenda(orcamento: GCOrcamento): boolean {
+function hasLinkedOs(orcamento: GCOrcamento): boolean {
   const situacao = normalizeText(orcamento.nome_situacao);
-  if (situacao.includes('venda gerada') || situacao.includes('os gerada') || situacao.includes('ordem de servico')) {
+  if (situacao.includes('os gerada') || situacao.includes('ordem de servico')) {
     return true;
   }
 
@@ -84,13 +84,14 @@ function hasLinkedOsOrVenda(orcamento: GCOrcamento): boolean {
     const descricao = normalizeText(atributo?.descricao);
     if (!descricao) return false;
 
-    const isLinkField =
+    const isOsField =
       descricao === 'tarefa os' ||
       descricao.includes('ordem de servico') ||
       descricao.includes('os gerada') ||
-      descricao.includes('venda gerada');
+      descricao.includes('numero os') ||
+      descricao.includes('número os');
 
-    if (!isLinkField) return false;
+    if (!isOsField) return false;
 
     const conteudo = String(atributo?.conteudo ?? '').trim();
     return conteudo !== '' && conteudo !== '0';
@@ -228,14 +229,11 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 1b: Detect converted budgets and exclude them from purchase calculation
+  // PHASE 1b: Detect budgets that already generated OS in GestãoClick and exclude them
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
   const orcamentosElegiveis = allOrcamentos.filter(o => {
-    const byFinanceiro = isConvertedBudgetFlag(o.situacao_financeiro);
-    const byEstoque = isConvertedBudgetFlag(o.situacao_estoque);
-    const byLinkedOsOrVenda = hasLinkedOsOrVenda(o);
-    const isConverted = byFinanceiro || byEstoque || byLinkedOsOrVenda;
-    if (!isConverted) return true;
+    const byLinkedOs = hasLinkedOs(o);
+    if (!byLinkedOs) return true;
 
     if (!convertedById.has(o.id)) {
       convertedById.set(o.id, {
@@ -246,12 +244,7 @@ export async function buildListaCompras(
         situacao_estoque: String(o.situacao_estoque ?? ''),
       });
 
-      const motivos = [
-        byFinanceiro ? 'financeiro' : null,
-        byEstoque ? 'estoque' : null,
-        byLinkedOsOrVenda ? 'vinculo_os_venda' : null,
-      ].filter(Boolean).join(', ');
-      console.warn(`[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: ${motivos})`);
+      console.warn(`[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: os_gerada)`);
     }
     return false;
   });

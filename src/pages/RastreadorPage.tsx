@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos } from '@/api/compras';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo } from '@/api/rastreador';
+import { OrcamentoConvertidoWarning } from '@/api/types';
 import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Search, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight,
-  PackageCheck, Clock, RefreshCw, Download, Printer, User, Filter,
+  PackageCheck, Clock, RefreshCw, Download, Printer, User, Filter, Ban, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -67,6 +68,7 @@ export default function RastreadorPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPrintView, setIsPrintView] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [blockedExpanded, setBlockedExpanded] = useState(true);
 
   const statusQuery = useQuery({
     queryKey: ['status-orcamentos'],
@@ -375,7 +377,7 @@ export default function RastreadorPage() {
         {result && (
           <div className="space-y-6 max-w-3xl mx-auto">
             {/* Summary cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Card className="p-3 text-center">
                 <p className="text-2xl font-bold text-foreground">{result.totalOrcamentos}</p>
                 <p className="text-xs text-muted-foreground">Total analisados</p>
@@ -390,11 +392,69 @@ export default function RastreadorPage() {
                 </p>
                 <p className="text-xs text-muted-foreground">Aguardando peças</p>
               </Card>
+              {result.totalBloqueados > 0 && (
+                <Card className="p-3 text-center border-destructive/50 bg-destructive/5">
+                  <p className="text-2xl font-bold text-destructive">{result.totalBloqueados}</p>
+                  <p className="text-xs text-muted-foreground">Bloqueados (já OS)</p>
+                </Card>
+              )}
             </div>
 
             <p className="text-xs text-muted-foreground text-right">
               Escaneado em {new Date(result.scannedAt).toLocaleString('pt-BR')}
             </p>
+
+            {/* Blocked budgets section */}
+            {result.orcamentosBloqueados.length > 0 && (
+              <Collapsible open={blockedExpanded} onOpenChange={setBlockedExpanded}>
+                <div className="rounded-lg border-2 border-destructive/50 bg-destructive/5">
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full flex items-center gap-3 p-4 text-left hover:bg-destructive/10 transition-colors rounded-t-lg">
+                      <Ban className="h-5 w-5 text-destructive shrink-0" />
+                      <div className="flex-1">
+                        <h3 className="font-bold text-destructive text-sm">
+                          🚫 Bloqueados — já viraram OS
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {result.orcamentosBloqueados.length} orçamento(s) removido(s) do rastreamento
+                        </p>
+                      </div>
+                      <Badge variant="destructive" className="text-sm">{result.orcamentosBloqueados.length}</Badge>
+                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${blockedExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-4 pb-4 space-y-2">
+                      {result.orcamentosBloqueados.map(c => (
+                        <Card key={c.orcamento_id} className="p-3 border-l-4 border-l-destructive bg-card">
+                          <p className="text-sm font-bold text-amber-500">
+                            ⚠️ {c.warning}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-sm text-foreground font-medium">#{c.codigo}</span>
+                            <span className="text-sm text-muted-foreground">— {c.nome_cliente}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <Badge
+                              variant={c.reason === 'flag' ? 'secondary' : 'outline'}
+                              className={c.reason === 'os_index' ? 'border-amber-500 text-amber-500 text-[10px]' : 'text-[10px]'}
+                            >
+                              {c.reason === 'flag' ? 'Flag' : 'OS detectada'}
+                            </Badge>
+                            {c.link_number && (
+                              <span className="text-xs text-muted-foreground">
+                                OS #{c.link_number}
+                                {c.link_situacao && ` [${c.link_situacao}]`}
+                              </span>
+                            )}
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            )}
 
             {/* Ready budgets */}
             {result.orcamentosProntos.length > 0 && (

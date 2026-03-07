@@ -1,5 +1,5 @@
-import { GCOrcamento, GCProdutoDetalhe } from './types';
-import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe } from './compras';
+import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning } from './types';
+import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex } from './compras';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;
@@ -29,9 +29,11 @@ export interface ConflictInfo {
 export interface RastreadorResult {
   orcamentosProntos: OrcamentoReadiness[];
   orcamentosPendentes: OrcamentoReadiness[];
+  orcamentosBloqueados: OrcamentoConvertidoWarning[];
   conflitos: ConflictInfo[];
   totalOrcamentos: number;
   totalProntos: number;
+  totalBloqueados: number;
   scannedAt: string;
 }
 
@@ -80,9 +82,51 @@ export async function rastrearOrcamentos(
   const deduped = [...new Map(allOrcamentos.map(o => [o.id, o])).values()];
 
   // Client-side fallback filter (in case API ignores nome param)
-  const uniqueOrcamentos = nomeCliente
+  const filteredOrcamentos = nomeCliente
     ? deduped.filter(o => o.nome_cliente.toLowerCase().includes(nomeCliente.toLowerCase()))
     : deduped;
+
+  // Phase 1b: Build OS index and filter out converted budgets
+  onProgress?.('Construindo índice de OS…', 0, 1);
+  const { index: osIndex } = await buildOSIndex(
+    (step, checked, total) => onProgress?.(step, checked, total),
+  );
+
+  const bloqueados: OrcamentoConvertidoWarning[] = [];
+  const uniqueOrcamentos: GCOrcamento[] = [];
+
+  for (const o of filteredOrcamentos) {
+    const flagFin = String(o.situacao_financeiro ?? '');
+    const flagEst = String(o.situacao_estoque ?? '');
+    const byFlags = ['1', 'true', 'sim'].includes(flagFin.toLowerCase()) ||
+                    ['1', 'true', 'sim'].includes(flagEst.toLowerCase());
+    const osMatch = osIndex[String(o.codigo)];
+
+    if (byFlags || osMatch) {
+      const reason = byFlags ? 'flag' as const : 'os_index' as const;
+      let warning = '';
+      if (osMatch) {
+        warning = `Orçamento #${o.codigo} → já é OS #${osMatch.os_codigo} [${osMatch.nome_situacao}]`;
+      } else {
+        warning = `Orçamento #${o.codigo} → convertido (flag financeiro/estoque)`;
+      }
+      bloqueados.push({
+        orcamento_id: o.id,
+        codigo: o.codigo,
+        nome_cliente: o.nome_cliente,
+        situacao_financeiro: flagFin,
+        situacao_estoque: flagEst,
+        reason,
+        link_number: osMatch?.os_codigo ?? null,
+        link_id: osMatch?.os_id ?? null,
+        link_situacao: osMatch?.nome_situacao ?? null,
+        warning,
+      });
+      console.warn(`[RASTREADOR] ${warning}`);
+    } else {
+      uniqueOrcamentos.push(o);
+    }
+  }
 
   // Phase 2: Collect unique product IDs
   const uniqueProductIds = new Set<string>();
@@ -260,9 +304,11 @@ export async function rastrearOrcamentos(
   return {
     orcamentosProntos: prontos,
     orcamentosPendentes: pendentes,
+    orcamentosBloqueados: bloqueados,
     conflitos,
     totalOrcamentos: uniqueOrcamentos.length,
     totalProntos: prontos.length,
+    totalBloqueados: bloqueados.length,
     scannedAt: new Date().toISOString(),
   };
 }

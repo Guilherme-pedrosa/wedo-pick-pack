@@ -74,28 +74,11 @@ function isConvertedBudgetFlag(value: unknown): boolean {
   return normalized === 'true' || normalized === 'sim' || normalized === 'yes';
 }
 
-function hasLinkedOs(orcamento: GCOrcamento): boolean {
-  const situacao = normalizeText(orcamento.nome_situacao);
-  if (situacao.includes('os gerada') || situacao.includes('ordem de servico')) {
-    return true;
-  }
-
-  return (orcamento.atributos ?? []).some(({ atributo }) => {
-    const descricao = normalizeText(atributo?.descricao);
-    if (!descricao) return false;
-
-    const isOsField =
-      descricao === 'tarefa os' ||
-      descricao.includes('ordem de servico') ||
-      descricao.includes('os gerada') ||
-      descricao.includes('numero os') ||
-      descricao.includes('número os');
-
-    if (!isOsField) return false;
-
-    const conteudo = String(atributo?.conteudo ?? '').trim();
-    return conteudo !== '' && conteudo !== '0';
-  });
+function hasConvertedBudget(orcamento: GCOrcamento): boolean {
+  return (
+    isConvertedBudgetFlag(orcamento.situacao_financeiro) ||
+    isConvertedBudgetFlag(orcamento.situacao_estoque)
+  );
 }
 
 function normalizeId(value: string | number | null | undefined): string {

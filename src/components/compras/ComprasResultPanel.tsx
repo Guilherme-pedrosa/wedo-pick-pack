@@ -171,7 +171,7 @@ export default function ComprasResultPanel() {
                   Atenção — {convertidos.length} orçamento(s) já convertido(s)
                 </h3>
                 <p className="text-sm text-amber-800 mt-1">
-                  Os orçamentos abaixo já geraram OS no GestãoClick. Verifique antes de prosseguir com a compra.
+                  Os orçamentos abaixo já geraram OS ou Venda no GestãoClick (detectado por flags estruturais do orçamento). Verifique antes de prosseguir com a compra.
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-3">
                   {convertidos.map(c => (

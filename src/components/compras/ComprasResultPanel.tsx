@@ -87,10 +87,11 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
 }
 
 export default function ComprasResultPanel() {
-  const { result, isScanning, progress, clearResult } = useComprasStore();
+  const { result, isScanning, progress, clearResult, osIndexStatus } = useComprasStore();
   const [okExpanded, setOkExpanded] = useState(false);
   const [cobertosExpanded, setCobertosExpanded] = useState(false);
   const [convertidosDismissed, setConvertidosDismissed] = useState(false);
+  const [blockedExpanded, setBlockedExpanded] = useState(true);
 
   const convertidos = result?.orcamentosConvertidos ?? [];
   const convertedOrcamentoIds = useMemo(

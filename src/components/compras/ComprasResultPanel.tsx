@@ -1,5 +1,6 @@
 import { useComprasStore } from '@/store/comprasStore';
-import { ItemCompra } from '@/api/types';
+import { ItemCompra, OrcamentoConvertidoWarning } from '@/api/types';
+import { getOSIndexStatus } from '@/api/compras';
 import ComprasTable from './ComprasTable';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import {
   ShoppingCart, ShoppingBag, AlertTriangle, CheckCircle2, DollarSign,
-  Download, Printer, Loader2, ChevronDown, RefreshCw, Clock, X,
+  Download, Printer, Loader2, ChevronDown, RefreshCw, Clock, X, Ban, Database,
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 

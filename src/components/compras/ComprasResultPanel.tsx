@@ -201,12 +201,12 @@ export default function ComprasResultPanel() {
                         <span className="text-sm text-foreground font-medium">#{c.codigo}</span>
                         <span className="text-sm text-muted-foreground">— {c.nome_cliente}</span>
                       </div>
-                      <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex items-center gap-2 mt-1.5">
                         <Badge
                           variant={c.reason === 'flag' ? 'secondary' : 'outline'}
                           className={c.reason === 'os_index' ? 'border-amber-500 text-amber-500 text-[10px]' : 'text-[10px]'}
                         >
-                          {c.reason === 'flag' ? 'Flag' : 'OS detectada'}
+                          {c.reason === 'flag' ? 'Flag automática' : 'OS detectada'}
                         </Badge>
                         {c.link_number && (
                           <span className="text-xs text-muted-foreground">
@@ -215,6 +215,12 @@ export default function ComprasResultPanel() {
                           </span>
                         )}
                       </div>
+                      {c.reason === 'os_index' && (
+                        <p className="text-[10px] text-amber-500/70 mt-1.5 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          Vínculo baseado em campo digitado manualmente na OS (atributo "Nº Orçamento")
+                        </p>
+                      )}
                     </Card>
                   ))}
                   <Button

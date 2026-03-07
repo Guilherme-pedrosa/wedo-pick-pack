@@ -1,5 +1,5 @@
-import { GCOrcamento, GCProdutoDetalhe } from './types';
-import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe } from './compras';
+import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning } from './types';
+import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex } from './compras';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;
@@ -29,9 +29,11 @@ export interface ConflictInfo {
 export interface RastreadorResult {
   orcamentosProntos: OrcamentoReadiness[];
   orcamentosPendentes: OrcamentoReadiness[];
+  orcamentosBloqueados: OrcamentoConvertidoWarning[];
   conflitos: ConflictInfo[];
   totalOrcamentos: number;
   totalProntos: number;
+  totalBloqueados: number;
   scannedAt: string;
 }
 

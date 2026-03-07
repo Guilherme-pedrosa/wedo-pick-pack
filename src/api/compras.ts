@@ -74,11 +74,88 @@ function isConvertedBudgetFlag(value: unknown): boolean {
   return normalized === 'true' || normalized === 'sim' || normalized === 'yes';
 }
 
-function hasConvertedBudget(orcamento: GCOrcamento): boolean {
+function hasConvertedBudgetByFlags(orcamento: GCOrcamento): boolean {
   return (
     isConvertedBudgetFlag(orcamento.situacao_financeiro) ||
     isConvertedBudgetFlag(orcamento.situacao_estoque)
   );
+}
+
+function isLikelyLinkedRecordId(value: unknown): string | null {
+  const normalized = normalizeId(value as string | number | null | undefined);
+  if (!normalized) return null;
+  if (!/^\d{4,}$/.test(normalized)) return null;
+  return normalized;
+}
+
+function extractLinkedIdsFromAtributos(orcamento: GCOrcamento): { osIds: string[]; vendaIds: string[] } {
+  const osIds = new Set<string>();
+  const vendaIds = new Set<string>();
+
+  for (const wrapper of orcamento.atributos || []) {
+    const atributo = wrapper?.atributo;
+    if (!atributo) continue;
+
+    const conteudoId = isLikelyLinkedRecordId(atributo.conteudo);
+    if (!conteudoId) continue;
+
+    const desc = normalizeText(atributo.descricao);
+    if (!desc) continue;
+
+    // Conversão de orçamento costuma gravar o ID no campo extra (ex.: "TAREFA OS")
+    if (desc.includes('os') || desc.includes('ordem de servico') || desc.includes('servico')) {
+      osIds.add(conteudoId);
+      continue;
+    }
+
+    if (desc.includes('venda')) {
+      vendaIds.add(conteudoId);
+    }
+  }
+
+  return { osIds: [...osIds], vendaIds: [...vendaIds] };
+}
+
+async function checkExistsById(
+  kind: 'os' | 'venda',
+  id: string,
+  cache: Map<string, Promise<boolean>>,
+): Promise<boolean> {
+  const key = `${kind}:${id}`;
+  if (!cache.has(key)) {
+    cache.set(
+      key,
+      (async () => {
+        try {
+          const path = kind === 'os' ? `/api/ordens_servicos/${id}` : `/api/vendas/${id}`;
+          const res = await apiRequest<{ data?: { id?: string } }>(path);
+          return Boolean(res?.data?.id);
+        } catch {
+          return false;
+        }
+      })(),
+    );
+  }
+
+  return cache.get(key)!;
+}
+
+async function hasConvertedBudgetByLinkedDocs(
+  orcamento: GCOrcamento,
+  cache: Map<string, Promise<boolean>>,
+): Promise<boolean> {
+  const { osIds, vendaIds } = extractLinkedIdsFromAtributos(orcamento);
+  if (osIds.length === 0 && vendaIds.length === 0) return false;
+
+  for (const osId of osIds) {
+    if (await checkExistsById('os', osId, cache)) return true;
+  }
+
+  for (const vendaId of vendaIds) {
+    if (await checkExistsById('venda', vendaId, cache)) return true;
+  }
+
+  return false;
 }
 
 function normalizeId(value: string | number | null | undefined): string {

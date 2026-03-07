@@ -300,7 +300,7 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 3: Aggregate budget quantities per product
+  // PHASE 3: Aggregate budget quantities per product (excluding converted budgets)
   const productMap = new Map<string, {
     produto_id: string; variacao_id: string; nome_produto: string;
     codigo_produto: string; sigla_unidade: string; movimenta_estoque: string;
@@ -308,7 +308,7 @@ export async function buildListaCompras(
     orcamentos: Array<{ id: string; codigo: string; qtd: number; nome_cliente: string }>;
   }>();
 
-  for (const orc of allOrcamentos) {
+  for (const orc of orcamentosElegiveis) {
     for (const p of orc.produtos || []) {
       const produtoId = normalizeId(p.produto.produto_id);
       if (!produtoId) continue;
@@ -439,7 +439,7 @@ export async function buildListaCompras(
     itensOkList,
     itensCobertosporPedido: itensCobertos,
     orcamentosConvertidos,
-    totalOrcamentos: allOrcamentos.length,
+    totalOrcamentos: orcamentosElegiveis.length,
     totalProdutosSemEstoque: itensList.length,
     totalProdutosOk: itensOkList.length,
     totalItensCobertosporPedido: itensCobertos.length,

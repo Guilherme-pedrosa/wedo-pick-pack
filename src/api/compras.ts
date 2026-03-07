@@ -59,9 +59,42 @@ function parseDecimal(value: string | number | null | undefined): number {
   return parseFloat(raw) || 0;
 }
 
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 function isConvertedBudgetFlag(value: unknown): boolean {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  return normalized === '1' || normalized === 'true' || normalized === 'sim' || normalized === 'yes';
+  const normalized = normalizeText(value);
+  if (!normalized) return false;
+  if (/^\d+$/.test(normalized)) return Number(normalized) > 0;
+  return normalized === 'true' || normalized === 'sim' || normalized === 'yes';
+}
+
+function hasLinkedOsOrVenda(orcamento: GCOrcamento): boolean {
+  const situacao = normalizeText(orcamento.nome_situacao);
+  if (situacao.includes('venda gerada') || situacao.includes('os gerada') || situacao.includes('ordem de servico')) {
+    return true;
+  }
+
+  return (orcamento.atributos ?? []).some(({ atributo }) => {
+    const descricao = normalizeText(atributo?.descricao);
+    if (!descricao) return false;
+
+    const isLinkField =
+      descricao === 'tarefa os' ||
+      descricao.includes('ordem de servico') ||
+      descricao.includes('os gerada') ||
+      descricao.includes('venda gerada');
+
+    if (!isLinkField) return false;
+
+    const conteudo = String(atributo?.conteudo ?? '').trim();
+    return conteudo !== '' && conteudo !== '0';
+  });
 }
 
 function normalizeId(value: string | number | null | undefined): string {
@@ -198,7 +231,10 @@ export async function buildListaCompras(
   // PHASE 1b: Detect converted budgets and exclude them from purchase calculation
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
   const orcamentosElegiveis = allOrcamentos.filter(o => {
-    const isConverted = isConvertedBudgetFlag(o.situacao_financeiro) || isConvertedBudgetFlag(o.situacao_estoque);
+    const byFinanceiro = isConvertedBudgetFlag(o.situacao_financeiro);
+    const byEstoque = isConvertedBudgetFlag(o.situacao_estoque);
+    const byLinkedOsOrVenda = hasLinkedOsOrVenda(o);
+    const isConverted = byFinanceiro || byEstoque || byLinkedOsOrVenda;
     if (!isConverted) return true;
 
     if (!convertedById.has(o.id)) {
@@ -209,6 +245,13 @@ export async function buildListaCompras(
         situacao_financeiro: String(o.situacao_financeiro ?? ''),
         situacao_estoque: String(o.situacao_estoque ?? ''),
       });
+
+      const motivos = [
+        byFinanceiro ? 'financeiro' : null,
+        byEstoque ? 'estoque' : null,
+        byLinkedOsOrVenda ? 'vinculo_os_venda' : null,
+      ].filter(Boolean).join(', ');
+      console.warn(`[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: ${motivos})`);
     }
     return false;
   });

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getStatusOrcamentos, getStatusCompras, listOrcamentos, buildListaCompras } from '@/api/compras';
+import { getStatusOrcamentos, getStatusCompras, listOrcamentos, buildListaCompras, getOSIndexStatus } from '@/api/compras';
 import { useComprasStore } from '@/store/comprasStore';
 import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -13,7 +13,7 @@ import { FileText, RefreshCw, ShoppingCart, Loader2, Package } from 'lucide-reac
 import { toast } from 'sonner';
 
 export default function OrcamentosPanel() {
-  const { config, setConfig, isScanning, setScanning, setProgress, setResult, progress } = useComprasStore();
+  const { config, setConfig, isScanning, setScanning, setProgress, setResult, progress, setOSIndexStatus } = useComprasStore();
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>(config.situacoesOrcamentoSelecionadas ?? []);
   const [selectedCompra, setSelectedCompra] = useState<string[]>(config.situacoesCompraEmAndamento ?? []);
   const [orcamentos, setOrcamentos] = useState<GCOrcamento[]>([]);
@@ -99,8 +99,12 @@ export default function OrcamentosPanel() {
         (step, checked, total) => setProgress({ step, checked, total }),
       );
       setResult(result);
+      // Update OS index status in store
+      const idxStatus = getOSIndexStatus();
+      if (idxStatus) setOSIndexStatus(idxStatus);
       const parts = [`${result.totalProdutosSemEstoque} itens para comprar`];
       if (result.totalItensCobertosporPedido > 0) parts.push(`${result.totalItensCobertosporPedido} cobertos por pedido`);
+      if (result.orcamentosConvertidos.length > 0) parts.push(`${result.orcamentosConvertidos.length} bloqueado(s) por OS`);
       parts.push(`${result.totalProdutosOk} com estoque`);
       toast.success(`Lista gerada! ${parts.join(', ')}.`);
     } catch (err) {

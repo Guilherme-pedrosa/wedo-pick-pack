@@ -1,5 +1,6 @@
 import { useComprasStore } from '@/store/comprasStore';
-import { ItemCompra } from '@/api/types';
+import { ItemCompra, OrcamentoConvertidoWarning } from '@/api/types';
+import { getOSIndexStatus } from '@/api/compras';
 import ComprasTable from './ComprasTable';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Badge } from '@/components/ui/badge';
 import {
   ShoppingCart, ShoppingBag, AlertTriangle, CheckCircle2, DollarSign,
-  Download, Printer, Loader2, ChevronDown, RefreshCw, Clock, X,
+  Download, Printer, Loader2, ChevronDown, RefreshCw, Clock, X, Ban, Database,
 } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 
@@ -86,10 +87,11 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
 }
 
 export default function ComprasResultPanel() {
-  const { result, isScanning, progress, clearResult } = useComprasStore();
+  const { result, isScanning, progress, clearResult, osIndexStatus } = useComprasStore();
   const [okExpanded, setOkExpanded] = useState(false);
   const [cobertosExpanded, setCobertosExpanded] = useState(false);
   const [convertidosDismissed, setConvertidosDismissed] = useState(false);
+  const [blockedExpanded, setBlockedExpanded] = useState(true);
 
   const convertidos = result?.orcamentosConvertidos ?? [];
   const convertedOrcamentoIds = useMemo(
@@ -147,7 +149,15 @@ export default function ComprasResultPanel() {
           <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
             <ShoppingCart className="h-5 w-5 text-primary" /> Lista de Compras
           </h2>
-          <p className="text-xs text-muted-foreground">{scannedDate}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">{scannedDate}</p>
+            {osIndexStatus && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Database className="h-3 w-3" />
+                Índice: {osIndexStatus.totalVinculos} vínculos | atualizado há {Math.round((Date.now() - osIndexStatus.builtAt) / 1000)}s
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => exportCSV(result.itensList, result.scannedAt)}>
@@ -161,51 +171,64 @@ export default function ComprasResultPanel() {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Converted budgets warning */}
+        {/* Blocked / Converted budgets section */}
         {convertidos.length > 0 && !convertidosDismissed && (
-          <div className="rounded-lg border-2 border-amber-400 bg-amber-50 p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-amber-900">
-                  Atenção — {convertidos.length} orçamento(s) já convertido(s)
-                </h3>
-                <p className="text-sm text-amber-800 mt-1">
-                  Os orçamentos abaixo já geraram OS ou Venda no GestãoClick (detectado por flags estruturais do orçamento). Verifique antes de prosseguir com a compra.
-                </p>
-                <div className="flex flex-wrap gap-1.5 mt-3">
+          <Collapsible open={blockedExpanded} onOpenChange={setBlockedExpanded}>
+            <div className="rounded-lg border-2 border-destructive/50 bg-destructive/5">
+              <CollapsibleTrigger asChild>
+                <button className="w-full flex items-center gap-3 p-4 text-left hover:bg-destructive/10 transition-colors rounded-t-lg">
+                  <Ban className="h-6 w-6 text-destructive shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="font-bold text-destructive">
+                      🚫 Bloqueados — já viraram OS
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {convertidos.length} orçamento(s) removido(s) da lista de compras
+                    </p>
+                  </div>
+                  <Badge variant="destructive" className="text-sm">{convertidos.length}</Badge>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${blockedExpanded ? 'rotate-180' : ''}`} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-4 pb-4 space-y-2">
                   {convertidos.map(c => (
-                    <Badge
-                      key={c.orcamento_id}
-                      className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-mono"
-                    >
-                      {c.codigo} — {c.nome_cliente}
-                    </Badge>
+                    <Card key={c.orcamento_id} className="p-3 border-l-4 border-l-destructive bg-card">
+                      <p className="text-sm font-bold text-amber-500">
+                        ⚠️ {c.warning}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-sm text-foreground font-medium">#{c.codigo}</span>
+                        <span className="text-sm text-muted-foreground">— {c.nome_cliente}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <Badge
+                          variant={c.reason === 'flag' ? 'secondary' : 'outline'}
+                          className={c.reason === 'os_index' ? 'border-amber-500 text-amber-500 text-[10px]' : 'text-[10px]'}
+                        >
+                          {c.reason === 'flag' ? 'Flag' : 'OS detectada'}
+                        </Badge>
+                        {c.link_number && (
+                          <span className="text-xs text-muted-foreground">
+                            OS #{c.link_number}
+                            {c.link_situacao && ` [${c.link_situacao}]`}
+                          </span>
+                        )}
+                      </div>
+                    </Card>
                   ))}
-                </div>
-                <div className="flex gap-2 mt-4">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setConvertidosDismissed(true)}
-                    className="gap-1.5"
+                    className="gap-1.5 mt-2"
                   >
                     <X className="h-3.5 w-3.5" /> Ignorar e continuar
                   </Button>
-                  <Button
-                    size="sm"
-                    className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
-                    onClick={() => {
-                      const el = document.getElementById('compras-table-section');
-                      el?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" /> Revisar orçamentos
-                  </Button>
                 </div>
-              </div>
+              </CollapsibleContent>
             </div>
-          </div>
+          </Collapsible>
         )}
 
         {/* Summary cards */}

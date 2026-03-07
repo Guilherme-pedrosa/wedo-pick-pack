@@ -2,6 +2,7 @@ import {
   GCSituacao, GCMeta, GCOrcamento, GCProdutoDetalhe, GCFornecedor,
   GCOrdemCompra, GCSituacaoCompra,
   ItemCompra, ComprasResult, OrcamentoConvertidoWarning,
+  OSIndex, OSIndexEntry,
 } from './types';
 import {
   MOCK_STATUS_ORCAMENTO, MOCK_ORCAMENTOS, MOCK_PRODUTOS_DETALHE, MOCK_FORNECEDORES,
@@ -81,93 +82,88 @@ function hasConvertedBudgetByFlags(orcamento: GCOrcamento): boolean {
   );
 }
 
-function extractNumericReference(value: unknown): string | null {
-  const raw = normalizeId(value as string | number | null | undefined);
-  if (!raw) return null;
+// --- REVERSE OS INDEX ---
+// Scans all OS records and maps orçamento codes found in OS atributos → OS info
+// Cached in memory with 5min TTL
 
-  const digitsOnly = raw.replace(/\D+/g, ' ').trim().split(/\s+/).find(part => /^\d{3,}$/.test(part));
-  return digitsOnly || null;
+let osIndexCache: { index: OSIndex; builtAt: number; totalVinculos: number } | null = null;
+const OS_INDEX_TTL = 5 * 60 * 1000; // 5 minutes
+
+function normalizeForMatch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
 }
 
-function extractLinkedIdsFromAtributos(orcamento: GCOrcamento): { osRefs: string[]; vendaRefs: string[] } {
-  const osRefs = new Set<string>();
-  const vendaRefs = new Set<string>();
+export async function buildOSIndex(
+  onProgress?: (step: string, checked: number, total: number) => void,
+  forceRebuild = false,
+): Promise<{ index: OSIndex; totalVinculos: number; builtAt: number }> {
+  // Return cache if still valid
+  if (!forceRebuild && osIndexCache && (Date.now() - osIndexCache.builtAt < OS_INDEX_TTL)) {
+    return osIndexCache;
+  }
 
-  for (const wrapper of orcamento.atributos || []) {
-    const atributo = wrapper?.atributo;
-    if (!atributo) continue;
+  const index: OSIndex = {};
+  let page = 1;
+  let totalPages = 1;
+  let vinculos = 0;
 
-    const conteudoRef = extractNumericReference(atributo.conteudo);
-    if (!conteudoRef) continue;
+  onProgress?.('Indexando OS… página 1', 0, 1);
 
-    const desc = normalizeText(atributo.descricao);
-    if (!desc) continue;
+  while (page <= totalPages) {
+    const res = await apiRequest<{ data: any[]; meta: GCMeta }>(`/api/ordens_servicos?limite=100&pagina=${page}`);
+    totalPages = res.meta.total_paginas;
 
-    // Conversão de orçamento costuma gravar ID ou CÓDIGO da OS/Venda em campo extra
-    if (desc.includes('os') || desc.includes('ordem de servico') || desc.includes('servico')) {
-      osRefs.add(conteudoRef);
-      continue;
+    for (const item of res.data || []) {
+      const osCodigo = String(item.codigo ?? '');
+      const osId = String(item.id ?? '');
+      const nomeSituacao = String(item.nome_situacao ?? '');
+      const nomeCliente = String(item.nome_cliente ?? '');
+
+      for (const wrapper of item.atributos || []) {
+        const atributo = wrapper?.atributo;
+        if (!atributo) continue;
+
+        const desc = normalizeForMatch(String(atributo.descricao ?? ''));
+        if (!desc) continue;
+
+        // Match: "NÚMERO ORÇAMENTO", "NUMERO ORCAMENTO", "NUMERO ORC", "ORCAMENTO", etc.
+        const isOrcRef = desc.includes('ORCAMENTO') || desc.includes('NUMERO ORC');
+        if (!isOrcRef) continue;
+
+        const conteudo = String(atributo.conteudo ?? '').trim();
+        if (!conteudo || !/^\d+$/.test(conteudo)) continue;
+
+        // Store: budget code → OS info
+        index[conteudo] = { os_codigo: osCodigo, os_id: osId, nome_situacao: nomeSituacao, nome_cliente: nomeCliente };
+        vinculos++;
+      }
     }
 
-    if (desc.includes('venda')) {
-      vendaRefs.add(conteudoRef);
-    }
+    onProgress?.(`Indexando OS… página ${page} de ${totalPages} (${vinculos} vínculos)`, page, totalPages);
+    page++;
+    if (page <= totalPages && !isUsingMock()) await new Promise(r => setTimeout(r, 350));
   }
 
-  return { osRefs: [...osRefs], vendaRefs: [...vendaRefs] };
+  osIndexCache = { index, builtAt: Date.now(), totalVinculos: vinculos };
+  console.log(`[COMPRAS] OS Index built: ${vinculos} vínculos from ${totalPages} pages`);
+  return osIndexCache;
 }
 
-async function checkExistsByReference(
-  kind: 'os' | 'venda',
-  ref: string,
-  cache: Map<string, Promise<boolean>>,
-): Promise<boolean> {
-  const key = `${kind}:${ref}`;
-  if (!cache.has(key)) {
-    cache.set(
-      key,
-      (async () => {
-        const basePath = kind === 'os' ? '/api/ordens_servicos' : '/api/vendas';
-
-        // 1) Tenta como ID interno
-        try {
-          const byId = await apiRequest<{ data?: { id?: string } }>(`${basePath}/${ref}`);
-          if (byId?.data?.id) return true;
-        } catch {
-          // segue para tentativa por código
-        }
-
-        // 2) Tenta como código comercial (caso comum do vínculo em atributo)
-        try {
-          const byCodigo = await apiRequest<{ data?: Array<{ id?: string; codigo?: string | number }> }>(`${basePath}?codigo=${encodeURIComponent(ref)}&pagina=1`);
-          const list = byCodigo?.data || [];
-          return list.some(item => normalizeId(item?.codigo as string | number | null | undefined) === ref || Boolean(item?.id));
-        } catch {
-          return false;
-        }
-      })(),
-    );
-  }
-
-  return cache.get(key)!;
+export function getOSIndexStatus(): { totalVinculos: number; builtAt: number; isExpired: boolean } | null {
+  if (!osIndexCache) return null;
+  return {
+    totalVinculos: osIndexCache.totalVinculos,
+    builtAt: osIndexCache.builtAt,
+    isExpired: Date.now() - osIndexCache.builtAt >= OS_INDEX_TTL,
+  };
 }
 
-async function hasConvertedBudgetByLinkedDocs(
-  orcamento: GCOrcamento,
-  cache: Map<string, Promise<boolean>>,
-): Promise<boolean> {
-  const { osRefs, vendaRefs } = extractLinkedIdsFromAtributos(orcamento);
-  if (osRefs.length === 0 && vendaRefs.length === 0) return false;
-
-  for (const osRef of osRefs) {
-    if (await checkExistsByReference('os', osRef, cache)) return true;
-  }
-
-  for (const vendaRef of vendaRefs) {
-    if (await checkExistsByReference('venda', vendaRef, cache)) return true;
-  }
-
-  return false;
+export function clearOSIndexCache() {
+  osIndexCache = null;
 }
 
 function normalizeId(value: string | number | null | undefined): string {
@@ -301,36 +297,56 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 1b: Detect budgets already converted (OS/Venda) via structural flags and linked IDs in atributos
-  onProgress?.('Validando orçamentos já convertidos…', 0, Math.max(allOrcamentos.length, 1));
+  // PHASE 1b: Build reverse OS index and detect converted budgets
+  onProgress?.('Construindo índice de OS…', 0, 1);
+  const { index: osIndex, totalVinculos } = await buildOSIndex(
+    (step, checked, total) => onProgress?.(step, checked, total),
+  );
+  console.log(`[COMPRAS] OS Index ready: ${totalVinculos} vínculos`);
+
+  onProgress?.('Filtrando orçamentos já convertidos…', 0, allOrcamentos.length);
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
   const orcamentosElegiveis: GCOrcamento[] = [];
-  const linkedLookupCache = new Map<string, Promise<boolean>>();
 
   for (let i = 0; i < allOrcamentos.length; i++) {
     const o = allOrcamentos[i];
     const byFlags = hasConvertedBudgetByFlags(o);
-    const byLinkedDocs = byFlags ? false : await hasConvertedBudgetByLinkedDocs(o, linkedLookupCache);
+    const osMatch = osIndex[String(o.codigo)];
 
-    if (byFlags || byLinkedDocs) {
+    if (byFlags || osMatch) {
       if (!convertedById.has(o.id)) {
+        const reason = byFlags ? 'flag' as const : 'os_index' as const;
+        const linkNumber = osMatch?.os_codigo ?? null;
+        const linkId = osMatch?.os_id ?? null;
+        const linkSituacao = osMatch?.nome_situacao ?? null;
+
+        let warning = '';
+        if (osMatch) {
+          warning = `Orçamento #${o.codigo} → já é OS #${osMatch.os_codigo} [${osMatch.nome_situacao}]`;
+        } else {
+          warning = `Orçamento #${o.codigo} → convertido (flag financeiro/estoque)`;
+        }
+
         convertedById.set(o.id, {
           orcamento_id: o.id,
           codigo: o.codigo,
           nome_cliente: o.nome_cliente,
           situacao_financeiro: String(o.situacao_financeiro ?? ''),
           situacao_estoque: String(o.situacao_estoque ?? ''),
+          reason,
+          link_number: linkNumber,
+          link_id: linkId,
+          link_situacao: linkSituacao,
+          warning,
         });
 
-        console.warn(
-          `[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: ${byFlags ? 'converted_flags' : 'linked_os_or_venda'})`,
-        );
+        console.warn(`[COMPRAS] ${warning}`);
       }
     } else {
       orcamentosElegiveis.push(o);
     }
 
-    onProgress?.('Validando orçamentos já convertidos…', i + 1, allOrcamentos.length);
+    onProgress?.('Filtrando orçamentos já convertidos…', i + 1, allOrcamentos.length);
   }
 
   const orcamentosConvertidos = [...convertedById.values()];

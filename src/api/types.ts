@@ -151,7 +151,21 @@ export interface OrcamentoConvertidoWarning {
   nome_cliente: string;
   situacao_financeiro: string;
   situacao_estoque: string;
+  reason: 'flag' | 'os_index';
+  link_number: string | null;   // OS visible code e.g. "8978"
+  link_id: string | null;
+  link_situacao: string | null;
+  warning: string;              // e.g. "Orçamento #4748 → já é OS #8978 [STATUS]"
 }
+
+export interface OSIndexEntry {
+  os_codigo: string;
+  os_id: string;
+  nome_situacao: string;
+  nome_cliente: string;
+}
+
+export type OSIndex = Record<string, OSIndexEntry>;
 
 export interface GCProdutoDetalhe {
   id: string;

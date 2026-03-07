@@ -297,36 +297,56 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 1b: Detect budgets already converted (OS/Venda) via structural flags and linked IDs in atributos
-  onProgress?.('Validando orçamentos já convertidos…', 0, Math.max(allOrcamentos.length, 1));
+  // PHASE 1b: Build reverse OS index and detect converted budgets
+  onProgress?.('Construindo índice de OS…', 0, 1);
+  const { index: osIndex, totalVinculos } = await buildOSIndex(
+    (step, checked, total) => onProgress?.(step, checked, total),
+  );
+  console.log(`[COMPRAS] OS Index ready: ${totalVinculos} vínculos`);
+
+  onProgress?.('Filtrando orçamentos já convertidos…', 0, allOrcamentos.length);
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
   const orcamentosElegiveis: GCOrcamento[] = [];
-  const linkedLookupCache = new Map<string, Promise<boolean>>();
 
   for (let i = 0; i < allOrcamentos.length; i++) {
     const o = allOrcamentos[i];
     const byFlags = hasConvertedBudgetByFlags(o);
-    const byLinkedDocs = byFlags ? false : await hasConvertedBudgetByLinkedDocs(o, linkedLookupCache);
+    const osMatch = osIndex[String(o.codigo)];
 
-    if (byFlags || byLinkedDocs) {
+    if (byFlags || osMatch) {
       if (!convertedById.has(o.id)) {
+        const reason = byFlags ? 'flag' as const : 'os_index' as const;
+        const linkNumber = osMatch?.os_codigo ?? null;
+        const linkId = osMatch?.os_id ?? null;
+        const linkSituacao = osMatch?.nome_situacao ?? null;
+
+        let warning = '';
+        if (osMatch) {
+          warning = `Orçamento #${o.codigo} → já é OS #${osMatch.os_codigo} [${osMatch.nome_situacao}]`;
+        } else {
+          warning = `Orçamento #${o.codigo} → convertido (flag financeiro/estoque)`;
+        }
+
         convertedById.set(o.id, {
           orcamento_id: o.id,
           codigo: o.codigo,
           nome_cliente: o.nome_cliente,
           situacao_financeiro: String(o.situacao_financeiro ?? ''),
           situacao_estoque: String(o.situacao_estoque ?? ''),
+          reason,
+          link_number: linkNumber,
+          link_id: linkId,
+          link_situacao: linkSituacao,
+          warning,
         });
 
-        console.warn(
-          `[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: ${byFlags ? 'converted_flags' : 'linked_os_or_venda'})`,
-        );
+        console.warn(`[COMPRAS] ${warning}`);
       }
     } else {
       orcamentosElegiveis.push(o);
     }
 
-    onProgress?.('Validando orçamentos já convertidos…', i + 1, allOrcamentos.length);
+    onProgress?.('Filtrando orçamentos já convertidos…', i + 1, allOrcamentos.length);
   }
 
   const orcamentosConvertidos = [...convertedById.values()];

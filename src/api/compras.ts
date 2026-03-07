@@ -74,11 +74,88 @@ function isConvertedBudgetFlag(value: unknown): boolean {
   return normalized === 'true' || normalized === 'sim' || normalized === 'yes';
 }
 
-function hasConvertedBudget(orcamento: GCOrcamento): boolean {
+function hasConvertedBudgetByFlags(orcamento: GCOrcamento): boolean {
   return (
     isConvertedBudgetFlag(orcamento.situacao_financeiro) ||
     isConvertedBudgetFlag(orcamento.situacao_estoque)
   );
+}
+
+function isLikelyLinkedRecordId(value: unknown): string | null {
+  const normalized = normalizeId(value as string | number | null | undefined);
+  if (!normalized) return null;
+  if (!/^\d{4,}$/.test(normalized)) return null;
+  return normalized;
+}
+
+function extractLinkedIdsFromAtributos(orcamento: GCOrcamento): { osIds: string[]; vendaIds: string[] } {
+  const osIds = new Set<string>();
+  const vendaIds = new Set<string>();
+
+  for (const wrapper of orcamento.atributos || []) {
+    const atributo = wrapper?.atributo;
+    if (!atributo) continue;
+
+    const conteudoId = isLikelyLinkedRecordId(atributo.conteudo);
+    if (!conteudoId) continue;
+
+    const desc = normalizeText(atributo.descricao);
+    if (!desc) continue;
+
+    // Conversão de orçamento costuma gravar o ID no campo extra (ex.: "TAREFA OS")
+    if (desc.includes('os') || desc.includes('ordem de servico') || desc.includes('servico')) {
+      osIds.add(conteudoId);
+      continue;
+    }
+
+    if (desc.includes('venda')) {
+      vendaIds.add(conteudoId);
+    }
+  }
+
+  return { osIds: [...osIds], vendaIds: [...vendaIds] };
+}
+
+async function checkExistsById(
+  kind: 'os' | 'venda',
+  id: string,
+  cache: Map<string, Promise<boolean>>,
+): Promise<boolean> {
+  const key = `${kind}:${id}`;
+  if (!cache.has(key)) {
+    cache.set(
+      key,
+      (async () => {
+        try {
+          const path = kind === 'os' ? `/api/ordens_servicos/${id}` : `/api/vendas/${id}`;
+          const res = await apiRequest<{ data?: { id?: string } }>(path);
+          return Boolean(res?.data?.id);
+        } catch {
+          return false;
+        }
+      })(),
+    );
+  }
+
+  return cache.get(key)!;
+}
+
+async function hasConvertedBudgetByLinkedDocs(
+  orcamento: GCOrcamento,
+  cache: Map<string, Promise<boolean>>,
+): Promise<boolean> {
+  const { osIds, vendaIds } = extractLinkedIdsFromAtributos(orcamento);
+  if (osIds.length === 0 && vendaIds.length === 0) return false;
+
+  for (const osId of osIds) {
+    if (await checkExistsById('os', osId, cache)) return true;
+  }
+
+  for (const vendaId of vendaIds) {
+    if (await checkExistsById('venda', vendaId, cache)) return true;
+  }
+
+  return false;
 }
 
 function normalizeId(value: string | number | null | undefined): string {
@@ -212,25 +289,37 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 1b: Detect budgets already converted (OS/Venda) via structural flags and exclude them
+  // PHASE 1b: Detect budgets already converted (OS/Venda) via structural flags and linked IDs in atributos
+  onProgress?.('Validando orçamentos já convertidos…', 0, Math.max(allOrcamentos.length, 1));
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
-  const orcamentosElegiveis = allOrcamentos.filter(o => {
-    const byStructuralFlags = hasConvertedBudget(o);
-    if (!byStructuralFlags) return true;
+  const orcamentosElegiveis: GCOrcamento[] = [];
+  const linkedLookupCache = new Map<string, Promise<boolean>>();
 
-    if (!convertedById.has(o.id)) {
-      convertedById.set(o.id, {
-        orcamento_id: o.id,
-        codigo: o.codigo,
-        nome_cliente: o.nome_cliente,
-        situacao_financeiro: String(o.situacao_financeiro ?? ''),
-        situacao_estoque: String(o.situacao_estoque ?? ''),
-      });
+  for (let i = 0; i < allOrcamentos.length; i++) {
+    const o = allOrcamentos[i];
+    const byFlags = hasConvertedBudgetByFlags(o);
+    const byLinkedDocs = byFlags ? false : await hasConvertedBudgetByLinkedDocs(o, linkedLookupCache);
 
-      console.warn(`[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: converted_flags, financeiro=${o.situacao_financeiro ?? ''}, estoque=${o.situacao_estoque ?? ''})`);
+    if (byFlags || byLinkedDocs) {
+      if (!convertedById.has(o.id)) {
+        convertedById.set(o.id, {
+          orcamento_id: o.id,
+          codigo: o.codigo,
+          nome_cliente: o.nome_cliente,
+          situacao_financeiro: String(o.situacao_financeiro ?? ''),
+          situacao_estoque: String(o.situacao_estoque ?? ''),
+        });
+
+        console.warn(
+          `[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: ${byFlags ? 'converted_flags' : 'linked_os_or_venda'})`,
+        );
+      }
+    } else {
+      orcamentosElegiveis.push(o);
     }
-    return false;
-  });
+
+    onProgress?.('Validando orçamentos já convertidos…', i + 1, allOrcamentos.length);
+  }
 
   const orcamentosConvertidos = [...convertedById.values()];
 

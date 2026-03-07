@@ -289,25 +289,37 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 1b: Detect budgets already converted (OS/Venda) via structural flags and exclude them
+  // PHASE 1b: Detect budgets already converted (OS/Venda) via structural flags and linked IDs in atributos
+  onProgress?.('Validando orçamentos já convertidos…', 0, Math.max(allOrcamentos.length, 1));
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
-  const orcamentosElegiveis = allOrcamentos.filter(o => {
-    const byStructuralFlags = hasConvertedBudget(o);
-    if (!byStructuralFlags) return true;
+  const orcamentosElegiveis: GCOrcamento[] = [];
+  const linkedLookupCache = new Map<string, Promise<boolean>>();
 
-    if (!convertedById.has(o.id)) {
-      convertedById.set(o.id, {
-        orcamento_id: o.id,
-        codigo: o.codigo,
-        nome_cliente: o.nome_cliente,
-        situacao_financeiro: String(o.situacao_financeiro ?? ''),
-        situacao_estoque: String(o.situacao_estoque ?? ''),
-      });
+  for (let i = 0; i < allOrcamentos.length; i++) {
+    const o = allOrcamentos[i];
+    const byFlags = hasConvertedBudgetByFlags(o);
+    const byLinkedDocs = byFlags ? false : await hasConvertedBudgetByLinkedDocs(o, linkedLookupCache);
 
-      console.warn(`[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: converted_flags, financeiro=${o.situacao_financeiro ?? ''}, estoque=${o.situacao_estoque ?? ''})`);
+    if (byFlags || byLinkedDocs) {
+      if (!convertedById.has(o.id)) {
+        convertedById.set(o.id, {
+          orcamento_id: o.id,
+          codigo: o.codigo,
+          nome_cliente: o.nome_cliente,
+          situacao_financeiro: String(o.situacao_financeiro ?? ''),
+          situacao_estoque: String(o.situacao_estoque ?? ''),
+        });
+
+        console.warn(
+          `[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: ${byFlags ? 'converted_flags' : 'linked_os_or_venda'})`,
+        );
+      }
+    } else {
+      orcamentosElegiveis.push(o);
     }
-    return false;
-  });
+
+    onProgress?.('Validando orçamentos já convertidos…', i + 1, allOrcamentos.length);
+  }
 
   const orcamentosConvertidos = [...convertedById.values()];
 

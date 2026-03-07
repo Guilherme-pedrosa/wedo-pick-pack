@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos } from '@/api/compras';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo } from '@/api/rastreador';
+import { OrcamentoConvertidoWarning } from '@/api/types';
 import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Search, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight,
-  PackageCheck, Clock, RefreshCw, Download, Printer, User, Filter,
+  PackageCheck, Clock, RefreshCw, Download, Printer, User, Filter, Ban, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 

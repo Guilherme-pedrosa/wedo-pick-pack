@@ -59,6 +59,11 @@ function parseDecimal(value: string | number | null | undefined): number {
   return parseFloat(raw) || 0;
 }
 
+function isConvertedBudgetFlag(value: unknown): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'sim' || normalized === 'yes';
+}
+
 function normalizeId(value: string | number | null | undefined): string {
   if (value == null) return '';
   const raw = String(value).trim();
@@ -190,19 +195,28 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 1b: Detect converted budgets
-  const orcamentosConvertidos: OrcamentoConvertidoWarning[] = allOrcamentos
-    .filter(o => o.situacao_financeiro === '1' || o.situacao_estoque === '1')
-    .map(o => ({
-      orcamento_id: o.id,
-      codigo: o.codigo,
-      nome_cliente: o.nome_cliente,
-      situacao_financeiro: o.situacao_financeiro!,
-      situacao_estoque: o.situacao_estoque!,
-    }));
+  // PHASE 1b: Detect converted budgets and exclude them from purchase calculation
+  const convertedById = new Map<string, OrcamentoConvertidoWarning>();
+  const orcamentosElegiveis = allOrcamentos.filter(o => {
+    const isConverted = isConvertedBudgetFlag(o.situacao_financeiro) || isConvertedBudgetFlag(o.situacao_estoque);
+    if (!isConverted) return true;
+
+    if (!convertedById.has(o.id)) {
+      convertedById.set(o.id, {
+        orcamento_id: o.id,
+        codigo: o.codigo,
+        nome_cliente: o.nome_cliente,
+        situacao_financeiro: String(o.situacao_financeiro ?? ''),
+        situacao_estoque: String(o.situacao_estoque ?? ''),
+      });
+    }
+    return false;
+  });
+
+  const orcamentosConvertidos = [...convertedById.values()];
 
   if (orcamentosConvertidos.length > 0) {
-    console.log(`[COMPRAS] Phase 1b: ${orcamentosConvertidos.length} orçamento(s) já convertido(s)`);
+    console.log(`[COMPRAS] Phase 1b: ${orcamentosConvertidos.length} orçamento(s) já convertido(s) e removido(s) da lista de compras`);
   }
 
   // PHASE 2a: Fetch purchase orders for selected statuses (quantity cross-reference)
@@ -286,7 +300,7 @@ export async function buildListaCompras(
     }
   }
 
-  // PHASE 3: Aggregate budget quantities per product
+  // PHASE 3: Aggregate budget quantities per product (excluding converted budgets)
   const productMap = new Map<string, {
     produto_id: string; variacao_id: string; nome_produto: string;
     codigo_produto: string; sigla_unidade: string; movimenta_estoque: string;
@@ -294,7 +308,7 @@ export async function buildListaCompras(
     orcamentos: Array<{ id: string; codigo: string; qtd: number; nome_cliente: string }>;
   }>();
 
-  for (const orc of allOrcamentos) {
+  for (const orc of orcamentosElegiveis) {
     for (const p of orc.produtos || []) {
       const produtoId = normalizeId(p.produto.produto_id);
       if (!produtoId) continue;
@@ -425,7 +439,7 @@ export async function buildListaCompras(
     itensOkList,
     itensCobertosporPedido: itensCobertos,
     orcamentosConvertidos,
-    totalOrcamentos: allOrcamentos.length,
+    totalOrcamentos: orcamentosElegiveis.length,
     totalProdutosSemEstoque: itensList.length,
     totalProdutosOk: itensOkList.length,
     totalItensCobertosporPedido: itensCobertos.length,

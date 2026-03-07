@@ -9,7 +9,7 @@ import {
   ShoppingCart, ShoppingBag, AlertTriangle, CheckCircle2, DollarSign,
   Download, Printer, Loader2, ChevronDown, RefreshCw, Clock, X,
 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -96,6 +96,10 @@ export default function ComprasResultPanel() {
     () => new Set(convertidos.map(c => c.orcamento_id)),
     [convertidos]
   );
+
+  useEffect(() => {
+    setConvertidosDismissed(false);
+  }, [result?.scannedAt]);
 
   if (!result && !isScanning) {
     return (

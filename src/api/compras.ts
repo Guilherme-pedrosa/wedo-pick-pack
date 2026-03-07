@@ -231,7 +231,10 @@ export async function buildListaCompras(
   // PHASE 1b: Detect converted budgets and exclude them from purchase calculation
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
   const orcamentosElegiveis = allOrcamentos.filter(o => {
-    const isConverted = isConvertedBudgetFlag(o.situacao_financeiro) || isConvertedBudgetFlag(o.situacao_estoque);
+    const byFinanceiro = isConvertedBudgetFlag(o.situacao_financeiro);
+    const byEstoque = isConvertedBudgetFlag(o.situacao_estoque);
+    const byLinkedOsOrVenda = hasLinkedOsOrVenda(o);
+    const isConverted = byFinanceiro || byEstoque || byLinkedOsOrVenda;
     if (!isConverted) return true;
 
     if (!convertedById.has(o.id)) {
@@ -242,6 +245,13 @@ export async function buildListaCompras(
         situacao_financeiro: String(o.situacao_financeiro ?? ''),
         situacao_estoque: String(o.situacao_estoque ?? ''),
       });
+
+      const motivos = [
+        byFinanceiro ? 'financeiro' : null,
+        byEstoque ? 'estoque' : null,
+        byLinkedOsOrVenda ? 'vinculo_os_venda' : null,
+      ].filter(Boolean).join(', ');
+      console.warn(`[COMPRAS] Orçamento ${o.codigo} removido da lista de compras (motivo: ${motivos})`);
     }
     return false;
   });

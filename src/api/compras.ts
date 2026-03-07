@@ -2,6 +2,7 @@ import {
   GCSituacao, GCMeta, GCOrcamento, GCProdutoDetalhe, GCFornecedor,
   GCOrdemCompra, GCSituacaoCompra,
   ItemCompra, ComprasResult, OrcamentoConvertidoWarning,
+  OSIndex, OSIndexEntry,
 } from './types';
 import {
   MOCK_STATUS_ORCAMENTO, MOCK_ORCAMENTOS, MOCK_PRODUTOS_DETALHE, MOCK_FORNECEDORES,

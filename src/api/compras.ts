@@ -215,8 +215,8 @@ export async function buildListaCompras(
   // PHASE 1b: Detect budgets that already generated OS in GestãoClick and exclude them
   const convertedById = new Map<string, OrcamentoConvertidoWarning>();
   const orcamentosElegiveis = allOrcamentos.filter(o => {
-    const byLinkedOs = hasLinkedOs(o);
-    if (!byLinkedOs) return true;
+    const byStructuralFlags = hasConvertedBudget(o);
+    if (!byStructuralFlags) return true;
 
     if (!convertedById.has(o.id)) {
       convertedById.set(o.id, {

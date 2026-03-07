@@ -81,55 +81,67 @@ function hasConvertedBudgetByFlags(orcamento: GCOrcamento): boolean {
   );
 }
 
-function isLikelyLinkedRecordId(value: unknown): string | null {
-  const normalized = normalizeId(value as string | number | null | undefined);
-  if (!normalized) return null;
-  if (!/^\d{4,}$/.test(normalized)) return null;
-  return normalized;
+function extractNumericReference(value: unknown): string | null {
+  const raw = normalizeId(value as string | number | null | undefined);
+  if (!raw) return null;
+
+  const digitsOnly = raw.replace(/\D+/g, ' ').trim().split(/\s+/).find(part => /^\d{3,}$/.test(part));
+  return digitsOnly || null;
 }
 
-function extractLinkedIdsFromAtributos(orcamento: GCOrcamento): { osIds: string[]; vendaIds: string[] } {
-  const osIds = new Set<string>();
-  const vendaIds = new Set<string>();
+function extractLinkedIdsFromAtributos(orcamento: GCOrcamento): { osRefs: string[]; vendaRefs: string[] } {
+  const osRefs = new Set<string>();
+  const vendaRefs = new Set<string>();
 
   for (const wrapper of orcamento.atributos || []) {
     const atributo = wrapper?.atributo;
     if (!atributo) continue;
 
-    const conteudoId = isLikelyLinkedRecordId(atributo.conteudo);
-    if (!conteudoId) continue;
+    const conteudoRef = extractNumericReference(atributo.conteudo);
+    if (!conteudoRef) continue;
 
     const desc = normalizeText(atributo.descricao);
     if (!desc) continue;
 
-    // Conversão de orçamento costuma gravar o ID no campo extra (ex.: "TAREFA OS")
+    // Conversão de orçamento costuma gravar ID ou CÓDIGO da OS/Venda em campo extra
     if (desc.includes('os') || desc.includes('ordem de servico') || desc.includes('servico')) {
-      osIds.add(conteudoId);
+      osRefs.add(conteudoRef);
       continue;
     }
 
     if (desc.includes('venda')) {
-      vendaIds.add(conteudoId);
+      vendaRefs.add(conteudoRef);
     }
   }
 
-  return { osIds: [...osIds], vendaIds: [...vendaIds] };
+  return { osRefs: [...osRefs], vendaRefs: [...vendaRefs] };
 }
 
-async function checkExistsById(
+async function checkExistsByReference(
   kind: 'os' | 'venda',
-  id: string,
+  ref: string,
   cache: Map<string, Promise<boolean>>,
 ): Promise<boolean> {
-  const key = `${kind}:${id}`;
+  const key = `${kind}:${ref}`;
   if (!cache.has(key)) {
     cache.set(
       key,
       (async () => {
+        const basePath = kind === 'os' ? '/api/ordens_servicos' : '/api/vendas';
+
+        // 1) Tenta como ID interno
         try {
-          const path = kind === 'os' ? `/api/ordens_servicos/${id}` : `/api/vendas/${id}`;
-          const res = await apiRequest<{ data?: { id?: string } }>(path);
-          return Boolean(res?.data?.id);
+          const byId = await apiRequest<{ data?: { id?: string } }>(`${basePath}/${ref}`);
+          if (byId?.data?.id) return true;
+        } catch {
+          // segue para tentativa por código
+        }
+
+        // 2) Tenta como código comercial (caso comum do vínculo em atributo)
+        try {
+          const byCodigo = await apiRequest<{ data?: Array<{ id?: string; codigo?: string | number }> }>(`${basePath}?codigo=${encodeURIComponent(ref)}&pagina=1`);
+          const list = byCodigo?.data || [];
+          return list.some(item => normalizeId(item?.codigo as string | number | null | undefined) === ref || Boolean(item?.id));
         } catch {
           return false;
         }
@@ -144,15 +156,15 @@ async function hasConvertedBudgetByLinkedDocs(
   orcamento: GCOrcamento,
   cache: Map<string, Promise<boolean>>,
 ): Promise<boolean> {
-  const { osIds, vendaIds } = extractLinkedIdsFromAtributos(orcamento);
-  if (osIds.length === 0 && vendaIds.length === 0) return false;
+  const { osRefs, vendaRefs } = extractLinkedIdsFromAtributos(orcamento);
+  if (osRefs.length === 0 && vendaRefs.length === 0) return false;
 
-  for (const osId of osIds) {
-    if (await checkExistsById('os', osId, cache)) return true;
+  for (const osRef of osRefs) {
+    if (await checkExistsByReference('os', osRef, cache)) return true;
   }
 
-  for (const vendaId of vendaIds) {
-    if (await checkExistsById('venda', vendaId, cache)) return true;
+  for (const vendaRef of vendaRefs) {
+    if (await checkExistsByReference('venda', vendaRef, cache)) return true;
   }
 
   return false;

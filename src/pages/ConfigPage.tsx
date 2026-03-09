@@ -20,6 +20,7 @@ export default function ConfigPage() {
   const [operatorName, setOperatorName] = useState(config.operatorName);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const [hydrated, setHydrated] = useState(useCheckoutStore.persist.hasHydrated());
 
   const [osStatusToShow, setOsStatusToShow] = useState<string[]>(config.osStatusToShow);
   const [vendaStatusToShow, setVendaStatusToShow] = useState<string[]>(config.vendaStatusToShow);
@@ -27,12 +28,19 @@ export default function ConfigPage() {
   const [defaultVendaStatus, setDefaultVendaStatus] = useState(config.defaultVendaConclusionStatus);
 
   useEffect(() => {
+    const unsub = useCheckoutStore.persist.onFinishHydration(() => setHydrated(true));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
     setOperatorName(config.operatorName);
     setOsStatusToShow(config.osStatusToShow ?? []);
     setVendaStatusToShow(config.vendaStatusToShow ?? []);
     setDefaultOSStatus(config.defaultOSConclusionStatus ?? '');
     setDefaultVendaStatus(config.defaultVendaConclusionStatus ?? '');
   }, [
+    hydrated,
     config.operatorName,
     config.osStatusToShow,
     config.vendaStatusToShow,

@@ -270,12 +270,21 @@ export async function checkStockForOrders(
 }
 
 // --- PRODUCT DETAILS (for barcode enrichment) ---
+interface GCProductExtraField {
+  id: string;
+  atributo_id: string;
+  descricao: string;
+  conteudo: string;
+  tipo?: string;
+}
+
 interface GCProductDetail {
   id: string;
   codigo_barra: string;
   codigo_interno: string;
   nome: string;
   variacoes?: Array<{ variacao: { id: string; codigo: string } }>;
+  campos_extras?: GCProductExtraField[];
 }
 
 async function getProductDetail(produtoId: string): Promise<GCProductDetail | null> {

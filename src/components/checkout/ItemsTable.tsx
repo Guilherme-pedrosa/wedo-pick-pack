@@ -94,6 +94,7 @@ export default function ItemsTable({ items }: Props) {
             <th className="py-2 px-3">Produto</th>
             <th className="py-2 px-3">Código</th>
             <th className="py-2 px-3">Cód. Barras</th>
+            <th className="py-2 px-3">Localização</th>
             <th className="py-2 px-3 text-center">Conferidos</th>
             <th className="py-2 px-3 text-center">Total</th>
             <th className="py-2 px-3 text-center">Unid</th>

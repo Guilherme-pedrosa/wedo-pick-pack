@@ -332,7 +332,7 @@ export async function enrichOrderProducts(
     // Try atributos first (actual API format)
     if (detail.atributos && Array.isArray(detail.atributos)) {
       for (const item of detail.atributos) {
-        const campo = item.atributo || item;
+        const campo: GCProductExtraField = 'atributo' in item ? item.atributo : item as any;
         const desc = (campo.descricao || '').toLowerCase().trim();
         if (desc.includes('localização física') || desc.includes('localizacao fisica')) {
           localizacao_fisica = campo.conteudo || '';

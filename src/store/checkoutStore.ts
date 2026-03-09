@@ -107,6 +107,10 @@ export const useCheckoutStore = create<CheckoutStore>()(
     }),
     {
       name: 'wedo-checkout-store',
+      partialize: (state) => ({
+        concludedSessions: state.concludedSessions,
+        config: state.config,
+      }),
     }
   )
 );

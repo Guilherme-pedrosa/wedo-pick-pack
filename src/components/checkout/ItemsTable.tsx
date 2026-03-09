@@ -57,6 +57,17 @@ export default function ItemsTable({ items }: Props) {
                   )}
                   <span>{item.sigla_unidade}</span>
                 </div>
+                {(item.localizacao_fisica || item.localizacao_rational) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs ml-5.5 mt-0.5">
+                    <MapPin className="h-3 w-3 text-primary shrink-0" />
+                    {item.localizacao_fisica && (
+                      <span className="text-primary font-medium">{item.localizacao_fisica}</span>
+                    )}
+                    {item.localizacao_rational && (
+                      <span className="text-muted-foreground">Rational: {item.localizacao_rational}</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="text-right shrink-0">
                 <div className="text-sm font-bold">

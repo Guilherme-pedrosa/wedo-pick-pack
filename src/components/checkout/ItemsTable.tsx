@@ -1,6 +1,6 @@
 import { PickingItem } from '@/api/types';
 import { useCheckoutStore } from '@/store/checkoutStore';
-import { CheckCircle2, Package } from 'lucide-react';
+import { CheckCircle2, Package, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -57,6 +57,17 @@ export default function ItemsTable({ items }: Props) {
                   )}
                   <span>{item.sigla_unidade}</span>
                 </div>
+                {(item.localizacao_fisica || item.localizacao_rational) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs ml-5.5 mt-0.5">
+                    <MapPin className="h-3 w-3 text-primary shrink-0" />
+                    {item.localizacao_fisica && (
+                      <span className="text-primary font-medium">{item.localizacao_fisica}</span>
+                    )}
+                    {item.localizacao_rational && (
+                      <span className="text-muted-foreground">Rational: {item.localizacao_rational}</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="text-right shrink-0">
                 <div className="text-sm font-bold">
@@ -83,6 +94,7 @@ export default function ItemsTable({ items }: Props) {
             <th className="py-2 px-3">Produto</th>
             <th className="py-2 px-3">Código</th>
             <th className="py-2 px-3">Cód. Barras</th>
+            <th className="py-2 px-3">Localização</th>
             <th className="py-2 px-3 text-center">Conferidos</th>
             <th className="py-2 px-3 text-center">Total</th>
             <th className="py-2 px-3 text-center">Unid</th>
@@ -110,6 +122,21 @@ export default function ItemsTable({ items }: Props) {
               </td>
               <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
                 {item.codigo_barras || '—'}
+              </td>
+              <td className="py-2.5 px-3 text-xs">
+                {(item.localizacao_fisica || item.localizacao_rational) ? (
+                  <div className="flex items-start gap-1">
+                    <MapPin className="h-3 w-3 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      {item.localizacao_fisica && (
+                        <div className="text-primary font-medium">{item.localizacao_fisica}</div>
+                      )}
+                      {item.localizacao_rational && (
+                        <div className="text-muted-foreground">Rational: {item.localizacao_rational}</div>
+                      )}
+                    </div>
+                  </div>
+                ) : '—'}
               </td>
               <td className="py-2.5 px-3 text-center font-medium">
                 {item.conferido

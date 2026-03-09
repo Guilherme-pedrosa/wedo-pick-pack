@@ -40,6 +40,8 @@ function buildItems(order: Order): PickingItem[] {
     qtd_total: parseGCQuantity(p.produto.quantidade),
     qtd_conferida: 0,
     conferido: false,
+    localizacao_fisica: p.produto.localizacao_fisica,
+    localizacao_rational: p.produto.localizacao_rational,
   }));
 }
 

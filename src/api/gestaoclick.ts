@@ -270,12 +270,21 @@ export async function checkStockForOrders(
 }
 
 // --- PRODUCT DETAILS (for barcode enrichment) ---
+interface GCProductExtraField {
+  id: string;
+  atributo_id: string;
+  descricao: string;
+  conteudo: string;
+  tipo?: string;
+}
+
 interface GCProductDetail {
   id: string;
   codigo_barra: string;
   codigo_interno: string;
   nome: string;
   variacoes?: Array<{ variacao: { id: string; codigo: string } }>;
+  campos_extras?: GCProductExtraField[];
 }
 
 async function getProductDetail(produtoId: string): Promise<GCProductDetail | null> {
@@ -311,8 +320,21 @@ export async function enrichOrderProducts(
     if (produto.variacao_id && detail.variacoes) {
       const variacao = detail.variacoes.find(v => v.variacao.id === produto.variacao_id);
       if (variacao?.variacao.codigo) {
-        // Use variation code as product code if available
         if (!codigoBarras) codigoBarras = '';
+      }
+    }
+
+    // Extract location fields from campos_extras
+    let localizacao_fisica = '';
+    let localizacao_rational = '';
+    if (detail.campos_extras && Array.isArray(detail.campos_extras)) {
+      for (const campo of detail.campos_extras) {
+        const desc = (campo.descricao || '').toLowerCase().trim();
+        if (desc.includes('localização física') || desc.includes('localizacao fisica')) {
+          localizacao_fisica = campo.conteudo || '';
+        } else if (desc.includes('localização rational') || desc.includes('localizacao rational')) {
+          localizacao_rational = campo.conteudo || '';
+        }
       }
     }
 
@@ -321,6 +343,8 @@ export async function enrichOrderProducts(
         ...produto,
         codigo_produto: codigoProduto,
         codigo_barras: codigoBarras,
+        localizacao_fisica: localizacao_fisica || undefined,
+        localizacao_rational: localizacao_rational || undefined,
       },
     };
   });

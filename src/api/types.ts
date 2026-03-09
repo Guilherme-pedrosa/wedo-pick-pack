@@ -13,6 +13,8 @@ export interface GCProdutoItem {
   sigla_unidade: string;
   quantidade: number | string;
   valor_venda?: string;
+  localizacao_fisica?: string;
+  localizacao_rational?: string;
 }
 
 export interface GCOrdemServico {
@@ -84,6 +86,8 @@ export interface PickingItem {
   qtd_conferida: number;
   conferido: boolean;
   confirmed_at?: string;
+  localizacao_fisica?: string;
+  localizacao_rational?: string;
 }
 
 export interface PickingSession {

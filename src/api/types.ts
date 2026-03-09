@@ -84,6 +84,8 @@ export interface PickingItem {
   qtd_conferida: number;
   conferido: boolean;
   confirmed_at?: string;
+  localizacao_fisica?: string;
+  localizacao_rational?: string;
 }
 
 export interface PickingSession {

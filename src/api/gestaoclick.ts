@@ -325,10 +325,24 @@ export async function enrichOrderProducts(
       }
     }
 
-    // Extract location fields from campos_extras
+    // Extract location fields from atributos (API returns atributos with nested atributo objects)
     let localizacao_fisica = '';
     let localizacao_rational = '';
-    if (detail.campos_extras && Array.isArray(detail.campos_extras)) {
+    
+    // Try atributos first (actual API format)
+    if (detail.atributos && Array.isArray(detail.atributos)) {
+      for (const item of detail.atributos) {
+        const campo = item.atributo || item;
+        const desc = (campo.descricao || '').toLowerCase().trim();
+        if (desc.includes('localização física') || desc.includes('localizacao fisica')) {
+          localizacao_fisica = campo.conteudo || '';
+        } else if (desc.includes('localização rational') || desc.includes('localizacao rational')) {
+          localizacao_rational = campo.conteudo || '';
+        }
+      }
+    }
+    // Fallback to campos_extras if present
+    if (!localizacao_fisica && !localizacao_rational && detail.campos_extras && Array.isArray(detail.campos_extras)) {
       for (const campo of detail.campos_extras) {
         const desc = (campo.descricao || '').toLowerCase().trim();
         if (desc.includes('localização física') || desc.includes('localizacao fisica')) {

@@ -123,6 +123,21 @@ export default function ItemsTable({ items }: Props) {
               <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">
                 {item.codigo_barras || '—'}
               </td>
+              <td className="py-2.5 px-3 text-xs">
+                {(item.localizacao_fisica || item.localizacao_rational) ? (
+                  <div className="flex items-start gap-1">
+                    <MapPin className="h-3 w-3 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      {item.localizacao_fisica && (
+                        <div className="text-primary font-medium">{item.localizacao_fisica}</div>
+                      )}
+                      {item.localizacao_rational && (
+                        <div className="text-muted-foreground">Rational: {item.localizacao_rational}</div>
+                      )}
+                    </div>
+                  </div>
+                ) : '—'}
+              </td>
               <td className="py-2.5 px-3 text-center font-medium">
                 {item.conferido
                   ? `${fmtQtd(item.qtd_total)}/${fmtQtd(item.qtd_total)}`

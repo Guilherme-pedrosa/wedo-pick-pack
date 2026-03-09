@@ -1,6 +1,6 @@
 import { PickingItem } from '@/api/types';
 import { useCheckoutStore } from '@/store/checkoutStore';
-import { CheckCircle2, Package } from 'lucide-react';
+import { CheckCircle2, Package, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 

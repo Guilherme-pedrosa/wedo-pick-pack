@@ -285,6 +285,7 @@ interface GCProductDetail {
   nome: string;
   variacoes?: Array<{ variacao: { id: string; codigo: string } }>;
   campos_extras?: GCProductExtraField[];
+  atributos?: Array<{ atributo: GCProductExtraField }>;
 }
 
 async function getProductDetail(produtoId: string): Promise<GCProductDetail | null> {

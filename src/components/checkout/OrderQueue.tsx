@@ -108,22 +108,10 @@ export default function OrderQueue() {
     }
   }, [filteredByConfig]);
 
-  const loadAndStartRef = useRef(loadAndStart);
-  loadAndStartRef.current = loadAndStart;
-
-  const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
-    if (session && session.refId !== id && !session.concludedAt) {
-      setConfirmSwitch({ tipo, id });
-      return;
-    }
-    await loadAndStartRef.current(tipo, id);
-  }, [session]);
-
-  const loadAndStart = async (tipo: OrderType, id: string) => {
+  const loadAndStart = useCallback(async (tipo: OrderType, id: string) => {
     setLoading(true);
     try {
       const order = tipo === 'os' ? await getOS(id) : await getVenda(id);
-      // Enrich products with barcode/code details
       const enrichedProdutos = await enrichOrderProducts(order.produtos);
       order.produtos = enrichedProdutos;
       startSession(tipo, order);
@@ -132,14 +120,22 @@ export default function OrderQueue() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [startSession]);
 
-  const handleConfirmSwitch = async () => {
+  const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
+    if (session && session.refId !== id && !session.concludedAt) {
+      setConfirmSwitch({ tipo, id });
+      return;
+    }
+    await loadAndStart(tipo, id);
+  }, [session, loadAndStart]);
+
+  const handleConfirmSwitch = useCallback(async () => {
     if (!confirmSwitch) return;
     cancelSession();
     await loadAndStart(confirmSwitch.tipo, confirmSwitch.id);
     setConfirmSwitch(null);
-  };
+  }, [confirmSwitch, cancelSession, loadAndStart]);
 
   function getOrderBadge(order: GCOrdemServico | GCVenda) {
     if (session && session.refId === order.id && session.tipo === activeType && !session.concludedAt) {

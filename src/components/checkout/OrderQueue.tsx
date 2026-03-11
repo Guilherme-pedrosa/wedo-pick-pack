@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';

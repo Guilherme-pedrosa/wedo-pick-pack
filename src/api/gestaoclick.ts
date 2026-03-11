@@ -305,10 +305,16 @@ export async function enrichOrderProducts(
   // Deduplicate produto_ids
   const uniqueIds = [...new Set(produtos.map(p => p.produto.produto_id))];
   
-  // Fetch all product details in parallel
-  const details = await Promise.all(uniqueIds.map(id => getProductDetail(id)));
+  // Fetch product details in batches of 3 (respect API rate limit of 3 req/s)
   const detailMap = new Map<string, GCProductDetail>();
-  details.forEach(d => { if (d) detailMap.set(d.id, d); });
+  for (let i = 0; i < uniqueIds.length; i += 3) {
+    const batch = uniqueIds.slice(i, i + 3);
+    const results = await Promise.all(batch.map(id => getProductDetail(id)));
+    results.forEach(d => { if (d) detailMap.set(d.id, d); });
+    if (i + 3 < uniqueIds.length) {
+      await new Promise(r => setTimeout(r, 1100)); // respect rate limit
+    }
+  }
 
   return produtos.map(({ produto }) => {
     const detail = detailMap.get(produto.produto_id);

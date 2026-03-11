@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { matchItemByCode } from '@/lib/scanMatcher';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,9 @@ import { PackageCheck, Scan, Clock, X, Printer, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import ItemsTable from './ItemsTable';
 import ConclusionModal from './ConclusionModal';
-import BarcodeScannerModal from './BarcodeScannerModal';
+
+// Lazy load the heavy barcode scanner (html5-qrcode)
+const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'));
 
 export default function ConferencePanel() {
   const session = useCheckoutStore(s => s.session);
@@ -26,14 +28,17 @@ export default function ConferencePanel() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const scanRef = useRef<HTMLInputElement>(null);
 
-  // Timer
+  // Timer - only update the elapsed string, not the whole component
   useEffect(() => {
     if (!session || session.concludedAt) return;
     const interval = setInterval(() => {
       const diff = Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000);
       const m = String(Math.floor(diff / 60)).padStart(2, '0');
       const s = String(diff % 60).padStart(2, '0');
-      setElapsed(`${m}:${s}`);
+      setElapsed(prev => {
+        const next = `${m}:${s}`;
+        return prev === next ? prev : next;
+      });
     }, 1000);
     return () => clearInterval(interval);
   }, [session?.startedAt, session?.concludedAt]);
@@ -112,7 +117,7 @@ export default function ConferencePanel() {
     scanRef.current?.focus();
   }, [scanCode, scanQty, processScan, session?.items]);
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     if (!session) return;
     const items = session.items;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório de Separação</title>
@@ -139,7 +144,23 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
     const w = window.open('', '_blank');
     w?.document.write(html);
     w?.document.close();
-  };
+  }, [session, config.operatorName]);
+
+  // Memoize computed values
+  const { allConfirmed, confirmedCount, totalCount, showQtyField, progress, hasAnyConfirmed } = useMemo(() => {
+    if (!session) return { allConfirmed: false, confirmedCount: 0, totalCount: 0, showQtyField: false, progress: 0, hasAnyConfirmed: false };
+    const items = session.items;
+    const confirmed = items.filter(i => i.conferido).length;
+    const total = items.length;
+    return {
+      allConfirmed: items.every(i => i.conferido),
+      confirmedCount: confirmed,
+      totalCount: total,
+      showQtyField: items.some(i => i.qtd_total >= 5),
+      progress: total > 0 ? Math.round((confirmed / total) * 100) : 0,
+      hasAnyConfirmed: items.some(i => i.qtd_conferida > 0),
+    };
+  }, [session?.items]);
 
   // No active session
   if (!session) {
@@ -151,13 +172,6 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
       </div>
     );
   }
-
-  const allConfirmed = session.items.every(i => i.conferido);
-  const confirmedCount = session.items.filter(i => i.conferido).length;
-  const totalCount = session.items.length;
-  const showQtyField = session.items.some(i => i.qtd_total >= 5);
-  const progress = totalCount > 0 ? Math.round((confirmedCount / totalCount) * 100) : 0;
-  const hasAnyConfirmed = session.items.some(i => i.qtd_conferida > 0);
 
   // Concluded view
   if (session.concludedAt) {
@@ -184,7 +198,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
 
   return (
     <div className="flex flex-col h-full">
-      {/* Order header — stacks on mobile */}
+      {/* Order header */}
       <div className="bg-card border-b border-border p-3 md:p-4 shadow-sm">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2 flex-wrap">
@@ -262,15 +276,20 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         )}
       </div>
 
-      <BarcodeScannerModal
-        open={cameraOpen}
-        onClose={() => setCameraOpen(false)}
-        onScan={(code) => {
-          const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-          processScan(code, hasLargeQty ? (Number(scanQty) || 1) : 1);
-          scanRef.current?.focus();
-        }}
-      />
+      {/* Lazy-loaded barcode scanner */}
+      {cameraOpen && (
+        <Suspense fallback={null}>
+          <BarcodeScannerModal
+            open={cameraOpen}
+            onClose={() => setCameraOpen(false)}
+            onScan={(code) => {
+              const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
+              processScan(code, hasLargeQty ? (Number(scanQty) || 1) : 1);
+              scanRef.current?.focus();
+            }}
+          />
+        </Suspense>
+      )}
 
       {/* Progress */}
       <div className="px-3 md:px-4 py-2">
@@ -288,7 +307,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         <ItemsTable items={session.items} />
       </div>
 
-      {/* Footer actions — stacks on mobile */}
+      {/* Footer actions */}
       <div className="border-t border-border bg-card p-3 md:p-4 shadow-[0_-2px_8px_rgba(0,0,0,0.05)]">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="text-xs md:text-sm text-muted-foreground">

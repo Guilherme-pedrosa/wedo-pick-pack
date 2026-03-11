@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
@@ -18,6 +18,7 @@ export default function OrderQueue() {
   const [activeType, setActiveType] = useState<OrderType>('os');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [confirmSwitch, setConfirmSwitch] = useState<{ tipo: OrderType; id: string } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,13 +65,21 @@ export default function OrderQueue() {
     ? filteredByConfig.filter(o => stockFilter.has(o.id))
     : filteredByConfig;
 
-  // Client-side search
-  const filtered = search.trim()
-    ? filteredByStock.filter(o =>
-        o.codigo.toLowerCase().includes(search.toLowerCase()) ||
-        o.nome_cliente.toLowerCase().includes(search.toLowerCase())
-      )
-    : filteredByStock;
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Client-side search (uses debounced value)
+  const filtered = useMemo(() => {
+    const s = debouncedSearch.trim().toLowerCase();
+    if (!s) return filteredByStock;
+    return filteredByStock.filter(o =>
+      o.codigo.toLowerCase().includes(s) ||
+      o.nome_cliente.toLowerCase().includes(s)
+    );
+  }, [filteredByStock, debouncedSearch]);
 
   const handleStockScan = useCallback(async () => {
     if (filteredByConfig.length === 0) {

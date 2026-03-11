@@ -18,6 +18,7 @@ export default function OrderQueue() {
   const [activeType, setActiveType] = useState<OrderType>('os');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
   const [confirmSwitch, setConfirmSwitch] = useState<{ tipo: OrderType; id: string } | null>(null);
   const [loading, setLoading] = useState(false);

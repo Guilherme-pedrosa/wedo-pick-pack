@@ -108,12 +108,15 @@ export default function OrderQueue() {
     }
   }, [filteredByConfig]);
 
+  const loadAndStartRef = useRef(loadAndStart);
+  loadAndStartRef.current = loadAndStart;
+
   const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
     if (session && session.refId !== id && !session.concludedAt) {
       setConfirmSwitch({ tipo, id });
       return;
     }
-    await loadAndStart(tipo, id);
+    await loadAndStartRef.current(tipo, id);
   }, [session]);
 
   const loadAndStart = async (tipo: OrderType, id: string) => {

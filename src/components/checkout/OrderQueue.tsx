@@ -35,13 +35,17 @@ export default function OrderQueue() {
   const separatedQuery = useQuery({
     queryKey: ['valid-separated-ids'],
     queryFn: getValidSeparatedOrderIds,
-    refetchInterval: 15000, // re-check every 15s
+    refetchInterval: 60000, // re-check every 60s (was 15s — too aggressive)
+    staleTime: 30000, // consider fresh for 30s
+    refetchOnWindowFocus: false,
   });
   const separatedIds = separatedQuery.data || new Set<string>();
 
   const statusQuery = useQuery({
     queryKey: ['statuses', activeType],
     queryFn: () => activeType === 'os' ? getStatusOS() : getStatusVendas(),
+    staleTime: 5 * 60 * 1000, // statuses rarely change — cache 5 min
+    refetchOnWindowFocus: false,
   });
 
   const filterStatusId = statusFilter === 'all' ? undefined : statusFilter;
@@ -49,6 +53,8 @@ export default function OrderQueue() {
   const ordersQuery = useQuery({
     queryKey: ['orders', activeType, filterStatusId, page],
     queryFn: () => activeType === 'os' ? listOS(filterStatusId, page) : listVendas(filterStatusId, page),
+    staleTime: 30000, // consider fresh for 30s — prevents refetch on focus
+    refetchOnWindowFocus: false,
   });
 
   const orders = ordersQuery.data?.data || [];
@@ -102,19 +108,10 @@ export default function OrderQueue() {
     }
   }, [filteredByConfig]);
 
-  const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
-    if (session && session.refId !== id && !session.concludedAt) {
-      setConfirmSwitch({ tipo, id });
-      return;
-    }
-    await loadAndStart(tipo, id);
-  }, [session]);
-
-  const loadAndStart = async (tipo: OrderType, id: string) => {
+  const loadAndStart = useCallback(async (tipo: OrderType, id: string) => {
     setLoading(true);
     try {
       const order = tipo === 'os' ? await getOS(id) : await getVenda(id);
-      // Enrich products with barcode/code details
       const enrichedProdutos = await enrichOrderProducts(order.produtos);
       order.produtos = enrichedProdutos;
       startSession(tipo, order);
@@ -123,14 +120,22 @@ export default function OrderQueue() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [startSession]);
 
-  const handleConfirmSwitch = async () => {
+  const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
+    if (session && session.refId !== id && !session.concludedAt) {
+      setConfirmSwitch({ tipo, id });
+      return;
+    }
+    await loadAndStart(tipo, id);
+  }, [session, loadAndStart]);
+
+  const handleConfirmSwitch = useCallback(async () => {
     if (!confirmSwitch) return;
     cancelSession();
     await loadAndStart(confirmSwitch.tipo, confirmSwitch.id);
     setConfirmSwitch(null);
-  };
+  }, [confirmSwitch, cancelSession, loadAndStart]);
 
   function getOrderBadge(order: GCOrdemServico | GCVenda) {
     if (session && session.refId === order.id && session.tipo === activeType && !session.concludedAt) {

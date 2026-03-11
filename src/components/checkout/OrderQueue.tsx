@@ -35,13 +35,17 @@ export default function OrderQueue() {
   const separatedQuery = useQuery({
     queryKey: ['valid-separated-ids'],
     queryFn: getValidSeparatedOrderIds,
-    refetchInterval: 15000, // re-check every 15s
+    refetchInterval: 60000, // re-check every 60s (was 15s — too aggressive)
+    staleTime: 30000, // consider fresh for 30s
+    refetchOnWindowFocus: false,
   });
   const separatedIds = separatedQuery.data || new Set<string>();
 
   const statusQuery = useQuery({
     queryKey: ['statuses', activeType],
     queryFn: () => activeType === 'os' ? getStatusOS() : getStatusVendas(),
+    staleTime: 5 * 60 * 1000, // statuses rarely change — cache 5 min
+    refetchOnWindowFocus: false,
   });
 
   const filterStatusId = statusFilter === 'all' ? undefined : statusFilter;
@@ -49,6 +53,8 @@ export default function OrderQueue() {
   const ordersQuery = useQuery({
     queryKey: ['orders', activeType, filterStatusId, page],
     queryFn: () => activeType === 'os' ? listOS(filterStatusId, page) : listVendas(filterStatusId, page),
+    staleTime: 30000, // consider fresh for 30s — prevents refetch on focus
+    refetchOnWindowFocus: false,
   });
 
   const orders = ordersQuery.data?.data || [];

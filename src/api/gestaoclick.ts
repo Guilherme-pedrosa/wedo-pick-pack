@@ -47,6 +47,31 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
 
 const mockDelay = () => new Promise(r => setTimeout(r, 300));
 
+const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+function normalizeStatusId(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+async function confirmStatusApplied(tipo: 'os' | 'venda', id: string, expectedStatusId: string): Promise<boolean> {
+  const path = tipo === 'os' ? `/api/ordens_servicos/${id}` : `/api/vendas/${id}`;
+  const expected = normalizeStatusId(expectedStatusId);
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await apiRequest<{ data?: { situacao_id?: string | number } }>(path);
+      const current = normalizeStatusId(res?.data?.situacao_id);
+      if (current === expected) return true;
+    } catch {
+      // ignore transient read errors and retry
+    }
+
+    if (attempt < 2) await wait(900);
+  }
+
+  return false;
+}
+
 // --- LIST ---
 export async function listOS(situacaoId?: string, pagina = 1): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
   if (isUsingMock()) {

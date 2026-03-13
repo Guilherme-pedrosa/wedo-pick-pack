@@ -39,9 +39,12 @@ export interface CreateSeparationInput {
   started_at: string;
 }
 
-export async function createSeparation(input: CreateSeparationInput): Promise<SeparationRecord | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+export async function createSeparation(input: CreateSeparationInput): Promise<SeparationRecord> {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    throw new Error('AUTH_REQUIRED');
+  }
 
   const { data, error } = await supabase
     .from('separations')
@@ -52,10 +55,11 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
     .select()
     .single();
 
-  if (error) {
+  if (error || !data) {
     console.error('Error creating separation:', error);
-    return null;
+    throw new Error('SEPARATION_SAVE_FAILED');
   }
+
   return data as unknown as SeparationRecord;
 }
 

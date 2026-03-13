@@ -100,6 +100,12 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         toast.warning('⏳ Limite da API atingido. Tente novamente em 30s.');
       } else if (msg === 'AUTH_ERROR') {
         toast.error('🔑 Credenciais inválidas. Verifique em Configurações.');
+      } else if (msg === 'STATUS_NOT_APPLIED') {
+        toast.error('⚠️ O GestãoClick não confirmou a troca de status. A separação não foi finalizada.');
+      } else if (msg === 'AUTH_REQUIRED') {
+        toast.error('🔒 Sessão expirada. Faça login novamente para concluir a separação.');
+      } else if (msg === 'SEPARATION_SAVE_FAILED') {
+        toast.error('💾 Falha ao registrar a separação no histórico. Nada foi finalizado localmente.');
       } else {
         toast.error(`Erro ao atualizar GestãoClick: ${msg}`);
       }

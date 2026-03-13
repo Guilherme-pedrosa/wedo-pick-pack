@@ -158,10 +158,6 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
     : '';
 
-  const statusObservation = operatorName
-    ? `Separação por: ${operatorName} em ${now}`
-    : '';
-
   const payload: Record<string, any> = {
     cliente_id: rawOrder.cliente_id,
     codigo: rawOrder.codigo,
@@ -177,11 +173,28 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     atributos: rawOrder.atributos || [],
     equipamentos: rawOrder.equipamentos || [],
   };
+
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
-  await apiRequest(`/api/ordens_servicos/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
+
+  const putResponse = await apiRequest<{ data?: { situacao_id?: string | number }; situacao_id?: string | number }>(
+    `/api/ordens_servicos/${id}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const expectedStatus = normalizeStatusId(newStatusId);
+  const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
+
+  if (returnedStatus && returnedStatus !== expectedStatus) {
+    throw new Error('STATUS_NOT_APPLIED');
+  }
+
+  const confirmed = await confirmStatusApplied('os', id, expectedStatus);
+  if (!confirmed) {
+    throw new Error('STATUS_NOT_APPLIED');
+  }
 }
 
 export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string, gcUsuarioId?: string): Promise<void> {
@@ -202,12 +215,8 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
     : '';
 
-  const statusObservation = operatorName
-    ? `Separação por: ${operatorName} em ${now}`
-    : '';
-
   const payload: Record<string, any> = {
-    tipo: 'produto',
+    tipo: (rawOrder as any).tipo || 'produto',
     cliente_id: rawOrder.cliente_id,
     codigo: rawOrder.codigo,
     data: rawOrder.data,
@@ -220,11 +229,28 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     produtos: rawOrder.produtos,
     servicos: rawOrder.servicos || [],
   };
+
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
-  await apiRequest(`/api/vendas/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
+
+  const putResponse = await apiRequest<{ data?: { situacao_id?: string | number }; situacao_id?: string | number }>(
+    `/api/vendas/${id}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const expectedStatus = normalizeStatusId(newStatusId);
+  const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
+
+  if (returnedStatus && returnedStatus !== expectedStatus) {
+    throw new Error('STATUS_NOT_APPLIED');
+  }
+
+  const confirmed = await confirmStatusApplied('venda', id, expectedStatus);
+  if (!confirmed) {
+    throw new Error('STATUS_NOT_APPLIED');
+  }
 }
 
 // --- STOCK CHECK ---

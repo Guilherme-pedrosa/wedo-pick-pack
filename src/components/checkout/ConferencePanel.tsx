@@ -51,12 +51,12 @@ export default function ConferencePanel() {
     return () => { document.title = 'WeDo Checkout'; };
   }, [session?.codigo, session?.concludedAt]);
 
-  // Auto-focus scan input
+  // Auto-focus scan input only when session starts/changes
   useEffect(() => {
-    if (session && !session.concludedAt) {
+    if (session?.refId && !session.concludedAt) {
       scanRef.current?.focus();
     }
-  }, [session?.items, session?.concludedAt]);
+  }, [session?.refId, session?.concludedAt]);
 
   // F2 shortcut
   useEffect(() => {

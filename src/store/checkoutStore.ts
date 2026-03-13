@@ -76,19 +76,27 @@ export const useCheckoutStore = create<CheckoutStore>()(
       confirmItem: (itemId, qtd = 1) => {
         set((state) => {
           if (!state.session) return state;
-          const items = state.session.items.map((item) => {
-            if (item.id !== itemId) return item;
-            const remaining = item.qtd_total - item.qtd_conferida;
-            const toAdd = Math.min(qtd, remaining);
-            const newQtd = item.qtd_conferida + toAdd;
-            return {
-              ...item,
-              qtd_conferida: newQtd,
-              conferido: newQtd >= item.qtd_total,
-              confirmed_at: newQtd >= item.qtd_total ? new Date().toISOString() : item.confirmed_at,
-            };
-          });
-          return { session: { ...state.session, items } };
+
+          const items = state.session.items;
+          const idx = items.findIndex((item) => item.id === itemId);
+          if (idx === -1) return state;
+
+          const current = items[idx];
+          const remaining = current.qtd_total - current.qtd_conferida;
+          const toAdd = Math.min(qtd, remaining);
+          const newQtd = current.qtd_conferida + toAdd;
+
+          const updated = {
+            ...current,
+            qtd_conferida: newQtd,
+            conferido: newQtd >= current.qtd_total,
+            confirmed_at: newQtd >= current.qtd_total ? new Date().toISOString() : current.confirmed_at,
+          };
+
+          const newItems = items.slice();
+          newItems[idx] = updated;
+
+          return { session: { ...state.session, items: newItems } };
         });
       },
       concludeSession: () => {

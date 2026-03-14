@@ -535,6 +535,7 @@ const BoxesPage = () => {
         box={selectedBox}
         items={boxItems}
         loadingItems={loadingItems}
+        isAdmin={isAdmin}
         onClose={() => setSelectedBox(null)}
         onItemsChanged={() => {
           if (selectedBox) loadBoxItems(selectedBox);
@@ -546,6 +547,8 @@ const BoxesPage = () => {
         }}
         onUnlinkTechnician={handleUnlinkTechnician}
         onCheckin={handleOpenCheckin}
+        onDelete={handleDeleteBox}
+        onClone={handleCloneBox}
       />
 
       {/* Technician Link Dialog */}

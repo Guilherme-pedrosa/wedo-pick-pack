@@ -93,16 +93,17 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     );
   }
 
-  // 1. Find client by technician name with exact match priority
-  const client = await findClientByName(technician_name, gcHeaders);
-  if (!client) {
+  // 1. Find client by technician name (strict exact match)
+  const clientLookup = await findClientByName(technician_name, gcHeaders);
+  if (!clientLookup.client) {
     return new Response(
       JSON.stringify({
-        error: `Cliente do técnico "${technician_name}" não encontrado de forma exata no GestãoClick. Garanta que o cliente tenha exatamente o mesmo nome do técnico.`,
+        error: clientLookup.error || `Cliente do técnico "${technician_name}" não encontrado no GestãoClick.`,
       }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+  const client = clientLookup.client;
 
   // 2. Get variation IDs for each product (needed for venda payload)
   const productDetails: Array<{ produto_id: string; variacao_id: string | null; error?: string }> = [];
@@ -239,12 +240,17 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
 
   const isBalcao = await verifyVendaBalcao(vendaCodigo, gcHeaders);
   if (!isBalcao) {
+    const rollbackError = vendaId
+      ? await rollbackVendaAsDevolucao(vendaId, toolbox_name, technician_name, gcHeaders)
+      : 'Venda criada sem ID para rollback automático.';
+
     return new Response(
       JSON.stringify({
         success: false,
         venda_gc_id: vendaId,
         venda_codigo: vendaCodigo,
-        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP.',
+        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP. Rollback aplicado automaticamente.',
+        rollback_error: rollbackError,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -340,13 +346,21 @@ const normalizeText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-async function findClientByName(name: string, gcHeaders: Record<string, string>): Promise<{ id: string; nome: string } | null> {
+type ClientLookupResult = {
+  client: { id: string; nome: string } | null;
+  error?: string;
+};
+
+async function findClientByName(name: string, gcHeaders: Record<string, string>): Promise<ClientLookupResult> {
   try {
     const url = `${GC_API_URL}/api/clientes?nome=${encodeURIComponent(name)}`;
     const res = await fetch(url, { method: 'GET', headers: gcHeaders });
     if (!res.ok) {
-      await res.text();
-      return null;
+      const body = await res.text();
+      return {
+        client: null,
+        error: `Falha ao buscar cliente no GestãoClick: ${res.status} ${body || ''}`.trim(),
+      };
     }
 
     const json = await res.json();
@@ -356,29 +370,27 @@ async function findClientByName(name: string, gcHeaders: Record<string, string>)
       .filter((row: any) => row?.id && row?.nome)
       .map((row: any) => ({ id: String(row.id), nome: String(row.nome) }));
 
-    if (clients.length === 0) {
-      return null;
-    }
-
     const target = normalizeText(name);
-    const exact = clients.find((c) => normalizeText(c.nome) === target);
-    if (exact) {
-      return exact;
+    const exactMatches = clients.filter((c) => normalizeText(c.nome) === target);
+
+    if (exactMatches.length === 1) {
+      return { client: exactMatches[0] };
     }
 
-    const startsWith = clients.find((c) => normalizeText(c.nome).startsWith(target));
-    if (startsWith) {
-      return startsWith;
+    if (exactMatches.length === 0) {
+      return {
+        client: null,
+        error: `Cliente exato do técnico "${name}" não encontrado no GestãoClick.`,
+      };
     }
 
-    // Evita vincular técnico errado quando a busca retorna múltiplos nomes parecidos
-    if (clients.length === 1) {
-      return clients[0];
-    }
-
-    return null;
+    const names = [...new Set(exactMatches.map((c) => c.nome))].slice(0, 5);
+    return {
+      client: null,
+      error: `Cliente ambíguo para "${name}". Correspondências exatas: ${names.join(', ')}.`,
+    };
   } catch {
-    return null;
+    return { client: null, error: 'Erro inesperado ao buscar cliente no GestãoClick.' };
   }
 }
 
@@ -420,6 +432,43 @@ async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<
     return null;
   } catch {
     return null;
+  }
+}
+
+async function rollbackVendaAsDevolucao(
+  vendaGcId: string,
+  toolboxName: string,
+  technicianName: string,
+  gcHeaders: Record<string, string>
+): Promise<string | null> {
+  try {
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const rollbackObs = `[AUTO-ROLLBACK WeDo] Venda sem classificação balcão. Técnico: ${technicianName} | Maleta: ${toolboxName} | ${now}`;
+
+    const res = await fetch(`${GC_API_URL}/api/vendas/${vendaGcId}`, {
+      method: 'PUT',
+      headers: gcHeaders,
+      body: JSON.stringify({
+        situacao_id: SITUACAO_DEVOLUCAO,
+        observacoes: rollbackObs,
+      }),
+    });
+
+    const raw = await res.text();
+    let parsed: any = null;
+    try {
+      parsed = raw ? JSON.parse(raw) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (!res.ok || parsed?.status === 'error') {
+      return parsed?.message || parsed?.error || `Falha no rollback automático (${res.status})`;
+    }
+
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Erro desconhecido no rollback automático';
   }
 }
 

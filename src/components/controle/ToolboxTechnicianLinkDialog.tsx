@@ -55,17 +55,58 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
     if (!toolbox) return;
     setLinking(true);
     setStockProgress(null);
+
     try {
-      // 1. Get toolbox items
+      // 1) Carregar itens da maleta
       const { data: items } = await (supabase.from("toolbox_items") as any)
         .select("*")
         .eq("toolbox_id", toolbox.id);
 
-      // 2. Link technician
-      const { error } = await (supabase.from("toolboxes") as any)
-        .update({ technician_name: tech.name, technician_gc_id: tech.gc_id })
+      // 2) Primeiro cria a venda/baixa de estoque; se falhar, aborta sem vincular a maleta
+      let vendaGcId: string | null = null;
+      let vendaCodigo: string | null = null;
+      let vendaSummary: string | null = null;
+
+      if (items && items.length > 0) {
+        setStockProgress(`Criando venda de empréstimo (${items.length} itens)...`);
+
+        const result = await executeStockSaida({
+          items: items.map((i: any) => ({
+            produto_id: i.produto_id,
+            nome_produto: i.nome_produto,
+            quantidade: i.quantidade,
+            preco_unitario: i.preco_unitario || 0,
+          })),
+          justificativa: `Empréstimo de ferramenta - Maleta "${toolbox.name}"`,
+          toolboxName: toolbox.name,
+          technicianName: tech.name,
+          technicianGcId: tech.gc_id,
+        });
+
+        if (!result.success || !result.venda_gc_id) {
+          throw new Error(result.error || "Falha ao criar venda de balcão no ERP.");
+        }
+
+        vendaGcId = result.venda_gc_id;
+        vendaCodigo = result.venda_codigo || null;
+        vendaSummary = result.summary || null;
+      }
+
+      // 3) Só após venda confirmada: vincula técnico na maleta
+      const toolboxUpdatePayload: Record<string, any> = {
+        technician_name: tech.name,
+        technician_gc_id: tech.gc_id,
+      };
+
+      if (vendaGcId) {
+        toolboxUpdatePayload.venda_gc_id = vendaGcId;
+      }
+
+      const { error: linkError } = await (supabase.from("toolboxes") as any)
+        .update(toolboxUpdatePayload)
         .eq("id", toolbox.id);
-      if (error) throw error;
+
+      if (linkError) throw linkError;
 
       await logToolboxMovement({
         toolboxId: toolbox.id,
@@ -76,59 +117,31 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         details: `Maleta vinculada ao técnico ${tech.name}`,
       });
 
-      // 3. Create venda de empréstimo in GC (stock OUT)
-      if (items && items.length > 0) {
-        setStockProgress(`Criando venda de empréstimo (${items.length} itens)...`);
-        try {
-          const result = await executeStockSaida({
-            items: items.map((i: any) => ({
-              produto_id: i.produto_id,
-              nome_produto: i.nome_produto,
-              quantidade: i.quantidade,
-              preco_unitario: i.preco_unitario || 0,
-            })),
-            justificativa: `Empréstimo de ferramenta - Maleta "${toolbox.name}"`,
-            toolboxName: toolbox.name,
-            technicianName: tech.name,
-            technicianGcId: tech.gc_id,
-          });
+      if (vendaGcId) {
+        toast.success(`Venda #${vendaCodigo || vendaGcId} criada — estoque baixado`);
 
-          if (result.success && result.venda_gc_id) {
-            // Save venda_gc_id on the toolbox
-            await (supabase.from("toolboxes") as any)
-              .update({ venda_gc_id: result.venda_gc_id })
-              .eq("id", toolbox.id);
-
-            toast.success(`Venda #${result.venda_codigo} criada — estoque baixado`);
-
-            await logToolboxMovement({
-              toolboxId: toolbox.id,
-              toolboxName: toolbox.name,
-              action: "saida_estoque",
-              technicianName: tech.name,
-              technicianGcId: tech.gc_id,
-              details: `Venda GC #${result.venda_codigo} (ID: ${result.venda_gc_id}) — ${result.summary}`,
-            });
-          } else {
-            toast.error(`Erro ao criar venda: ${result.error || "Erro desconhecido"}`);
-            console.error("Stock saida error:", result);
-          }
-        } catch (stockErr) {
-          console.error("Stock movement error:", stockErr);
-          toast.error("Erro ao criar venda no ERP. A vinculação foi feita, mas o estoque NÃO foi baixado.");
-        }
+        await logToolboxMovement({
+          toolboxId: toolbox.id,
+          toolboxName: toolbox.name,
+          action: "saida_estoque",
+          technicianName: tech.name,
+          technicianGcId: tech.gc_id,
+          details: `Venda GC #${vendaCodigo || vendaGcId} (ID: ${vendaGcId}) — ${vendaSummary || "Saída registrada"}`,
+        });
       }
 
       toast.success(`Técnico ${tech.name} vinculado à maleta "${toolbox.name}"`);
       onLinked();
-      
+
       if (onShowReceipt) {
         onShowReceipt(toolbox, tech.name, tech.gc_id);
       }
-      
+
       onClose();
-    } catch {
-      toast.error("Erro ao vincular técnico");
+    } catch (error) {
+      console.error("Erro ao vincular técnico na maleta:", error);
+      const message = error instanceof Error ? error.message : "Erro ao vincular técnico";
+      toast.error(message);
     } finally {
       setLinking(false);
       setStockProgress(null);

@@ -36,6 +36,22 @@ export default function BoxHandoffReceipt({
   date,
 }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
+  const [logoBase64, setLogoBase64] = useState<string>("");
+
+  useEffect(() => {
+    // Convert logo to base64 so it works in print windows / PDF
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(img, 0, 0);
+      setLogoBase64(canvas.toDataURL("image/jpeg"));
+    };
+    img.src = "/images/logo-wedo.jpeg";
+  }, []);
 
   const totalValue = items.reduce(
     (sum, i) => sum + i.quantidade * (i.preco_unitario || 0),
@@ -55,10 +71,15 @@ export default function BoxHandoffReceipt({
     const content = printRef.current;
     if (!content) return;
 
+    // Replace the src in the cloned HTML with the base64 version
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = content.innerHTML;
+    const imgs = tempDiv.querySelectorAll("img[data-logo]");
+    imgs.forEach((img) => img.setAttribute("src", logoBase64));
+
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const logoUrl = window.location.origin + "/images/logo-wedo.jpeg";
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>

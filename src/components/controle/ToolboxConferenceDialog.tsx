@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardCheck, Check, X, AlertTriangle } from "lucide-react";
+import { ClipboardCheck, Check, X, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

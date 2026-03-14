@@ -124,19 +124,6 @@ const ToolboxesPage = () => {
     }
   };
 
-  const handleUnlinkTechnician = async (toolbox: ToolboxData) => {
-    try {
-      const { error } = await (supabase.from("toolboxes") as any)
-        .update({ technician_name: null, technician_gc_id: null })
-        .eq("id", toolbox.id);
-      if (error) throw error;
-      toast.success(`Técnico desvinculado de "${toolbox.name}"`);
-      loadToolboxes();
-      setSelectedToolbox(null);
-    } catch {
-      toast.error("Erro ao desvincular técnico");
-    }
-  };
 
   const handleOpenConference = async (toolbox: ToolboxData, unlink = false) => {
     try {

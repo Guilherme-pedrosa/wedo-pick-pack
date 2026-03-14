@@ -1,0 +1,14 @@
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"993.3000"') WHERE produto_id = '66867909';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"9.9000"') WHERE produto_id = '70236831';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"40.1800"') WHERE produto_id = '66867808';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"6.7700"') WHERE produto_id = '87221226';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"109.8000"') WHERE produto_id = '66867720';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"228.0960"') WHERE produto_id = '66867726';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"2.4000"') WHERE produto_id = '78285975';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"1.1600"') WHERE produto_id = '66867709';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"337.3700"') WHERE produto_id = '66867899';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"247.5000"') WHERE produto_id = '66868187';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"15.2100"') WHERE produto_id = '66867705';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"117.7000"') WHERE produto_id = '66867747';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"15.5200"') WHERE produto_id = '66867667';
+UPDATE public.products_index SET payload_min_json = jsonb_set(COALESCE(payload_min_json::jsonb, '{}'::jsonb), '{preco_venda}', '"165.6900"') WHERE produto_id = '70016061';

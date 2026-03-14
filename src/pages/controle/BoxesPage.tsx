@@ -60,6 +60,10 @@ const BoxesPage = () => {
     try {
       const alerts = await runBaixaValidationWithAlerts();
       setBaixaAlerts(alerts);
+      // Reload boxes if any items were auto-reverted
+      if (alerts.some(a => a.reverted)) {
+        loadBoxes();
+      }
     } finally {
       setValidatingBaixas(false);
     }
@@ -347,23 +351,49 @@ const BoxesPage = () => {
 
       {/* Baixa Validation Alerts */}
       {baixaAlerts.length > 0 && (
-        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 space-y-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            <h3 className="text-sm font-semibold text-destructive">
-              Alertas de Baixas ({baixaAlerts.length})
-            </h3>
-          </div>
-          <div className="space-y-1.5">
-            {baixaAlerts.map((alert, i) => (
-              <div key={i} className="text-xs text-destructive/90 bg-destructive/5 rounded px-3 py-2 border border-destructive/10">
-                <span className="font-medium">{alert.reason}</span>
-                <span className="block text-destructive/60 mt-0.5">
-                  Caixa: {alert.boxName} · {alert.produtoNome} ({alert.quantidade}x)
-                </span>
+        <div className="space-y-3">
+          {/* Reverted alerts */}
+          {baixaAlerts.filter(a => a.reverted).length > 0 && (
+            <div className="bg-warning/10 border border-warning/30 rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-warning" />
+                <h3 className="text-sm font-semibold text-warning">
+                  Estornos Automáticos ({baixaAlerts.filter(a => a.reverted).length})
+                </h3>
               </div>
-            ))}
-          </div>
+              <div className="space-y-1.5">
+                {baixaAlerts.filter(a => a.reverted).map((alert, i) => (
+                  <div key={i} className="text-xs bg-warning/5 rounded px-3 py-2 border border-warning/10">
+                    <span className="font-medium text-warning">{alert.reason}</span>
+                    <span className="block text-muted-foreground mt-0.5">
+                      ✅ {alert.quantidade}x "{alert.produtoNome}" devolvido para <span className="font-semibold">{alert.revertedTo}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Pending alerts (not auto-reverted) */}
+          {baixaAlerts.filter(a => !a.reverted).length > 0 && (
+            <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                <h3 className="text-sm font-semibold text-destructive">
+                  Alertas Pendentes ({baixaAlerts.filter(a => !a.reverted).length})
+                </h3>
+              </div>
+              <div className="space-y-1.5">
+                {baixaAlerts.filter(a => !a.reverted).map((alert, i) => (
+                  <div key={i} className="text-xs text-destructive/90 bg-destructive/5 rounded px-3 py-2 border border-destructive/10">
+                    <span className="font-medium">{alert.reason}</span>
+                    <span className="block text-destructive/60 mt-0.5">
+                      Caixa: {alert.boxName} · {alert.produtoNome} ({alert.quantidade}x)
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

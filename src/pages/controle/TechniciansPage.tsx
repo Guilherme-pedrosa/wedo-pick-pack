@@ -91,52 +91,79 @@ const TechniciansPage = () => {
 
       // Load active boxes with items for each technician
       const gcIds = (techs || []).map((t) => t.gc_id);
-      const { data: boxes } = await supabase
-        .from("boxes")
-        .select("id, name, status, created_at, technician_gc_id")
-        .in("technician_gc_id", gcIds)
-        .eq("status", "active");
+      const [boxesRes, toolboxesRes] = await Promise.all([
+        supabase
+          .from("boxes")
+          .select("id, name, status, created_at, technician_gc_id")
+          .in("technician_gc_id", gcIds)
+          .eq("status", "active"),
+        (supabase.from("toolboxes") as any)
+          .select("id, name, status, created_at, technician_gc_id")
+          .in("technician_gc_id", gcIds)
+          .eq("status", "active"),
+      ]);
 
-      const boxIds = (boxes || []).map((b) => b.id);
-      const { data: items } = boxIds.length > 0
-        ? await supabase
-            .from("box_items")
-            .select("id, box_id, nome_produto, quantidade, preco_unitario")
-            .in("box_id", boxIds)
-        : { data: [] };
+      const boxes = boxesRes.data || [];
+      const toolboxes = toolboxesRes.data || [];
 
-      // Group items by box
-      const itemsByBox = new Map<string, typeof items>();
-      for (const item of items || []) {
+      const boxIds = boxes.map((b: any) => b.id);
+      const toolboxIds = toolboxes.map((t: any) => t.id);
+
+      const [itemsRes, tbItemsRes] = await Promise.all([
+        boxIds.length > 0
+          ? supabase.from("box_items").select("id, box_id, nome_produto, quantidade, preco_unitario").in("box_id", boxIds)
+          : Promise.resolve({ data: [] }),
+        toolboxIds.length > 0
+          ? (supabase.from("toolbox_items") as any).select("id, toolbox_id, nome_produto, quantidade, preco_unitario").in("toolbox_id", toolboxIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      // Group box items
+      const itemsByBox = new Map<string, any[]>();
+      for (const item of itemsRes.data || []) {
         if (!itemsByBox.has(item.box_id)) itemsByBox.set(item.box_id, []);
         itemsByBox.get(item.box_id)!.push(item);
       }
 
+      // Group toolbox items
+      const itemsByToolbox = new Map<string, any[]>();
+      for (const item of tbItemsRes.data || []) {
+        if (!itemsByToolbox.has(item.toolbox_id)) itemsByToolbox.set(item.toolbox_id, []);
+        itemsByToolbox.get(item.toolbox_id)!.push(item);
+      }
+
       // Group boxes by technician gc_id
       const boxesByTech = new Map<string, BoxWithItems[]>();
-      for (const box of boxes || []) {
-        const gcId = box.technician_gc_id!;
+      for (const box of boxes) {
+        const gcId = (box as any).technician_gc_id!;
         if (!boxesByTech.has(gcId)) boxesByTech.set(gcId, []);
-        const boxItems = itemsByBox.get(box.id) || [];
+        const bItems = itemsByBox.get(box.id) || [];
         boxesByTech.get(gcId)!.push({
           ...box,
-          items: boxItems.map((i) => ({
-            id: i.id,
-            nome_produto: i.nome_produto,
-            quantidade: i.quantidade,
-            preco_unitario: i.preco_unitario,
-          })),
+          items: bItems.map((i: any) => ({ id: i.id, nome_produto: i.nome_produto, quantidade: i.quantidade, preco_unitario: i.preco_unitario })),
+        });
+      }
+
+      // Group toolboxes by technician gc_id
+      const toolboxesByTech = new Map<string, ToolboxWithItems[]>();
+      for (const tb of toolboxes) {
+        const gcId = tb.technician_gc_id!;
+        if (!toolboxesByTech.has(gcId)) toolboxesByTech.set(gcId, []);
+        const tItems = itemsByToolbox.get(tb.id) || [];
+        toolboxesByTech.get(gcId)!.push({
+          ...tb,
+          items: tItems.map((i: any) => ({ id: i.id, nome_produto: i.nome_produto, quantidade: i.quantidade, preco_unitario: i.preco_unitario })),
         });
       }
 
       const result: TechnicianWithBoxes[] = (techs || []).map((t) => {
         const techBoxes = boxesByTech.get(t.gc_id) || [];
+        const techToolboxes = toolboxesByTech.get(t.gc_id) || [];
         const totalItems = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade, 0), 0);
-        const totalValue = techBoxes.reduce(
-          (sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0),
-          0
-        );
-        return { ...t, boxes: techBoxes, totalItems, totalValue };
+        const totalValue = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
+        const toolboxTotalItems = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade, 0), 0);
+        const toolboxTotalValue = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
+        return { ...t, boxes: techBoxes, toolboxes: techToolboxes, totalItems, totalValue, toolboxTotalItems, toolboxTotalValue };
       });
 
       setTechnicians(result);

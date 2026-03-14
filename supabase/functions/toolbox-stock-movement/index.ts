@@ -181,7 +181,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   }
 
   const vendaPayload: Record<string, any> = {
-    tipo: 'vendas_balcao',
+    tipo: 'produto',
     codigo: String(codigo),
     cliente_id: client.id,
     situacao_id: SITUACAO_EMPRESTIMO,
@@ -196,7 +196,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
           data_vencimento: dataStr,
           valor: totalValue,
           forma_pagamento_id: pdvPayment.id,
-          observacao: 'Empréstimo de ferramenta (PDV/Balcão)',
+          observacao: 'Empréstimo de ferramenta',
         },
       },
     ],
@@ -230,28 +230,11 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
 
   const vendaId = vendaBody.data?.id;
   const vendaCodigo = vendaBody.data?.codigo;
+  const nomeCliente = vendaBody.data?.nome_cliente || client.nome;
 
-  if (!vendaCodigo) {
+  if (!vendaId) {
     return new Response(
-      JSON.stringify({ success: false, venda_gc_id: vendaId, error: 'Venda criada sem código retornado pelo ERP.' }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const isBalcao = await verifyVendaBalcao(vendaCodigo, gcHeaders);
-  if (!isBalcao) {
-    const rollbackError = vendaId
-      ? await rollbackVendaAsDevolucao(vendaId, toolbox_name, technician_name, gcHeaders)
-      : 'Venda criada sem ID para rollback automático.';
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        venda_gc_id: vendaId,
-        venda_codigo: vendaCodigo,
-        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP. Rollback aplicado automaticamente.',
-        rollback_error: rollbackError,
-      }),
+      JSON.stringify({ success: false, error: 'Venda criada sem ID retornado pelo ERP.' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -261,7 +244,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
       success: true,
       venda_gc_id: vendaId,
       venda_codigo: vendaCodigo,
-      summary: `Venda balcão #${vendaCodigo} criada para ${client.nome} com ${items.length} item(ns)`,
+      summary: `Venda #${vendaCodigo} (${nomeCliente}) — ${items.length} item(ns) — Situação: EMPRESTIMO DE FERRAMENTA`,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );

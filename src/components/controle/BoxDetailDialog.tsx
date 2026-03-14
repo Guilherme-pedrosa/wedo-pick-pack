@@ -9,6 +9,9 @@ import {
   ClipboardCheck,
   FileText,
   AlertTriangle,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +78,27 @@ export default function BoxDetailDialog({
   const [adding, setAdding] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const handleRename = async () => {
+    if (!box || !newName.trim() || newName.trim() === box.name) {
+      setEditingName(false);
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("boxes")
+        .update({ name: newName.trim() })
+        .eq("id", box.id);
+      if (error) throw error;
+      toast.success("Nome atualizado");
+      setEditingName(false);
+      onItemsChanged();
+    } catch {
+      toast.error("Erro ao renomear");
+    }
+  };
   const [reversalLogs, setReversalLogs] = useState<Record<string, { reason: string; date: string; operator: string }>>({});
 
   const isPendenciasBox = box?.name?.includes("Pendências");
@@ -209,7 +233,32 @@ export default function BoxDetailDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              {box?.name}
+              {editingName ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleRename()}
+                    className="h-7 text-sm w-48"
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRename}>
+                    <Check className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingName(false)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <span>{box?.name}</span>
+                  {!isPendenciasBox && (
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setNewName(box?.name || ""); setEditingName(true); }}>
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  )}
+                </>
+              )}
               {box?.technician_name && (
                 <Badge variant="outline" className="ml-2 text-xs bg-primary/10 text-primary border-primary/20">
                   <UserCheck className="h-3 w-3 mr-1" />

@@ -423,11 +423,13 @@ const ToolboxesPage = () => {
       <ToolboxConferenceDialog
         toolbox={conferenceToolbox}
         items={conferenceItems}
-        onClose={() => setConferenceToolbox(null)}
+        onClose={() => { setConferenceToolbox(null); setConferenceUnlink(false); }}
         onCompleted={() => {
           setConferenceToolbox(null);
+          setConferenceUnlink(false);
           loadToolboxes();
         }}
+        unlinkOnComplete={conferenceUnlink}
       />
 
       {/* Receipt */}

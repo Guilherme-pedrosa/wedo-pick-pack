@@ -55,14 +55,22 @@ const BoxesPage = () => {
   }, []);
 
   const loadLastSync = async () => {
-    const { data } = await supabase
-      .from("sync_runs")
-      .select("finished_at, status")
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data?.finished_at) {
-      setLastSync(data.finished_at);
+    const [syncResult, countResult] = await Promise.all([
+      supabase
+        .from("sync_runs")
+        .select("finished_at, status")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("products_index")
+        .select("produto_id", { count: "exact", head: true }),
+    ]);
+    if (syncResult.data?.finished_at) {
+      setLastSync(syncResult.data.finished_at);
+    }
+    if (countResult.count !== null) {
+      setProductsCount(countResult.count);
     }
   };
 

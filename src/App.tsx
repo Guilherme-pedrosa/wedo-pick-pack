@@ -100,6 +100,7 @@ function AuthenticatedApp() {
         <Route path="/controle/maletas" element={<ToolboxesPage />} />
         <Route path="/controle/tecnicos" element={<TechniciansPage />} />
         <Route path="/controle/logs" element={<HandoffLogsPage />} />
+        <Route path="/controle/logs-maletas" element={<ToolboxLogsPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route

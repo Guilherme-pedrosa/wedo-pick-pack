@@ -346,13 +346,21 @@ const normalizeText = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-async function findClientByName(name: string, gcHeaders: Record<string, string>): Promise<{ id: string; nome: string } | null> {
+type ClientLookupResult = {
+  client: { id: string; nome: string } | null;
+  error?: string;
+};
+
+async function findClientByName(name: string, gcHeaders: Record<string, string>): Promise<ClientLookupResult> {
   try {
     const url = `${GC_API_URL}/api/clientes?nome=${encodeURIComponent(name)}`;
     const res = await fetch(url, { method: 'GET', headers: gcHeaders });
     if (!res.ok) {
-      await res.text();
-      return null;
+      const body = await res.text();
+      return {
+        client: null,
+        error: `Falha ao buscar cliente no GestãoClick: ${res.status} ${body || ''}`.trim(),
+      };
     }
 
     const json = await res.json();
@@ -362,29 +370,27 @@ async function findClientByName(name: string, gcHeaders: Record<string, string>)
       .filter((row: any) => row?.id && row?.nome)
       .map((row: any) => ({ id: String(row.id), nome: String(row.nome) }));
 
-    if (clients.length === 0) {
-      return null;
-    }
-
     const target = normalizeText(name);
-    const exact = clients.find((c) => normalizeText(c.nome) === target);
-    if (exact) {
-      return exact;
+    const exactMatches = clients.filter((c) => normalizeText(c.nome) === target);
+
+    if (exactMatches.length === 1) {
+      return { client: exactMatches[0] };
     }
 
-    const startsWith = clients.find((c) => normalizeText(c.nome).startsWith(target));
-    if (startsWith) {
-      return startsWith;
+    if (exactMatches.length === 0) {
+      return {
+        client: null,
+        error: `Cliente exato do técnico "${name}" não encontrado no GestãoClick.`,
+      };
     }
 
-    // Evita vincular técnico errado quando a busca retorna múltiplos nomes parecidos
-    if (clients.length === 1) {
-      return clients[0];
-    }
-
-    return null;
+    const names = [...new Set(exactMatches.map((c) => c.nome))].slice(0, 5);
+    return {
+      client: null,
+      error: `Cliente ambíguo para "${name}". Correspondências exatas: ${names.join(', ')}.`,
+    };
   } catch {
-    return null;
+    return { client: null, error: 'Erro inesperado ao buscar cliente no GestãoClick.' };
   }
 }
 

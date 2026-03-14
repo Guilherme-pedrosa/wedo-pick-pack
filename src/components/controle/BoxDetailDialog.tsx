@@ -78,6 +78,27 @@ export default function BoxDetailDialog({
   const [adding, setAdding] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const handleRename = async () => {
+    if (!box || !newName.trim() || newName.trim() === box.name) {
+      setEditingName(false);
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("boxes")
+        .update({ name: newName.trim() })
+        .eq("id", box.id);
+      if (error) throw error;
+      toast.success("Nome atualizado");
+      setEditingName(false);
+      onItemsChanged();
+    } catch {
+      toast.error("Erro ao renomear");
+    }
+  };
   const [reversalLogs, setReversalLogs] = useState<Record<string, { reason: string; date: string; operator: string }>>({});
 
   const isPendenciasBox = box?.name?.includes("Pendências");

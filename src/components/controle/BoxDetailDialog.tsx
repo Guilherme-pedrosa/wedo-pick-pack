@@ -57,11 +57,14 @@ interface Props {
   box: BoxData | null;
   items: BoxItemData[];
   loadingItems: boolean;
+  isAdmin?: boolean;
   onClose: () => void;
   onItemsChanged: () => void;
   onLinkTechnician: (box: BoxData) => void;
   onUnlinkTechnician: (box: BoxData) => void;
   onCheckin: (box: BoxData) => void;
+  onDelete?: (box: BoxData) => void;
+  onClone?: (box: BoxData) => void;
 }
 
 export default function BoxDetailDialog({

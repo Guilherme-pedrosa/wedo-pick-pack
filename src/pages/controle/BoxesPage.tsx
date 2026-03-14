@@ -277,9 +277,11 @@ const BoxesPage = () => {
           <p className="text-muted-foreground text-sm">
             Gerencie as caixas — armazéns virtuais de peças
           </p>
-          {lastSync && (
+          {(lastSync || productsCount !== null) && (
             <p className="text-xs text-muted-foreground/60 mt-0.5">
-              Última sync: {new Date(lastSync).toLocaleString("pt-BR")}
+              {lastSync && <>Última sync: {new Date(lastSync).toLocaleString("pt-BR")}</>}
+              {lastSync && productsCount !== null && <> · </>}
+              {productsCount !== null && <>{productsCount.toLocaleString("pt-BR")} produtos no banco</>}
             </p>
           )}
         </div>

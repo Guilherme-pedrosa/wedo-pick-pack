@@ -4,9 +4,8 @@ import {
   Trash2,
   Plus,
   Minus,
-  CheckCircle2,
-  X,
   UserCheck,
+  UserX,
   ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -50,9 +49,8 @@ interface Props {
   loadingItems: boolean;
   onClose: () => void;
   onItemsChanged: () => void;
-  onCloseBox: (box: BoxData) => void;
-  onCancelBox: (box: BoxData) => void;
   onLinkTechnician: (box: BoxData) => void;
+  onUnlinkTechnician: (box: BoxData) => void;
   onCheckin: (box: BoxData) => void;
 }
 
@@ -62,9 +60,8 @@ export default function BoxDetailDialog({
   loadingItems,
   onClose,
   onItemsChanged,
-  onCloseBox,
-  onCancelBox,
   onLinkTechnician,
+  onUnlinkTechnician,
   onCheckin,
 }: Props) {
   const [selectedProduct, setSelectedProduct] = useState<ProductResult | null>(null);
@@ -72,13 +69,10 @@ export default function BoxDetailDialog({
   const [adding, setAdding] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
 
-  const isActive = box?.status === "active";
-
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
     setAdding(true);
     try {
-      // Check if product already exists in box
       const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
       if (existing) {
         const { error } = await supabase
@@ -120,8 +114,6 @@ export default function BoxDetailDialog({
   };
 
   const handleScan = (code: string) => {
-    // Trigger a search with the scanned code - we'll use the search function
-    // For now, search directly
     supabase.functions
       .invoke("search-products-index", {
         body: { query: code, source: "box_scan" },
@@ -157,57 +149,43 @@ export default function BoxDetailDialog({
           </DialogHeader>
 
           {/* Add Item Section */}
-          {isActive && (
-            <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-border">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Adicionar item
-              </p>
-              <ProductSearchInput
-                onSelect={setSelectedProduct}
-                onScanRequest={() => setScannerOpen(true)}
-                autoFocus
-              />
-              {selectedProduct && (
-                <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
-                    <p className="text-xs text-muted-foreground">
-                      ID: {selectedProduct.produto_id}
-                      {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setQty(Math.max(1, qty - 1))}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <Input
-                      type="number"
-                      value={qty}
-                      onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-14 h-7 text-center text-sm"
-                      min={1}
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setQty(qty + 1)}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  <Button size="sm" onClick={handleAddItem} disabled={adding} className="h-7">
-                    {adding ? "..." : "Adicionar"}
+          <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Adicionar item
+            </p>
+            <ProductSearchInput
+              onSelect={setSelectedProduct}
+              onScanRequest={() => setScannerOpen(true)}
+              autoFocus
+            />
+            {selectedProduct && (
+              <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
+                  <p className="text-xs text-muted-foreground">
+                    ID: {selectedProduct.produto_id}
+                    {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="icon" className="h-7 w-7"
+                    onClick={() => setQty(Math.max(1, qty - 1))}>
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <Input type="number" value={qty}
+                    onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-14 h-7 text-center text-sm" min={1} />
+                  <Button variant="outline" size="icon" className="h-7 w-7"
+                    onClick={() => setQty(qty + 1)}>
+                    <Plus className="h-3 w-3" />
                   </Button>
                 </div>
-              )}
-            </div>
-          )}
+                <Button size="sm" onClick={handleAddItem} disabled={adding} className="h-7">
+                  {adding ? "..." : "Adicionar"}
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* Items List */}
           <div className="flex-1 overflow-y-auto min-h-0">
@@ -221,9 +199,7 @@ export default function BoxDetailDialog({
               <div className="text-center py-8 text-muted-foreground">
                 <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Nenhum item nesta caixa</p>
-                {isActive && (
-                  <p className="text-xs mt-1">Use a busca acima para adicionar itens</p>
-                )}
+                <p className="text-xs mt-1">Use a busca acima para adicionar itens</p>
               </div>
             ) : (
               <>
@@ -243,16 +219,11 @@ export default function BoxDetailDialog({
                           ID: {item.produto_id} · Qtd: {item.quantidade}
                         </p>
                       </div>
-                      {isActive && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => handleRemoveItem(item.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
+                      <Button variant="ghost" size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        onClick={() => handleRemoveItem(item.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -261,49 +232,26 @@ export default function BoxDetailDialog({
           </div>
 
           {/* Action buttons */}
-          {isActive && box && (
+          {box && (
             <div className="flex flex-wrap gap-2 pt-3 border-t border-border">
-              {!box.technician_name && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onLinkTechnician(box)}
-                  className="text-xs"
-                >
+              {!box.technician_name ? (
+                <Button variant="outline" size="sm" onClick={() => onLinkTechnician(box)} className="text-xs">
                   <UserCheck className="h-3.5 w-3.5 mr-1" />
                   Vincular técnico
                 </Button>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => onCheckin(box)} className="text-xs">
+                    <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                    Check-in
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => onUnlinkTechnician(box)}
+                    className="text-xs text-muted-foreground">
+                    <UserX className="h-3.5 w-3.5 mr-1" />
+                    Desvincular técnico
+                  </Button>
+                </>
               )}
-              {box.technician_name && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onCheckin(box)}
-                  className="text-xs"
-                >
-                  <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
-                  Check-in
-                </Button>
-              )}
-              <div className="flex-1" />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs"
-                onClick={() => onCloseBox(box)}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                Fechar caixa
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-destructive hover:text-destructive"
-                onClick={() => onCancelBox(box)}
-              >
-                <X className="h-3.5 w-3.5 mr-1" />
-                Cancelar
-              </Button>
             </div>
           )}
         </DialogContent>

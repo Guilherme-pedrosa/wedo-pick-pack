@@ -138,8 +138,24 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         return;
       }
 
-      // Check if product exists in the order
+      // Check if the OS/Venda date is after the box creation date
       const orderData = detailData?.data;
+      const orderDateStr = orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
+      if (orderDateStr && box) {
+        const orderDate = new Date(orderDateStr);
+        const boxCreatedAt = new Date(box.created_at);
+        // Compare dates only (ignore time)
+        const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
+        const boxDay = new Date(boxCreatedAt.getFullYear(), boxCreatedAt.getMonth(), boxCreatedAt.getDate());
+        if (orderDay < boxDay) {
+          toast.error(
+            `${label} #${ci.ref} é do dia ${orderDateStr}, anterior à saída da caixa (${boxCreatedAt.toLocaleDateString("pt-BR")}). Não é permitido vincular.`
+          );
+          return;
+        }
+      }
+
+      // Check if product exists in the order
       const produtos = orderData?.produtos || [];
       const found = produtos.some(
         (p: any) =>

@@ -13,6 +13,7 @@ import {
   Package,
   Boxes,
   Wrench,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: "Caixas", icon: Boxes, href: "/controle/caixas" },
       { title: "Técnicos", icon: Wrench, href: "/controle/tecnicos" },
+      { title: "Log de Saídas", icon: ClipboardList, href: "/controle/logs" },
     ],
   },
   {

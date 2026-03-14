@@ -229,7 +229,7 @@ const ToolboxesPage = () => {
         .in("produto_id", produtoIds);
       products?.forEach((p) => {
         const payload = p.payload_min_json as any;
-        const precoVenda = parseFloat(payload?.preco_venda || payload?.valor_venda || "0") || 0;
+        const precoVenda = parseFloat(payload?.preco_venda || payload?.valor_venda || payload?.valor_custo || "0") || 0;
         productMap.set(p.produto_id, {
           codigo_interno: p.codigo_interno || undefined,
           preco_venda: precoVenda,

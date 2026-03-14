@@ -226,7 +226,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
 
   return (
     <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
         <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -236,20 +236,47 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
           </DialogHeader>
 
           <div className="space-y-4 flex-1 overflow-y-auto">
-            {/* Step 1: Search product */}
+            {/* Step 1: Select item from box */}
             {!matchedItem && (
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Busque o produto que foi utilizado:
-                </p>
-                <ProductSearchInput
-                  onSelect={handleProductSelect}
-                  onScanRequest={() => setScannerOpen(true)}
-                  autoFocus
-                />
-                {loadingItems && (
-                  <p className="text-xs text-muted-foreground">Carregando itens da caixa...</p>
-                )}
+                <Label className="text-xs">Selecione o item utilizado</Label>
+                <Popover open={comboOpen} onOpenChange={setComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={comboOpen}
+                      className="w-full justify-between h-9 text-sm font-normal"
+                    >
+                      {loadingItems ? "Carregando..." : "Selecionar produto..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Filtrar por nome..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {boxItems.map((item) => (
+                            <CommandItem
+                              key={item.id}
+                              value={item.nome_produto}
+                              onSelect={() => handleItemSelect(item)}
+                              className="flex flex-col items-start gap-0.5 py-2"
+                            >
+                              <span className="text-sm font-medium">{item.nome_produto}</span>
+                              <span className="text-xs text-muted-foreground">
+                                Qtd: {item.quantidade}
+                                {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
 

@@ -166,14 +166,41 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     return { produto: prodPayload };
   });
 
+  const totalValue = items
+    .reduce((sum, item) => sum + (item.quantidade * (item.preco_unitario || 0)), 0)
+    .toFixed(2);
+
+  const pdvPayment = await findPdvPaymentMethod(gcHeaders);
+  if (!pdvPayment?.id) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Nenhuma forma de pagamento de PDV (disponível no balcão) foi encontrada no GestãoClick.',
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   const vendaPayload: Record<string, any> = {
-    tipo: 'vendas_balcao',
+    tipo: 'produto',
     codigo: String(codigo),
     cliente_id: clientId,
     situacao_id: SITUACAO_EMPRESTIMO,
     data: dataStr,
+    prazo_entrega: dataStr,
     condicao_pagamento: 'a_vista',
+    nome_canal_venda: 'Presencial',
     observacoes: `[WeDo Maleta] ${justificativa} | Maleta: ${toolbox_name} | Técnico: ${technician_name}`,
+    pagamentos: [
+      {
+        pagamento: {
+          data_vencimento: dataStr,
+          valor: totalValue,
+          forma_pagamento_id: pdvPayment.id,
+          observacao: 'Empréstimo de ferramenta (PDV/Balcão)',
+        },
+      },
+    ],
     produtos,
   };
 
@@ -202,12 +229,26 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   const vendaId = vendaBody.data?.id;
   const vendaCodigo = vendaBody.data?.codigo;
 
+  // 5. Verify classification in ERP (must appear as vendas_balcao)
+  const isBalcao = await verifyVendaBalcao(vendaCodigo, gcHeaders);
+  if (!isBalcao) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        venda_gc_id: vendaId,
+        venda_codigo: vendaCodigo,
+        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP.',
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   return new Response(
     JSON.stringify({
       success: true,
       venda_gc_id: vendaId,
       venda_codigo: vendaCodigo,
-      summary: `Venda #${vendaCodigo} criada com ${items.length} item(ns)`,
+      summary: `Venda balcão #${vendaCodigo} criada com ${items.length} item(ns)`,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -303,4 +344,73 @@ async function findClientByName(name: string, gcHeaders: Record<string, string>)
   } catch {
     return null;
   }
+}
+
+async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<{ id: string; nome: string } | null> {
+  try {
+    const res = await fetch(`${GC_API_URL}/api/formas_pagamentos`, {
+      method: 'GET',
+      headers: gcHeaders,
+    });
+    if (!res.ok) {
+      await res.text();
+      return null;
+    }
+
+    const json = await res.json();
+    const raw = Array.isArray(json?.data) ? json.data : [];
+
+    const methods = raw
+      .map((row: any) => row?.FormasPagamento || row)
+      .filter((row: any) => row?.id && row?.nome);
+
+    // Prefer "A Combinar" when available (commonly configured for balcão)
+    const aCombinar = methods.find(
+      (m: any) => m.disponivel_pdv === '1' && String(m.nome || '').toLowerCase().includes('combinar')
+    );
+    if (aCombinar) {
+      return { id: String(aCombinar.id), nome: String(aCombinar.nome) };
+    }
+
+    // Then prefer PDV-enabled methods that don't force financial posting
+    const preferred = methods.find((m: any) => m.disponivel_pdv === '1' && m.confirmar_financeiro === '0');
+    if (preferred) {
+      return { id: String(preferred.id), nome: String(preferred.nome) };
+    }
+
+    const pdvOnly = methods.find((m: any) => m.disponivel_pdv === '1');
+    if (pdvOnly) {
+      return { id: String(pdvOnly.id), nome: String(pdvOnly.nome) };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyVendaBalcao(vendaCodigo: string, gcHeaders: Record<string, string>): Promise<boolean> {
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const res = await fetch(`${GC_API_URL}/api/vendas?codigo=${encodeURIComponent(vendaCodigo)}&tipo=vendas_balcao`, {
+        method: 'GET',
+        headers: gcHeaders,
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json?.data) && json.data.length > 0) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore and retry
+    }
+
+    if (i < 2) {
+      await wait(900);
+    }
+  }
+
+  return false;
 }

@@ -40,6 +40,7 @@ export interface BoxItemData {
   produto_id: string;
   nome_produto: string;
   quantidade: number;
+  preco_unitario: number;
   added_at: string;
 }
 

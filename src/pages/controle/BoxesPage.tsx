@@ -232,6 +232,8 @@ const BoxesPage = () => {
   const inOperationBoxes = boxes.filter((b) => b.technician_name);
   const standByBoxes = boxes.filter((b) => !b.technician_name);
 
+  const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
   const renderBoxRow = (box: BoxData, variant: "operation" | "standby") => {
     const isOperation = variant === "operation";
     return (
@@ -264,6 +266,11 @@ const BoxesPage = () => {
               </span>
             )}
             <span className="text-xs text-muted-foreground">{box.items_count || 0} itens</span>
+            {(box.total_value || 0) > 0 && (
+              <span className="text-xs font-semibold text-foreground">
+                {formatCurrency(box.total_value || 0)}
+              </span>
+            )}
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
               {formatDate(box.created_at)}

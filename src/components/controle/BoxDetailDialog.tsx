@@ -32,6 +32,7 @@ export interface BoxData {
   technician_name?: string | null;
   technician_gc_id?: string | null;
   items_count?: number;
+  total_value?: number;
 }
 
 export interface BoxItemData {

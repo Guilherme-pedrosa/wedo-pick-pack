@@ -60,6 +60,10 @@ const BoxesPage = () => {
     try {
       const alerts = await runBaixaValidationWithAlerts();
       setBaixaAlerts(alerts);
+      // Reload boxes if any items were auto-reverted
+      if (alerts.some(a => a.reverted)) {
+        loadBoxes();
+      }
     } finally {
       setValidatingBaixas(false);
     }

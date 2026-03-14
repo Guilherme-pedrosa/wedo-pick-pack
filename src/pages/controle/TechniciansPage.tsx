@@ -47,10 +47,21 @@ interface BoxWithItems {
   items: { id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
 }
 
+interface ToolboxWithItems {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  items: { id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
+}
+
 interface TechnicianWithBoxes extends Technician {
   boxes: BoxWithItems[];
+  toolboxes: ToolboxWithItems[];
   totalItems: number;
   totalValue: number;
+  toolboxTotalItems: number;
+  toolboxTotalValue: number;
 }
 
 const TechniciansPage = () => {

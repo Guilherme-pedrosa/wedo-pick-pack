@@ -237,6 +237,10 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 revertedTo: "",
                 operatorName: log.operator_name || "",
                 createdAt: log.created_at,
+                gcSituacao: gcAudit.situacao,
+                gcModificadoEm: gcAudit.modificadoEm,
+                gcUsuarioNome: gcAudit.usuarioNome,
+                gcObsInterna: gcAudit.obsInterna,
               });
             }
           }

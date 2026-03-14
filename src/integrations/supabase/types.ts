@@ -387,6 +387,30 @@ export type Database = {
         }
         Relationships: []
       }
+      technicians: {
+        Row: {
+          active: boolean
+          created_at: string
+          gc_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          gc_id: string
+          id?: string
+          name: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          gc_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

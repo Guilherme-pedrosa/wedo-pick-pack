@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Search, Trash2, Users, Loader2, Package, ChevronDown, ChevronRight } from "lucide-react";
+import { UserPlus, Search, Trash2, Users, Loader2, Package, ChevronDown, ChevronRight, Wrench, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -47,10 +47,21 @@ interface BoxWithItems {
   items: { id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
 }
 
+interface ToolboxWithItems {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  items: { id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
+}
+
 interface TechnicianWithBoxes extends Technician {
   boxes: BoxWithItems[];
+  toolboxes: ToolboxWithItems[];
   totalItems: number;
   totalValue: number;
+  toolboxTotalItems: number;
+  toolboxTotalValue: number;
 }
 
 const TechniciansPage = () => {
@@ -80,52 +91,79 @@ const TechniciansPage = () => {
 
       // Load active boxes with items for each technician
       const gcIds = (techs || []).map((t) => t.gc_id);
-      const { data: boxes } = await supabase
-        .from("boxes")
-        .select("id, name, status, created_at, technician_gc_id")
-        .in("technician_gc_id", gcIds)
-        .eq("status", "active");
+      const [boxesRes, toolboxesRes] = await Promise.all([
+        supabase
+          .from("boxes")
+          .select("id, name, status, created_at, technician_gc_id")
+          .in("technician_gc_id", gcIds)
+          .eq("status", "active"),
+        (supabase.from("toolboxes") as any)
+          .select("id, name, status, created_at, technician_gc_id")
+          .in("technician_gc_id", gcIds)
+          .eq("status", "active"),
+      ]);
 
-      const boxIds = (boxes || []).map((b) => b.id);
-      const { data: items } = boxIds.length > 0
-        ? await supabase
-            .from("box_items")
-            .select("id, box_id, nome_produto, quantidade, preco_unitario")
-            .in("box_id", boxIds)
-        : { data: [] };
+      const boxes = boxesRes.data || [];
+      const toolboxes = toolboxesRes.data || [];
 
-      // Group items by box
-      const itemsByBox = new Map<string, typeof items>();
-      for (const item of items || []) {
+      const boxIds = boxes.map((b: any) => b.id);
+      const toolboxIds = toolboxes.map((t: any) => t.id);
+
+      const [itemsRes, tbItemsRes] = await Promise.all([
+        boxIds.length > 0
+          ? supabase.from("box_items").select("id, box_id, nome_produto, quantidade, preco_unitario").in("box_id", boxIds)
+          : Promise.resolve({ data: [] }),
+        toolboxIds.length > 0
+          ? (supabase.from("toolbox_items") as any).select("id, toolbox_id, nome_produto, quantidade, preco_unitario").in("toolbox_id", toolboxIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      // Group box items
+      const itemsByBox = new Map<string, any[]>();
+      for (const item of itemsRes.data || []) {
         if (!itemsByBox.has(item.box_id)) itemsByBox.set(item.box_id, []);
         itemsByBox.get(item.box_id)!.push(item);
       }
 
+      // Group toolbox items
+      const itemsByToolbox = new Map<string, any[]>();
+      for (const item of tbItemsRes.data || []) {
+        if (!itemsByToolbox.has(item.toolbox_id)) itemsByToolbox.set(item.toolbox_id, []);
+        itemsByToolbox.get(item.toolbox_id)!.push(item);
+      }
+
       // Group boxes by technician gc_id
       const boxesByTech = new Map<string, BoxWithItems[]>();
-      for (const box of boxes || []) {
-        const gcId = box.technician_gc_id!;
+      for (const box of boxes) {
+        const gcId = (box as any).technician_gc_id!;
         if (!boxesByTech.has(gcId)) boxesByTech.set(gcId, []);
-        const boxItems = itemsByBox.get(box.id) || [];
+        const bItems = itemsByBox.get(box.id) || [];
         boxesByTech.get(gcId)!.push({
           ...box,
-          items: boxItems.map((i) => ({
-            id: i.id,
-            nome_produto: i.nome_produto,
-            quantidade: i.quantidade,
-            preco_unitario: i.preco_unitario,
-          })),
+          items: bItems.map((i: any) => ({ id: i.id, nome_produto: i.nome_produto, quantidade: i.quantidade, preco_unitario: i.preco_unitario })),
+        });
+      }
+
+      // Group toolboxes by technician gc_id
+      const toolboxesByTech = new Map<string, ToolboxWithItems[]>();
+      for (const tb of toolboxes) {
+        const gcId = tb.technician_gc_id!;
+        if (!toolboxesByTech.has(gcId)) toolboxesByTech.set(gcId, []);
+        const tItems = itemsByToolbox.get(tb.id) || [];
+        toolboxesByTech.get(gcId)!.push({
+          ...tb,
+          items: tItems.map((i: any) => ({ id: i.id, nome_produto: i.nome_produto, quantidade: i.quantidade, preco_unitario: i.preco_unitario })),
         });
       }
 
       const result: TechnicianWithBoxes[] = (techs || []).map((t) => {
         const techBoxes = boxesByTech.get(t.gc_id) || [];
+        const techToolboxes = toolboxesByTech.get(t.gc_id) || [];
         const totalItems = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade, 0), 0);
-        const totalValue = techBoxes.reduce(
-          (sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0),
-          0
-        );
-        return { ...t, boxes: techBoxes, totalItems, totalValue };
+        const totalValue = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
+        const toolboxTotalItems = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade, 0), 0);
+        const toolboxTotalValue = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
+        return { ...t, boxes: techBoxes, toolboxes: techToolboxes, totalItems, totalValue, toolboxTotalItems, toolboxTotalValue };
       });
 
       setTechnicians(result);
@@ -247,6 +285,8 @@ const TechniciansPage = () => {
           {technicians.map((tech) => {
             const isExpanded = expandedTech.has(tech.id);
             const hasBoxes = tech.boxes.length > 0;
+            const hasToolboxes = tech.toolboxes.length > 0;
+            const hasContent = hasBoxes || hasToolboxes;
 
             return (
               <div
@@ -254,10 +294,10 @@ const TechniciansPage = () => {
                 className="bg-card rounded-xl border border-border overflow-hidden"
               >
                 <div
-                  className={`flex items-center gap-3 p-4 ${hasBoxes ? "cursor-pointer hover:bg-accent/30 transition-colors" : ""}`}
-                  onClick={() => hasBoxes && toggleExpand(tech.id)}
+                  className={`flex items-center gap-3 p-4 ${hasContent ? "cursor-pointer hover:bg-accent/30 transition-colors" : ""}`}
+                  onClick={() => hasContent && toggleExpand(tech.id)}
                 >
-                  {hasBoxes ? (
+                  {hasContent ? (
                     isExpanded ? (
                       <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                     ) : (
@@ -274,28 +314,49 @@ const TechniciansPage = () => {
                     </p>
                   </div>
 
-                  {hasBoxes ? (
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">
-                          {tech.boxes.length} caixa{tech.boxes.length > 1 ? "s" : ""} · {tech.totalItems} ite{tech.totalItems === 1 ? "m" : "ns"}
-                        </p>
-                        {tech.totalValue > 0 && (
-                          <p className="text-xs font-medium text-foreground">
-                            {formatCurrency(tech.totalValue)}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {hasBoxes && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {tech.boxes.length} caixa{tech.boxes.length > 1 ? "s" : ""} · {tech.totalItems} ite{tech.totalItems === 1 ? "m" : "ns"}
                           </p>
-                        )}
+                          {tech.totalValue > 0 && (
+                            <p className="text-xs font-medium text-foreground">
+                              {formatCurrency(tech.totalValue)}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="default" className="text-xs">
+                          <Package className="h-3 w-3 mr-1" />
+                          Caixa
+                        </Badge>
                       </div>
-                      <Badge variant="default" className="text-xs">
-                        <Package className="h-3 w-3 mr-1" />
-                        Em operação
+                    )}
+                    {hasToolboxes && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {tech.toolboxes.length} maleta{tech.toolboxes.length > 1 ? "s" : ""} · {tech.toolboxTotalItems} ferr.
+                          </p>
+                          {tech.toolboxTotalValue > 0 && (
+                            <p className="text-xs font-medium text-foreground">
+                              {formatCurrency(tech.toolboxTotalValue)}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-xs bg-accent/50">
+                          <Briefcase className="h-3 w-3 mr-1" />
+                          Maleta
+                        </Badge>
+                      </div>
+                    )}
+                    {!hasContent && (
+                      <Badge variant="secondary" className="text-xs">
+                        Sem vínculos
                       </Badge>
-                    </div>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs shrink-0">
-                      Sem caixas
-                    </Badge>
-                  )}
+                    )}
+                  </div>
 
                   <Button
                     variant="ghost"
@@ -310,7 +371,7 @@ const TechniciansPage = () => {
                   </Button>
                 </div>
 
-                {hasBoxes && isExpanded && (
+                {hasContent && isExpanded && (
                   <div className="border-t border-border bg-muted/30 px-4 pb-4 pt-2 space-y-3">
                     {tech.boxes.map((box) => {
                       const boxTotal = box.items.reduce(
@@ -340,6 +401,54 @@ const TechniciansPage = () => {
                               </TableHeader>
                               <TableBody>
                                 {box.items.map((item) => (
+                                  <TableRow key={item.id} className="text-xs">
+                                    <TableCell className="py-1.5 text-xs">
+                                      {item.nome_produto}
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-xs text-center">
+                                      {item.quantidade}
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-xs text-right">
+                                      {item.preco_unitario
+                                        ? formatCurrency(item.quantidade * item.preco_unitario)
+                                        : "—"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {tech.toolboxes.map((tb) => {
+                      const tbTotal = tb.items.reduce(
+                        (s, i) => s + i.quantidade * (i.preco_unitario || 0),
+                        0
+                      );
+                      return (
+                        <div key={tb.id} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-foreground">
+                              🧰 {tb.name}
+                            </p>
+                            {tbTotal > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                Total: {formatCurrency(tbTotal)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="rounded-lg border border-border overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="text-xs">
+                                  <TableHead className="py-1.5 text-xs">Ferramenta</TableHead>
+                                  <TableHead className="py-1.5 text-xs text-center w-16">Qtd</TableHead>
+                                  <TableHead className="py-1.5 text-xs text-right w-24">Valor</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {tb.items.map((item) => (
                                   <TableRow key={item.id} className="text-xs">
                                     <TableCell className="py-1.5 text-xs">
                                       {item.nome_produto}

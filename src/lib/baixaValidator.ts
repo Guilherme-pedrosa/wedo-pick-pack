@@ -15,6 +15,8 @@ export interface BaixaAlert {
   reason: string;
   reverted: boolean;
   revertedTo: string;
+  operatorName: string;
+  createdAt: string;
 }
 
 /**

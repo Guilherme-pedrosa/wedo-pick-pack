@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Package,
   Trash2,
@@ -8,6 +8,7 @@ import {
   UserX,
   ClipboardCheck,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,6 +75,37 @@ export default function BoxDetailDialog({
   const [adding, setAdding] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
+  const [reversalLogs, setReversalLogs] = useState<Record<string, { reason: string; date: string; operator: string }>>({});
+
+  const isPendenciasBox = box?.name?.includes("Pendências");
+
+  useEffect(() => {
+    if (!box || !isPendenciasBox) {
+      setReversalLogs({});
+      return;
+    }
+    // Fetch reversal logs for items in this box
+    supabase
+      .from("box_movement_logs")
+      .select("*")
+      .eq("box_id", box.id)
+      .eq("action", "adicao")
+      .like("details", "Estorno automático:%")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        const map: Record<string, { reason: string; date: string; operator: string }> = {};
+        for (const log of data || []) {
+          if (log.produto_id && !map[log.produto_id]) {
+            map[log.produto_id] = {
+              reason: log.details?.replace("Estorno automático: ", "").split(" | ref:")[0] || "Estorno automático",
+              date: log.created_at,
+              operator: log.operator_name || "",
+            };
+          }
+        }
+        setReversalLogs(map);
+      });
+  }, [box?.id, isPendenciasBox]);
 
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
@@ -269,6 +301,18 @@ export default function BoxDetailDialog({
                           ID: {item.produto_id} · Qtd: {item.quantidade}
                           {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
+                        {isPendenciasBox && reversalLogs[item.produto_id] && (
+                          <div className="mt-1 p-1.5 bg-warning/10 border border-warning/20 rounded text-[11px] space-y-0.5">
+                            <p className="flex items-center gap-1 font-medium text-warning">
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              {reversalLogs[item.produto_id].reason}
+                            </p>
+                            <p className="text-muted-foreground pl-4">
+                              Estornado em {new Date(reversalLogs[item.produto_id].date).toLocaleString("pt-BR")}
+                              {reversalLogs[item.produto_id].operator && <> · Operador: {reversalLogs[item.produto_id].operator}</>}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <Button variant="ghost" size="icon"

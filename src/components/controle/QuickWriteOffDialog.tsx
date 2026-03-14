@@ -211,12 +211,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       setQty(1);
       setValidado(false);
       // Reload items
-      const { data } = await supabase
-        .from("box_items")
-        .select("*")
-        .eq("box_id", box.id)
-        .order("added_at", { ascending: false });
-      setBoxItems(data || []);
+      await loadItems();
       onCompleted();
     } catch (e) {
       toast.error("Erro ao realizar baixa");

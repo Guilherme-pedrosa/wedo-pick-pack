@@ -510,7 +510,7 @@ const TechniciansPage = () => {
           <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
             {gcEmployees.length === 0 && !searching && (
               <p className="text-sm text-muted-foreground text-center py-6">
-                Pesquise para encontrar funcionários
+                Pesquise para encontrar técnicos
               </p>
             )}
             {searching && (

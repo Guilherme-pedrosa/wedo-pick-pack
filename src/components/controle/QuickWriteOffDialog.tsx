@@ -209,20 +209,41 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         }
       }
 
-      // Product validation
+      // Product validation + quantity check
       const produtos = orderData?.produtos || [];
-      const found = produtos.some(
+      const productInOrder = produtos.find(
         (p: any) =>
           p?.produto?.produto_id === matchedItem.produto_id ||
           String(p?.produto?.produto_id) === matchedItem.produto_id
       );
-      if (!found) {
+      if (!productInOrder) {
         toast.warning(`Produto "${matchedItem.nome_produto}" não encontrado na ${label} #${ref}`);
         return;
       }
 
+      const orderQty = parseFloat(productInOrder.quantidade) || 1;
+
+      // Check how many units of this product were already used with this ref
+      const { data: existingLogs } = await supabase
+        .from("box_movement_logs")
+        .select("quantidade")
+        .eq("action", "baixa")
+        .eq("ref_tipo", tipo)
+        .eq("ref_numero", ref.trim())
+        .eq("produto_id", matchedItem.produto_id);
+
+      const alreadyUsed = (existingLogs || []).reduce((sum, l) => sum + (l.quantidade || 0), 0);
+      const remaining = orderQty - alreadyUsed;
+
+      if (remaining <= 0) {
+        toast.error(`${label} #${ref} já foi totalmente utilizada para baixa deste produto (${orderQty}x já usadas)`);
+        return;
+      }
+
+      setMaxAllowedQty(Math.min(remaining, matchedItem.quantidade));
+      setQty(1);
       setValidado(true);
-      toast.success(`Validado: produto encontrado na ${label} #${ref}`);
+      toast.success(`Validado: ${remaining}x disponível na ${label} #${ref}`);
     } catch (e) {
       toast.error("Erro ao validar referência");
       console.error(e);

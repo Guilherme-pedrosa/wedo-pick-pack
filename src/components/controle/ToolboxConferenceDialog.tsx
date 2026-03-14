@@ -154,9 +154,38 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
           toast.warning(`${missingItems.length} ferramenta(s) ausente(s)!`, { duration: 8000 });
         }
 
-        // Unlink technician
+        // Return stock via venda status change
+        if (toolbox.venda_gc_id) {
+          setStockProgress("Devolvendo estoque (alterando venda no ERP)...");
+          try {
+            const result = await executeStockEntrada({
+              vendaGcId: toolbox.venda_gc_id,
+              toolboxName: toolbox.name,
+              technicianName: toolbox.technician_name,
+            });
+
+            if (result.success) {
+              toast.success(result.summary || "Venda alterada para devolução");
+              await logToolboxMovement({
+                toolboxId: toolbox.id,
+                toolboxName: toolbox.name,
+                action: "entrada_estoque",
+                technicianName: toolbox.technician_name || undefined,
+                technicianGcId: toolbox.technician_gc_id || undefined,
+                details: result.summary || "Venda alterada para Cancelada - Devolução",
+              });
+            } else {
+              toast.error(`Erro ao devolver estoque: ${result.error}`);
+            }
+          } catch (err) {
+            console.error("Stock entrada error:", err);
+            toast.error("Erro ao alterar venda no ERP.");
+          }
+        }
+
+        // Unlink technician and clear venda_gc_id
         await (supabase.from("toolboxes") as any)
-          .update({ technician_name: null, technician_gc_id: null })
+          .update({ technician_name: null, technician_gc_id: null, venda_gc_id: null })
           .eq("id", toolbox.id);
 
         await logToolboxMovement({

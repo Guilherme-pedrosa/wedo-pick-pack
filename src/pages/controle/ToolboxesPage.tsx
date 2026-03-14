@@ -151,10 +151,10 @@ const ToolboxesPage = () => {
       handleOpenConference(toolbox, true);
       return;
     }
-    // No items, unlink directly
+    // No items, unlink directly (also clear venda_gc_id)
     try {
       const { error } = await (supabase.from("toolboxes") as any)
-        .update({ technician_name: null, technician_gc_id: null })
+        .update({ technician_name: null, technician_gc_id: null, venda_gc_id: null })
         .eq("id", toolbox.id);
       if (error) throw error;
       toast.success(`Técnico desvinculado de "${toolbox.name}"`);

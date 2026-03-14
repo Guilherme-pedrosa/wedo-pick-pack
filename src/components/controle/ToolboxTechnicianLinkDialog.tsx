@@ -33,6 +33,8 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [stockProgress, setStockProgress] = useState<string | null>(null);
 
   useEffect(() => {
     if (!toolbox) return;

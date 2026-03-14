@@ -368,6 +368,9 @@ const BoxesPage = () => {
                     <span className="block text-muted-foreground mt-0.5">
                       ✅ {alert.quantidade}x "{alert.produtoNome}" devolvido para <span className="font-semibold">{alert.revertedTo}</span>
                     </span>
+                    <span className="block text-muted-foreground/60 mt-0.5">
+                      Baixa feita por: {alert.operatorName} em {new Date(alert.createdAt).toLocaleString("pt-BR")}
+                    </span>
                   </div>
                 ))}
               </div>

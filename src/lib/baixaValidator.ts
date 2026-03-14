@@ -15,6 +15,8 @@ export interface BaixaAlert {
   reason: string;
   reverted: boolean;
   revertedTo: string;
+  operatorName: string;
+  createdAt: string;
 }
 
 /**
@@ -217,6 +219,8 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 reason: `Produto "${log.produto_nome}" foi removido da ${label} #${numero}`,
                 reverted: false,
                 revertedTo: "",
+                operatorName: log.operator_name || "",
+                createdAt: log.created_at,
               });
             }
           }
@@ -266,6 +270,8 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
               reason,
               reverted: true,
               revertedTo: targetBoxName,
+              operatorName: log.operator_name || "",
+              createdAt: log.created_at,
             };
 
             await reverseItem(alert, targetBoxId, targetBoxName);

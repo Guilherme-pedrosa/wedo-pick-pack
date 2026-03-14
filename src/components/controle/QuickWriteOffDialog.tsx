@@ -357,7 +357,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Filtrar por nome ou código..." />
+                      <CommandInput placeholder="Filtrar por nome, código ou ID..." />
                       <CommandList>
                         <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
                         <CommandGroup>

@@ -54,12 +54,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
     if (!toolbox) return;
     setLinking(true);
     try {
-      // 1. Get toolbox items for stock movement
-      const { data: items } = await (supabase.from("toolbox_items") as any)
-        .select("*")
-        .eq("toolbox_id", toolbox.id);
-
-      // 2. Link technician
+      // Link technician
       const { error } = await (supabase.from("toolboxes") as any)
         .update({ technician_name: tech.name, technician_gc_id: tech.gc_id })
         .eq("id", toolbox.id);

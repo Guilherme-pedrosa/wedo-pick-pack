@@ -45,7 +45,37 @@ const BoxesPage = () => {
 
   useEffect(() => {
     loadBoxes();
+    loadLastSync();
   }, []);
+
+  const loadLastSync = async () => {
+    const { data } = await supabase
+      .from("sync_runs")
+      .select("finished_at, status")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data?.finished_at) {
+      setLastSync(data.finished_at);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-products", {
+        body: { run_type: "full" },
+      });
+      if (error) throw error;
+      toast.success(`Sync concluído! ${data?.upsertCount || 0} produtos atualizados`);
+      loadLastSync();
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao sincronizar produtos");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const loadBoxes = async () => {
     setLoading(true);

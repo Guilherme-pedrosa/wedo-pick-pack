@@ -82,7 +82,6 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
       toast.error("Erro ao vincular técnico");
     } finally {
       setLinking(false);
-      setStockProgress(null);
     }
   };
 

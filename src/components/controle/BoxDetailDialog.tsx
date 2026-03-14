@@ -227,6 +227,7 @@ export default function BoxDetailDialog({
                         </p>
                         <p className="text-xs text-muted-foreground">
                           ID: {item.produto_id} · Qtd: {item.quantidade}
+                          {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
                       </div>
                       <Button variant="ghost" size="icon"

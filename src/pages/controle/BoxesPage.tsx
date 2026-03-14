@@ -126,6 +126,7 @@ const BoxesPage = () => {
       if (error) throw error;
       toast.success(`Sync concluído! ${data?.upsertCount || 0} produtos atualizados`);
       loadLastSync();
+      checkBaixas();
     } catch (e) {
       console.error(e);
       toast.error("Erro ao sincronizar produtos");

@@ -201,7 +201,7 @@ const TechniciansPage = () => {
       setGcEmployees(employees);
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao buscar funcionários");
+      toast.error("Erro ao buscar técnicos");
     } finally {
       setSearching(false);
     }
@@ -310,7 +310,7 @@ const TechniciansPage = () => {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm">{tech.name}</p>
                     <p className="text-xs text-muted-foreground font-mono">
-                      GC: {tech.gc_id}
+                      ID: {tech.gc_id}
                     </p>
                   </div>
 
@@ -488,7 +488,7 @@ const TechniciansPage = () => {
           </DialogHeader>
           <div className="flex gap-2">
             <Input
-              placeholder="Buscar funcionário no GestãoClick..."
+              placeholder="Buscar técnico no GestãoClick..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && searchGCEmployees()}
@@ -510,7 +510,7 @@ const TechniciansPage = () => {
           <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
             {gcEmployees.length === 0 && !searching && (
               <p className="text-sm text-muted-foreground text-center py-6">
-                Pesquise para encontrar funcionários
+                Pesquise para encontrar técnicos
               </p>
             )}
             {searching && (

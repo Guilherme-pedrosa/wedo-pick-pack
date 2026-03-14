@@ -168,7 +168,7 @@ export default function BoxHandoffReceipt({
                 <span style={{ fontSize: "12px", fontWeight: 600 }}>{technicianName}</span>
               </div>
               <div>
-                <label style={{ fontSize: "10px", color: "#888", textTransform: "uppercase", letterSpacing: "0.5px", display: "block" }}>ID Funcionário</label>
+                <label style={{ fontSize: "10px", color: "#888", textTransform: "uppercase", letterSpacing: "0.5px", display: "block" }}>Nº Identificação</label>
                 <span style={{ fontSize: "12px", fontWeight: 600 }}>{technicianGcId}</span>
               </div>
               <div>

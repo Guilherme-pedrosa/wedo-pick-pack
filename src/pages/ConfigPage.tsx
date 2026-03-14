@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, isUsingMock } from '@/api/gestaoclick';
+import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle2, XCircle, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ConfigPage() {
@@ -20,6 +21,7 @@ export default function ConfigPage() {
   const [operatorName, setOperatorName] = useState(config.operatorName);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(useCheckoutStore.persist.hasHydrated());
 
   const [osStatusToShow, setOsStatusToShow] = useState<string[]>(config.osStatusToShow);
@@ -75,15 +77,42 @@ export default function ConfigPage() {
     setVendaStatusToShow(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
 
-  const handleSave = () => {
-    setConfig({
-      operatorName,
-      osStatusToShow,
-      vendaStatusToShow,
-      defaultOSConclusionStatus: defaultOSStatus,
-      defaultVendaConclusionStatus: defaultVendaStatus,
-    });
-    toast.success('Configurações salvas com sucesso!');
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error('AUTH_REQUIRED');
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          os_status_to_show: osStatusToShow,
+          venda_status_to_show: vendaStatusToShow,
+          default_os_conclusion_status: defaultOSStatus,
+          default_venda_conclusion_status: defaultVendaStatus,
+        } as never)
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setConfig({
+        operatorName,
+        osStatusToShow,
+        vendaStatusToShow,
+        defaultOSConclusionStatus: defaultOSStatus,
+        defaultVendaConclusionStatus: defaultVendaStatus,
+      });
+      toast.success('Configurações salvas com sucesso!');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      if (msg === 'AUTH_REQUIRED') {
+        toast.error('Sessão expirada. Faça login novamente.');
+      } else {
+        toast.error('Não foi possível salvar suas configurações no perfil.');
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -210,8 +239,9 @@ export default function ConfigPage() {
         </Tabs>
       </Card>
 
-      <Button onClick={handleSave} className="w-full" size="lg">
-        💾 Salvar Configurações
+      <Button onClick={handleSave} className="w-full gap-2" size="lg" disabled={saving}>
+        {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+        💾 {saving ? 'Salvando...' : 'Salvar Configurações'}
       </Button>
     </div>
   );

@@ -57,6 +57,7 @@ export default function BoxHandoffReceipt({
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
+    const logoUrl = window.location.origin + "/images/logo-wedo.jpeg";
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -65,6 +66,11 @@ export default function BoxHandoffReceipt({
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #1a1a1a; font-size: 12px; }
+          .company-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 2px solid #333; }
+          .company-header img { height: 50px; }
+          .company-header .company-info { flex: 1; }
+          .company-header .company-info h2 { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+          .company-header .company-info p { font-size: 9px; color: #666; line-height: 1.4; }
           .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 12px; }
           .header h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
           .header p { font-size: 11px; color: #666; }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardCheck, Check, X, AlertTriangle } from "lucide-react";
+import { ClipboardCheck, Check, X, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ToolboxData, ToolboxItemData } from "./ToolboxDetailDialog";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
+import { executeStockEntrada } from "@/api/stockMovement";
 
 
 interface Props {

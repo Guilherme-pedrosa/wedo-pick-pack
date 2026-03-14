@@ -57,6 +57,7 @@ export default function BoxHandoffReceipt({
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
+    const logoUrl = window.location.origin + "/images/logo-wedo.jpeg";
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -65,6 +66,11 @@ export default function BoxHandoffReceipt({
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #1a1a1a; font-size: 12px; }
+          .company-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 2px solid #333; }
+          .company-header img { height: 50px; }
+          .company-header .company-info { flex: 1; }
+          .company-header .company-info h2 { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+          .company-header .company-info p { font-size: 9px; color: #666; line-height: 1.4; }
           .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 12px; }
           .header h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
           .header p { font-size: 11px; color: #666; }
@@ -115,7 +121,17 @@ export default function BoxHandoffReceipt({
             ref={printRef}
             className="bg-white text-black p-4 rounded border border-border text-xs"
           >
-            <div className="header">
+            {/* Company Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", paddingBottom: "12px", borderBottom: "2px solid #333" }}>
+              <img src="/images/logo-wedo.jpeg" alt="WeDo" style={{ height: "50px" }} />
+              <div>
+                <h2 style={{ fontSize: "13px", fontWeight: 700, marginBottom: "2px" }}>WD Comércio e Importação</h2>
+                <p style={{ fontSize: "9px", color: "#666", lineHeight: 1.4, margin: 0 }}>CNPJ: 43.572.954/0001-81</p>
+                <p style={{ fontSize: "9px", color: "#666", lineHeight: 1.4, margin: 0 }}>Rua PB48 Q 5 L 57 – Pq Brasília, Anápolis – GO</p>
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", marginBottom: "16px" }}>
               <h1 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "4px", textTransform: "uppercase", letterSpacing: "1px" }}>
                 Recibo de Saída de Materiais
               </h1>

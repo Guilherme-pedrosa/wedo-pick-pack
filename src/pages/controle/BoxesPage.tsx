@@ -257,7 +257,11 @@ const BoxesPage = () => {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
             <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Sincronizando..." : "Sincronizar Produtos"}
+            {syncing
+              ? syncProgress && syncProgress.total > 0
+                ? `Sincronizando (${syncProgress.fetched}/${syncProgress.total})`
+                : "Buscando produtos..."
+              : "Sincronizar Produtos"}
           </Button>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />

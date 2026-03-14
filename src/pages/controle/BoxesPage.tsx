@@ -213,13 +213,26 @@ const BoxesPage = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <p className="text-muted-foreground text-sm">
-          Gerencie as caixas de separação e expedição
-        </p>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Caixa
-        </Button>
+        <div>
+          <p className="text-muted-foreground text-sm">
+            Gerencie as caixas de separação e expedição
+          </p>
+          {lastSync && (
+            <p className="text-xs text-muted-foreground/60 mt-0.5">
+              Última sync: {new Date(lastSync).toLocaleString("pt-BR")}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Sincronizando..." : "Sincronizar Produtos"}
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Caixa
+          </Button>
+        </div>
       </div>
 
       {/* Active Boxes */}

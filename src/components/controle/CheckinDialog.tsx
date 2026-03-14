@@ -81,9 +81,9 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
   };
 
   const hasDivergencias = checkinItems.some((ci) => ci.divergencia > 0);
-  const allDivergenciasJustified = checkinItems
+  const allDivergenciasValidated = checkinItems
     .filter((ci) => ci.divergencia > 0)
-    .every((ci) => ci.tipo && ci.ref);
+    .every((ci) => ci.tipo && ci.ref && ci.validado);
 
   const handleValidateRef = async (index: number) => {
     const ci = checkinItems[index];

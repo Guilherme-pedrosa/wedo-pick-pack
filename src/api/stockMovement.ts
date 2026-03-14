@@ -40,7 +40,7 @@ export async function executeStockSaida(params: {
   });
 
   if (error) {
-    throw new Error(error.message || "Erro ao criar venda de empréstimo");
+    throw new Error(error.message || "Erro ao aplicar ajuste de estoque de saída");
   }
 
   return data as StockSaidaResponse;

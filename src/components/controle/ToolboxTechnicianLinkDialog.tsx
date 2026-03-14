@@ -68,7 +68,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
       let vendaSummary: string | null = null;
 
       if (items && items.length > 0) {
-        setStockProgress(`Criando venda de empréstimo (${items.length} itens)...`);
+        setStockProgress(`Aplicando ajuste de estoque (${items.length} itens)...`);
 
         const result = await executeStockSaida({
           items: items.map((i: any) => ({
@@ -84,7 +84,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         });
 
         if (!result.success || !result.venda_gc_id) {
-          throw new Error(result.error || "Falha ao criar venda de balcão no ERP.");
+          throw new Error(result.error || "Falha ao aplicar ajuste de estoque no ERP.");
         }
 
         vendaGcId = result.venda_gc_id;

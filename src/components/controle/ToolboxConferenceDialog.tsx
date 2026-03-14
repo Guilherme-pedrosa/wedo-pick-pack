@@ -32,7 +32,7 @@ interface CheckItem {
   observacao: string;
 }
 
-export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCompleted }: Props) {
+export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCompleted, unlinkOnComplete }: Props) {
   const [checkItems, setCheckItems] = useState<CheckItem[]>(() =>
     items.map((i) => ({
       produto_id: i.produto_id,

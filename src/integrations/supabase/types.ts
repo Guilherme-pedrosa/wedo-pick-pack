@@ -124,6 +124,7 @@ export type Database = {
           box_id: string
           id: string
           nome_produto: string
+          preco_unitario: number | null
           produto_id: string
           quantidade: number
         }
@@ -132,6 +133,7 @@ export type Database = {
           box_id: string
           id?: string
           nome_produto: string
+          preco_unitario?: number | null
           produto_id: string
           quantidade?: number
         }
@@ -140,6 +142,7 @@ export type Database = {
           box_id?: string
           id?: string
           nome_produto?: string
+          preco_unitario?: number | null
           produto_id?: string
           quantidade?: number
         }

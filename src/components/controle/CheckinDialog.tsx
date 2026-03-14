@@ -251,13 +251,18 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         }
       }
 
-      // Close the box after check-in
+      // Return box to stand by after check-in
       await supabase
         .from("boxes")
-        .update({ status: "closed", closed_at: new Date().toISOString() })
+        .update({
+          status: "active",
+          closed_at: null,
+          technician_name: null,
+          technician_gc_id: null,
+        })
         .eq("id", box.id);
 
-      toast.success("Check-in concluído! Caixa fechada.");
+      toast.success("Check-in concluído! Caixa retornou para Stand By.");
       onCompleted();
     } catch (e) {
       toast.error("Erro ao concluir check-in");

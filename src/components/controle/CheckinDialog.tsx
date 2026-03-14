@@ -205,6 +205,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
           operator_name: profile?.name || user.email || "",
           status: "completed",
           completed_at: new Date().toISOString(),
+          notes: observacao.trim() || null,
         })
         .select("id")
         .single();

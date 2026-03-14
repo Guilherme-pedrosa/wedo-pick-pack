@@ -488,7 +488,7 @@ const TechniciansPage = () => {
           </DialogHeader>
           <div className="flex gap-2">
             <Input
-              placeholder="Buscar funcionário no GestãoClick..."
+              placeholder="Buscar técnico no GestãoClick..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && searchGCEmployees()}

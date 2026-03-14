@@ -20,6 +20,7 @@ import BoxDetailDialog, {
 import TechnicianLinkDialog from "@/components/controle/TechnicianLinkDialog";
 import CheckinDialog from "@/components/controle/CheckinDialog";
 import QuickWriteOffDialog from "@/components/controle/QuickWriteOffDialog";
+import { runBaixaValidationWithAlerts, type BaixaAlert } from "@/lib/baixaValidator";
 
 const BoxesPage = () => {
   const { user } = useAuth();

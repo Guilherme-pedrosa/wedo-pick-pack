@@ -27,6 +27,10 @@ const BoxesPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [newBoxName, setNewBoxName] = useState("");
 
+  // Sync state
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
   // Detail dialog state
   const [selectedBox, setSelectedBox] = useState<BoxData | null>(null);
   const [boxItems, setBoxItems] = useState<BoxItemData[]>([]);

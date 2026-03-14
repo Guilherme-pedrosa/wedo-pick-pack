@@ -62,6 +62,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: "Caixas", icon: Boxes, href: "/controle/caixas" },
       { title: "Técnicos", icon: Wrench, href: "/controle/tecnicos" },
+      { title: "Log de Saídas", icon: ClipboardList, href: "/controle/logs" },
     ],
   },
   {

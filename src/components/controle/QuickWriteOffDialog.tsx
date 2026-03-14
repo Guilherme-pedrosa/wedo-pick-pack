@@ -302,7 +302,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   };
 
   if (!box) return null;
-  const maxQty = matchedItem?.quantidade || 1;
+  const maxQty = validado ? maxAllowedQty : (matchedItem?.quantidade || 1);
 
   return (
     <>

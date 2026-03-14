@@ -61,7 +61,7 @@ export async function executeStockEntrada(params: {
   });
 
   if (error) {
-    throw new Error(error.message || "Erro ao devolver venda");
+    throw new Error(error.message || "Erro ao estornar ajuste de estoque");
   }
 
   return data as StockEntradaResponse;

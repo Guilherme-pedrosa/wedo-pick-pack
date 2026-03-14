@@ -5,10 +5,9 @@ const corsHeaders = {
 };
 
 const GC_API_URL = 'https://api.gestaoclick.com';
-
-// Situações de venda no GestãoClick
-const SITUACAO_EMPRESTIMO = '7411572';       // EMPRESTIMO DE FERRAMENTA (lancar=2, movimenta estoque)
-const SITUACAO_DEVOLUCAO  = '7340738';       // Cancelada - Devolução de Ferramenta (lancar=0)
+const SITUACAO_DEVOLUCAO = '7340738';
+const ADJUSTMENT_TOKEN_PREFIX = 'AJE:';
+const ADJUSTMENT_TOKEN_VERSION = 'toolbox_ajuste_v1';
 
 interface MovementItem {
   produto_id: string;
@@ -34,8 +33,28 @@ interface EntradaRequest {
 }
 
 type RequestBody = SaidaRequest | EntradaRequest;
+type Direction = 'saida' | 'entrada';
 
-const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+type AdjustmentToken = {
+  version: string;
+  created_at: string;
+  toolbox_name: string;
+  technician_name: string;
+  items: Array<{
+    produto_id: string;
+    nome_produto: string;
+    quantidade: number;
+  }>;
+};
+
+type AppliedAdjustment = {
+  item: MovementItem;
+  product: any;
+  beforeStock: number;
+  afterStock: number;
+};
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -56,22 +75,24 @@ Deno.serve(async (req: Request) => {
     'access-token': GC_ACCESS_TOKEN,
     'secret-access-token': GC_SECRET_TOKEN,
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
   };
 
   try {
     const body: RequestBody = await req.json();
 
+    if (body.tipo === 'saida') {
+      return await handleSaida(body, gcHeaders);
+    }
+
     if (body.tipo === 'entrada') {
       return await handleEntrada(body, gcHeaders);
-    } else if (body.tipo === 'saida') {
-      return await handleSaida(body, gcHeaders);
-    } else {
-      return new Response(
-        JSON.stringify({ error: 'Invalid tipo. Use "saida" or "entrada".' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
+
+    return new Response(
+      JSON.stringify({ error: 'Invalid tipo. Use "saida" or "entrada".' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Stock movement error:', message);
@@ -82,9 +103,8 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-// ===================== SAÍDA (Criar Venda) =====================
 async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>) {
-  const { items, justificativa, toolbox_name, technician_name, technician_gc_id } = body;
+  const { items, toolbox_name, technician_name } = body;
 
   if (!items?.length || !toolbox_name || !technician_name) {
     return new Response(
@@ -93,164 +113,42 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     );
   }
 
-  // 1. Find client by technician name (strict exact match)
-  const clientLookup = await findClientByName(technician_name, gcHeaders);
-  if (!clientLookup.client) {
+  const adjustResult = await applyStockAdjustments(items, 'saida', gcHeaders);
+  if (!adjustResult.success) {
     return new Response(
       JSON.stringify({
-        error: clientLookup.error || `Cliente do técnico "${technician_name}" não encontrado no GestãoClick.`,
+        success: false,
+        error: adjustResult.error || 'Falha ao aplicar ajuste de estoque de saída.',
       }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-  const client = clientLookup.client;
 
-  // 2. Get variation IDs for each product (needed for venda payload)
-  const productDetails: Array<{ produto_id: string; variacao_id: string | null; error?: string }> = [];
-
-  for (let i = 0; i < items.length; i += 3) {
-    const batch = items.slice(i, i + 3);
-    const results = await Promise.all(
-      batch.map(async (item) => {
-        try {
-          const res = await fetch(`${GC_API_URL}/api/produtos/${item.produto_id}`, {
-            method: 'GET',
-            headers: gcHeaders,
-          });
-          if (!res.ok) {
-            const txt = await res.text();
-            return { produto_id: item.produto_id, variacao_id: null, error: `GET failed: ${res.status} ${txt}` };
-          }
-          const json = await res.json();
-          const product = json.data;
-          let variacaoId: string | null = null;
-          if (product?.variacoes?.length > 0) {
-            const firstVar = product.variacoes[0]?.variacao || product.variacoes[0];
-            variacaoId = firstVar?.id || null;
-          }
-          return { produto_id: item.produto_id, variacao_id: variacaoId };
-        } catch (err) {
-          return { produto_id: item.produto_id, variacao_id: null, error: err instanceof Error ? err.message : 'Unknown' };
-        }
-      })
-    );
-    productDetails.push(...results);
-    if (i + 3 < items.length) await wait(1100);
-  }
-
-  const fetchErrors = productDetails.filter(p => p.error);
-  if (fetchErrors.length > 0) {
-    console.error('Product fetch errors:', fetchErrors);
-  }
-
-  // 3. Build venda payload
-  const now = new Date();
-  const dataStr = now.toISOString().slice(0, 10);
-  const codigo = Math.floor(Date.now() / 1000);
-
-  const produtos = items.map((item) => {
-    const detail = productDetails.find(p => p.produto_id === item.produto_id);
-    const prodPayload: Record<string, any> = {
+  const token = encodeAdjustmentToken({
+    version: ADJUSTMENT_TOKEN_VERSION,
+    created_at: new Date().toISOString(),
+    toolbox_name,
+    technician_name,
+    items: items.map((item) => ({
       produto_id: item.produto_id,
-      quantidade: String(item.quantidade),
-      valor_venda: String(item.preco_unitario || 0),
-      tipo_desconto: 'R$',
-      desconto_valor: '0',
-      desconto_porcentagem: '0',
-      detalhes: justificativa,
-    };
-    if (detail?.variacao_id) {
-      prodPayload.variacao_id = detail.variacao_id;
-    }
-    return { produto: prodPayload };
+      nome_produto: item.nome_produto,
+      quantidade: Number(item.quantidade || 0),
+    })),
   });
 
-  const totalValue = items
-    .reduce((sum, item) => sum + (item.quantidade * (item.preco_unitario || 0)), 0)
-    .toFixed(2);
-
-  const pdvPayment = await findPdvPaymentMethod(gcHeaders);
-  if (!pdvPayment?.id) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Nenhuma forma de pagamento de PDV (disponível no balcão) foi encontrada no GestãoClick.',
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const vendaPayload: Record<string, any> = {
-    tipo: 'produto',
-    codigo: String(codigo),
-    cliente_id: client.id,
-    situacao_id: SITUACAO_EMPRESTIMO,
-    data: dataStr,
-    prazo_entrega: dataStr,
-    condicao_pagamento: 'a_vista',
-    nome_canal_venda: 'Presencial',
-    observacoes: `[WeDo Maleta] ${justificativa} | Maleta: ${toolbox_name} | Técnico: ${technician_name} (${technician_gc_id || 'sem-id'})`,
-    pagamentos: [
-      {
-        pagamento: {
-          data_vencimento: dataStr,
-          valor: totalValue,
-          forma_pagamento_id: pdvPayment.id,
-          observacao: 'Empréstimo de ferramenta',
-        },
-      },
-    ],
-    produtos,
-  };
-
-  if (technician_gc_id) {
-    vendaPayload.tecnico_id = String(technician_gc_id);
-  }
-
-  console.log('Creating venda:', JSON.stringify(vendaPayload).slice(0, 500));
-  const vendaRes = await fetch(`${GC_API_URL}/api/vendas`, {
-    method: 'POST',
-    headers: gcHeaders,
-    body: JSON.stringify(vendaPayload),
-  });
-
-  const vendaBody = await vendaRes.json();
-  console.log('Venda response:', JSON.stringify(vendaBody).slice(0, 500));
-
-  if (!vendaRes.ok || vendaBody.status === 'error') {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: vendaBody.message || vendaBody.error || `POST /api/vendas failed: ${vendaRes.status}`,
-        gc_response: vendaBody,
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const vendaId = vendaBody.data?.id;
-  const vendaCodigo = vendaBody.data?.codigo;
-  const nomeCliente = vendaBody.data?.nome_cliente || client.nome;
-
-  if (!vendaId) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'Venda criada sem ID retornado pelo ERP.' }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
+  const ref = `AJE-${Date.now()}`;
 
   return new Response(
     JSON.stringify({
       success: true,
-      venda_gc_id: vendaId,
-      venda_codigo: vendaCodigo,
-      summary: `Venda #${vendaCodigo} (${nomeCliente}) — ${items.length} item(ns) — Situação: EMPRESTIMO DE FERRAMENTA`,
+      venda_gc_id: token,
+      venda_codigo: ref,
+      summary: `Ajuste de estoque aplicado (${items.length} item(ns))`,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
 
-// ===================== ENTRADA (Alterar Status da Venda) =====================
 async function handleEntrada(body: EntradaRequest, gcHeaders: Record<string, string>) {
   const { venda_gc_id, toolbox_name, technician_name } = body;
 
@@ -261,51 +159,77 @@ async function handleEntrada(body: EntradaRequest, gcHeaders: Record<string, str
     );
   }
 
-  const getRes = await fetch(`${GC_API_URL}/api/vendas/${venda_gc_id}`, {
+  // Novo fluxo: estorno de ajuste de estoque
+  const tokenData = decodeAdjustmentToken(venda_gc_id);
+  if (tokenData) {
+    const adjustResult = await applyStockAdjustments(tokenData.items, 'entrada', gcHeaders);
+
+    if (!adjustResult.success) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: adjustResult.error || 'Falha ao estornar ajuste de estoque.',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        summary: `Estorno de ajuste aplicado (${tokenData.items.length} item(ns)) — Técnico: ${technician_name} | Maleta: ${toolbox_name}`,
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Fluxo legado: se ainda houver venda antiga gravada, cancela por situação
+  return await handleLegacyEntradaBySale(venda_gc_id, toolbox_name, technician_name, gcHeaders);
+}
+
+async function handleLegacyEntradaBySale(
+  vendaGcId: string,
+  toolboxName: string,
+  technicianName: string,
+  gcHeaders: Record<string, string>
+) {
+  const getRes = await fetch(`${GC_API_URL}/api/vendas/${vendaGcId}`, {
     method: 'GET',
     headers: gcHeaders,
   });
 
-  if (!getRes.ok) {
-    const txt = await getRes.text();
+  const getBody = await readJson(getRes);
+  if (!getRes.ok || getBody?.status === 'error' || !getBody?.data) {
     return new Response(
-      JSON.stringify({ success: false, error: `GET venda failed: ${getRes.status} ${txt}` }),
+      JSON.stringify({
+        success: false,
+        error: getBody?.message || getBody?.error || `GET venda failed: ${getRes.status}`,
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
-  const getBody = await getRes.json();
   const vendaData = getBody.data;
-
-  if (!vendaData) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'Venda not found' }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const obsNote = `\n[WeDo Maleta - DEVOLUÇÃO] Técnico: ${technician_name} | Maleta: ${toolbox_name} | ${now}`;
+  const obsNote = `\n[WeDo Maleta - DEVOLUÇÃO] Técnico: ${technicianName} | Maleta: ${toolboxName} | ${now}`;
 
   const putPayload: Record<string, any> = {
     situacao_id: SITUACAO_DEVOLUCAO,
     observacoes: (vendaData.observacoes || '') + obsNote,
   };
 
-  const putRes = await fetch(`${GC_API_URL}/api/vendas/${venda_gc_id}`, {
+  const putRes = await fetch(`${GC_API_URL}/api/vendas/${vendaGcId}`, {
     method: 'PUT',
     headers: gcHeaders,
     body: JSON.stringify(putPayload),
   });
 
-  const putBody = await putRes.json();
-  console.log('Venda update response:', JSON.stringify(putBody).slice(0, 500));
-
-  if (!putRes.ok || putBody.status === 'error') {
+  const putBody = await readJson(putRes);
+  if (!putRes.ok || putBody?.status === 'error') {
     return new Response(
       JSON.stringify({
         success: false,
-        error: putBody.message || putBody.error || `PUT /api/vendas/${venda_gc_id} failed: ${putRes.status}`,
+        error: putBody?.message || putBody?.error || `PUT /api/vendas/${vendaGcId} failed: ${putRes.status}`,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -320,101 +244,238 @@ async function handleEntrada(body: EntradaRequest, gcHeaders: Record<string, str
   );
 }
 
-// ===================== HELPERS =====================
-const normalizeText = (value: string) =>
-  String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+async function applyStockAdjustments(
+  items: MovementItem[],
+  direction: Direction,
+  gcHeaders: Record<string, string>
+): Promise<{ success: boolean; error?: string; applied?: AppliedAdjustment[] }> {
+  const applied: AppliedAdjustment[] = [];
 
-type ClientLookupResult = {
-  client: { id: string; nome: string } | null;
-  error?: string;
-};
+  for (const item of items) {
+    const quantidade = Number(item.quantidade || 0);
+    if (!item.produto_id || quantidade <= 0) {
+      await rollbackAppliedAdjustments(applied, gcHeaders);
+      return { success: false, error: `Item inválido para ajuste: ${item.nome_produto || item.produto_id}` };
+    }
 
-async function findClientByName(name: string, gcHeaders: Record<string, string>): Promise<ClientLookupResult> {
-  try {
-    const url = `${GC_API_URL}/api/clientes?nome=${encodeURIComponent(name)}`;
-    const res = await fetch(url, { method: 'GET', headers: gcHeaders });
-    if (!res.ok) {
-      const body = await res.text();
+    const productResult = await fetchProductById(item.produto_id, gcHeaders);
+    if (!productResult.product) {
+      await rollbackAppliedAdjustments(applied, gcHeaders);
+      return { success: false, error: productResult.error || `Produto ${item.produto_id} não encontrado.` };
+    }
+
+    const product = productResult.product;
+    const beforeStock = toNumber(product.estoque);
+    const afterStock = direction === 'saida' ? beforeStock - quantidade : beforeStock + quantidade;
+
+    if (direction === 'saida' && afterStock < 0) {
+      await rollbackAppliedAdjustments(applied, gcHeaders);
       return {
-        client: null,
-        error: `Falha ao buscar cliente no GestãoClick: ${res.status} ${body || ''}`.trim(),
+        success: false,
+        error: `Estoque insuficiente para ${item.nome_produto} (${item.produto_id}). Estoque atual: ${beforeStock}, solicitado: ${quantidade}.`,
       };
     }
 
-    const json = await res.json();
-    const raw = Array.isArray(json?.data) ? json.data : [];
-    const clients = raw
-      .map((row: any) => row?.Cliente || row)
-      .filter((row: any) => row?.id && row?.nome)
-      .map((row: any) => ({ id: String(row.id), nome: String(row.nome) }));
-
-    const target = normalizeText(name);
-    const exactMatches = clients.filter((c) => normalizeText(c.nome) === target);
-
-    if (exactMatches.length === 1) {
-      return { client: exactMatches[0] };
-    }
-
-    if (exactMatches.length === 0) {
+    const updateResult = await updateProductStock(product, afterStock, gcHeaders);
+    if (!updateResult.success) {
+      const rollbackError = await rollbackAppliedAdjustments(applied, gcHeaders);
       return {
-        client: null,
-        error: `Cliente exato do técnico "${name}" não encontrado no GestãoClick.`,
+        success: false,
+        error: `${updateResult.error || `Falha ao atualizar estoque do produto ${item.produto_id}.`}${rollbackError ? ` | Erro no rollback: ${rollbackError}` : ''}`,
       };
     }
 
-    const names = [...new Set(exactMatches.map((c) => c.nome))].slice(0, 5);
-    return {
-      client: null,
-      error: `Cliente ambíguo para "${name}". Correspondências exatas: ${names.join(', ')}.`,
-    };
-  } catch {
-    return { client: null, error: 'Erro inesperado ao buscar cliente no GestãoClick.' };
+    applied.push({ item, product, beforeStock, afterStock });
+    await wait(360);
   }
+
+  return { success: true, applied };
 }
 
-async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<{ id: string; nome: string } | null> {
+async function rollbackAppliedAdjustments(applied: AppliedAdjustment[], gcHeaders: Record<string, string>): Promise<string | null> {
+  if (!applied.length) return null;
+
+  const rollbackErrors: string[] = [];
+
+  for (const entry of [...applied].reverse()) {
+    const rollbackResult = await updateProductStock(entry.product, entry.beforeStock, gcHeaders);
+    if (!rollbackResult.success) {
+      rollbackErrors.push(`${entry.item.nome_produto}: ${rollbackResult.error || 'falha desconhecida no rollback'}`);
+    }
+    await wait(360);
+  }
+
+  return rollbackErrors.length ? rollbackErrors.join(' | ') : null;
+}
+
+async function fetchProductById(produtoId: string, gcHeaders: Record<string, string>): Promise<{ product: any | null; error?: string }> {
   try {
-    const res = await fetch(`${GC_API_URL}/api/formas_pagamentos`, {
+    const res = await fetch(`${GC_API_URL}/api/produtos/${produtoId}`, {
       method: 'GET',
       headers: gcHeaders,
     });
-    if (!res.ok) {
-      await res.text();
+
+    const body = await readJson(res);
+
+    if (!res.ok || body?.status === 'error') {
+      return {
+        product: null,
+        error: body?.message || body?.error || `GET /api/produtos/${produtoId} failed: ${res.status}`,
+      };
+    }
+
+    if (!body?.data) {
+      return { product: null, error: `Produto ${produtoId} sem dados no retorno da API.` };
+    }
+
+    return { product: body.data };
+  } catch (error) {
+    return { product: null, error: error instanceof Error ? error.message : 'Erro inesperado ao buscar produto.' };
+  }
+}
+
+async function updateProductStock(product: any, newStock: number, gcHeaders: Record<string, string>): Promise<{ success: boolean; error?: string }> {
+  const payload = buildProductUpdatePayload(product, newStock);
+
+  if (!payload.nome || !payload.codigo_interno) {
+    return { success: false, error: `Produto ${product?.id} sem campos obrigatórios para edição (nome/codigo_interno).` };
+  }
+
+  const res = await fetch(`${GC_API_URL}/api/produtos/${product.id}`, {
+    method: 'PUT',
+    headers: gcHeaders,
+    body: JSON.stringify(payload),
+  });
+
+  const body = await readJson(res);
+  if (!res.ok || body?.status === 'error') {
+    return {
+      success: false,
+      error: body?.message || body?.error || `PUT /api/produtos/${product.id} failed: ${res.status}`,
+    };
+  }
+
+  return { success: true };
+}
+
+function buildProductUpdatePayload(product: any, stock: number): Record<string, any> {
+  const payload: Record<string, any> = {
+    nome: String(product?.nome || ''),
+    codigo_interno: String(product?.codigo_interno || product?.codigo_barra || product?.id || ''),
+    valor_custo: formatDecimal(toNumber(product?.valor_custo), 4),
+    estoque: formatDecimal(stock, 2),
+  };
+
+  const optionalFields = [
+    'codigo_barra',
+    'largura',
+    'altura',
+    'comprimento',
+    'ativo',
+    'grupo_id',
+    'nome_grupo',
+    'descricao',
+  ] as const;
+
+  optionalFields.forEach((key) => {
+    const value = product?.[key];
+    if (value !== undefined && value !== null && String(value) !== '') {
+      payload[key] = String(value);
+    }
+  });
+
+  if (Array.isArray(product?.valores) && product.valores.length > 0) {
+    const valores = product.valores
+      .filter((v: any) => v?.tipo_id)
+      .map((v: any) => ({
+        tipo_id: String(v.tipo_id),
+        valor_venda: formatDecimal(toNumber(v.valor_venda ?? product?.valor_venda), 2),
+      }));
+
+    if (valores.length > 0) {
+      payload.valores = valores;
+    }
+  }
+
+  const fiscal = product?.fiscal || {};
+  const fiscalFields = [
+    'ncm',
+    'cest',
+    'peso_liquido',
+    'peso_bruto',
+    'valor_aproximado_tributos',
+    'valor_fixo_pis',
+    'valor_fixo_pis_st',
+    'valor_fixo_confins',
+    'valor_fixo_confins_st',
+  ] as const;
+
+  fiscalFields.forEach((key) => {
+    const value = fiscal?.[key];
+    if (value !== undefined && value !== null && String(value) !== '') {
+      payload[key] = String(value);
+    }
+  });
+
+  return payload;
+}
+
+async function readJson(res: Response): Promise<any> {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+}
+
+function toNumber(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const raw = String(value ?? '').trim();
+  if (!raw) return 0;
+
+  const normalized = raw.includes(',') && !raw.includes('.')
+    ? raw.replace(',', '.')
+    : raw.replace(/,/g, '');
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDecimal(value: number, digits: number): string {
+  const normalized = Number.isFinite(value) ? value : 0;
+  return normalized.toFixed(digits);
+}
+
+function encodeAdjustmentToken(data: AdjustmentToken): string {
+  const json = JSON.stringify(data);
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return `${ADJUSTMENT_TOKEN_PREFIX}${btoa(binary)}`;
+}
+
+function decodeAdjustmentToken(token: string): AdjustmentToken | null {
+  if (!token || !token.startsWith(ADJUSTMENT_TOKEN_PREFIX)) {
+    return null;
+  }
+
+  try {
+    const encoded = token.slice(ADJUSTMENT_TOKEN_PREFIX.length);
+    const binary = atob(encoded);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(json) as AdjustmentToken;
+
+    if (parsed?.version !== ADJUSTMENT_TOKEN_VERSION || !Array.isArray(parsed.items)) {
       return null;
     }
 
-    const json = await res.json();
-    const raw = Array.isArray(json?.data) ? json.data : [];
-
-    const methods = raw
-      .map((row: any) => row?.FormasPagamento || row)
-      .filter((row: any) => row?.id && row?.nome);
-
-    const aCombinar = methods.find(
-      (m: any) => m.disponivel_pdv === '1' && String(m.nome || '').toLowerCase().includes('combinar')
-    );
-    if (aCombinar) {
-      return { id: String(aCombinar.id), nome: String(aCombinar.nome) };
-    }
-
-    const preferred = methods.find((m: any) => m.disponivel_pdv === '1' && m.confirmar_financeiro === '0');
-    if (preferred) {
-      return { id: String(preferred.id), nome: String(preferred.nome) };
-    }
-
-    const pdvOnly = methods.find((m: any) => m.disponivel_pdv === '1');
-    if (pdvOnly) {
-      return { id: String(pdvOnly.id), nome: String(pdvOnly.nome) };
-    }
-
-    return null;
+    return parsed;
   } catch {
     return null;
   }
 }
-

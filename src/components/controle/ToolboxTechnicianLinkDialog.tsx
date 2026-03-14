@@ -118,7 +118,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
       });
 
       if (vendaGcId) {
-        toast.success(`Venda #${vendaCodigo || vendaGcId} criada — estoque baixado`);
+        toast.success(`Ajuste de estoque aplicado (${vendaCodigo || "ref interna"})`);
 
         await logToolboxMovement({
           toolboxId: toolbox.id,
@@ -126,7 +126,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
           action: "saida_estoque",
           technicianName: tech.name,
           technicianGcId: tech.gc_id,
-          details: `Venda GC #${vendaCodigo || vendaGcId} (ID: ${vendaGcId}) — ${vendaSummary || "Saída registrada"}`,
+          details: `Ajuste ERP ${vendaCodigo || "(sem código)"} — ${vendaSummary || "Saída registrada"}`,
         });
       }
 

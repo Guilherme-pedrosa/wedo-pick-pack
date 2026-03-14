@@ -206,6 +206,71 @@ export type Database = {
           },
         ]
       }
+      box_movement_logs: {
+        Row: {
+          action: string
+          box_id: string
+          box_name: string
+          created_at: string
+          details: string | null
+          id: string
+          operator_id: string
+          operator_name: string
+          preco_unitario: number | null
+          produto_id: string | null
+          produto_nome: string | null
+          quantidade: number | null
+          ref_numero: string | null
+          ref_tipo: string | null
+          technician_gc_id: string | null
+          technician_name: string | null
+        }
+        Insert: {
+          action: string
+          box_id: string
+          box_name: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          operator_id: string
+          operator_name?: string
+          preco_unitario?: number | null
+          produto_id?: string | null
+          produto_nome?: string | null
+          quantidade?: number | null
+          ref_numero?: string | null
+          ref_tipo?: string | null
+          technician_gc_id?: string | null
+          technician_name?: string | null
+        }
+        Update: {
+          action?: string
+          box_id?: string
+          box_name?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          operator_id?: string
+          operator_name?: string
+          preco_unitario?: number | null
+          produto_id?: string | null
+          produto_nome?: string | null
+          quantidade?: number | null
+          ref_numero?: string | null
+          ref_tipo?: string | null
+          technician_gc_id?: string | null
+          technician_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_movement_logs_box_id_fkey"
+            columns: ["box_id"]
+            isOneToOne: false
+            referencedRelation: "boxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       boxes: {
         Row: {
           closed_at: string | null

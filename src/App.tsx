@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import BoxesPage from "./pages/controle/BoxesPage";
+import ToolboxesPage from "./pages/controle/ToolboxesPage";
 import TechniciansPage from "./pages/controle/TechniciansPage";
 import HandoffLogsPage from "./pages/controle/HandoffLogsPage";
 import CheckoutPage from "./pages/CheckoutPage";
@@ -95,6 +96,7 @@ function AuthenticatedApp() {
         <Route path="/separations" element={<SeparationsPage />} />
         <Route path="/compras" element={<ComprasPage />} />
         <Route path="/controle/caixas" element={<BoxesPage />} />
+        <Route path="/controle/maletas" element={<ToolboxesPage />} />
         <Route path="/controle/tecnicos" element={<TechniciansPage />} />
         <Route path="/controle/logs" element={<HandoffLogsPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />

@@ -23,7 +23,7 @@ import QuickWriteOffDialog from "@/components/controle/QuickWriteOffDialog";
 import { runBaixaValidationWithAlerts, type BaixaAlert } from "@/lib/baixaValidator";
 
 const BoxesPage = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [boxes, setBoxes] = useState<BoxData[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);

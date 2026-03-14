@@ -273,6 +273,7 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
           <div className="p-3 bg-muted/50 rounded-lg border border-border">
             <p className="text-sm font-medium">{item.nome_produto}</p>
             <p className="text-xs text-muted-foreground">
+              {codigoInterno && <><span className="font-medium">Cód: {codigoInterno}</span> · </>}
               ID: {item.produto_id} · Estoque na caixa: {item.quantidade}
             </p>
           </div>

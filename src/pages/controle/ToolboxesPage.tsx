@@ -39,7 +39,7 @@ const ToolboxesPage = () => {
   // Conference
   const [conferenceToolbox, setConferenceToolbox] = useState<ToolboxData | null>(null);
   const [conferenceItems, setConferenceItems] = useState<ToolboxItemData[]>([]);
-
+  const [conferenceUnlink, setConferenceUnlink] = useState(false);
   // Receipt
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<{

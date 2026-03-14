@@ -187,44 +187,52 @@ export default function BoxDetailDialog({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Add Item Section */}
-          <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Adicionar item
-            </p>
-            <ProductSearchInput
-              onSelect={setSelectedProduct}
-              onScanRequest={() => setScannerOpen(true)}
-              autoFocus
-            />
-            {selectedProduct && (
-              <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
-                  <p className="text-xs text-muted-foreground">
-                    ID: {selectedProduct.produto_id}
-                    {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="icon" className="h-7 w-7"
-                    onClick={() => setQty(Math.max(1, qty - 1))}>
-                    <Minus className="h-3 w-3" />
+          {/* Add Item Section - only when box is NOT in operation */}
+          {isInOperation ? (
+            <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+              <p className="text-xs text-muted-foreground">
+                ⚠️ Caixa em operação com <span className="font-semibold">{box?.technician_name}</span> — não é possível adicionar ou remover itens.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 p-3 bg-muted/50 rounded-lg border border-border">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Adicionar item
+              </p>
+              <ProductSearchInput
+                onSelect={setSelectedProduct}
+                onScanRequest={() => setScannerOpen(true)}
+                autoFocus
+              />
+              {selectedProduct && (
+                <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
+                    <p className="text-xs text-muted-foreground">
+                      ID: {selectedProduct.produto_id}
+                      {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon" className="h-7 w-7"
+                      onClick={() => setQty(Math.max(1, qty - 1))}>
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <Input type="number" value={qty}
+                      onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-14 h-7 text-center text-sm" min={1} />
+                    <Button variant="outline" size="icon" className="h-7 w-7"
+                      onClick={() => setQty(qty + 1)}>
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <Button size="sm" onClick={handleAddItem} disabled={adding} className="h-7">
+                    {adding ? "..." : "Adicionar"}
                   </Button>
-                  <Input type="number" value={qty}
-                    onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-14 h-7 text-center text-sm" min={1} />
-                  <Button variant="outline" size="icon" className="h-7 w-7"
-                    onClick={() => setQty(qty + 1)}>
-                    <Plus className="h-3 w-3" />
-                  </Button>
                 </div>
-                <Button size="sm" onClick={handleAddItem} disabled={adding} className="h-7">
-                  {adding ? "..." : "Adicionar"}
-                </Button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Items List */}
           <div className="flex-1 overflow-y-auto min-h-0">

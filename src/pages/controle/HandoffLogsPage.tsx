@@ -73,7 +73,21 @@ export default function HandoffLogsPage() {
   const formatCurrency = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.action === filter);
+  const filtered = logs.filter((l) => {
+    if (filter !== "all" && l.action !== filter) return false;
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      return (
+        l.box_name?.toLowerCase().includes(q) ||
+        l.produto_nome?.toLowerCase().includes(q) ||
+        l.technician_name?.toLowerCase().includes(q) ||
+        l.operator_name?.toLowerCase().includes(q) ||
+        l.details?.toLowerCase().includes(q) ||
+        l.ref_numero?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   const filters: { key: FilterType; label: string }[] = [
     { key: "all", label: "Todas" },

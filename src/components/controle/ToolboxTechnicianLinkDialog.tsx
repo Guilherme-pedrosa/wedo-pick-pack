@@ -53,7 +53,6 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
   const handleLink = async (tech: Technician) => {
     if (!toolbox) return;
     setLinking(true);
-    setStockProgress(null);
     try {
       // 1. Get toolbox items for stock movement
       const { data: items } = await (supabase.from("toolbox_items") as any)

@@ -172,6 +172,7 @@ export default function ToolboxHandoffReceipt({
             <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px" }}>
               <thead>
                 <tr>
+                  <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>ID</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Código</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Ferramenta</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "center", fontSize: "10px", textTransform: "uppercase" }}>Qtd</th>

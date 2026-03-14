@@ -304,6 +304,7 @@ const BoxesPage = () => {
     }
   };
 
+  const formatDate = (d: string) =>
     new Date(d).toLocaleString("pt-BR", {
       day: "2-digit",
       month: "2-digit",

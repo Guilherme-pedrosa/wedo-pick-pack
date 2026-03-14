@@ -166,14 +166,41 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     return { produto: prodPayload };
   });
 
+  const totalValue = items
+    .reduce((sum, item) => sum + (item.quantidade * (item.preco_unitario || 0)), 0)
+    .toFixed(2);
+
+  const pdvPayment = await findPdvPaymentMethod(gcHeaders);
+  if (!pdvPayment?.id) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Nenhuma forma de pagamento de PDV (disponível no balcão) foi encontrada no GestãoClick.',
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   const vendaPayload: Record<string, any> = {
-    tipo: 'vendas_balcao',
+    tipo: 'produto',
     codigo: String(codigo),
     cliente_id: clientId,
     situacao_id: SITUACAO_EMPRESTIMO,
     data: dataStr,
+    prazo_entrega: dataStr,
     condicao_pagamento: 'a_vista',
+    nome_canal_venda: 'Presencial',
     observacoes: `[WeDo Maleta] ${justificativa} | Maleta: ${toolbox_name} | Técnico: ${technician_name}`,
+    pagamentos: [
+      {
+        pagamento: {
+          data_vencimento: dataStr,
+          valor: totalValue,
+          forma_pagamento_id: pdvPayment.id,
+          observacao: 'Empréstimo de ferramenta (PDV/Balcão)',
+        },
+      },
+    ],
     produtos,
   };
 
@@ -202,12 +229,26 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   const vendaId = vendaBody.data?.id;
   const vendaCodigo = vendaBody.data?.codigo;
 
+  // 5. Verify classification in ERP (must appear as vendas_balcao)
+  const isBalcao = await verifyVendaBalcao(vendaCodigo, gcHeaders);
+  if (!isBalcao) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        venda_gc_id: vendaId,
+        venda_codigo: vendaCodigo,
+        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP.',
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   return new Response(
     JSON.stringify({
       success: true,
       venda_gc_id: vendaId,
       venda_codigo: vendaCodigo,
-      summary: `Venda #${vendaCodigo} criada com ${items.length} item(ns)`,
+      summary: `Venda balcão #${vendaCodigo} criada com ${items.length} item(ns)`,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );

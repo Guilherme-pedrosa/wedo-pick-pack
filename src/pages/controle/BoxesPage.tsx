@@ -128,10 +128,14 @@ const BoxesPage = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const { data: counts } = await supabase.from("box_items").select("box_id");
+        const { data: itemsData } = await supabase
+          .from("box_items")
+          .select("box_id, quantidade, preco_unitario");
         const countMap = new Map<string, number>();
-        counts?.forEach((c) => {
+        const valueMap = new Map<string, number>();
+        itemsData?.forEach((c: any) => {
           countMap.set(c.box_id, (countMap.get(c.box_id) || 0) + 1);
+          valueMap.set(c.box_id, (valueMap.get(c.box_id) || 0) + (c.quantidade || 0) * (c.preco_unitario || 0));
         });
 
         setBoxes(
@@ -139,6 +143,7 @@ const BoxesPage = () => {
             ...b,
             status: b.status as BoxData["status"],
             items_count: countMap.get(b.id) || 0,
+            total_value: valueMap.get(b.id) || 0,
           }))
         );
       } else {

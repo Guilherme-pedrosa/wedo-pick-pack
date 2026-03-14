@@ -7,7 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCheckoutStore } from "@/store/checkoutStore";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import AppHeader from "@/components/layout/AppHeader";
+import { AppLayout } from "@/components/layout/AppLayout";
+import DashboardPage from "./pages/DashboardPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import ComprasPage from "./pages/ComprasPage";
@@ -34,7 +35,6 @@ function AuthenticatedApp() {
       return;
     }
 
-    // Check if setup is needed (no admins)
     supabase.rpc('has_any_admin').then(({ data, error }) => {
       if (error) {
         console.error('Error checking admin status:', error);
@@ -84,10 +84,10 @@ function AuthenticatedApp() {
   }
 
   return (
-    <>
-      <AppHeader isAdmin={isAdmin} userName={profile?.name || user.email || ''} />
-      <Routes>
-        <Route path="/" element={<Navigate to="/checkout" replace />} />
+    <Routes>
+      <Route element={<AppLayout isAdmin={isAdmin} userName={profile?.name || user.email || ''} />}>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/separations" element={<SeparationsPage />} />
         <Route path="/compras" element={<ComprasPage />} />
@@ -95,11 +95,11 @@ function AuthenticatedApp() {
         <Route path="/config" element={<ConfigPage />} />
         <Route
           path="/admin/users"
-          element={isAdmin ? <AdminUsersPage /> : <Navigate to="/checkout" replace />}
+          element={isAdmin ? <AdminUsersPage /> : <Navigate to="/dashboard" replace />}
         />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </>
+      </Route>
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 }
 

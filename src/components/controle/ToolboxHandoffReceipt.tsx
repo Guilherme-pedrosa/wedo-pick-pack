@@ -186,6 +186,9 @@ export default function ToolboxHandoffReceipt({
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
                       {item.produto_id}
                     </td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
+                      {item.codigo_interno || "—"}
+                    </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px" }}>
                       {item.nome_produto}
                     </td>

@@ -394,12 +394,27 @@ export default function BoxDetailDialog({
 
           {/* Action buttons */}
           {box && (
-            <div className="flex flex-wrap gap-2 pt-3 border-t border-border">
+            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
               {!box.technician_name ? (
-                <Button variant="outline" size="sm" onClick={() => onLinkTechnician(box)} className="text-xs">
-                  <UserCheck className="h-3.5 w-3.5 mr-1" />
-                  Vincular técnico
-                </Button>
+                <>
+                  <Button variant="outline" size="sm" onClick={() => onLinkTechnician(box)} className="text-xs">
+                    <UserCheck className="h-3.5 w-3.5 mr-1" />
+                    Vincular técnico
+                  </Button>
+                  {onClone && (
+                    <Button variant="outline" size="sm" onClick={() => onClone(box)} className="text-xs">
+                      <Copy className="h-3.5 w-3.5 mr-1" />
+                      Clonar
+                    </Button>
+                  )}
+                  {isAdmin && onDelete && !isPendenciasBox && (
+                    <Button variant="ghost" size="sm" onClick={() => onDelete(box)}
+                      className="text-xs text-destructive hover:text-destructive ml-auto">
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Excluir caixa
+                    </Button>
+                  )}
+                </>
               ) : (
                 <>
                   <Button variant="outline" size="sm" onClick={() => onCheckin(box)} className="text-xs">
@@ -411,6 +426,12 @@ export default function BoxDetailDialog({
                     <UserX className="h-3.5 w-3.5 mr-1" />
                     Desvincular técnico
                   </Button>
+                  {onClone && (
+                    <Button variant="outline" size="sm" onClick={() => onClone(box)} className="text-xs">
+                      <Copy className="h-3.5 w-3.5 mr-1" />
+                      Clonar
+                    </Button>
+                  )}
                 </>
               )}
             </div>

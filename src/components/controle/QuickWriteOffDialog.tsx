@@ -334,20 +334,20 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Filtrar por nome..." />
+                      <CommandInput placeholder="Filtrar por nome ou código..." />
                       <CommandList>
                         <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
                         <CommandGroup>
                           {boxItems.map((item) => (
                             <CommandItem
                               key={item.id}
-                              value={item.nome_produto}
+                              value={`${item.produto_id} ${item.nome_produto}`}
                               onSelect={() => handleItemSelect(item)}
                               className="flex flex-col items-start gap-0.5 py-2"
                             >
                               <span className="text-sm font-medium">{item.nome_produto}</span>
                               <span className="text-xs text-muted-foreground">
-                                Qtd: {item.quantidade}
+                                Cód: {item.produto_id} · Qtd: {item.quantidade}
                                 {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
                               </span>
                             </CommandItem>

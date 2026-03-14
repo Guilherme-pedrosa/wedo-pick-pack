@@ -165,6 +165,7 @@ export default function BoxDetailDialog({
       });
   };
 
+  const isInOperation = !!box?.technician_name;
   const totalItems = items.reduce((sum, i) => sum + i.quantidade, 0);
   const totalValue = items.reduce((sum, i) => sum + i.quantidade * (i.preco_unitario || 0), 0);
   const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

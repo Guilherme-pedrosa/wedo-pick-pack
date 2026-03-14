@@ -83,11 +83,11 @@ Deno.serve(async (req: Request) => {
     }
 
     if (results.length === 0) {
-      // Partial match on codigo_interno or nome
+      // Partial match on codigo_interno, codigo_barra, produto_id or nome
       const { data } = await supabaseAdmin
         .from('products_index')
         .select('*')
-        .or(`codigo_interno.ilike.%${query}%,nome.ilike.%${query}%`)
+        .or(`codigo_interno.ilike.%${query}%,codigo_barra.ilike.%${query}%,produto_id.ilike.%${query}%,nome.ilike.%${query}%`)
         .order('nome')
         .limit(20);
       if (data && data.length > 0) {

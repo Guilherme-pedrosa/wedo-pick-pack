@@ -45,12 +45,27 @@ function AuthenticatedApp() {
     });
   }, [loading, user]);
 
-  // Sync operator info from profile
+  // Sync checkout config from user profile
   useEffect(() => {
     if (profile) {
-      setConfig({ operatorName: profile.name, gcUsuarioId: profile.gc_usuario_id || '' });
+      setConfig({
+        operatorName: profile.name,
+        gcUsuarioId: profile.gc_usuario_id || '',
+        osStatusToShow: profile.os_status_to_show ?? [],
+        vendaStatusToShow: profile.venda_status_to_show ?? [],
+        defaultOSConclusionStatus: profile.default_os_conclusion_status ?? '',
+        defaultVendaConclusionStatus: profile.default_venda_conclusion_status ?? '',
+      });
     }
-  }, [profile?.name, profile?.gc_usuario_id, setConfig]);
+  }, [
+    profile?.name,
+    profile?.gc_usuario_id,
+    profile?.os_status_to_show,
+    profile?.venda_status_to_show,
+    profile?.default_os_conclusion_status,
+    profile?.default_venda_conclusion_status,
+    setConfig,
+  ]);
 
   if (loading || needsSetup === null) {
     return (

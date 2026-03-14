@@ -11,6 +11,7 @@ import {
   LogOut,
   X,
   Package,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,12 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: "Checkout", icon: Package, href: "/checkout" },
       { title: "Separações", icon: PackageCheck, href: "/separations" },
+    ],
+  },
+  {
+    label: "Controle e Saída",
+    items: [
+      { title: "Caixas", icon: Boxes, href: "/controle/caixas" },
     ],
   },
   {

@@ -10,6 +10,7 @@ interface AppLayoutHeaderProps {
 const pageMeta: Record<string, { title: string; breadcrumb: string[] }> = {
   "/dashboard": { title: "Dashboard", breadcrumb: [] },
   "/checkout": { title: "Checkout", breadcrumb: ["Operação", "Checkout"] },
+  "/controle/caixas": { title: "Caixas", breadcrumb: ["Controle e Saída", "Caixas"] },
   "/separations": { title: "Separações", breadcrumb: ["Operação", "Separações"] },
   "/compras": { title: "Compras", breadcrumb: ["Suprimentos", "Compras"] },
   "/rastreador": { title: "Rastreador", breadcrumb: ["Suprimentos", "Rastreador"] },

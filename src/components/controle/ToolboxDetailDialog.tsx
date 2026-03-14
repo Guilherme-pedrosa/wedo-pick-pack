@@ -84,6 +84,9 @@ export default function ToolboxDetailDialog({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
+  const [returningItem, setReturningItem] = useState<ToolboxItemData | null>(null);
+  const [returnQty, setReturnQty] = useState(1);
+  const [returning, setReturning] = useState(false);
 
   const handleRename = async () => {
     if (!toolbox || !newName.trim() || newName.trim() === toolbox.name) {

@@ -283,6 +283,13 @@ export default function BoxDetailDialog({
         onClose={() => setScannerOpen(false)}
         onScan={handleScan}
       />
+      <ItemWriteOffDialog
+        open={!!writeOffItem}
+        item={writeOffItem}
+        box={box}
+        onClose={() => setWriteOffItem(null)}
+        onCompleted={onItemsChanged}
+      />
     </>
   );
 }

@@ -72,7 +72,20 @@ export default function ToolboxLogsPage() {
     return dt.toLocaleDateString("pt-BR") + " " + dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   };
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.action === filter);
+  const filtered = logs.filter((l) => {
+    if (filter !== "all" && l.action !== filter) return false;
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      return (
+        l.toolbox_name?.toLowerCase().includes(q) ||
+        l.produto_nome?.toLowerCase().includes(q) ||
+        l.technician_name?.toLowerCase().includes(q) ||
+        l.operator_name?.toLowerCase().includes(q) ||
+        l.details?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   const filters: { key: FilterType; label: string }[] = [
     { key: "all", label: "Todas" },

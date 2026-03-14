@@ -163,6 +163,7 @@ export default function BoxHandoffReceipt({
             <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px" }}>
               <thead>
                 <tr>
+                  <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Código</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Produto</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "center", fontSize: "10px", textTransform: "uppercase" }}>Qtd</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "right", fontSize: "10px", textTransform: "uppercase" }}>Unit.</th>
@@ -172,6 +173,9 @@ export default function BoxHandoffReceipt({
               <tbody>
                 {items.map((item, idx) => (
                   <tr key={idx} style={{ background: idx % 2 === 0 ? "white" : "#fafafa" }}>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
+                      {item.produto_id}
+                    </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px" }}>
                       {item.nome_produto}
                     </td>

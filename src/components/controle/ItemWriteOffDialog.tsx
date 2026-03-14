@@ -244,7 +244,7 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
 
   if (!item) return null;
 
-  const maxQty = item.quantidade;
+  const maxQty = validado ? maxAllowedQty : item.quantidade;
 
   return (
     <Dialog open={open} onOpenChange={() => handleClose()}>

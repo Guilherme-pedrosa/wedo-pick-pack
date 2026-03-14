@@ -31,6 +31,7 @@ const BoxesPage = () => {
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ fetched: number; total: number } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [productsCount, setProductsCount] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
 
   // Detail dialog state

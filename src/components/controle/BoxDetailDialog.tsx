@@ -277,11 +277,13 @@ export default function BoxDetailDialog({
                           onClick={() => setWriteOffItem(item)}>
                           <FileText className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => handleRemoveItem(item)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {!isInOperation && (
+                          <Button variant="ghost" size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveItem(item)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}

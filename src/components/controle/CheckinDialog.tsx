@@ -301,7 +301,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                             <SelectItem value="venda">Venda</SelectItem>
                           </SelectContent>
                         </Select>
-                        {ci.tipo && ci.tipo !== "divergencia" && (
+                        {ci.tipo && (
                           <>
                             <Input
                               value={ci.ref}
@@ -321,14 +321,6 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                               {validating === ci.item.id ? "..." : "Validar"}
                             </Button>
                           </>
-                        )}
-                        {ci.tipo === "divergencia" && (
-                          <Input
-                            value={ci.ref}
-                            onChange={(e) => updateItem(index, { ref: e.target.value })}
-                            placeholder="Motivo/observação"
-                            className="flex-1 h-7 text-xs"
-                          />
                         )}
                       </div>
                       {ci.validado && (

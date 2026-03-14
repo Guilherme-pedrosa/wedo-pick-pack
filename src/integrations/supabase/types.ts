@@ -14,6 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
+      box_checkin_items: {
+        Row: {
+          box_id: string
+          checkin_id: string
+          created_at: string
+          divergencia: number
+          id: string
+          justificativa_ref: string | null
+          justificativa_tipo: string | null
+          justificativa_validada: boolean
+          nome_produto: string
+          produto_id: string
+          quantidade_devolvida: number
+          quantidade_esperada: number
+          reposto: boolean
+        }
+        Insert: {
+          box_id: string
+          checkin_id: string
+          created_at?: string
+          divergencia?: number
+          id?: string
+          justificativa_ref?: string | null
+          justificativa_tipo?: string | null
+          justificativa_validada?: boolean
+          nome_produto: string
+          produto_id: string
+          quantidade_devolvida?: number
+          quantidade_esperada?: number
+          reposto?: boolean
+        }
+        Update: {
+          box_id?: string
+          checkin_id?: string
+          created_at?: string
+          divergencia?: number
+          id?: string
+          justificativa_ref?: string | null
+          justificativa_tipo?: string | null
+          justificativa_validada?: boolean
+          nome_produto?: string
+          produto_id?: string
+          quantidade_devolvida?: number
+          quantidade_esperada?: number
+          reposto?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_checkin_items_box_id_fkey"
+            columns: ["box_id"]
+            isOneToOne: false
+            referencedRelation: "boxes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "box_checkin_items_checkin_id_fkey"
+            columns: ["checkin_id"]
+            isOneToOne: false
+            referencedRelation: "box_checkin_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      box_checkin_records: {
+        Row: {
+          box_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          operator_id: string
+          operator_name: string
+          status: string
+        }
+        Insert: {
+          box_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          operator_id: string
+          operator_name?: string
+          status?: string
+        }
+        Update: {
+          box_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          operator_id?: string
+          operator_name?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_checkin_records_box_id_fkey"
+            columns: ["box_id"]
+            isOneToOne: false
+            referencedRelation: "boxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       box_items: {
         Row: {
           added_at: string
@@ -56,6 +160,8 @@ export type Database = {
           id: string
           name: string
           status: string
+          technician_gc_id: string | null
+          technician_name: string | null
           user_id: string
         }
         Insert: {
@@ -64,6 +170,8 @@ export type Database = {
           id?: string
           name: string
           status?: string
+          technician_gc_id?: string | null
+          technician_name?: string | null
           user_id: string
         }
         Update: {
@@ -72,6 +180,8 @@ export type Database = {
           id?: string
           name?: string
           status?: string
+          technician_gc_id?: string | null
+          technician_name?: string | null
           user_id?: string
         }
         Relationships: []

@@ -183,19 +183,30 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
 
         let reason = "";
         let shouldRevert = false;
+        let gcAudit: { situacao?: string; modificadoEm?: string; usuarioNome?: string; obsInterna?: string } = {};
 
         if (!orderData) {
-          reason = `${label} #${numero} não encontrada no GestãoClick (pode ter sido excluída)`;
+          reason = `${label} #${numero} não encontrada no GestãoClick (excluída)`;
           shouldRevert = true;
         } else {
-          const situacao = (orderData.situacao || orderData.status || "").toLowerCase();
+          // Extract audit info from the order
+          gcAudit = {
+            situacao: orderData.nome_situacao || orderData.situacao || "",
+            modificadoEm: orderData.modificado_em || orderData.atualizado_em || "",
+            usuarioNome: orderData.nome_vendedor || orderData.nome_usuario || orderData.nome_tecnico || "",
+            obsInterna: orderData.observacoes_interna || "",
+          };
+
+          const situacao = (gcAudit.situacao || "").toLowerCase();
           const isCancelled =
             situacao.includes("cancelad") ||
             situacao.includes("cancel") ||
             situacao.includes("exclu");
 
           if (isCancelled) {
-            reason = `${label} #${numero} foi CANCELADA no GestãoClick`;
+            const modInfo = gcAudit.modificadoEm ? ` em ${gcAudit.modificadoEm}` : "";
+            const userInfo = gcAudit.usuarioNome ? ` por ${gcAudit.usuarioNome}` : "";
+            reason = `${label} #${numero} CANCELADA${userInfo}${modInfo}`;
             shouldRevert = true;
           }
         }

@@ -23,6 +23,7 @@ interface SaidaRequest {
   justificativa: string;
   toolbox_name: string;
   technician_name: string;
+  technician_gc_id?: string | null;
 }
 
 interface EntradaRequest {
@@ -62,10 +63,8 @@ Deno.serve(async (req: Request) => {
     const body: RequestBody = await req.json();
 
     if (body.tipo === 'entrada') {
-      // ============ DEVOLUÇÃO: Alterar status da venda ============
       return await handleEntrada(body, gcHeaders);
     } else if (body.tipo === 'saida') {
-      // ============ SAÍDA: Criar venda de balcão ============
       return await handleSaida(body, gcHeaders);
     } else {
       return new Response(
@@ -85,7 +84,7 @@ Deno.serve(async (req: Request) => {
 
 // ===================== SAÍDA (Criar Venda) =====================
 async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>) {
-  const { items, justificativa, toolbox_name, technician_name } = body;
+  const { items, justificativa, toolbox_name, technician_name, technician_gc_id } = body;
 
   if (!items?.length || !toolbox_name || !technician_name) {
     return new Response(
@@ -94,11 +93,13 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     );
   }
 
-  // 1. Find client by technician name
-  const clientId = await findClientByName(technician_name, gcHeaders);
-  if (!clientId) {
+  // 1. Find client by technician name with exact match priority
+  const client = await findClientByName(technician_name, gcHeaders);
+  if (!client) {
     return new Response(
-      JSON.stringify({ error: `Cliente "${technician_name}" não encontrado no GestãoClick. Cadastre o técnico como cliente.` }),
+      JSON.stringify({
+        error: `Cliente do técnico "${technician_name}" não encontrado de forma exata no GestãoClick. Garanta que o cliente tenha exatamente o mesmo nome do técnico.`,
+      }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -106,7 +107,6 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   // 2. Get variation IDs for each product (needed for venda payload)
   const productDetails: Array<{ produto_id: string; variacao_id: string | null; error?: string }> = [];
 
-  // Process in batches of 3 to respect rate limits
   for (let i = 0; i < items.length; i += 3) {
     const batch = items.slice(i, i + 3);
     const results = await Promise.all(
@@ -122,7 +122,6 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
           }
           const json = await res.json();
           const product = json.data;
-          // Get first variation ID
           let variacaoId: string | null = null;
           if (product?.variacoes?.length > 0) {
             const firstVar = product.variacoes[0]?.variacao || product.variacoes[0];
@@ -138,7 +137,6 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     if (i + 3 < items.length) await wait(1100);
   }
 
-  // Check for product fetch errors
   const fetchErrors = productDetails.filter(p => p.error);
   if (fetchErrors.length > 0) {
     console.error('Product fetch errors:', fetchErrors);
@@ -146,8 +144,8 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
 
   // 3. Build venda payload
   const now = new Date();
-  const dataStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
-  const codigo = Math.floor(Date.now() / 1000); // unique int code
+  const dataStr = now.toISOString().slice(0, 10);
+  const codigo = Math.floor(Date.now() / 1000);
 
   const produtos = items.map((item) => {
     const detail = productDetails.find(p => p.produto_id === item.produto_id);
@@ -182,15 +180,15 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   }
 
   const vendaPayload: Record<string, any> = {
-    tipo: 'produto',
+    tipo: 'vendas_balcao',
     codigo: String(codigo),
-    cliente_id: clientId,
+    cliente_id: client.id,
     situacao_id: SITUACAO_EMPRESTIMO,
     data: dataStr,
     prazo_entrega: dataStr,
     condicao_pagamento: 'a_vista',
     nome_canal_venda: 'Presencial',
-    observacoes: `[WeDo Maleta] ${justificativa} | Maleta: ${toolbox_name} | Técnico: ${technician_name}`,
+    observacoes: `[WeDo Maleta] ${justificativa} | Maleta: ${toolbox_name} | Técnico: ${technician_name} (${technician_gc_id || 'sem-id'})`,
     pagamentos: [
       {
         pagamento: {
@@ -204,7 +202,10 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     produtos,
   };
 
-  // 4. POST the venda
+  if (technician_gc_id) {
+    vendaPayload.tecnico_id = String(technician_gc_id);
+  }
+
   console.log('Creating venda:', JSON.stringify(vendaPayload).slice(0, 500));
   const vendaRes = await fetch(`${GC_API_URL}/api/vendas`, {
     method: 'POST',
@@ -229,7 +230,13 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   const vendaId = vendaBody.data?.id;
   const vendaCodigo = vendaBody.data?.codigo;
 
-  // 5. Verify classification in ERP (must appear as vendas_balcao)
+  if (!vendaCodigo) {
+    return new Response(
+      JSON.stringify({ success: false, venda_gc_id: vendaId, error: 'Venda criada sem código retornado pelo ERP.' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   const isBalcao = await verifyVendaBalcao(vendaCodigo, gcHeaders);
   if (!isBalcao) {
     return new Response(
@@ -248,7 +255,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
       success: true,
       venda_gc_id: vendaId,
       venda_codigo: vendaCodigo,
-      summary: `Venda balcão #${vendaCodigo} criada com ${items.length} item(ns)`,
+      summary: `Venda balcão #${vendaCodigo} criada para ${client.nome} com ${items.length} item(ns)`,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -265,7 +272,6 @@ async function handleEntrada(body: EntradaRequest, gcHeaders: Record<string, str
     );
   }
 
-  // 1. GET current venda to get required fields
   const getRes = await fetch(`${GC_API_URL}/api/vendas/${venda_gc_id}`, {
     method: 'GET',
     headers: gcHeaders,
@@ -289,7 +295,6 @@ async function handleEntrada(body: EntradaRequest, gcHeaders: Record<string, str
     );
   }
 
-  // 2. PUT with updated situação
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   const obsNote = `\n[WeDo Maleta - DEVOLUÇÃO] Técnico: ${technician_name} | Maleta: ${toolbox_name} | ${now}`;
 
@@ -327,7 +332,15 @@ async function handleEntrada(body: EntradaRequest, gcHeaders: Record<string, str
 }
 
 // ===================== HELPERS =====================
-async function findClientByName(name: string, gcHeaders: Record<string, string>): Promise<string | null> {
+const normalizeText = (value: string) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+async function findClientByName(name: string, gcHeaders: Record<string, string>): Promise<{ id: string; nome: string } | null> {
   try {
     const url = `${GC_API_URL}/api/clientes?nome=${encodeURIComponent(name)}`;
     const res = await fetch(url, { method: 'GET', headers: gcHeaders });
@@ -335,11 +348,34 @@ async function findClientByName(name: string, gcHeaders: Record<string, string>)
       await res.text();
       return null;
     }
+
     const json = await res.json();
-    if (json.data?.length > 0) {
-      // Return the first matching client
-      return json.data[0].id;
+    const raw = Array.isArray(json?.data) ? json.data : [];
+    const clients = raw
+      .map((row: any) => row?.Cliente || row)
+      .filter((row: any) => row?.id && row?.nome)
+      .map((row: any) => ({ id: String(row.id), nome: String(row.nome) }));
+
+    if (clients.length === 0) {
+      return null;
     }
+
+    const target = normalizeText(name);
+    const exact = clients.find((c) => normalizeText(c.nome) === target);
+    if (exact) {
+      return exact;
+    }
+
+    const startsWith = clients.find((c) => normalizeText(c.nome).startsWith(target));
+    if (startsWith) {
+      return startsWith;
+    }
+
+    // Evita vincular técnico errado quando a busca retorna múltiplos nomes parecidos
+    if (clients.length === 1) {
+      return clients[0];
+    }
+
     return null;
   } catch {
     return null;
@@ -364,7 +400,6 @@ async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<
       .map((row: any) => row?.FormasPagamento || row)
       .filter((row: any) => row?.id && row?.nome);
 
-    // Prefer "A Combinar" when available (commonly configured for balcão)
     const aCombinar = methods.find(
       (m: any) => m.disponivel_pdv === '1' && String(m.nome || '').toLowerCase().includes('combinar')
     );
@@ -372,7 +407,6 @@ async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<
       return { id: String(aCombinar.id), nome: String(aCombinar.nome) };
     }
 
-    // Then prefer PDV-enabled methods that don't force financial posting
     const preferred = methods.find((m: any) => m.disponivel_pdv === '1' && m.confirmar_financeiro === '0');
     if (preferred) {
       return { id: String(preferred.id), nome: String(preferred.nome) };

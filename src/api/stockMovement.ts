@@ -26,6 +26,7 @@ export async function executeStockSaida(params: {
   justificativa: string;
   toolboxName: string;
   technicianName: string;
+  technicianGcId?: string;
 }): Promise<StockSaidaResponse> {
   const { data, error } = await supabase.functions.invoke("toolbox-stock-movement", {
     body: {
@@ -34,6 +35,7 @@ export async function executeStockSaida(params: {
       justificativa: params.justificativa,
       toolbox_name: params.toolboxName,
       technician_name: params.technicianName,
+      technician_gc_id: params.technicianGcId ?? null,
     },
   });
 

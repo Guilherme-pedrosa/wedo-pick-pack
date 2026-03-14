@@ -90,6 +90,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
             justificativa: `Empréstimo de ferramenta - Maleta "${toolbox.name}"`,
             toolboxName: toolbox.name,
             technicianName: tech.name,
+            technicianGcId: tech.gc_id,
           });
 
           if (result.success && result.venda_gc_id) {

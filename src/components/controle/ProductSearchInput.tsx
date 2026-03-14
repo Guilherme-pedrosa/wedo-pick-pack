@@ -53,6 +53,7 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
       if (error) throw error;
       const items = (data?.data || []) as ProductResult[];
       setResults(items);
+      setSearched(true);
       setOpen(items.length > 0);
 
       // Auto-select if single exact match (barcode/code)

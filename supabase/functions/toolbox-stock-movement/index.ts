@@ -181,7 +181,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   }
 
   const vendaPayload: Record<string, any> = {
-    tipo: 'vendas_balcao',
+    tipo: 'produto',
     codigo: String(codigo),
     cliente_id: client.id,
     situacao_id: SITUACAO_EMPRESTIMO,
@@ -196,7 +196,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
           data_vencimento: dataStr,
           valor: totalValue,
           forma_pagamento_id: pdvPayment.id,
-          observacao: 'Empréstimo de ferramenta (PDV/Balcão)',
+          observacao: 'Empréstimo de ferramenta',
         },
       },
     ],
@@ -230,28 +230,11 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
 
   const vendaId = vendaBody.data?.id;
   const vendaCodigo = vendaBody.data?.codigo;
+  const nomeCliente = vendaBody.data?.nome_cliente || client.nome;
 
-  if (!vendaCodigo) {
+  if (!vendaId) {
     return new Response(
-      JSON.stringify({ success: false, venda_gc_id: vendaId, error: 'Venda criada sem código retornado pelo ERP.' }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  const isBalcao = await verifyVendaBalcao(vendaCodigo, gcHeaders);
-  if (!isBalcao) {
-    const rollbackError = vendaId
-      ? await rollbackVendaAsDevolucao(vendaId, toolbox_name, technician_name, gcHeaders)
-      : 'Venda criada sem ID para rollback automático.';
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        venda_gc_id: vendaId,
-        venda_codigo: vendaCodigo,
-        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP. Rollback aplicado automaticamente.',
-        rollback_error: rollbackError,
-      }),
+      JSON.stringify({ success: false, error: 'Venda criada sem ID retornado pelo ERP.' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -261,7 +244,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
       success: true,
       venda_gc_id: vendaId,
       venda_codigo: vendaCodigo,
-      summary: `Venda balcão #${vendaCodigo} criada para ${client.nome} com ${items.length} item(ns)`,
+      summary: `Venda #${vendaCodigo} (${nomeCliente}) — ${items.length} item(ns) — Situação: EMPRESTIMO DE FERRAMENTA`,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -435,65 +418,3 @@ async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<
   }
 }
 
-async function rollbackVendaAsDevolucao(
-  vendaGcId: string,
-  toolboxName: string,
-  technicianName: string,
-  gcHeaders: Record<string, string>
-): Promise<string | null> {
-  try {
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    const rollbackObs = `[AUTO-ROLLBACK WeDo] Venda sem classificação balcão. Técnico: ${technicianName} | Maleta: ${toolboxName} | ${now}`;
-
-    const res = await fetch(`${GC_API_URL}/api/vendas/${vendaGcId}`, {
-      method: 'PUT',
-      headers: gcHeaders,
-      body: JSON.stringify({
-        situacao_id: SITUACAO_DEVOLUCAO,
-        observacoes: rollbackObs,
-      }),
-    });
-
-    const raw = await res.text();
-    let parsed: any = null;
-    try {
-      parsed = raw ? JSON.parse(raw) : null;
-    } catch {
-      parsed = null;
-    }
-
-    if (!res.ok || parsed?.status === 'error') {
-      return parsed?.message || parsed?.error || `Falha no rollback automático (${res.status})`;
-    }
-
-    return null;
-  } catch (error) {
-    return error instanceof Error ? error.message : 'Erro desconhecido no rollback automático';
-  }
-}
-
-async function verifyVendaBalcao(vendaCodigo: string, gcHeaders: Record<string, string>): Promise<boolean> {
-  for (let i = 0; i < 3; i += 1) {
-    try {
-      const res = await fetch(`${GC_API_URL}/api/vendas?codigo=${encodeURIComponent(vendaCodigo)}&tipo=vendas_balcao`, {
-        method: 'GET',
-        headers: gcHeaders,
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json?.data) && json.data.length > 0) {
-          return true;
-        }
-      }
-    } catch {
-      // ignore and retry
-    }
-
-    if (i < 2) {
-      await wait(900);
-    }
-  }
-
-  return false;
-}

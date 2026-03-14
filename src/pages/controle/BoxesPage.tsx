@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Package, Clock, UserCheck, RefreshCw, ArrowUpRight, Box, Pause, FileText, AlertTriangle } from "lucide-react";
+import { Plus, Package, Clock, UserCheck, RefreshCw, ArrowUpRight, Box, Pause, FileText, AlertTriangle, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

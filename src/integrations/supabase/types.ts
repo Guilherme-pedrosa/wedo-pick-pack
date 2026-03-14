@@ -361,6 +361,7 @@ export type Database = {
           run_type: string
           started_at: string
           status: string
+          total_count: number
           upsert_count: number
         }
         Insert: {
@@ -372,6 +373,7 @@ export type Database = {
           run_type: string
           started_at?: string
           status?: string
+          total_count?: number
           upsert_count?: number
         }
         Update: {
@@ -383,6 +385,7 @@ export type Database = {
           run_type?: string
           started_at?: string
           status?: string
+          total_count?: number
           upsert_count?: number
         }
         Relationships: []

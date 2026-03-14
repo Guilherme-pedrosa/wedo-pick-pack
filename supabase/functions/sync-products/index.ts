@@ -2,15 +2,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const GC_API_URL = 'https://api.gestaoclick.com';
 const BATCH_SIZE = 3;
 const BATCH_DELAY_MS = 1100;
-
-// --- Helpers ---
 
 function wait(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -45,8 +43,6 @@ function computeFingerprintInput(p: Record<string, unknown>): string {
   ].join('|');
 }
 
-// --- GestãoClick API calls ---
-
 async function gcFetch(
   path: string,
   accessToken: string,
@@ -71,11 +67,11 @@ async function listProductsPage(
   page: number,
   accessToken: string,
   secretToken: string,
-): Promise<{ data: Record<string, unknown>[]; meta: { total_paginas: number } }> {
+): Promise<{ data: Record<string, unknown>[]; meta: { total_paginas: number; total_registros: number } }> {
   const res = await gcFetch(`/api/produtos?pagina=${page}`, accessToken, secretToken);
   return {
     data: (res.data as Record<string, unknown>[]) || [],
-    meta: (res.meta as { total_paginas: number }) || { total_paginas: 1 },
+    meta: (res.meta as { total_paginas: number; total_registros: number }) || { total_paginas: 1, total_registros: 0 },
   };
 }
 
@@ -92,34 +88,47 @@ async function getProductDetail(
   }
 }
 
-// --- Sync logic ---
+// Helper to update progress in sync_runs
+async function updateProgress(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  runId: string,
+  processed: number,
+  total: number,
+) {
+  await supabaseAdmin
+    .from('sync_runs')
+    .update({
+      fetched_count: processed,
+      total_count: total,
+    })
+    .eq('id', runId);
+}
 
 async function syncFull(
   supabaseAdmin: ReturnType<typeof createClient>,
   accessToken: string,
   secretToken: string,
 ) {
-  // Create sync run
   const { data: run } = await supabaseAdmin
     .from('sync_runs')
-    .insert({ run_type: 'full', status: 'running' })
+    .insert({ run_type: 'full', status: 'running', total_count: 0 })
     .select('id')
     .single();
   const runId = run!.id;
 
-  let fetchedCount = 0;
+  let processedCount = 0;
   let upsertCount = 0;
   let errorsCount = 0;
   const notes: string[] = [];
 
   try {
-    // Paginate through all products
+    // First pass: collect all products from listing
     let page = 1;
     let totalPages = 1;
+    let totalRegistros = 0;
     const allProducts: Record<string, unknown>[] = [];
 
     while (page <= totalPages) {
-      // Fetch pages in batches of 3 to respect rate limit
       const pageBatch: number[] = [];
       for (let i = 0; i < BATCH_SIZE && page + i <= totalPages; i++) {
         pageBatch.push(page + i);
@@ -129,23 +138,28 @@ async function syncFull(
         pageBatch.map((p) => listProductsPage(p, accessToken, secretToken).catch((e) => {
           errorsCount++;
           notes.push(`Page ${p} error: ${e.message}`);
-          return { data: [], meta: { total_paginas: totalPages } };
+          return { data: [], meta: { total_paginas: totalPages, total_registros: totalRegistros } };
         })),
       );
 
       for (const r of results) {
         allProducts.push(...r.data);
         if (r.meta.total_paginas > totalPages) totalPages = r.meta.total_paginas;
+        if (r.meta.total_registros > totalRegistros) totalRegistros = r.meta.total_registros;
       }
 
       page += pageBatch.length;
       if (page <= totalPages) await wait(BATCH_DELAY_MS);
     }
 
-    fetchedCount = allProducts.length;
+    const totalProducts = allProducts.length;
 
-    // Process in chunks for upsert
-    for (const product of allProducts) {
+    // Set total in DB so UI can show progress
+    await updateProgress(supabaseAdmin, runId, 0, totalProducts);
+
+    // Process products one by one, updating progress every 10
+    for (let i = 0; i < allProducts.length; i++) {
+      const product = allProducts[i];
       try {
         const fpInput = computeFingerprintInput(product);
         const fp = await sha256(fpInput);
@@ -153,7 +167,6 @@ async function syncFull(
         const hasVariacao = !!(product.variacoes && (product.variacoes as unknown[]).length > 0);
         const isAtivo = product.ativo !== false && product.ativo !== '0' && product.ativo !== 'false';
 
-        // Check existing fingerprint
         const { data: existing } = await supabaseAdmin
           .from('products_index')
           .select('fingerprint')
@@ -161,13 +174,11 @@ async function syncFull(
           .maybeSingle();
 
         if (existing && existing.fingerprint === fp) {
-          // No change, just update last_seen_at
           await supabaseAdmin
             .from('products_index')
             .update({ last_seen_at: new Date().toISOString() })
             .eq('produto_id', produtoId);
         } else {
-          // Upsert
           const codigoInterno = product.codigo_interno ? String(product.codigo_interno).trim() : null;
           const codigoBarra = product.codigo_barra ? String(product.codigo_barra).trim() : null;
 
@@ -196,29 +207,37 @@ async function syncFull(
         errorsCount++;
         notes.push(`Product ${product.id} error: ${(e as Error).message}`);
       }
+
+      processedCount = i + 1;
+
+      // Update progress every 10 items or on last item
+      if (processedCount % 10 === 0 || processedCount === totalProducts) {
+        await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
+      }
     }
 
-    const status = errorsCount === 0 ? 'success' : errorsCount < fetchedCount ? 'partial' : 'failed';
+    const status = errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
 
     await supabaseAdmin
       .from('sync_runs')
       .update({
         finished_at: new Date().toISOString(),
-        fetched_count: fetchedCount,
+        fetched_count: processedCount,
         upsert_count: upsertCount,
         errors_count: errorsCount,
+        total_count: totalProducts,
         notes: notes.length ? notes.join('\n') : null,
         status,
       })
       .eq('id', runId);
 
-    return { runId, fetchedCount, upsertCount, errorsCount, status };
+    return { runId, fetchedCount: processedCount, upsertCount, errorsCount, status, totalCount: totalProducts };
   } catch (e) {
     await supabaseAdmin
       .from('sync_runs')
       .update({
         finished_at: new Date().toISOString(),
-        fetched_count: fetchedCount,
+        fetched_count: processedCount,
         upsert_count: upsertCount,
         errors_count: errorsCount + 1,
         notes: notes.concat((e as Error).message).join('\n'),
@@ -236,23 +255,19 @@ async function syncIncremental(
 ) {
   const { data: run } = await supabaseAdmin
     .from('sync_runs')
-    .insert({ run_type: 'incremental', status: 'running' })
+    .insert({ run_type: 'incremental', status: 'running', total_count: 0 })
     .select('id')
     .single();
   const runId = run!.id;
 
-  let fetchedCount = 0;
+  let processedCount = 0;
   let upsertCount = 0;
   let errorsCount = 0;
   const notes: string[] = [];
 
   try {
-    // Build hot set: unique produto_ids from:
-    // 1. Active box items
-    // 2. Product queries last 24h
     const hotSetIds = new Set<string>();
 
-    // From active boxes
     const { data: activeBoxItems } = await supabaseAdmin
       .from('box_items')
       .select('produto_id, boxes!inner(status)')
@@ -261,7 +276,6 @@ async function syncIncremental(
       for (const item of activeBoxItems) hotSetIds.add(item.produto_id);
     }
 
-    // From product queries last 24h
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data: recentQueries } = await supabaseAdmin
       .from('product_queries')
@@ -274,16 +288,13 @@ async function syncIncremental(
       }
     }
 
-    // From recent separations (items used in checkout today)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    // We can't easily get produto_ids from separations without a join table,
-    // so we'll skip this source for now and rely on boxes + queries
-
     const uniqueIds = [...hotSetIds];
-    notes.push(`Hot set size: ${uniqueIds.length}`);
+    const totalProducts = uniqueIds.length;
+    notes.push(`Hot set size: ${totalProducts}`);
 
-    if (uniqueIds.length === 0) {
+    await updateProgress(supabaseAdmin, runId, 0, totalProducts);
+
+    if (totalProducts === 0) {
       await supabaseAdmin
         .from('sync_runs')
         .update({
@@ -291,14 +302,14 @@ async function syncIncremental(
           fetched_count: 0,
           upsert_count: 0,
           errors_count: 0,
+          total_count: 0,
           notes: 'Empty hot set, nothing to sync',
           status: 'success',
         })
         .eq('id', runId);
-      return { runId, fetchedCount: 0, upsertCount: 0, errorsCount: 0, status: 'success' };
+      return { runId, fetchedCount: 0, upsertCount: 0, errorsCount: 0, status: 'success', totalCount: 0 };
     }
 
-    // Fetch details in batches of 3
     for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
       const batch = uniqueIds.slice(i, i + BATCH_SIZE);
       const results = await Promise.all(
@@ -306,11 +317,11 @@ async function syncIncremental(
       );
 
       for (const product of results) {
+        processedCount++;
         if (!product) {
           errorsCount++;
           continue;
         }
-        fetchedCount++;
 
         try {
           const fpInput = computeFingerprintInput(product);
@@ -361,30 +372,34 @@ async function syncIncremental(
         }
       }
 
+      // Update progress after each batch
+      await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
+
       if (i + BATCH_SIZE < uniqueIds.length) await wait(BATCH_DELAY_MS);
     }
 
-    const status = errorsCount === 0 ? 'success' : errorsCount < fetchedCount ? 'partial' : 'failed';
+    const status = errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
 
     await supabaseAdmin
       .from('sync_runs')
       .update({
         finished_at: new Date().toISOString(),
-        fetched_count: fetchedCount,
+        fetched_count: processedCount,
         upsert_count: upsertCount,
         errors_count: errorsCount,
+        total_count: totalProducts,
         notes: notes.length ? notes.join('\n') : null,
         status,
       })
       .eq('id', runId);
 
-    return { runId, fetchedCount, upsertCount, errorsCount, status };
+    return { runId, fetchedCount: processedCount, upsertCount, errorsCount, status, totalCount: totalProducts };
   } catch (e) {
     await supabaseAdmin
       .from('sync_runs')
       .update({
         finished_at: new Date().toISOString(),
-        fetched_count: fetchedCount,
+        fetched_count: processedCount,
         upsert_count: upsertCount,
         errors_count: errorsCount + 1,
         notes: notes.concat((e as Error).message).join('\n'),
@@ -394,8 +409,6 @@ async function syncIncremental(
     throw e;
   }
 }
-
-// --- Handler ---
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {

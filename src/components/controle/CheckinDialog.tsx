@@ -140,7 +140,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
       // Check if the OS/Venda date is after the box creation date
       const orderData = detailData?.data;
-      const orderDateStr = orderData?.data_entrada || orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
+      const orderDateStr = orderData?.cadastrado_em || orderData?.created_at;
       if (orderDateStr && box) {
         let orderDate: Date;
         const brMatch = String(orderDateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);

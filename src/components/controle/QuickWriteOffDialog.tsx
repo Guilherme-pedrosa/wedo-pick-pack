@@ -182,7 +182,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       }
 
       // Date validation
-      const orderDateStr = orderData?.data_entrada || orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
+      const orderDateStr = orderData?.cadastrado_em || orderData?.created_at;
       if (orderDateStr && box) {
         // Parse date - handle dd/mm/yyyy, dd/mm/yyyy - HH:mm, and ISO formats
         let orderDate: Date;

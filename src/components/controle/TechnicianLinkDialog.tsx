@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { BoxData } from "./BoxDetailDialog";
 import BoxHandoffReceipt from "./BoxHandoffReceipt";
+import { logBoxMovement } from "@/lib/boxMovementLog";
 
 interface Technician {
   id: string;

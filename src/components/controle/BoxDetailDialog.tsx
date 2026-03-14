@@ -71,11 +71,14 @@ export default function BoxDetailDialog({
   box,
   items,
   loadingItems,
+  isAdmin,
   onClose,
   onItemsChanged,
   onLinkTechnician,
   onUnlinkTechnician,
   onCheckin,
+  onDelete,
+  onClone,
 }: Props) {
   const [selectedProduct, setSelectedProduct] = useState<ProductResult | null>(null);
   const [qty, setQty] = useState(1);

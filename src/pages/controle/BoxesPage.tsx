@@ -246,7 +246,64 @@ const BoxesPage = () => {
     }
   };
 
-  const formatDate = (d: string) =>
+  const handleDeleteBox = async (box: BoxData) => {
+    if (box.technician_name) {
+      toast.error("Não é possível excluir uma caixa vinculada a um técnico");
+      return;
+    }
+    if (!confirm(`Tem certeza que deseja excluir a caixa "${box.name}"? Os itens serão removidos, mas o histórico de movimentações será mantido.`)) return;
+    try {
+      // Delete items first, then the box
+      await supabase.from("box_items").delete().eq("box_id", box.id);
+      const { error } = await supabase
+        .from("boxes")
+        .update({ status: "cancelled" })
+        .eq("id", box.id);
+      if (error) throw error;
+      toast.success(`Caixa "${box.name}" excluída`);
+      setSelectedBox(null);
+      loadBoxes();
+    } catch {
+      toast.error("Erro ao excluir caixa");
+    }
+  };
+
+  const handleCloneBox = async (box: BoxData) => {
+    if (!user) return;
+    try {
+      const cloneName = `${box.name} (cópia)`;
+      const { data: newBox, error } = await supabase
+        .from("boxes")
+        .insert({ name: cloneName, user_id: user.id })
+        .select("id")
+        .single();
+      if (error || !newBox) throw error;
+
+      // Clone items
+      const { data: sourceItems } = await supabase
+        .from("box_items")
+        .select("*")
+        .eq("box_id", box.id);
+
+      if (sourceItems?.length) {
+        const clonedItems = sourceItems.map((item) => ({
+          box_id: newBox.id,
+          produto_id: item.produto_id,
+          nome_produto: item.nome_produto,
+          quantidade: item.quantidade,
+          preco_unitario: item.preco_unitario,
+        }));
+        await supabase.from("box_items").insert(clonedItems);
+      }
+
+      toast.success(`Caixa "${cloneName}" criada com ${sourceItems?.length || 0} itens`);
+      setSelectedBox(null);
+      loadBoxes();
+    } catch {
+      toast.error("Erro ao clonar caixa");
+    }
+  };
+
     new Date(d).toLocaleString("pt-BR", {
       day: "2-digit",
       month: "2-digit",

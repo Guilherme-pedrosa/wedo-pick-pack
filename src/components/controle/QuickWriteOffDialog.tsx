@@ -64,6 +64,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   const [validado, setValidado] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [maxAllowedQty, setMaxAllowedQty] = useState(1);
 
   const resetState = () => {
     setMatchedItem(null);
@@ -208,20 +209,41 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         }
       }
 
-      // Product validation
+      // Product validation + quantity check
       const produtos = orderData?.produtos || [];
-      const found = produtos.some(
+      const productInOrder = produtos.find(
         (p: any) =>
           p?.produto?.produto_id === matchedItem.produto_id ||
           String(p?.produto?.produto_id) === matchedItem.produto_id
       );
-      if (!found) {
+      if (!productInOrder) {
         toast.warning(`Produto "${matchedItem.nome_produto}" não encontrado na ${label} #${ref}`);
         return;
       }
 
+      const orderQty = parseFloat(productInOrder.quantidade) || 1;
+
+      // Check how many units of this product were already used with this ref
+      const { data: existingLogs } = await supabase
+        .from("box_movement_logs")
+        .select("quantidade")
+        .eq("action", "baixa")
+        .eq("ref_tipo", tipo)
+        .eq("ref_numero", ref.trim())
+        .eq("produto_id", matchedItem.produto_id);
+
+      const alreadyUsed = (existingLogs || []).reduce((sum, l) => sum + (l.quantidade || 0), 0);
+      const remaining = orderQty - alreadyUsed;
+
+      if (remaining <= 0) {
+        toast.error(`${label} #${ref} já foi totalmente utilizada para baixa deste produto (${orderQty}x já usadas)`);
+        return;
+      }
+
+      setMaxAllowedQty(Math.min(remaining, matchedItem.quantidade));
+      setQty(1);
       setValidado(true);
-      toast.success(`Validado: produto encontrado na ${label} #${ref}`);
+      toast.success(`Validado: ${remaining}x disponível na ${label} #${ref}`);
     } catch (e) {
       toast.error("Erro ao validar referência");
       console.error(e);
@@ -280,7 +302,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   };
 
   if (!box) return null;
-  const maxQty = matchedItem?.quantidade || 1;
+  const maxQty = validado ? maxAllowedQty : (matchedItem?.quantidade || 1);
 
   return (
     <>
@@ -312,20 +334,20 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Filtrar por nome..." />
+                      <CommandInput placeholder="Filtrar por nome ou código..." />
                       <CommandList>
                         <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
                         <CommandGroup>
                           {boxItems.map((item) => (
                             <CommandItem
                               key={item.id}
-                              value={item.nome_produto}
+                              value={`${item.produto_id} ${item.nome_produto}`}
                               onSelect={() => handleItemSelect(item)}
                               className="flex flex-col items-start gap-0.5 py-2"
                             >
                               <span className="text-sm font-medium">{item.nome_produto}</span>
                               <span className="text-xs text-muted-foreground">
-                                Qtd: {item.quantidade}
+                                Cód: {item.produto_id} · Qtd: {item.quantidade}
                                 {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
                               </span>
                             </CommandItem>

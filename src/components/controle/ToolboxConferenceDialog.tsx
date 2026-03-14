@@ -154,9 +154,9 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
           toast.warning(`${missingItems.length} ferramenta(s) ausente(s)!`, { duration: 8000 });
         }
 
-        // Return stock via venda status change
+        // Return stock via stock adjustment reversal
         if (toolbox.venda_gc_id) {
-          setStockProgress("Devolvendo estoque (alterando venda no ERP)...");
+          setStockProgress("Devolvendo estoque (estornando ajuste no ERP)...");
           try {
             const result = await executeStockEntrada({
               vendaGcId: toolbox.venda_gc_id,
@@ -165,21 +165,21 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
             });
 
             if (result.success) {
-              toast.success(result.summary || "Venda alterada para devolução");
+              toast.success(result.summary || "Ajuste de estoque estornado");
               await logToolboxMovement({
                 toolboxId: toolbox.id,
                 toolboxName: toolbox.name,
                 action: "entrada_estoque",
                 technicianName: toolbox.technician_name || undefined,
                 technicianGcId: toolbox.technician_gc_id || undefined,
-                details: result.summary || "Venda alterada para Cancelada - Devolução",
+                details: result.summary || "Estorno de ajuste de estoque no ERP",
               });
             } else {
               toast.error(`Erro ao devolver estoque: ${result.error}`);
             }
           } catch (err) {
             console.error("Stock entrada error:", err);
-            toast.error("Erro ao alterar venda no ERP.");
+            toast.error("Erro ao estornar ajuste de estoque no ERP.");
           }
         }
 

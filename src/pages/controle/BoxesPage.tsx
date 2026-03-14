@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Package, X, CheckCircle2, Clock, UserCheck, RefreshCw } from "lucide-react";
+import { Plus, Package, X, CheckCircle2, Clock, UserCheck, RefreshCw, ArrowUpRight, Box, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -80,7 +80,6 @@ const BoxesPage = () => {
         setSyncProgress({ fetched: data.fetched_count, total: data.total_count });
       }
 
-      // If no running sync found, check latest completed
       if (!data || data.finished_at) {
         if (pollRef.current) clearInterval(pollRef.current);
       }
@@ -207,7 +206,6 @@ const BoxesPage = () => {
   };
 
   const handleOpenCheckin = async (box: BoxData) => {
-    // Load items for check-in
     try {
       const { data, error } = await supabase
         .from("box_items")
@@ -238,7 +236,61 @@ const BoxesPage = () => {
   };
 
   const activeBoxes = boxes.filter((b) => b.status === "active");
+  const inOperationBoxes = activeBoxes.filter((b) => b.technician_name);
+  const standByBoxes = activeBoxes.filter((b) => !b.technician_name);
   const inactiveBoxes = boxes.filter((b) => b.status !== "active");
+
+  const renderBoxRow = (box: BoxData, variant: "operation" | "standby") => {
+    const isOperation = variant === "operation";
+    return (
+      <div
+        key={box.id}
+        className="flex items-center gap-4 px-4 py-3 hover:bg-accent/30 transition-colors cursor-pointer group"
+        onClick={() => loadBoxItems(box)}
+      >
+        <div className={`flex items-center justify-center h-10 w-10 rounded-lg shrink-0 ${
+          isOperation ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning"
+        }`}>
+          <Box className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-foreground text-sm truncate">{box.name}</h3>
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${
+              isOperation
+                ? "bg-primary/10 text-primary border-primary/20"
+                : "bg-warning/10 text-warning border-warning/20"
+            }`}>
+              {isOperation ? "Em campo" : "Aguardando"}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-3 mt-0.5">
+            {box.technician_name && (
+              <span className="flex items-center gap-1 text-xs text-primary font-medium">
+                <UserCheck className="h-3 w-3" />
+                {box.technician_name}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">{box.items_count || 0} itens</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              {formatDate(box.created_at)}
+            </span>
+          </div>
+        </div>
+        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="ghost" size="sm" className="h-8 text-xs"
+            onClick={(e) => { e.stopPropagation(); handleCloseBox(box); }}>
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Fechar
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
+            onClick={(e) => { e.stopPropagation(); handleCancelBox(box); }}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -270,112 +322,78 @@ const BoxesPage = () => {
         </div>
       </div>
 
-      {/* Active Boxes */}
+      {/* Em Operação */}
       <div>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-          Caixas Ativas ({activeBoxes.length})
-        </h3>
+        <div className="flex items-center gap-2 mb-3">
+          <ArrowUpRight className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+            Em Operação ({inOperationBoxes.length})
+          </h3>
+        </div>
         {loading ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-muted rounded-xl animate-pulse" />
+          <div className="space-y-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />
             ))}
           </div>
-        ) : activeBoxes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 bg-card rounded-xl border border-border">
-            <Package className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma caixa ativa</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              Criar primeira caixa
-            </Button>
+        ) : inOperationBoxes.length === 0 ? (
+          <div className="bg-card border border-border rounded-lg p-6 text-center">
+            <p className="text-sm text-muted-foreground">Nenhuma caixa em operação</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Vincule um técnico a uma caixa para colocá-la em operação</p>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {activeBoxes.map((box) => (
-              <div
-                key={box.id}
-                className="bg-card rounded-xl border border-border p-4 hover:border-primary/20 hover:shadow-md transition-all cursor-pointer"
-                onClick={() => loadBoxItems(box)}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <h3 className="font-semibold text-foreground">{box.name}</h3>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(box.created_at)}
-                    </div>
-                  </div>
-                  <Badge variant="outline" className={statusConfig[box.status].color}>
-                    {statusConfig[box.status].label}
-                  </Badge>
-                </div>
-                {box.technician_name && (
-                  <div className="flex items-center gap-1 text-xs text-primary mb-2">
-                    <UserCheck className="h-3 w-3" />
-                    {box.technician_name}
-                  </div>
-                )}
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    {box.items_count || 0} itens
-                  </span>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCloseBox(box);
-                      }}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                      Fechar
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-destructive hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCancelBox(box);
-                      }}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
+            {inOperationBoxes.map((box) => renderBoxRow(box, "operation"))}
           </div>
         )}
       </div>
 
-      {/* Inactive Boxes */}
+      {/* Stand By */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Pause className="h-4 w-4 text-warning" />
+          <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
+            Stand By ({standByBoxes.length})
+          </h3>
+        </div>
+        {!loading && standByBoxes.length === 0 ? (
+          <div className="bg-card border border-border rounded-lg p-6 text-center">
+            <Package className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Nenhuma caixa em stand by</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Criar caixa
+            </Button>
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
+            {standByBoxes.map((box) => renderBoxRow(box, "standby"))}
+          </div>
+        )}
+      </div>
+
+      {/* Histórico */}
       {inactiveBoxes.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
             Histórico ({inactiveBoxes.length})
           </h3>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {inactiveBoxes.slice(0, 6).map((box) => (
+          <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
+            {inactiveBoxes.slice(0, 10).map((box) => (
               <div
                 key={box.id}
-                className="bg-card rounded-xl border border-border p-4 opacity-60 cursor-pointer hover:opacity-80 transition-opacity"
+                className="flex items-center gap-4 px-4 py-2.5 hover:bg-accent/20 transition-colors cursor-pointer opacity-60 hover:opacity-80"
                 onClick={() => loadBoxItems(box)}
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-medium text-foreground text-sm">{box.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {formatDate(box.created_at)}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className={statusConfig[box.status].color}>
-                    {statusConfig[box.status].label}
-                  </Badge>
+                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-muted text-muted-foreground shrink-0">
+                  <Box className="h-4 w-4" />
                 </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-medium text-foreground text-sm truncate">{box.name}</h3>
+                  <span className="text-xs text-muted-foreground">{formatDate(box.created_at)}</span>
+                </div>
+                <Badge variant="outline" className={statusConfig[box.status].color + " text-[10px]"}>
+                  {statusConfig[box.status].label}
+                </Badge>
               </div>
             ))}
           </div>

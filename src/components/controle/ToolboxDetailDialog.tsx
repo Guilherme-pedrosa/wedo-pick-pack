@@ -228,10 +228,10 @@ export default function ToolboxDetailDialog({
 
       toast.success(`${returningItem.nome_produto} devolvido`);
 
-      // Cancel the sale in GestãoClick if there's a linked sale
+      // Estorna ajuste de estoque no ERP quando houver referência vinculada
       if (toolbox.venda_gc_id) {
         try {
-          toast.info("Cancelando venda no GestãoClick...");
+          toast.info("Estornando ajuste de estoque no ERP...");
           const result = await executeStockEntrada({
             vendaGcId: toolbox.venda_gc_id,
             toolboxName: toolbox.name,
@@ -242,13 +242,13 @@ export default function ToolboxDetailDialog({
             await (supabase.from("toolboxes") as any)
               .update({ venda_gc_id: null })
               .eq("id", toolbox.id);
-            toast.success("Venda cancelada no GestãoClick");
+            toast.success("Ajuste de estoque estornado no ERP");
           } else {
-            toast.error(`Erro ao cancelar venda: ${result.error}`);
+            toast.error(`Erro ao estornar ajuste: ${result.error}`);
           }
         } catch (err) {
-          console.error("Error cancelling sale:", err);
-          toast.error("Erro ao cancelar venda no GestãoClick");
+          console.error("Error reverting stock adjustment:", err);
+          toast.error("Erro ao estornar ajuste de estoque no ERP");
         }
       }
 

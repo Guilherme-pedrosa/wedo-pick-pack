@@ -359,7 +359,13 @@ export default function ToolboxDetailDialog({
                       Conferência
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" onClick={() => onUnlinkTechnician(toolbox)}
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    if (items.length > 0) {
+                      onConference(toolbox);
+                    } else {
+                      onUnlinkTechnician(toolbox);
+                    }
+                  }}
                     className="text-xs text-muted-foreground">
                     <UserX className="h-3.5 w-3.5 mr-1" />
                     Desvincular técnico

@@ -39,7 +39,7 @@ const ToolboxesPage = () => {
   // Conference
   const [conferenceToolbox, setConferenceToolbox] = useState<ToolboxData | null>(null);
   const [conferenceItems, setConferenceItems] = useState<ToolboxItemData[]>([]);
-
+  const [conferenceUnlink, setConferenceUnlink] = useState(false);
   // Receipt
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<{
@@ -124,7 +124,34 @@ const ToolboxesPage = () => {
     }
   };
 
+
+  const handleOpenConference = async (toolbox: ToolboxData, unlink = false) => {
+    try {
+      const { data, error } = await (supabase.from("toolbox_items") as any)
+        .select("*")
+        .eq("toolbox_id", toolbox.id)
+        .order("added_at", { ascending: false });
+      if (error) throw error;
+      setConferenceItems(data || []);
+      setConferenceUnlink(unlink);
+      setConferenceToolbox(toolbox);
+      setSelectedToolbox(null);
+    } catch {
+      toast.error("Erro ao carregar itens para conferência");
+    }
+  };
+
   const handleUnlinkTechnician = async (toolbox: ToolboxData) => {
+    // If toolbox has items, require conference first
+    const { data: items } = await (supabase.from("toolbox_items") as any)
+      .select("id")
+      .eq("toolbox_id", toolbox.id)
+      .limit(1);
+    if (items && items.length > 0) {
+      handleOpenConference(toolbox, true);
+      return;
+    }
+    // No items, unlink directly
     try {
       const { error } = await (supabase.from("toolboxes") as any)
         .update({ technician_name: null, technician_gc_id: null })
@@ -135,21 +162,6 @@ const ToolboxesPage = () => {
       setSelectedToolbox(null);
     } catch {
       toast.error("Erro ao desvincular técnico");
-    }
-  };
-
-  const handleOpenConference = async (toolbox: ToolboxData) => {
-    try {
-      const { data, error } = await (supabase.from("toolbox_items") as any)
-        .select("*")
-        .eq("toolbox_id", toolbox.id)
-        .order("added_at", { ascending: false });
-      if (error) throw error;
-      setConferenceItems(data || []);
-      setConferenceToolbox(toolbox);
-      setSelectedToolbox(null);
-    } catch {
-      toast.error("Erro ao carregar itens para conferência");
     }
   };
 
@@ -398,11 +410,13 @@ const ToolboxesPage = () => {
       <ToolboxConferenceDialog
         toolbox={conferenceToolbox}
         items={conferenceItems}
-        onClose={() => setConferenceToolbox(null)}
+        onClose={() => { setConferenceToolbox(null); setConferenceUnlink(false); }}
         onCompleted={() => {
           setConferenceToolbox(null);
+          setConferenceUnlink(false);
           loadToolboxes();
         }}
+        unlinkOnComplete={conferenceUnlink}
       />
 
       {/* Receipt */}

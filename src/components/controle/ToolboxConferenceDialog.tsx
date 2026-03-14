@@ -21,6 +21,7 @@ interface Props {
   items: ToolboxItemData[];
   onClose: () => void;
   onCompleted: () => void;
+  unlinkOnComplete?: boolean;
 }
 
 interface CheckItem {
@@ -31,7 +32,7 @@ interface CheckItem {
   observacao: string;
 }
 
-export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCompleted }: Props) {
+export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCompleted, unlinkOnComplete }: Props) {
   const [checkItems, setCheckItems] = useState<CheckItem[]>(() =>
     items.map((i) => ({
       produto_id: i.produto_id,
@@ -129,6 +130,24 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
         technicianGcId: toolbox.technician_gc_id || undefined,
         details: `Conferência: ${presentCount}/${checkItems.length} presentes, ${missingCount} ausentes`,
       });
+
+      // Unlink technician after conference if requested
+      if (unlinkOnComplete && toolbox.technician_name) {
+        await (supabase.from("toolboxes") as any)
+          .update({ technician_name: null, technician_gc_id: null })
+          .eq("id", toolbox.id);
+
+        await logToolboxMovement({
+          toolboxId: toolbox.id,
+          toolboxName: toolbox.name,
+          action: "devolucao",
+          technicianName: toolbox.technician_name || undefined,
+          technicianGcId: toolbox.technician_gc_id || undefined,
+          details: `Técnico ${toolbox.technician_name} desvinculado após conferência`,
+        });
+
+        toast.success(`Técnico "${toolbox.technician_name}" desvinculado de "${toolbox.name}"`);
+      }
 
       toast.success(`Conferência salva: ${presentCount}/${checkItems.length} presentes`);
       if (missingCount > 0) {

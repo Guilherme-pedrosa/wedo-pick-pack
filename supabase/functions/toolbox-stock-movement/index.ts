@@ -93,16 +93,17 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
     );
   }
 
-  // 1. Find client by technician name with exact match priority
-  const client = await findClientByName(technician_name, gcHeaders);
-  if (!client) {
+  // 1. Find client by technician name (strict exact match)
+  const clientLookup = await findClientByName(technician_name, gcHeaders);
+  if (!clientLookup.client) {
     return new Response(
       JSON.stringify({
-        error: `Cliente do técnico "${technician_name}" não encontrado de forma exata no GestãoClick. Garanta que o cliente tenha exatamente o mesmo nome do técnico.`,
+        error: clientLookup.error || `Cliente do técnico "${technician_name}" não encontrado no GestãoClick.`,
       }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+  const client = clientLookup.client;
 
   // 2. Get variation IDs for each product (needed for venda payload)
   const productDetails: Array<{ produto_id: string; variacao_id: string | null; error?: string }> = [];

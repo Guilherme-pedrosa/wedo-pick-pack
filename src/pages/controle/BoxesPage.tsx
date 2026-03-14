@@ -303,15 +303,26 @@ const BoxesPage = () => {
           </div>
         </div>
         {isOperation && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => { e.stopPropagation(); setWriteOffBox(box); }}
-          >
-            <FileText className="h-3.5 w-3.5 mr-1" />
-            Baixa
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={(e) => { e.stopPropagation(); handleOpenCheckin(box); }}
+            >
+              <LogIn className="h-3.5 w-3.5 mr-1" />
+              Check-in
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => { e.stopPropagation(); setWriteOffBox(box); }}
+            >
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              Baixa
+            </Button>
+          </div>
         )}
       </div>
     );

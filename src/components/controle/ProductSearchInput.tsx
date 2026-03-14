@@ -142,6 +142,13 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
           ))}
         </div>
       )}
+
+      {searched && !loading && results.length === 0 && query.trim() && (
+        <div className="absolute z-50 mt-1 w-full bg-popover border border-border rounded-lg shadow-lg p-4 text-center">
+          <p className="text-sm text-muted-foreground">Nenhum produto encontrado para "<span className="font-medium text-foreground">{query.trim()}</span>"</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Verifique o código ou nome e tente novamente</p>
+        </div>
+      )}
     </div>
   );
 }

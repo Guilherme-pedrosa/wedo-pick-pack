@@ -31,6 +31,7 @@ const BoxesPage = () => {
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ fetched: number; total: number } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [productsCount, setProductsCount] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
 
   // Detail dialog state
@@ -54,14 +55,22 @@ const BoxesPage = () => {
   }, []);
 
   const loadLastSync = async () => {
-    const { data } = await supabase
-      .from("sync_runs")
-      .select("finished_at, status")
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data?.finished_at) {
-      setLastSync(data.finished_at);
+    const [syncResult, countResult] = await Promise.all([
+      supabase
+        .from("sync_runs")
+        .select("finished_at, status")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("products_index")
+        .select("produto_id", { count: "exact", head: true }),
+    ]);
+    if (syncResult.data?.finished_at) {
+      setLastSync(syncResult.data.finished_at);
+    }
+    if (countResult.count !== null) {
+      setProductsCount(countResult.count);
     }
   };
 
@@ -268,9 +277,11 @@ const BoxesPage = () => {
           <p className="text-muted-foreground text-sm">
             Gerencie as caixas — armazéns virtuais de peças
           </p>
-          {lastSync && (
+          {(lastSync || productsCount !== null) && (
             <p className="text-xs text-muted-foreground/60 mt-0.5">
-              Última sync: {new Date(lastSync).toLocaleString("pt-BR")}
+              {lastSync && <>Última sync: {new Date(lastSync).toLocaleString("pt-BR")}</>}
+              {lastSync && productsCount !== null && <> · </>}
+              {productsCount !== null && <>{productsCount.toLocaleString("pt-BR")} produtos no banco</>}
             </p>
           )}
         </div>

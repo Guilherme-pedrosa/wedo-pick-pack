@@ -13,6 +13,7 @@ import BoxesPage from "./pages/controle/BoxesPage";
 import ToolboxesPage from "./pages/controle/ToolboxesPage";
 import TechniciansPage from "./pages/controle/TechniciansPage";
 import HandoffLogsPage from "./pages/controle/HandoffLogsPage";
+import ToolboxLogsPage from "./pages/controle/ToolboxLogsPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import ComprasPage from "./pages/ComprasPage";

@@ -401,7 +401,6 @@ const BoxesPage = () => {
         onClose={() => setTechBox(null)}
         onLinked={() => {
           loadBoxes();
-          setTechBox(null);
         }}
       />
 

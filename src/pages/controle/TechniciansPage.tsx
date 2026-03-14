@@ -285,6 +285,8 @@ const TechniciansPage = () => {
           {technicians.map((tech) => {
             const isExpanded = expandedTech.has(tech.id);
             const hasBoxes = tech.boxes.length > 0;
+            const hasToolboxes = tech.toolboxes.length > 0;
+            const hasContent = hasBoxes || hasToolboxes;
 
             return (
               <div
@@ -292,10 +294,10 @@ const TechniciansPage = () => {
                 className="bg-card rounded-xl border border-border overflow-hidden"
               >
                 <div
-                  className={`flex items-center gap-3 p-4 ${hasBoxes ? "cursor-pointer hover:bg-accent/30 transition-colors" : ""}`}
-                  onClick={() => hasBoxes && toggleExpand(tech.id)}
+                  className={`flex items-center gap-3 p-4 ${hasContent ? "cursor-pointer hover:bg-accent/30 transition-colors" : ""}`}
+                  onClick={() => hasContent && toggleExpand(tech.id)}
                 >
-                  {hasBoxes ? (
+                  {hasContent ? (
                     isExpanded ? (
                       <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                     ) : (
@@ -312,28 +314,49 @@ const TechniciansPage = () => {
                     </p>
                   </div>
 
-                  {hasBoxes ? (
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">
-                          {tech.boxes.length} caixa{tech.boxes.length > 1 ? "s" : ""} · {tech.totalItems} ite{tech.totalItems === 1 ? "m" : "ns"}
-                        </p>
-                        {tech.totalValue > 0 && (
-                          <p className="text-xs font-medium text-foreground">
-                            {formatCurrency(tech.totalValue)}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {hasBoxes && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {tech.boxes.length} caixa{tech.boxes.length > 1 ? "s" : ""} · {tech.totalItems} ite{tech.totalItems === 1 ? "m" : "ns"}
                           </p>
-                        )}
+                          {tech.totalValue > 0 && (
+                            <p className="text-xs font-medium text-foreground">
+                              {formatCurrency(tech.totalValue)}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="default" className="text-xs">
+                          <Package className="h-3 w-3 mr-1" />
+                          Caixa
+                        </Badge>
                       </div>
-                      <Badge variant="default" className="text-xs">
-                        <Package className="h-3 w-3 mr-1" />
-                        Em operação
+                    )}
+                    {hasToolboxes && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {tech.toolboxes.length} maleta{tech.toolboxes.length > 1 ? "s" : ""} · {tech.toolboxTotalItems} ferr.
+                          </p>
+                          {tech.toolboxTotalValue > 0 && (
+                            <p className="text-xs font-medium text-foreground">
+                              {formatCurrency(tech.toolboxTotalValue)}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-xs bg-accent/50">
+                          <Briefcase className="h-3 w-3 mr-1" />
+                          Maleta
+                        </Badge>
+                      </div>
+                    )}
+                    {!hasContent && (
+                      <Badge variant="secondary" className="text-xs">
+                        Sem vínculos
                       </Badge>
-                    </div>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs shrink-0">
-                      Sem caixas
-                    </Badge>
-                  )}
+                    )}
+                  </div>
 
                   <Button
                     variant="ghost"

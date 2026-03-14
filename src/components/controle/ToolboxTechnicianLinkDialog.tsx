@@ -13,6 +13,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
+import { executeStockMovement } from "@/api/stockMovement";
 import type { ToolboxData, ToolboxItemData } from "./ToolboxDetailDialog";
 
 interface Technician {

@@ -182,16 +182,26 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       }
 
       // Date validation
-      // orderData already set above
-      const orderDateStr = orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
+      const orderDateStr = orderData?.data_entrada || orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
       if (orderDateStr && box) {
-        const orderDate = new Date(orderDateStr);
+        // Parse date - handle dd/mm/yyyy, dd/mm/yyyy - HH:mm, and ISO formats
+        let orderDate: Date;
+        const brMatch = String(orderDateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (brMatch) {
+          orderDate = new Date(parseInt(brMatch[3]), parseInt(brMatch[2]) - 1, parseInt(brMatch[1]));
+        } else {
+          orderDate = new Date(orderDateStr);
+        }
+        
         const boxCreatedAt = new Date(box.created_at);
         const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
         const boxDay = new Date(boxCreatedAt.getFullYear(), boxCreatedAt.getMonth(), boxCreatedAt.getDate());
-        if (orderDay < boxDay) {
+        
+        if (isNaN(orderDay.getTime())) {
+          console.warn("Could not parse order date:", orderDateStr);
+        } else if (orderDay < boxDay) {
           toast.error(
-            `${label} #${ref} é anterior à saída da caixa (${boxCreatedAt.toLocaleDateString("pt-BR")}). Não é permitido.`
+            `${label} #${ref} é de ${orderDay.toLocaleDateString("pt-BR")}, anterior à saída da caixa (${boxDay.toLocaleDateString("pt-BR")}). Não é permitido.`
           );
           return;
         }

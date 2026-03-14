@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { BoxData } from "./BoxDetailDialog";
 import BoxHandoffReceipt from "./BoxHandoffReceipt";
+import { logBoxMovement } from "@/lib/boxMovementLog";
 
 interface Technician {
   id: string;
@@ -119,7 +120,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         if (prof) operatorName = prof.name;
       }
 
-      // Log the handoff
+      // Log the handoff (legacy table + unified log)
       await supabase.from("box_handoff_logs").insert({
         box_id: box.id,
         box_name: box.name,
@@ -129,6 +130,16 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         operator_name: operatorName,
         items_count: totalItems,
         total_value: totalValue,
+      });
+
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "saida",
+        quantidade: totalItems,
+        technicianName: tech.name,
+        technicianGcId: tech.gc_id,
+        details: `Caixa entregue ao técnico ${tech.name} com ${totalItems} itens (${totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`,
       });
 
       setReceiptData({

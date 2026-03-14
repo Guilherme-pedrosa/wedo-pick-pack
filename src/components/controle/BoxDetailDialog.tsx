@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import ItemWriteOffDialog from "./ItemWriteOffDialog";
+import { logBoxMovement } from "@/lib/boxMovementLog";
 
 export interface BoxData {
   id: string;
@@ -80,24 +81,37 @@ export default function BoxDetailDialog({
     try {
       const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || "0") || 0;
       const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
-      if (existing) {
-        const { error } = await supabase
-          .from("box_items")
-          .update({ quantidade: existing.quantidade + qty, preco_unitario: preco })
-          .eq("id", existing.id);
-        if (error) throw error;
-        toast.success(`Quantidade atualizada: ${existing.quantidade + qty}`);
-      } else {
-        const { error } = await supabase.from("box_items").insert({
-          box_id: box.id,
-          produto_id: selectedProduct.produto_id,
-          nome_produto: selectedProduct.nome,
+        if (existing) {
+          const { error } = await supabase
+            .from("box_items")
+            .update({ quantidade: existing.quantidade + qty, preco_unitario: preco })
+            .eq("id", existing.id);
+          if (error) throw error;
+          toast.success(`Quantidade atualizada: ${existing.quantidade + qty}`);
+        } else {
+          const { error } = await supabase.from("box_items").insert({
+            box_id: box.id,
+            produto_id: selectedProduct.produto_id,
+            nome_produto: selectedProduct.nome,
+            quantidade: qty,
+            preco_unitario: preco,
+          });
+          if (error) throw error;
+          toast.success(`${selectedProduct.nome} adicionado`);
+        }
+
+        await logBoxMovement({
+          boxId: box.id,
+          boxName: box.name,
+          action: "adicao",
+          produtoId: selectedProduct.produto_id,
+          produtoNome: selectedProduct.nome,
           quantidade: qty,
-          preco_unitario: preco,
+          precoUnitario: preco,
+          technicianName: box.technician_name || undefined,
+          technicianGcId: box.technician_gc_id || undefined,
+          details: `Adicionado ${qty}x "${selectedProduct.nome}"`,
         });
-        if (error) throw error;
-        toast.success(`${selectedProduct.nome} adicionado`);
-      }
       setSelectedProduct(null);
       setQty(1);
       onItemsChanged();
@@ -109,10 +123,25 @@ export default function BoxDetailDialog({
     }
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleRemoveItem = async (itemToRemove: BoxItemData) => {
+    if (!box) return;
     try {
-      const { error } = await supabase.from("box_items").delete().eq("id", itemId);
+      const { error } = await supabase.from("box_items").delete().eq("id", itemToRemove.id);
       if (error) throw error;
+
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "remocao",
+        produtoId: itemToRemove.produto_id,
+        produtoNome: itemToRemove.nome_produto,
+        quantidade: itemToRemove.quantidade,
+        precoUnitario: itemToRemove.preco_unitario,
+        technicianName: box.technician_name || undefined,
+        technicianGcId: box.technician_gc_id || undefined,
+        details: `Removido ${itemToRemove.quantidade}x "${itemToRemove.nome_produto}"`,
+      });
+
       toast.success("Item removido");
       onItemsChanged();
     } catch {
@@ -241,7 +270,7 @@ export default function BoxDetailDialog({
                         </Button>
                         <Button variant="ghost" size="icon"
                           className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => handleRemoveItem(item.id)}>
+                          onClick={() => handleRemoveItem(item)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>

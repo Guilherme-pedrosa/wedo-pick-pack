@@ -31,6 +31,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import type { BoxData, BoxItemData } from "./BoxDetailDialog";
+import { logBoxMovement } from "@/lib/boxMovementLog";
 
 interface CheckinItemState {
   item: BoxItemData;
@@ -261,6 +262,20 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
           technician_gc_id: null,
         })
         .eq("id", box.id);
+
+      const totalDevolvido = checkinItems.reduce((s, ci) => s + ci.devolvido, 0);
+      const totalEsperado = checkinItems.reduce((s, ci) => s + ci.item.quantidade, 0);
+      const totalDivergencia = checkinItems.reduce((s, ci) => s + ci.divergencia, 0);
+
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "entrada",
+        quantidade: totalDevolvido,
+        technicianName: box.technician_name || undefined,
+        technicianGcId: box.technician_gc_id || undefined,
+        details: `Check-in concluído. Esperado: ${totalEsperado}, Devolvido: ${totalDevolvido}, Divergências: ${totalDivergencia}`,
+      });
 
       toast.success("Check-in concluído! Caixa retornou para Stand By.");
       onCompleted();

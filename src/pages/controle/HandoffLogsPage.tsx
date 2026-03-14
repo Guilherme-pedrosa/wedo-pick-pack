@@ -1,35 +1,48 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ClipboardList, ArrowLeft, LogOut, LogIn, RefreshCw } from "lucide-react";
+import {
+  Loader2, ClipboardList, ArrowLeft, LogOut, LogIn,
+  RefreshCw, PackagePlus, PackageMinus, FileText, UserX,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
 
 interface MovementLog {
   id: string;
-  type: "saida" | "entrada";
+  action: string;
   box_name: string;
-  technician_name: string;
-  technician_gc_id: string;
+  produto_id: string | null;
+  produto_nome: string | null;
+  quantidade: number | null;
+  preco_unitario: number | null;
+  ref_tipo: string | null;
+  ref_numero: string | null;
+  technician_name: string | null;
+  technician_gc_id: string | null;
   operator_name: string;
-  items_count: number;
-  total_value: number;
-  status?: string;
-  occurred_at: string;
+  details: string | null;
+  created_at: string;
 }
+
+const ACTION_CONFIG: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
+  saida: { label: "Saída", icon: LogOut, color: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800" },
+  entrada: { label: "Entrada", icon: LogIn, color: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800" },
+  baixa: { label: "Baixa", icon: FileText, color: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800" },
+  adicao: { label: "Adição", icon: PackagePlus, color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800" },
+  remocao: { label: "Remoção", icon: PackageMinus, color: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800" },
+  desvincular: { label: "Desvincular", icon: UserX, color: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-900/30 dark:text-gray-400 dark:border-gray-800" },
+};
+
+type FilterType = "all" | "saida" | "entrada" | "baixa" | "adicao" | "remocao";
 
 export default function HandoffLogsPage() {
   const [logs, setLogs] = useState<MovementLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "saida" | "entrada">("all");
+  const [filter, setFilter] = useState<FilterType>("all");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -38,85 +51,15 @@ export default function HandoffLogsPage() {
 
   const loadLogs = async () => {
     setLoading(true);
-
-    // Fetch exits (handoff logs)
-    const handoffPromise = supabase
-      .from("box_handoff_logs")
+    const { data, error } = await supabase
+      .from("box_movement_logs")
       .select("*")
-      .order("handed_at", { ascending: false })
-      .limit(500);
-
-    // Fetch entries (check-in records with box info)
-    const checkinPromise = supabase
-      .from("box_checkin_records")
-      .select("id, box_id, operator_name, status, created_at, completed_at, notes")
       .order("created_at", { ascending: false })
       .limit(500);
 
-    const [handoffRes, checkinRes] = await Promise.all([handoffPromise, checkinPromise]);
-
-    const movements: MovementLog[] = [];
-
-    // Map handoffs → saida
-    if (handoffRes.data) {
-      for (const h of handoffRes.data) {
-        movements.push({
-          id: h.id,
-          type: "saida",
-          box_name: h.box_name,
-          technician_name: h.technician_name,
-          technician_gc_id: h.technician_gc_id,
-          operator_name: h.operator_name,
-          items_count: h.items_count,
-          total_value: Number(h.total_value) || 0,
-          occurred_at: h.handed_at,
-        });
-      }
+    if (!error && data) {
+      setLogs(data as MovementLog[]);
     }
-
-    // Map check-ins → entrada — need to get box info
-    if (checkinRes.data && checkinRes.data.length > 0) {
-      const boxIds = [...new Set(checkinRes.data.map((c) => c.box_id))];
-      const { data: boxes } = await supabase
-        .from("boxes")
-        .select("id, name, technician_name, technician_gc_id")
-        .in("id", boxIds);
-
-      const boxMap = new Map(boxes?.map((b) => [b.id, b]) || []);
-
-      // Get item counts per checkin
-      const checkinIds = checkinRes.data.map((c) => c.id);
-      const { data: checkinItems } = await supabase
-        .from("box_checkin_items")
-        .select("checkin_id, quantidade_esperada")
-        .in("checkin_id", checkinIds);
-
-      const itemCountMap = new Map<string, number>();
-      checkinItems?.forEach((ci) => {
-        itemCountMap.set(ci.checkin_id, (itemCountMap.get(ci.checkin_id) || 0) + ci.quantidade_esperada);
-      });
-
-      for (const c of checkinRes.data) {
-        const box = boxMap.get(c.box_id);
-        movements.push({
-          id: c.id,
-          type: "entrada",
-          box_name: box?.name || "—",
-          technician_name: box?.technician_name || "—",
-          technician_gc_id: box?.technician_gc_id || "—",
-          operator_name: c.operator_name || "—",
-          items_count: itemCountMap.get(c.id) || 0,
-          total_value: 0,
-          status: c.status,
-          occurred_at: c.completed_at || c.created_at,
-        });
-      }
-    }
-
-    // Sort by date desc
-    movements.sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
-
-    setLogs(movements);
     setLoading(false);
   };
 
@@ -128,7 +71,16 @@ export default function HandoffLogsPage() {
   const formatCurrency = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.type === filter);
+  const filtered = filter === "all" ? logs : logs.filter((l) => l.action === filter);
+
+  const filters: { key: FilterType; label: string }[] = [
+    { key: "all", label: "Todas" },
+    { key: "saida", label: "Saídas" },
+    { key: "entrada", label: "Entradas" },
+    { key: "baixa", label: "Baixas" },
+    { key: "adicao", label: "Adições" },
+    { key: "remocao", label: "Remoções" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -143,7 +95,7 @@ export default function HandoffLogsPage() {
               Movimentações
             </h1>
             <p className="text-sm text-muted-foreground">
-              Histórico completo de entradas e saídas de caixas
+              Histórico completo de todas as ações nas caixas
             </p>
           </div>
         </div>
@@ -158,32 +110,17 @@ export default function HandoffLogsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant={filter === "all" ? "default" : "outline"}
-          onClick={() => setFilter("all")}
-        >
-          Todas
-        </Button>
-        <Button
-          size="sm"
-          variant={filter === "saida" ? "default" : "outline"}
-          onClick={() => setFilter("saida")}
-          className="gap-1.5"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          Saídas
-        </Button>
-        <Button
-          size="sm"
-          variant={filter === "entrada" ? "default" : "outline"}
-          onClick={() => setFilter("entrada")}
-          className="gap-1.5"
-        >
-          <LogIn className="h-3.5 w-3.5" />
-          Entradas
-        </Button>
+      <div className="flex gap-2 flex-wrap">
+        {filters.map((f) => (
+          <Button
+            key={f.key}
+            size="sm"
+            variant={filter === f.key ? "default" : "outline"}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label}
+          </Button>
+        ))}
       </div>
 
       {loading ? (
@@ -195,63 +132,86 @@ export default function HandoffLogsPage() {
           Nenhuma movimentação registrada ainda.
         </div>
       ) : (
-        <div className="rounded-lg border bg-card">
+        <div className="rounded-lg border bg-card overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Data/Hora</TableHead>
                 <TableHead>Caixa</TableHead>
+                <TableHead>Produto</TableHead>
+                <TableHead className="text-center">Qtd</TableHead>
+                <TableHead>Ref.</TableHead>
                 <TableHead>Técnico</TableHead>
-                <TableHead>ID Func.</TableHead>
                 <TableHead>Operador</TableHead>
-                <TableHead className="text-center">Itens</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Detalhes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((log) => (
-                <TableRow key={`${log.type}-${log.id}`}>
-                  <TableCell>
-                    {log.type === "saida" ? (
-                      <Badge variant="destructive" className="gap-1 text-xs whitespace-nowrap">
-                        <LogOut className="h-3 w-3" />
-                        Saída
+              {filtered.map((log) => {
+                const config = ACTION_CONFIG[log.action] || ACTION_CONFIG.saida;
+                const Icon = config.icon;
+                return (
+                  <TableRow key={log.id}>
+                    <TableCell>
+                      <Badge variant="outline" className={`gap-1 text-xs whitespace-nowrap ${config.color}`}>
+                        <Icon className="h-3 w-3" />
+                        {config.label}
                       </Badge>
-                    ) : (
-                      <Badge className="gap-1 text-xs whitespace-nowrap bg-emerald-600 hover:bg-emerald-700">
-                        <LogIn className="h-3 w-3" />
-                        Entrada
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs whitespace-nowrap">
-                    {formatDate(log.occurred_at)}
-                  </TableCell>
-                  <TableCell className="font-medium">{log.box_name}</TableCell>
-                  <TableCell>{log.technician_name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {log.technician_gc_id}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{log.operator_name}</TableCell>
-                  <TableCell className="text-center">{log.items_count}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">
-                    {log.total_value > 0 ? formatCurrency(log.total_value) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    {log.type === "saida" ? (
-                      <Badge variant="outline" className="text-xs">Entregue</Badge>
-                    ) : log.status === "completed" ? (
-                      <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-300">Concluído</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Em andamento</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="text-xs whitespace-nowrap">
+                      {formatDate(log.created_at)}
+                    </TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{log.box_name}</TableCell>
+                    <TableCell>
+                      {log.produto_nome ? (
+                        <div>
+                          <p className="text-sm truncate max-w-[200px]">{log.produto_nome}</p>
+                          {log.produto_id && (
+                            <p className="text-[10px] text-muted-foreground font-mono">{log.produto_id}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {log.quantidade ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      {log.ref_numero ? (
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {log.ref_tipo?.toUpperCase()} #{log.ref_numero}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {log.technician_name ? (
+                        <div>
+                          <p className="text-sm">{log.technician_name}</p>
+                          {log.technician_gc_id && (
+                            <p className="text-[10px] text-muted-foreground font-mono">{log.technician_gc_id}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                      {log.operator_name}
+                    </TableCell>
+                    <TableCell>
+                      {log.details ? (
+                        <p className="text-xs text-muted-foreground max-w-[250px] truncate" title={log.details}>
+                          {log.details}
+                        </p>
+                      ) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

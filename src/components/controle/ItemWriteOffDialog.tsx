@@ -27,6 +27,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { BoxData, BoxItemData } from "./BoxDetailDialog";
+import { logBoxMovement } from "@/lib/boxMovementLog";
 
 interface Props {
   open: boolean;
@@ -191,6 +192,21 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
           .eq("id", item.id);
         if (error) throw error;
       }
+
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "baixa",
+        produtoId: item.produto_id,
+        produtoNome: item.nome_produto,
+        quantidade: qty,
+        precoUnitario: item.preco_unitario,
+        refTipo: tipo,
+        refNumero: ref.trim(),
+        technicianName: box.technician_name || undefined,
+        technicianGcId: box.technician_gc_id || undefined,
+        details: `Baixa de ${qty}x vinculada à ${tipo === "os" ? "OS" : "Venda"} #${ref.trim()}`,
+      });
 
       const label = tipo === "os" ? "OS" : "Venda";
       toast.success(`Baixa de ${qty}x "${item.nome_produto}" vinculada à ${label} #${ref}`);

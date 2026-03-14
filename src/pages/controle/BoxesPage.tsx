@@ -47,6 +47,9 @@ const BoxesPage = () => {
   const [checkinBox, setCheckinBox] = useState<BoxData | null>(null);
   const [checkinItems, setCheckinItems] = useState<BoxItemData[]>([]);
 
+  // Quick write-off dialog
+  const [writeOffBox, setWriteOffBox] = useState<BoxData | null>(null);
+
   useEffect(() => {
     loadBoxes();
     loadLastSync();

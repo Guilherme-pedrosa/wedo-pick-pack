@@ -162,6 +162,13 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
           />
         </div>
 
+        {stockProgress && (
+          <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+            <span className="text-sm text-primary font-medium">{stockProgress}</span>
+          </div>
+        )}
+
         <div className="max-h-60 overflow-y-auto divide-y divide-border">
           {loading ? (
             <div className="py-4 text-center text-sm text-muted-foreground">Carregando...</div>
@@ -172,7 +179,8 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
               <button
                 key={tech.id}
                 onClick={() => handleLink(tech)}
-                className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-accent/30 transition-colors text-left"
+                disabled={linking}
+                className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-accent/30 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <UserCheck className="h-4 w-4 text-primary shrink-0" />
                 <div>
@@ -185,7 +193,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={linking}>Cancelar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

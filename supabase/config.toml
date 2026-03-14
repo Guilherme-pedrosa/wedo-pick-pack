@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.search-products-index]
 verify_jwt = false
+
+[functions.toolbox-stock-movement]
+verify_jwt = false

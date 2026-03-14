@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ToolboxData, ToolboxItemData } from "./ToolboxDetailDialog";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
-import { executeStockMovement } from "@/api/stockMovement";
+
 
 interface Props {
   toolbox: ToolboxData | null;

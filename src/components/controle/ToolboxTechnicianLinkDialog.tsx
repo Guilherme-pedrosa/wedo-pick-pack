@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { UserCheck, Search, Printer, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
+import { UserCheck, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -13,7 +12,6 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
-import { executeStockMovement } from "@/api/stockMovement";
 import type { ToolboxData, ToolboxItemData } from "./ToolboxDetailDialog";
 
 interface Technician {

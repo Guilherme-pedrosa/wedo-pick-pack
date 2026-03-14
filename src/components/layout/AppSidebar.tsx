@@ -60,6 +60,12 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: "Controle e Saída",
+    items: [
+      { title: "Caixas", icon: Boxes, href: "/controle/caixas" },
+    ],
+  },
+  {
     label: "Suprimentos",
     items: [
       { title: "Compras", icon: ShoppingCart, href: "/compras" },

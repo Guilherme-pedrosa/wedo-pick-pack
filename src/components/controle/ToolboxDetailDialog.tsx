@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
+import { executeStockEntrada } from "@/api/stockMovement";
 
 export interface ToolboxData {
   id: string;

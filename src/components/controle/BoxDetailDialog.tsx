@@ -72,6 +72,7 @@ export default function BoxDetailDialog({
   const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
 
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;

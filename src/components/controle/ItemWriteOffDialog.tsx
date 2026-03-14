@@ -45,6 +45,18 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [maxAllowedQty, setMaxAllowedQty] = useState(1);
+  const [codigoInterno, setCodigoInterno] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (item?.produto_id) {
+      supabase
+        .from("products_index")
+        .select("codigo_interno")
+        .eq("produto_id", item.produto_id)
+        .maybeSingle()
+        .then(({ data }) => setCodigoInterno(data?.codigo_interno || null));
+    }
+  }, [item?.produto_id]);
 
   const resetState = () => {
     setTipo("os");

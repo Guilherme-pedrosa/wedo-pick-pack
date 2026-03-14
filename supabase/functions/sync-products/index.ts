@@ -122,7 +122,7 @@ async function syncFull(
   const notes: string[] = [];
 
   try {
-    // First pass: collect all products from listing
+    // First pass: collect all products from listing pages
     let page = 1;
     let totalPages = 1;
     let totalRegistros = 0;
@@ -149,71 +149,68 @@ async function syncFull(
       }
 
       page += pageBatch.length;
+
+      // Update progress during page fetching
+      await updateProgress(supabaseAdmin, runId, allProducts.length, totalRegistros);
+
       if (page <= totalPages) await wait(BATCH_DELAY_MS);
     }
 
     const totalProducts = allProducts.length;
-
-    // Set total in DB so UI can show progress
     await updateProgress(supabaseAdmin, runId, 0, totalProducts);
 
-    // Process products one by one, updating progress every 10
-    for (let i = 0; i < allProducts.length; i++) {
-      const product = allProducts[i];
-      try {
-        const fpInput = computeFingerprintInput(product);
-        const fp = await sha256(fpInput);
-        const produtoId = String(product.id);
-        const hasVariacao = !!(product.variacoes && (product.variacoes as unknown[]).length > 0);
-        const isAtivo = product.ativo !== false && product.ativo !== '0' && product.ativo !== 'false';
+    // Bulk upsert in batches of 100 - skip individual fingerprint checks
+    const UPSERT_BATCH = 100;
+    for (let i = 0; i < allProducts.length; i += UPSERT_BATCH) {
+      const batch = allProducts.slice(i, i + UPSERT_BATCH);
+      const rows = [];
 
-        const { data: existing } = await supabaseAdmin
-          .from('products_index')
-          .select('fingerprint')
-          .eq('produto_id', produtoId)
-          .maybeSingle();
-
-        if (existing && existing.fingerprint === fp) {
-          await supabaseAdmin
-            .from('products_index')
-            .update({ last_seen_at: new Date().toISOString() })
-            .eq('produto_id', produtoId);
-        } else {
+      for (const product of batch) {
+        try {
+          const fpInput = computeFingerprintInput(product);
+          const fp = await sha256(fpInput);
+          const produtoId = String(product.id);
+          const hasVariacao = !!(product.variacoes && (product.variacoes as unknown[]).length > 0);
+          const isAtivo = product.ativo !== false && product.ativo !== '0' && product.ativo !== 'false';
           const codigoInterno = product.codigo_interno ? String(product.codigo_interno).trim() : null;
           const codigoBarra = product.codigo_barra ? String(product.codigo_barra).trim() : null;
 
-          await supabaseAdmin.from('products_index').upsert(
-            {
-              produto_id: produtoId,
-              nome: String(product.nome || ''),
-              codigo_interno: codigoInterno || null,
-              codigo_barra: codigoBarra || null,
-              possui_variacao: hasVariacao,
-              ativo: isAtivo,
-              fingerprint: fp,
-              last_synced_at: new Date().toISOString(),
-              last_seen_at: new Date().toISOString(),
-              payload_min_json: {
-                valor_custo: product.valor_custo,
-                estoque: product.estoque,
-                nome_grupo: product.nome_grupo,
-              },
+          rows.push({
+            produto_id: produtoId,
+            nome: String(product.nome || ''),
+            codigo_interno: codigoInterno || null,
+            codigo_barra: codigoBarra || null,
+            possui_variacao: hasVariacao,
+            ativo: isAtivo,
+            fingerprint: fp,
+            last_synced_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            payload_min_json: {
+              valor_custo: product.valor_custo,
+              estoque: product.estoque,
+              nome_grupo: product.nome_grupo,
             },
-            { onConflict: 'produto_id' },
-          );
-          upsertCount++;
+          });
+        } catch (e) {
+          errorsCount++;
+          notes.push(`Product ${product.id} prep error: ${(e as Error).message}`);
         }
-      } catch (e) {
-        errorsCount++;
-        notes.push(`Product ${product.id} error: ${(e as Error).message}`);
       }
 
-      processedCount = i + 1;
-
-      // Update progress every 10 items or on last item
-      if (processedCount % 10 === 0 || processedCount === totalProducts) {
-        await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
+      if (rows.length > 0) {
+        const { error } = await supabaseAdmin
+          .from('products_index')
+          .upsert(rows, { onConflict: 'produto_id' });
+        if (error) {
+          errorsCount += rows.length;
+          notes.push(`Batch upsert error at ${i}: ${error.message}`);
+        } else {
+          upsertCount += rows.length;
+        }
       }
+
+      processedCount = Math.min(i + UPSERT_BATCH, allProducts.length);
+      await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
     }
 
     const status = errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';

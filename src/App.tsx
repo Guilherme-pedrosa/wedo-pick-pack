@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import BoxesPage from "./pages/controle/BoxesPage";
+import TechniciansPage from "./pages/controle/TechniciansPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import ComprasPage from "./pages/ComprasPage";

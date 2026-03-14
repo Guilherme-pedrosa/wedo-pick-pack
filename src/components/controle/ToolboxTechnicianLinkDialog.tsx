@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { UserCheck, Search, Printer, Loader2, AlertTriangle, CheckCircle } from "lucide-react";
+import { UserCheck, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -13,7 +12,6 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
-import { executeStockMovement } from "@/api/stockMovement";
 import type { ToolboxData, ToolboxItemData } from "./ToolboxDetailDialog";
 
 interface Technician {
@@ -34,7 +32,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [linking, setLinking] = useState(false);
-  const [stockProgress, setStockProgress] = useState<string | null>(null);
+  
 
   useEffect(() => {
     if (!toolbox) return;
@@ -55,14 +53,8 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
   const handleLink = async (tech: Technician) => {
     if (!toolbox) return;
     setLinking(true);
-    setStockProgress(null);
     try {
-      // 1. Get toolbox items for stock movement
-      const { data: items } = await (supabase.from("toolbox_items") as any)
-        .select("*")
-        .eq("toolbox_id", toolbox.id);
-
-      // 2. Link technician
+      // Link technician
       const { error } = await (supabase.from("toolboxes") as any)
         .update({ technician_name: tech.name, technician_gc_id: tech.gc_id })
         .eq("id", toolbox.id);
@@ -77,49 +69,6 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         details: `Maleta vinculada ao técnico ${tech.name}`,
       });
 
-      // 3. Execute stock OUT if there are items
-      if (items && items.length > 0) {
-        setStockProgress(`Baixando estoque de ${items.length} item(ns)...`);
-        try {
-          const result = await executeStockMovement({
-            items: items.map((i: any) => ({
-              produto_id: i.produto_id,
-              nome_produto: i.nome_produto,
-              quantidade: i.quantidade,
-            })),
-            justificativa: `Saída para maleta "${toolbox.name}" - Técnico: ${tech.name}`,
-            toolboxName: toolbox.name,
-            technicianName: tech.name,
-            tipo: "saida",
-          });
-
-          const failedItems = result.results.filter(r => !r.success);
-          if (failedItems.length > 0) {
-            toast.warning(
-              `Estoque baixado parcialmente: ${result.summary}. Verifique os itens com erro.`,
-              { duration: 6000 }
-            );
-            failedItems.forEach(f => {
-              console.error(`Stock OUT failed for ${f.nome_produto}:`, f.error);
-            });
-          } else {
-            toast.success(`Estoque baixado: ${result.summary}`);
-          }
-
-          // Log stock movement
-          await logToolboxMovement({
-            toolboxId: toolbox.id,
-            toolboxName: toolbox.name,
-            action: "saida_estoque",
-            technicianName: tech.name,
-            technicianGcId: tech.gc_id,
-            details: `Baixa de estoque: ${result.summary} (${items.length} itens)`,
-          });
-        } catch (stockErr) {
-          console.error("Stock movement error:", stockErr);
-          toast.error("Erro ao baixar estoque no ERP. A vinculação foi feita, mas o estoque NÃO foi ajustado.");
-        }
-      }
 
       toast.success(`Técnico ${tech.name} vinculado à maleta "${toolbox.name}"`);
       onLinked();
@@ -133,7 +82,6 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
       toast.error("Erro ao vincular técnico");
     } finally {
       setLinking(false);
-      setStockProgress(null);
     }
   };
 
@@ -162,12 +110,8 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
           />
         </div>
 
-        {stockProgress && (
-          <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-            <span className="text-sm text-primary font-medium">{stockProgress}</span>
-          </div>
-        )}
+
+
 
         <div className="max-h-60 overflow-y-auto divide-y divide-border">
           {loading ? (

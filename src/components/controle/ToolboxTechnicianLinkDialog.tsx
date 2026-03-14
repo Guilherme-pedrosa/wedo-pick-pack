@@ -69,49 +69,6 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         details: `Maleta vinculada ao técnico ${tech.name}`,
       });
 
-      // 3. Execute stock OUT if there are items
-      if (items && items.length > 0) {
-        setStockProgress(`Baixando estoque de ${items.length} item(ns)...`);
-        try {
-          const result = await executeStockMovement({
-            items: items.map((i: any) => ({
-              produto_id: i.produto_id,
-              nome_produto: i.nome_produto,
-              quantidade: i.quantidade,
-            })),
-            justificativa: `Saída para maleta "${toolbox.name}" - Técnico: ${tech.name}`,
-            toolboxName: toolbox.name,
-            technicianName: tech.name,
-            tipo: "saida",
-          });
-
-          const failedItems = result.results.filter(r => !r.success);
-          if (failedItems.length > 0) {
-            toast.warning(
-              `Estoque baixado parcialmente: ${result.summary}. Verifique os itens com erro.`,
-              { duration: 6000 }
-            );
-            failedItems.forEach(f => {
-              console.error(`Stock OUT failed for ${f.nome_produto}:`, f.error);
-            });
-          } else {
-            toast.success(`Estoque baixado: ${result.summary}`);
-          }
-
-          // Log stock movement
-          await logToolboxMovement({
-            toolboxId: toolbox.id,
-            toolboxName: toolbox.name,
-            action: "saida_estoque",
-            technicianName: tech.name,
-            technicianGcId: tech.gc_id,
-            details: `Baixa de estoque: ${result.summary} (${items.length} itens)`,
-          });
-        } catch (stockErr) {
-          console.error("Stock movement error:", stockErr);
-          toast.error("Erro ao baixar estoque no ERP. A vinculação foi feita, mas o estoque NÃO foi ajustado.");
-        }
-      }
 
       toast.success(`Técnico ${tech.name} vinculado à maleta "${toolbox.name}"`);
       onLinked();

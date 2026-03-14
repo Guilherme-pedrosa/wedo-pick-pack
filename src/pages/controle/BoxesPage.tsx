@@ -51,9 +51,24 @@ const BoxesPage = () => {
   // Quick write-off dialog
   const [writeOffBox, setWriteOffBox] = useState<BoxData | null>(null);
 
+  // Baixa validation alerts
+  const [baixaAlerts, setBaixaAlerts] = useState<BaixaAlert[]>([]);
+  const [validatingBaixas, setValidatingBaixas] = useState(false);
+
+  const checkBaixas = async () => {
+    setValidatingBaixas(true);
+    try {
+      const alerts = await runBaixaValidationWithAlerts();
+      setBaixaAlerts(alerts);
+    } finally {
+      setValidatingBaixas(false);
+    }
+  };
+
   useEffect(() => {
     loadBoxes();
     loadLastSync();
+    checkBaixas();
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };

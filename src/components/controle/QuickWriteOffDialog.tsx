@@ -64,6 +64,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   const [validado, setValidado] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [maxAllowedQty, setMaxAllowedQty] = useState(1);
 
   const resetState = () => {
     setMatchedItem(null);

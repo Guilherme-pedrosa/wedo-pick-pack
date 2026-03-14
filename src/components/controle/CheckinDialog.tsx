@@ -359,7 +359,9 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                 .map((ci) => {
                   const index = checkinItems.indexOf(ci);
                   return (
-                    <div key={ci.item.id} className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border">
+                    <div key={ci.item.id} className={`flex items-center gap-3 p-3 rounded-lg border ${
+                      !ci.validado ? "bg-destructive/5 border-destructive/30" : "bg-card border-border"
+                    }`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{ci.item.nome_produto}</p>
                         <p className="text-xs text-muted-foreground">

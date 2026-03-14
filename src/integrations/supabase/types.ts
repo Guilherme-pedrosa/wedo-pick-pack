@@ -14,6 +14,131 @@ export type Database = {
   }
   public: {
     Tables: {
+      box_items: {
+        Row: {
+          added_at: string
+          box_id: string
+          id: string
+          nome_produto: string
+          produto_id: string
+          quantidade: number
+        }
+        Insert: {
+          added_at?: string
+          box_id: string
+          id?: string
+          nome_produto: string
+          produto_id: string
+          quantidade?: number
+        }
+        Update: {
+          added_at?: string
+          box_id?: string
+          id?: string
+          nome_produto?: string
+          produto_id?: string
+          quantidade?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_items_box_id_fkey"
+            columns: ["box_id"]
+            isOneToOne: false
+            referencedRelation: "boxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      boxes: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          id: string
+          name: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      product_queries: {
+        Row: {
+          created_at: string
+          id: string
+          query: string
+          resolved_produto_id: string | null
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          query: string
+          resolved_produto_id?: string | null
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          query?: string
+          resolved_produto_id?: string | null
+          source?: string
+        }
+        Relationships: []
+      }
+      products_index: {
+        Row: {
+          ativo: boolean
+          codigo_barra: string | null
+          codigo_interno: string | null
+          fingerprint: string
+          last_seen_at: string
+          last_synced_at: string
+          nome: string
+          payload_min_json: Json | null
+          possui_variacao: boolean
+          produto_id: string
+        }
+        Insert: {
+          ativo?: boolean
+          codigo_barra?: string | null
+          codigo_interno?: string | null
+          fingerprint: string
+          last_seen_at?: string
+          last_synced_at?: string
+          nome: string
+          payload_min_json?: Json | null
+          possui_variacao?: boolean
+          produto_id: string
+        }
+        Update: {
+          ativo?: boolean
+          codigo_barra?: string | null
+          codigo_interno?: string | null
+          fingerprint?: string
+          last_seen_at?: string
+          last_synced_at?: string
+          nome?: string
+          payload_min_json?: Json | null
+          possui_variacao?: boolean
+          produto_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -116,6 +241,42 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_runs: {
+        Row: {
+          errors_count: number
+          fetched_count: number
+          finished_at: string | null
+          id: string
+          notes: string | null
+          run_type: string
+          started_at: string
+          status: string
+          upsert_count: number
+        }
+        Insert: {
+          errors_count?: number
+          fetched_count?: number
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          run_type: string
+          started_at?: string
+          status?: string
+          upsert_count?: number
+        }
+        Update: {
+          errors_count?: number
+          fetched_count?: number
+          finished_at?: string | null
+          id?: string
+          notes?: string | null
+          run_type?: string
+          started_at?: string
+          status?: string
+          upsert_count?: number
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -147,6 +308,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "user"

@@ -310,7 +310,7 @@ const TechniciansPage = () => {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm">{tech.name}</p>
                     <p className="text-xs text-muted-foreground font-mono">
-                      GC: {tech.gc_id}
+                      ID: {tech.gc_id}
                     </p>
                   </div>
 

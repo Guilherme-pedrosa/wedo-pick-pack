@@ -74,11 +74,12 @@ export default function BoxDetailDialog({
     if (!selectedProduct || !box || qty < 1) return;
     setAdding(true);
     try {
+      const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || "0") || 0;
       const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
       if (existing) {
         const { error } = await supabase
           .from("box_items")
-          .update({ quantidade: existing.quantidade + qty })
+          .update({ quantidade: existing.quantidade + qty, preco_unitario: preco })
           .eq("id", existing.id);
         if (error) throw error;
         toast.success(`Quantidade atualizada: ${existing.quantidade + qty}`);
@@ -88,6 +89,7 @@ export default function BoxDetailDialog({
           produto_id: selectedProduct.produto_id,
           nome_produto: selectedProduct.nome,
           quantidade: qty,
+          preco_unitario: preco,
         });
         if (error) throw error;
         toast.success(`${selectedProduct.nome} adicionado`);

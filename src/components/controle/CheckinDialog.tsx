@@ -401,7 +401,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
               <Button variant="outline" onClick={() => setStep("conference")}>
                 Voltar
               </Button>
-              <Button onClick={handleComplete} disabled={saving}>
+              <Button onClick={handleComplete} disabled={saving || (hasDivergencias && !allDivergenciasValidated)}>
                 {saving ? "Salvando..." : "Concluir Check-in"}
               </Button>
             </DialogFooter>

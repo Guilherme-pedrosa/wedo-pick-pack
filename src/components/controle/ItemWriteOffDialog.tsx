@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FileText,
   Search,
@@ -45,6 +45,18 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [maxAllowedQty, setMaxAllowedQty] = useState(1);
+  const [codigoInterno, setCodigoInterno] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (item?.produto_id) {
+      supabase
+        .from("products_index")
+        .select("codigo_interno")
+        .eq("produto_id", item.produto_id)
+        .maybeSingle()
+        .then(({ data }) => setCodigoInterno(data?.codigo_interno || null));
+    }
+  }, [item?.produto_id]);
 
   const resetState = () => {
     setTipo("os");
@@ -261,6 +273,7 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
           <div className="p-3 bg-muted/50 rounded-lg border border-border">
             <p className="text-sm font-medium">{item.nome_produto}</p>
             <p className="text-xs text-muted-foreground">
+              {codigoInterno && <><span className="font-medium">Cód: {codigoInterno}</span> · </>}
               ID: {item.produto_id} · Estoque na caixa: {item.quantidade}
             </p>
           </div>

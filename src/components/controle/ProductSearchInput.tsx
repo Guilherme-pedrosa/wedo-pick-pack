@@ -42,6 +42,7 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
     if (!q.trim()) {
       setResults([]);
       setOpen(false);
+      setSearched(false);
       return;
     }
     setLoading(true);

@@ -7,6 +7,7 @@ import {
   UserCheck,
   UserX,
   ClipboardCheck,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
+import ItemWriteOffDialog from "./ItemWriteOffDialog";
 
 export interface BoxData {
   id: string;
@@ -70,6 +72,7 @@ export default function BoxDetailDialog({
   const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
 
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
@@ -229,11 +232,19 @@ export default function BoxDetailDialog({
                           {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveItem(item.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button variant="ghost" size="icon"
+                          className="h-7 w-7 text-primary hover:text-primary"
+                          title="Baixa por OS/Venda"
+                          onClick={() => setWriteOffItem(item)}>
+                          <FileText className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveItem(item.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -271,6 +282,13 @@ export default function BoxDetailDialog({
         open={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onScan={handleScan}
+      />
+      <ItemWriteOffDialog
+        open={!!writeOffItem}
+        item={writeOffItem}
+        box={box}
+        onClose={() => setWriteOffItem(null)}
+        onCompleted={onItemsChanged}
       />
     </>
   );

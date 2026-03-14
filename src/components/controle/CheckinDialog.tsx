@@ -89,28 +89,57 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
     const ci = checkinItems[index];
     if (!ci.ref || !ci.tipo) return;
 
+    const label = ci.tipo === "os" ? "OS" : "Venda";
     setValidating(ci.item.id);
     try {
-      // Validate OS/Venda exists via GC proxy
-      const path =
+      // Step 1: Search by code to find the internal ID
+      const searchPath =
         ci.tipo === "os"
-          ? `/api/ordens_servicos/${ci.ref}`
-          : `/api/vendas/${ci.ref}`;
+          ? `/api/ordens_servicos?pesquisa=${encodeURIComponent(ci.ref)}`
+          : `/api/vendas?pesquisa=${encodeURIComponent(ci.ref)}`;
 
-      const { data, error } = await supabase.functions.invoke("gc-proxy", {
-        body: { path, method: "GET" },
+      const { data: searchData, error: searchError } = await supabase.functions.invoke("gc-proxy", {
+        body: { path: searchPath, method: "GET" },
       });
 
-      if (error) throw error;
+      if (searchError) throw searchError;
 
-      const proxyMeta = data?._proxy;
-      if (!proxyMeta?.ok) {
-        toast.error(`${ci.tipo === "os" ? "OS" : "Venda"} #${ci.ref} não encontrada`);
+      if (!searchData?._proxy?.ok) {
+        toast.error(`Erro ao buscar ${label} #${ci.ref}`);
+        return;
+      }
+
+      // Find the matching record by code
+      const results: any[] = searchData?.data || [];
+      const match = results.find(
+        (r: any) => String(r.codigo) === String(ci.ref) || String(r.numero) === String(ci.ref)
+      );
+
+      if (!match) {
+        toast.error(`${label} #${ci.ref} não encontrada no GestãoClick`);
+        return;
+      }
+
+      // Step 2: Fetch the full record by internal ID to get products
+      const detailId = match.id || match.ordem_servico_id || match.venda_id;
+      const detailPath =
+        ci.tipo === "os"
+          ? `/api/ordens_servicos/${detailId}`
+          : `/api/vendas/${detailId}`;
+
+      const { data: detailData, error: detailError } = await supabase.functions.invoke("gc-proxy", {
+        body: { path: detailPath, method: "GET" },
+      });
+
+      if (detailError) throw detailError;
+
+      if (!detailData?._proxy?.ok) {
+        toast.error(`Erro ao carregar detalhes da ${label} #${ci.ref}`);
         return;
       }
 
       // Check if product exists in the order
-      const orderData = data?.data;
+      const orderData = detailData?.data;
       const produtos = orderData?.produtos || [];
       const found = produtos.some(
         (p: any) =>
@@ -120,13 +149,13 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
       if (!found) {
         toast.warning(
-          `Produto "${ci.item.nome_produto}" não encontrado na ${ci.tipo === "os" ? "OS" : "Venda"} #${ci.ref}`
+          `Produto "${ci.item.nome_produto}" não encontrado na ${label} #${ci.ref}`
         );
         return;
       }
 
       updateItem(index, { validado: true });
-      toast.success(`Validado: produto encontrado na ${ci.tipo === "os" ? "OS" : "Venda"} #${ci.ref}`);
+      toast.success(`Validado: produto encontrado na ${label} #${ci.ref}`);
     } catch (e) {
       toast.error("Erro ao validar referência");
       console.error(e);

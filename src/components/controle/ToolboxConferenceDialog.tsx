@@ -21,6 +21,7 @@ interface Props {
   items: ToolboxItemData[];
   onClose: () => void;
   onCompleted: () => void;
+  unlinkOnComplete?: boolean;
 }
 
 interface CheckItem {

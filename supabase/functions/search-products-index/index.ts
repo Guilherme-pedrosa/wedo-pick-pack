@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (results.length === 0) {
-      // Partial match on codigo_interno or nome
+      // Partial match on codigo_interno, codigo_barra, produto_id or nome
       const { data } = await supabaseAdmin
         .from('products_index')
         .select('*')

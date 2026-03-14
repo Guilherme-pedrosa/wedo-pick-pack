@@ -45,6 +45,7 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
   );
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [stockProgress, setStockProgress] = useState<string | null>(null);
 
   // Reset when items change
   useState(() => {

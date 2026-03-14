@@ -1,0 +1,1 @@
+ALTER TABLE public.box_items ADD COLUMN IF NOT EXISTS preco_unitario numeric(12,2) DEFAULT 0;

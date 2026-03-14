@@ -32,6 +32,7 @@ export interface BoxData {
   technician_name?: string | null;
   technician_gc_id?: string | null;
   items_count?: number;
+  total_value?: number;
 }
 
 export interface BoxItemData {
@@ -40,6 +41,7 @@ export interface BoxItemData {
   produto_id: string;
   nome_produto: string;
   quantidade: number;
+  preco_unitario: number;
   added_at: string;
 }
 
@@ -73,11 +75,12 @@ export default function BoxDetailDialog({
     if (!selectedProduct || !box || qty < 1) return;
     setAdding(true);
     try {
+      const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || "0") || 0;
       const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
       if (existing) {
         const { error } = await supabase
           .from("box_items")
-          .update({ quantidade: existing.quantidade + qty })
+          .update({ quantidade: existing.quantidade + qty, preco_unitario: preco })
           .eq("id", existing.id);
         if (error) throw error;
         toast.success(`Quantidade atualizada: ${existing.quantidade + qty}`);
@@ -87,6 +90,7 @@ export default function BoxDetailDialog({
           produto_id: selectedProduct.produto_id,
           nome_produto: selectedProduct.nome,
           quantidade: qty,
+          preco_unitario: preco,
         });
         if (error) throw error;
         toast.success(`${selectedProduct.nome} adicionado`);
@@ -130,6 +134,8 @@ export default function BoxDetailDialog({
   };
 
   const totalItems = items.reduce((sum, i) => sum + i.quantidade, 0);
+  const totalValue = items.reduce((sum, i) => sum + i.quantidade * (i.preco_unitario || 0), 0);
+  const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
     <>
@@ -207,6 +213,9 @@ export default function BoxDetailDialog({
                   <span className="text-xs text-muted-foreground">
                     {items.length} produto(s) · {totalItems} unidade(s)
                   </span>
+                  <span className="text-xs font-semibold text-foreground">
+                    {formatCurrency(totalValue)}
+                  </span>
                 </div>
                 <div className="divide-y divide-border">
                   {items.map((item) => (
@@ -217,6 +226,7 @@ export default function BoxDetailDialog({
                         </p>
                         <p className="text-xs text-muted-foreground">
                           ID: {item.produto_id} · Qtd: {item.quantidade}
+                          {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
                       </div>
                       <Button variant="ghost" size="icon"

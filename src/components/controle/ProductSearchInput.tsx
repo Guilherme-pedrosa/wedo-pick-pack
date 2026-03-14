@@ -10,6 +10,7 @@ export interface ProductResult {
   codigo_interno: string | null;
   codigo_barra: string | null;
   ativo: boolean;
+  payload_min_json?: { preco_venda?: string; valor_custo?: string; estoque?: string; nome_grupo?: string } | null;
 }
 
 interface Props {

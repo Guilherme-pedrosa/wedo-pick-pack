@@ -128,10 +128,14 @@ const BoxesPage = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const { data: counts } = await supabase.from("box_items").select("box_id");
+        const { data: itemsData } = await supabase
+          .from("box_items")
+          .select("box_id, quantidade, preco_unitario");
         const countMap = new Map<string, number>();
-        counts?.forEach((c) => {
+        const valueMap = new Map<string, number>();
+        itemsData?.forEach((c: any) => {
           countMap.set(c.box_id, (countMap.get(c.box_id) || 0) + 1);
+          valueMap.set(c.box_id, (valueMap.get(c.box_id) || 0) + (c.quantidade || 0) * (c.preco_unitario || 0));
         });
 
         setBoxes(
@@ -139,6 +143,7 @@ const BoxesPage = () => {
             ...b,
             status: b.status as BoxData["status"],
             items_count: countMap.get(b.id) || 0,
+            total_value: valueMap.get(b.id) || 0,
           }))
         );
       } else {
@@ -227,6 +232,8 @@ const BoxesPage = () => {
   const inOperationBoxes = boxes.filter((b) => b.technician_name);
   const standByBoxes = boxes.filter((b) => !b.technician_name);
 
+  const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
   const renderBoxRow = (box: BoxData, variant: "operation" | "standby") => {
     const isOperation = variant === "operation";
     return (
@@ -259,6 +266,11 @@ const BoxesPage = () => {
               </span>
             )}
             <span className="text-xs text-muted-foreground">{box.items_count || 0} itens</span>
+            {(box.total_value || 0) > 0 && (
+              <span className="text-xs font-semibold text-foreground">
+                {formatCurrency(box.total_value || 0)}
+              </span>
+            )}
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
               {formatDate(box.created_at)}

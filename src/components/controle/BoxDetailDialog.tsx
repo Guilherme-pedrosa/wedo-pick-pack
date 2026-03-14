@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
+import ItemWriteOffDialog from "./ItemWriteOffDialog";
 
 export interface BoxData {
   id: string;

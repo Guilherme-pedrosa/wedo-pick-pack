@@ -219,6 +219,8 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 reason: `Produto "${log.produto_nome}" foi removido da ${label} #${numero}`,
                 reverted: false,
                 revertedTo: "",
+                operatorName: log.operator_name || "",
+                createdAt: log.created_at,
               });
             }
           }

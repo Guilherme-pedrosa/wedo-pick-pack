@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Package, Clock, UserCheck, RefreshCw, ArrowUpRight, Box, Pause } from "lucide-react";
+import { Plus, Package, Clock, UserCheck, RefreshCw, ArrowUpRight, Box, Pause, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import BoxDetailDialog, {
 } from "@/components/controle/BoxDetailDialog";
 import TechnicianLinkDialog from "@/components/controle/TechnicianLinkDialog";
 import CheckinDialog from "@/components/controle/CheckinDialog";
+import QuickWriteOffDialog from "@/components/controle/QuickWriteOffDialog";
 
 const BoxesPage = () => {
   const { user } = useAuth();
@@ -45,6 +46,9 @@ const BoxesPage = () => {
   // Check-in dialog
   const [checkinBox, setCheckinBox] = useState<BoxData | null>(null);
   const [checkinItems, setCheckinItems] = useState<BoxItemData[]>([]);
+
+  // Quick write-off dialog
+  const [writeOffBox, setWriteOffBox] = useState<BoxData | null>(null);
 
   useEffect(() => {
     loadBoxes();
@@ -277,6 +281,17 @@ const BoxesPage = () => {
             </span>
           </div>
         </div>
+        {isOperation && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); setWriteOffBox(box); }}
+          >
+            <FileText className="h-3.5 w-3.5 mr-1" />
+            Baixa
+          </Button>
+        )}
       </div>
     );
   };
@@ -399,6 +414,14 @@ const BoxesPage = () => {
           setCheckinBox(null);
           loadBoxes();
         }}
+      />
+
+      {/* Quick Write-Off Dialog */}
+      <QuickWriteOffDialog
+        open={!!writeOffBox}
+        box={writeOffBox}
+        onClose={() => setWriteOffBox(null)}
+        onCompleted={loadBoxes}
       />
 
       {/* Create Dialog */}

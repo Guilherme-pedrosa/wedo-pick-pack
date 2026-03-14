@@ -416,6 +416,14 @@ const BoxesPage = () => {
         }}
       />
 
+      {/* Quick Write-Off Dialog */}
+      <QuickWriteOffDialog
+        open={!!writeOffBox}
+        box={writeOffBox}
+        onClose={() => setWriteOffBox(null)}
+        onCompleted={loadBoxes}
+      />
+
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-sm">

@@ -94,15 +94,47 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         .eq("box_id", box.id)
         .order("nome_produto");
 
+      const receiptItems = (items || []).map((i) => ({
+        nome_produto: i.nome_produto,
+        quantidade: i.quantidade,
+        preco_unitario: i.preco_unitario,
+      }));
+
+      const totalItems = receiptItems.reduce((s, i) => s + i.quantidade, 0);
+      const totalValue = receiptItems.reduce(
+        (s, i) => s + i.quantidade * (Number(i.preco_unitario) || 0),
+        0
+      );
+
+      // Get current user info for operator attribution
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      let operatorName = currentUser?.email || "";
+      if (currentUser) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("name")
+          .eq("id", currentUser.id)
+          .single();
+        if (prof) operatorName = prof.name;
+      }
+
+      // Log the handoff
+      await supabase.from("box_handoff_logs").insert({
+        box_id: box.id,
+        box_name: box.name,
+        technician_name: tech.name,
+        technician_gc_id: tech.gc_id,
+        operator_id: currentUser!.id,
+        operator_name: operatorName,
+        items_count: totalItems,
+        total_value: totalValue,
+      });
+
       setReceiptData({
         boxName: box.name,
         technicianName: tech.name,
         technicianGcId: tech.gc_id,
-        items: (items || []).map((i) => ({
-          nome_produto: i.nome_produto,
-          quantidade: i.quantidade,
-          preco_unitario: i.preco_unitario,
-        })),
+        items: receiptItems,
         date: new Date().toISOString(),
       });
 

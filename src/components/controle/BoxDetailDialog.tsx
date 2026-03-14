@@ -81,24 +81,37 @@ export default function BoxDetailDialog({
     try {
       const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || "0") || 0;
       const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
-      if (existing) {
-        const { error } = await supabase
-          .from("box_items")
-          .update({ quantidade: existing.quantidade + qty, preco_unitario: preco })
-          .eq("id", existing.id);
-        if (error) throw error;
-        toast.success(`Quantidade atualizada: ${existing.quantidade + qty}`);
-      } else {
-        const { error } = await supabase.from("box_items").insert({
-          box_id: box.id,
-          produto_id: selectedProduct.produto_id,
-          nome_produto: selectedProduct.nome,
+        if (existing) {
+          const { error } = await supabase
+            .from("box_items")
+            .update({ quantidade: existing.quantidade + qty, preco_unitario: preco })
+            .eq("id", existing.id);
+          if (error) throw error;
+          toast.success(`Quantidade atualizada: ${existing.quantidade + qty}`);
+        } else {
+          const { error } = await supabase.from("box_items").insert({
+            box_id: box.id,
+            produto_id: selectedProduct.produto_id,
+            nome_produto: selectedProduct.nome,
+            quantidade: qty,
+            preco_unitario: preco,
+          });
+          if (error) throw error;
+          toast.success(`${selectedProduct.nome} adicionado`);
+        }
+
+        await logBoxMovement({
+          boxId: box.id,
+          boxName: box.name,
+          action: "adicao",
+          produtoId: selectedProduct.produto_id,
+          produtoNome: selectedProduct.nome,
           quantidade: qty,
-          preco_unitario: preco,
+          precoUnitario: preco,
+          technicianName: box.technician_name || undefined,
+          technicianGcId: box.technician_gc_id || undefined,
+          details: `Adicionado ${qty}x "${selectedProduct.nome}"`,
         });
-        if (error) throw error;
-        toast.success(`${selectedProduct.nome} adicionado`);
-      }
       setSelectedProduct(null);
       setQty(1);
       onItemsChanged();

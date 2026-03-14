@@ -55,6 +55,8 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState<string | null>(null);
   const [step, setStep] = useState<"conference" | "review">("conference");
+  const [observacao, setObservacao] = useState("");
+  const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
     if (items.length > 0) {

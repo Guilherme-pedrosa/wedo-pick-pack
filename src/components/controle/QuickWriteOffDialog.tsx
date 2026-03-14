@@ -54,6 +54,7 @@ interface Props {
 
 export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }: Props) {
   const [boxItems, setBoxItems] = useState<BoxItemData[]>([]);
+  const [productCodes, setProductCodes] = useState<Record<string, string>>({});
   const [matchedItem, setMatchedItem] = useState<BoxItemData | null>(null);
   const [comboOpen, setComboOpen] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -85,12 +86,34 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   const loadItems = async () => {
     if (!box) return;
     setLoadingItems(true);
+
     const { data } = await supabase
       .from("box_items")
       .select("*")
       .eq("box_id", box.id)
       .order("nome_produto", { ascending: true });
-    setBoxItems(data || []);
+
+    const items = data || [];
+    setBoxItems(items);
+
+    const produtoIds = [...new Set(items.map((item) => item.produto_id).filter(Boolean))];
+    if (produtoIds.length > 0) {
+      const { data: indexData } = await supabase
+        .from("products_index")
+        .select("produto_id, codigo_interno")
+        .in("produto_id", produtoIds);
+
+      const codesMap: Record<string, string> = {};
+      (indexData || []).forEach((p) => {
+        if (p.codigo_interno) {
+          codesMap[p.produto_id] = p.codigo_interno;
+        }
+      });
+      setProductCodes(codesMap);
+    } else {
+      setProductCodes({});
+    }
+
     setLoadingItems(false);
   };
 
@@ -334,24 +357,27 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
                   </PopoverTrigger>
                   <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
                     <Command>
-                      <CommandInput placeholder="Filtrar por nome ou código..." />
+                      <CommandInput placeholder="Filtrar por nome, código ou ID..." />
                       <CommandList>
                         <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
                         <CommandGroup>
-                          {boxItems.map((item) => (
-                            <CommandItem
-                              key={item.id}
-                              value={`${item.produto_id} ${item.nome_produto}`}
-                              onSelect={() => handleItemSelect(item)}
-                              className="flex flex-col items-start gap-0.5 py-2"
-                            >
-                              <span className="text-sm font-medium">{item.nome_produto}</span>
-                              <span className="text-xs text-muted-foreground">
-                                Cód: {item.produto_id} · Qtd: {item.quantidade}
-                                {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
-                              </span>
-                            </CommandItem>
-                          ))}
+                          {boxItems.map((item) => {
+                            const codigoInterno = productCodes[item.produto_id];
+                            return (
+                              <CommandItem
+                                key={item.id}
+                                value={`${codigoInterno || ""} ${item.produto_id} ${item.nome_produto}`.trim()}
+                                onSelect={() => handleItemSelect(item)}
+                                className="flex flex-col items-start gap-0.5 py-2"
+                              >
+                                <span className="text-sm font-medium">{item.nome_produto}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  Código: {codigoInterno || "—"} · ID: {item.produto_id} · Qtd: {item.quantidade}
+                                  {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
+                                </span>
+                              </CommandItem>
+                            );
+                          })}
                         </CommandGroup>
                       </CommandList>
                     </Command>
@@ -369,7 +395,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
                     <div>
                       <p className="text-sm font-medium">{matchedItem.nome_produto}</p>
                       <p className="text-xs text-muted-foreground">
-                        ID: {matchedItem.produto_id} · Na caixa: {matchedItem.quantidade}
+                        Código: {productCodes[matchedItem.produto_id] || "—"} · ID: {matchedItem.produto_id} · Na caixa: {matchedItem.quantidade}
                       </p>
                     </div>
                     <Button variant="ghost" size="sm" className="text-xs h-7"

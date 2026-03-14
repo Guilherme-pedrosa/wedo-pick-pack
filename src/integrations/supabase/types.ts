@@ -17,21 +17,33 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          default_os_conclusion_status: string
+          default_venda_conclusion_status: string
           gc_usuario_id: string | null
           id: string
           name: string
+          os_status_to_show: string[]
+          venda_status_to_show: string[]
         }
         Insert: {
           created_at?: string
+          default_os_conclusion_status?: string
+          default_venda_conclusion_status?: string
           gc_usuario_id?: string | null
           id: string
           name: string
+          os_status_to_show?: string[]
+          venda_status_to_show?: string[]
         }
         Update: {
           created_at?: string
+          default_os_conclusion_status?: string
+          default_venda_conclusion_status?: string
           gc_usuario_id?: string | null
           id?: string
           name?: string
+          os_status_to_show?: string[]
+          venda_status_to_show?: string[]
         }
         Relationships: []
       }

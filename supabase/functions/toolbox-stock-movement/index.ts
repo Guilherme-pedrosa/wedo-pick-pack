@@ -345,3 +345,64 @@ async function findClientByName(name: string, gcHeaders: Record<string, string>)
     return null;
   }
 }
+
+async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<{ id: string; nome: string } | null> {
+  try {
+    const res = await fetch(`${GC_API_URL}/api/formas_pagamentos`, {
+      method: 'GET',
+      headers: gcHeaders,
+    });
+    if (!res.ok) {
+      await res.text();
+      return null;
+    }
+
+    const json = await res.json();
+    const raw = Array.isArray(json?.data) ? json.data : [];
+
+    const methods = raw
+      .map((row: any) => row?.FormasPagamento || row)
+      .filter((row: any) => row?.id && row?.nome);
+
+    // Prefer PDV-enabled methods that don't force financial posting
+    const preferred = methods.find((m: any) => m.disponivel_pdv === '1' && m.confirmar_financeiro === '0');
+    if (preferred) {
+      return { id: String(preferred.id), nome: String(preferred.nome) };
+    }
+
+    const pdvOnly = methods.find((m: any) => m.disponivel_pdv === '1');
+    if (pdvOnly) {
+      return { id: String(pdvOnly.id), nome: String(pdvOnly.nome) };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyVendaBalcao(vendaCodigo: string, gcHeaders: Record<string, string>): Promise<boolean> {
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const res = await fetch(`${GC_API_URL}/api/vendas?codigo=${encodeURIComponent(vendaCodigo)}&tipo=vendas_balcao`, {
+        method: 'GET',
+        headers: gcHeaders,
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json?.data) && json.data.length > 0) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore and retry
+    }
+
+    if (i < 2) {
+      await wait(900);
+    }
+  }
+
+  return false;
+}

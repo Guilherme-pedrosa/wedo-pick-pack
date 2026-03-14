@@ -167,7 +167,7 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
   });
 
   const vendaPayload: Record<string, any> = {
-    tipo: 'balcao',
+    tipo: 'vendas_balcao',
     codigo: String(codigo),
     cliente_id: clientId,
     situacao_id: SITUACAO_EMPRESTIMO,

@@ -299,7 +299,6 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                           <SelectContent>
                             <SelectItem value="os">OS</SelectItem>
                             <SelectItem value="venda">Venda</SelectItem>
-                            <SelectItem value="divergencia">Divergência</SelectItem>
                           </SelectContent>
                         </Select>
                         {ci.tipo && ci.tipo !== "divergencia" && (

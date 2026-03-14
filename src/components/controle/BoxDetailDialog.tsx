@@ -212,6 +212,11 @@ export default function BoxDetailDialog({
                   <span className="text-xs text-muted-foreground">
                     {items.length} produto(s) · {totalItems} unidade(s)
                   </span>
+                  <span className="text-xs font-semibold text-foreground">
+                    {formatCurrency(totalValue)}
+                  </span>
+                </div>
+                  </span>
                 </div>
                 <div className="divide-y divide-border">
                   {items.map((item) => (

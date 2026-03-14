@@ -54,7 +54,7 @@ interface Props {
 export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }: Props) {
   const [boxItems, setBoxItems] = useState<BoxItemData[]>([]);
   const [matchedItem, setMatchedItem] = useState<BoxItemData | null>(null);
-  const [scannerOpen, setScannerOpen] = useState(false);
+  const [comboOpen, setComboOpen] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
 
   const [tipo, setTipo] = useState<"os" | "venda">("os");
@@ -71,6 +71,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
     setQty(1);
     setValidado(false);
     setBoxItems([]);
+    setComboOpen(false);
   };
 
   const handleClose = () => {
@@ -79,54 +80,30 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   };
 
   // Load box items when dialog opens
-  const handleOpenChange = async (isOpen: boolean) => {
-    if (!isOpen) {
-      handleClose();
-      return;
-    }
-    if (box) {
-      setLoadingItems(true);
-      const { data } = await supabase
-        .from("box_items")
-        .select("*")
-        .eq("box_id", box.id)
-        .order("added_at", { ascending: false });
-      setBoxItems(data || []);
-      setLoadingItems(false);
-    }
+  const loadItems = async () => {
+    if (!box) return;
+    setLoadingItems(true);
+    const { data } = await supabase
+      .from("box_items")
+      .select("*")
+      .eq("box_id", box.id)
+      .order("nome_produto", { ascending: true });
+    setBoxItems(data || []);
+    setLoadingItems(false);
   };
 
-  // When dialog first opens, load items
-  useState(() => {
+  useEffect(() => {
     if (open && box) {
-      handleOpenChange(true);
+      loadItems();
     }
-  });
+  }, [open, box?.id]);
 
-  const handleProductSelect = (product: ProductResult) => {
-    const found = boxItems.find((i) => i.produto_id === product.produto_id);
-    if (!found) {
-      toast.error(`Produto "${product.nome}" não está nesta caixa`);
-      return;
-    }
-    setMatchedItem(found);
+  const handleItemSelect = (item: BoxItemData) => {
+    setMatchedItem(item);
+    setComboOpen(false);
     setQty(1);
     setValidado(false);
     setRef("");
-  };
-
-  const handleScan = (code: string) => {
-    supabase.functions
-      .invoke("search-products-index", {
-        body: { query: code, source: "box_writeoff_scan" },
-      })
-      .then(({ data, error }) => {
-        if (error || !data?.data?.length) {
-          toast.error(`Produto não encontrado: ${code}`);
-          return;
-        }
-        handleProductSelect(data.data[0] as ProductResult);
-      });
   };
 
   const handleValidate = async () => {

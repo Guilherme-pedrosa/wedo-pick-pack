@@ -233,7 +233,32 @@ export default function BoxDetailDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
-              {box?.name}
+              {editingName ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleRename()}
+                    className="h-7 text-sm w-48"
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRename}>
+                    <Check className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingName(false)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <span>{box?.name}</span>
+                  {!isPendenciasBox && (
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setNewName(box?.name || ""); setEditingName(true); }}>
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  )}
+                </>
+              )}
               {box?.technician_name && (
                 <Badge variant="outline" className="ml-2 text-xs bg-primary/10 text-primary border-primary/20">
                   <UserCheck className="h-3 w-3 mr-1" />

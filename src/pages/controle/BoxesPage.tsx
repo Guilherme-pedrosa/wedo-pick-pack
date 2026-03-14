@@ -1,14 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  Plus,
-  Package,
-  X,
-  CheckCircle2,
-  Trash2,
-  Clock,
-  AlertTriangle,
-} from "lucide-react";
+import { Plus, Package, X, CheckCircle2, Clock, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,35 +13,31 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-
-interface Box {
-  id: string;
-  name: string;
-  status: "active" | "closed" | "cancelled";
-  created_at: string;
-  closed_at: string | null;
-  user_id: string;
-  items_count?: number;
-}
-
-interface BoxItem {
-  id: string;
-  box_id: string;
-  produto_id: string;
-  nome_produto: string;
-  quantidade: number;
-  added_at: string;
-}
+import BoxDetailDialog, {
+  type BoxData,
+  type BoxItemData,
+} from "@/components/controle/BoxDetailDialog";
+import TechnicianLinkDialog from "@/components/controle/TechnicianLinkDialog";
+import CheckinDialog from "@/components/controle/CheckinDialog";
 
 const BoxesPage = () => {
   const { user } = useAuth();
-  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [boxes, setBoxes] = useState<BoxData[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newBoxName, setNewBoxName] = useState("");
-  const [selectedBox, setSelectedBox] = useState<Box | null>(null);
-  const [boxItems, setBoxItems] = useState<BoxItem[]>([]);
+
+  // Detail dialog state
+  const [selectedBox, setSelectedBox] = useState<BoxData | null>(null);
+  const [boxItems, setBoxItems] = useState<BoxItemData[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+
+  // Technician link dialog
+  const [techBox, setTechBox] = useState<BoxData | null>(null);
+
+  // Check-in dialog
+  const [checkinBox, setCheckinBox] = useState<BoxData | null>(null);
+  const [checkinItems, setCheckinItems] = useState<BoxItemData[]>([]);
 
   useEffect(() => {
     loadBoxes();
@@ -66,12 +53,8 @@ const BoxesPage = () => {
 
       if (error) throw error;
 
-      // Get item counts
       if (data && data.length > 0) {
-        const { data: counts } = await supabase
-          .from("box_items")
-          .select("box_id");
-
+        const { data: counts } = await supabase.from("box_items").select("box_id");
         const countMap = new Map<string, number>();
         counts?.forEach((c) => {
           countMap.set(c.box_id, (countMap.get(c.box_id) || 0) + 1);
@@ -80,16 +63,15 @@ const BoxesPage = () => {
         setBoxes(
           data.map((b) => ({
             ...b,
-            status: b.status as Box["status"],
+            status: b.status as BoxData["status"],
             items_count: countMap.get(b.id) || 0,
           }))
         );
       } else {
         setBoxes([]);
       }
-    } catch (e) {
+    } catch {
       toast.error("Erro ao carregar caixas");
-      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -98,21 +80,20 @@ const BoxesPage = () => {
   const handleCreate = async () => {
     if (!newBoxName.trim() || !user) return;
     try {
-      const { error } = await supabase.from("boxes").insert({
-        name: newBoxName.trim(),
-        user_id: user.id,
-      });
+      const { error } = await supabase
+        .from("boxes")
+        .insert({ name: newBoxName.trim(), user_id: user.id });
       if (error) throw error;
       toast.success("Caixa criada!");
       setCreateOpen(false);
       setNewBoxName("");
       loadBoxes();
-    } catch (e) {
+    } catch {
       toast.error("Erro ao criar caixa");
     }
   };
 
-  const handleCloseBox = async (box: Box) => {
+  const handleCloseBox = async (box: BoxData) => {
     try {
       const { error } = await supabase
         .from("boxes")
@@ -121,13 +102,13 @@ const BoxesPage = () => {
       if (error) throw error;
       toast.success(`Caixa "${box.name}" fechada`);
       loadBoxes();
-      if (selectedBox?.id === box.id) setSelectedBox(null);
-    } catch (e) {
+      setSelectedBox(null);
+    } catch {
       toast.error("Erro ao fechar caixa");
     }
   };
 
-  const handleCancelBox = async (box: Box) => {
+  const handleCancelBox = async (box: BoxData) => {
     try {
       const { error } = await supabase
         .from("boxes")
@@ -136,13 +117,13 @@ const BoxesPage = () => {
       if (error) throw error;
       toast.success(`Caixa "${box.name}" cancelada`);
       loadBoxes();
-      if (selectedBox?.id === box.id) setSelectedBox(null);
-    } catch (e) {
+      setSelectedBox(null);
+    } catch {
       toast.error("Erro ao cancelar caixa");
     }
   };
 
-  const loadBoxItems = async (box: Box) => {
+  const loadBoxItems = async (box: BoxData) => {
     setSelectedBox(box);
     setLoadingItems(true);
     try {
@@ -153,25 +134,27 @@ const BoxesPage = () => {
         .order("added_at", { ascending: false });
       if (error) throw error;
       setBoxItems(data || []);
-    } catch (e) {
+    } catch {
       toast.error("Erro ao carregar itens");
     } finally {
       setLoadingItems(false);
     }
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleOpenCheckin = async (box: BoxData) => {
+    // Load items for check-in
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("box_items")
-        .delete()
-        .eq("id", itemId);
+        .select("*")
+        .eq("box_id", box.id)
+        .order("added_at", { ascending: false });
       if (error) throw error;
-      setBoxItems((prev) => prev.filter((i) => i.id !== itemId));
-      toast.success("Item removido");
-      loadBoxes();
-    } catch (e) {
-      toast.error("Erro ao remover item");
+      setCheckinItems(data || []);
+      setCheckinBox(box);
+      setSelectedBox(null);
+    } catch {
+      toast.error("Erro ao carregar itens para check-in");
     }
   };
 
@@ -196,11 +179,9 @@ const BoxesPage = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <p className="text-muted-foreground text-sm">
-            Gerencie as caixas de separação e expedição
-          </p>
-        </div>
+        <p className="text-muted-foreground text-sm">
+          Gerencie as caixas de separação e expedição
+        </p>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nova Caixa
@@ -222,12 +203,7 @@ const BoxesPage = () => {
           <div className="flex flex-col items-center justify-center py-12 bg-card rounded-xl border border-border">
             <Package className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="text-sm text-muted-foreground">Nenhuma caixa ativa</p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              onClick={() => setCreateOpen(true)}
-            >
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4 mr-1" />
               Criar primeira caixa
             </Button>
@@ -240,7 +216,7 @@ const BoxesPage = () => {
                 className="bg-card rounded-xl border border-border p-4 hover:border-primary/20 hover:shadow-md transition-all cursor-pointer"
                 onClick={() => loadBoxItems(box)}
               >
-                <div className="flex items-start justify-between mb-3">
+                <div className="flex items-start justify-between mb-2">
                   <div>
                     <h3 className="font-semibold text-foreground">{box.name}</h3>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
@@ -248,13 +224,16 @@ const BoxesPage = () => {
                       {formatDate(box.created_at)}
                     </div>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={statusConfig[box.status].color}
-                  >
+                  <Badge variant="outline" className={statusConfig[box.status].color}>
                     {statusConfig[box.status].label}
                   </Badge>
                 </div>
+                {box.technician_name && (
+                  <div className="flex items-center gap-1 text-xs text-primary mb-2">
+                    <UserCheck className="h-3 w-3" />
+                    {box.technician_name}
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
                     {box.items_count || 0} itens
@@ -311,10 +290,7 @@ const BoxesPage = () => {
                       {formatDate(box.created_at)}
                     </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={statusConfig[box.status].color}
-                  >
+                  <Badge variant="outline" className={statusConfig[box.status].color}>
                     {statusConfig[box.status].label}
                   </Badge>
                 </div>
@@ -324,54 +300,45 @@ const BoxesPage = () => {
         </div>
       )}
 
-      {/* Box Items Dialog */}
-      <Dialog open={!!selectedBox} onOpenChange={() => setSelectedBox(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              {selectedBox?.name}
-            </DialogTitle>
-          </DialogHeader>
-          {loadingItems ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-10 bg-muted rounded animate-pulse" />
-              ))}
-            </div>
-          ) : boxItems.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground">
-              <Package className="h-8 w-8 mx-auto mb-2" />
-              <p className="text-sm">Nenhum item nesta caixa</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
-              {boxItems.map((item) => (
-                <div key={item.id} className="flex items-center gap-3 py-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {item.nome_produto}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      ID: {item.produto_id} · Qtd: {item.quantidade}
-                    </p>
-                  </div>
-                  {selectedBox?.status === "active" && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive"
-                      onClick={() => handleRemoveItem(item.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Box Detail Dialog */}
+      <BoxDetailDialog
+        box={selectedBox}
+        items={boxItems}
+        loadingItems={loadingItems}
+        onClose={() => setSelectedBox(null)}
+        onItemsChanged={() => {
+          if (selectedBox) loadBoxItems(selectedBox);
+          loadBoxes();
+        }}
+        onCloseBox={handleCloseBox}
+        onCancelBox={handleCancelBox}
+        onLinkTechnician={(box) => {
+          setTechBox(box);
+          setSelectedBox(null);
+        }}
+        onCheckin={handleOpenCheckin}
+      />
+
+      {/* Technician Link Dialog */}
+      <TechnicianLinkDialog
+        box={techBox}
+        onClose={() => setTechBox(null)}
+        onLinked={() => {
+          loadBoxes();
+          setTechBox(null);
+        }}
+      />
+
+      {/* Check-in Dialog */}
+      <CheckinDialog
+        box={checkinBox}
+        items={checkinItems}
+        onClose={() => setCheckinBox(null)}
+        onCompleted={() => {
+          setCheckinBox(null);
+          loadBoxes();
+        }}
+      />
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

@@ -75,6 +75,37 @@ export default function BoxDetailDialog({
   const [adding, setAdding] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
+  const [reversalLogs, setReversalLogs] = useState<Record<string, { reason: string; date: string; operator: string }>>({});
+
+  const isPendenciasBox = box?.name?.includes("Pendências");
+
+  useEffect(() => {
+    if (!box || !isPendenciasBox) {
+      setReversalLogs({});
+      return;
+    }
+    // Fetch reversal logs for items in this box
+    supabase
+      .from("box_movement_logs")
+      .select("*")
+      .eq("box_id", box.id)
+      .eq("action", "adicao")
+      .like("details", "Estorno automático:%")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        const map: Record<string, { reason: string; date: string; operator: string }> = {};
+        for (const log of data || []) {
+          if (log.produto_id && !map[log.produto_id]) {
+            map[log.produto_id] = {
+              reason: log.details?.replace("Estorno automático: ", "").split(" | ref:")[0] || "Estorno automático",
+              date: log.created_at,
+              operator: log.operator_name || "",
+            };
+          }
+        }
+        setReversalLogs(map);
+      });
+  }, [box?.id, isPendenciasBox]);
 
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;

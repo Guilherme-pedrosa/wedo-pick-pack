@@ -36,6 +36,7 @@ export interface ToolboxData {
   user_id: string;
   technician_name?: string | null;
   technician_gc_id?: string | null;
+  venda_gc_id?: string | null;
   items_count?: number;
   total_value?: number;
 }

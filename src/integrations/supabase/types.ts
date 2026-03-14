@@ -743,6 +743,7 @@ export type Database = {
           technician_gc_id: string | null
           technician_name: string | null
           user_id: string
+          venda_gc_id: string | null
         }
         Insert: {
           closed_at?: string | null
@@ -753,6 +754,7 @@ export type Database = {
           technician_gc_id?: string | null
           technician_name?: string | null
           user_id: string
+          venda_gc_id?: string | null
         }
         Update: {
           closed_at?: string | null
@@ -763,6 +765,7 @@ export type Database = {
           technician_gc_id?: string | null
           technician_name?: string | null
           user_id?: string
+          venda_gc_id?: string | null
         }
         Relationships: []
       }

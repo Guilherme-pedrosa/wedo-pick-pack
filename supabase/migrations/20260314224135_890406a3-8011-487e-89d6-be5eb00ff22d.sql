@@ -1,0 +1,1 @@
+ALTER TABLE public.toolboxes ADD COLUMN venda_gc_id text DEFAULT NULL;

@@ -131,7 +131,7 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
       }
 
       // Date validation
-      const orderDateStr = orderData?.data_entrada || orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
+      const orderDateStr = orderData?.cadastrado_em || orderData?.created_at;
       if (orderDateStr && box) {
         let orderDate: Date;
         const brMatch = String(orderDateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);

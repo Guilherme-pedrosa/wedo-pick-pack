@@ -196,10 +196,10 @@ export default function ToolboxHandoffReceipt({
                       {item.quantidade}
                     </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px", textAlign: "right" }}>
-                      {item.preco_unitario ? formatCurrency(item.preco_unitario) : "—"}
+                      {formatCurrency(item.preco_unitario || 0)}
                     </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px", textAlign: "right" }}>
-                      {item.preco_unitario ? formatCurrency(item.quantidade * item.preco_unitario) : "—"}
+                      {formatCurrency(item.quantidade * (item.preco_unitario || 0))}
                     </td>
                   </tr>
                 ))}
@@ -208,7 +208,7 @@ export default function ToolboxHandoffReceipt({
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "24px", padding: "8px 0", borderTop: "2px solid #333", marginBottom: "20px", fontSize: "12px", fontWeight: 700 }}>
               <span>Total de itens: {totalItems}</span>
-              {totalValue > 0 && <span>Valor total: {formatCurrency(totalValue)}</span>}
+              {<span>Valor total: {formatCurrency(totalValue)}</span>}
             </div>
 
             <div style={{ border: "1px solid #ccc", borderRadius: "4px", padding: "14px", marginBottom: "16px" }}>

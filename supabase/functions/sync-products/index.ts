@@ -187,7 +187,7 @@ async function syncFull(
             last_seen_at: new Date().toISOString(),
             payload_min_json: {
               valor_custo: product.valor_custo,
-              preco_venda: product.preco,
+              preco_venda: product.valor_venda || product.preco,
               estoque: product.estoque,
               nome_grupo: product.nome_grupo,
             },
@@ -356,7 +356,7 @@ async function syncIncremental(
                 last_seen_at: new Date().toISOString(),
                 payload_min_json: {
                   valor_custo: product.valor_custo,
-                  preco_venda: product.preco,
+                  preco_venda: product.valor_venda || product.preco,
                   estoque: product.estoque,
                   nome_grupo: product.nome_grupo,
                 },

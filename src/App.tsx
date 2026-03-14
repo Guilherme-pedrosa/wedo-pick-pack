@@ -13,6 +13,7 @@ import BoxesPage from "./pages/controle/BoxesPage";
 import ToolboxesPage from "./pages/controle/ToolboxesPage";
 import TechniciansPage from "./pages/controle/TechniciansPage";
 import HandoffLogsPage from "./pages/controle/HandoffLogsPage";
+import ToolboxLogsPage from "./pages/controle/ToolboxLogsPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import ComprasPage from "./pages/ComprasPage";
@@ -99,6 +100,7 @@ function AuthenticatedApp() {
         <Route path="/controle/maletas" element={<ToolboxesPage />} />
         <Route path="/controle/tecnicos" element={<TechniciansPage />} />
         <Route path="/controle/logs" element={<HandoffLogsPage />} />
+        <Route path="/controle/logs-maletas" element={<ToolboxLogsPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route

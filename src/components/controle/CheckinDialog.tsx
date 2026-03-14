@@ -5,10 +5,13 @@ import {
   CheckCircle2,
   Search,
   RotateCcw,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -52,6 +55,8 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState<string | null>(null);
   const [step, setStep] = useState<"conference" | "review">("conference");
+  const [observacao, setObservacao] = useState("");
+  const [accepted, setAccepted] = useState(false);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -200,6 +205,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
           operator_name: profile?.name || user.email || "",
           status: "completed",
           completed_at: new Date().toISOString(),
+          notes: observacao.trim() || null,
         })
         .select("id")
         .single();
@@ -448,12 +454,37 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                   <p className="text-sm">Tudo confere! Nenhuma divergência encontrada.</p>
                 </div>
               )}
+
+              {/* Observações */}
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs">Observações (opcional)</Label>
+                <Textarea
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  placeholder="Alguma observação sobre o estado dos itens, condições da caixa, etc..."
+                  className="text-sm min-h-[60px] resize-none"
+                />
+              </div>
+
+              {/* Termo de responsabilidade */}
+              <div className="flex items-start gap-3 p-3 rounded-lg border border-warning/30 bg-warning/5">
+                <Checkbox
+                  id="aceite-responsabilidade"
+                  checked={accepted}
+                  onCheckedChange={(v) => setAccepted(v === true)}
+                  className="mt-0.5"
+                />
+                <label htmlFor="aceite-responsabilidade" className="text-xs text-foreground leading-relaxed cursor-pointer">
+                  <ShieldAlert className="h-3.5 w-3.5 inline mr-1 text-warning" />
+                  <strong>Declaro que conferi todos os itens desta caixa.</strong> Estou ciente de que, a partir deste momento, a responsabilidade pelas peças devolvidas ao estoque é minha, e que qualquer peça faltante que não tenha sido devidamente conferida e justificada será cobrada de mim.
+                </label>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setStep("conference")}>
                 Voltar
               </Button>
-              <Button onClick={handleComplete} disabled={saving || (hasDivergencias && !allDivergenciasValidated)}>
+              <Button onClick={handleComplete} disabled={saving || !accepted || (hasDivergencias && !allDivergenciasValidated)}>
                 {saving ? "Salvando..." : "Concluir Check-in"}
               </Button>
             </DialogFooter>

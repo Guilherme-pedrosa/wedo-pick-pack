@@ -116,7 +116,7 @@ export default function BoxHandoffReceipt({
         </style>
       </head>
       <body>
-        ${content.innerHTML}
+        ${tempDiv.innerHTML}
       </body>
       </html>
     `);

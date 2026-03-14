@@ -395,7 +395,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
                     <div>
                       <p className="text-sm font-medium">{matchedItem.nome_produto}</p>
                       <p className="text-xs text-muted-foreground">
-                        ID: {matchedItem.produto_id} · Na caixa: {matchedItem.quantidade}
+                        Código: {productCodes[matchedItem.produto_id] || "—"} · ID: {matchedItem.produto_id} · Na caixa: {matchedItem.quantidade}
                       </p>
                     </div>
                     <Button variant="ghost" size="sm" className="text-xs h-7"

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Package, X, CheckCircle2, Clock, UserCheck, RefreshCw, ArrowUpRight, Box, Pause } from "lucide-react";
+import { Plus, Package, Clock, UserCheck, RefreshCw, ArrowUpRight, Box, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -113,6 +113,7 @@ const BoxesPage = () => {
       const { data, error } = await supabase
         .from("boxes")
         .select("*")
+        .eq("status", "active")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -157,33 +158,18 @@ const BoxesPage = () => {
     }
   };
 
-  const handleCloseBox = async (box: BoxData) => {
+  const handleUnlinkTechnician = async (box: BoxData) => {
     try {
       const { error } = await supabase
         .from("boxes")
-        .update({ status: "closed", closed_at: new Date().toISOString() })
+        .update({ technician_name: null, technician_gc_id: null })
         .eq("id", box.id);
       if (error) throw error;
-      toast.success(`Caixa "${box.name}" fechada`);
+      toast.success(`Técnico desvinculado de "${box.name}"`);
       loadBoxes();
       setSelectedBox(null);
     } catch {
-      toast.error("Erro ao fechar caixa");
-    }
-  };
-
-  const handleCancelBox = async (box: BoxData) => {
-    try {
-      const { error } = await supabase
-        .from("boxes")
-        .update({ status: "cancelled" })
-        .eq("id", box.id);
-      if (error) throw error;
-      toast.success(`Caixa "${box.name}" cancelada`);
-      loadBoxes();
-      setSelectedBox(null);
-    } catch {
-      toast.error("Erro ao cancelar caixa");
+      toast.error("Erro ao desvincular técnico");
     }
   };
 
@@ -229,16 +215,8 @@ const BoxesPage = () => {
       minute: "2-digit",
     });
 
-  const statusConfig = {
-    active: { label: "Ativa", color: "bg-success/10 text-success border-success/20" },
-    closed: { label: "Fechada", color: "bg-muted text-muted-foreground border-border" },
-    cancelled: { label: "Cancelada", color: "bg-destructive/10 text-destructive border-destructive/20" },
-  };
-
-  const activeBoxes = boxes.filter((b) => b.status === "active");
-  const inOperationBoxes = activeBoxes.filter((b) => b.technician_name);
-  const standByBoxes = activeBoxes.filter((b) => !b.technician_name);
-  const inactiveBoxes = boxes.filter((b) => b.status !== "active");
+  const inOperationBoxes = boxes.filter((b) => b.technician_name);
+  const standByBoxes = boxes.filter((b) => !b.technician_name);
 
   const renderBoxRow = (box: BoxData, variant: "operation" | "standby") => {
     const isOperation = variant === "operation";
@@ -278,16 +256,6 @@ const BoxesPage = () => {
             </span>
           </div>
         </div>
-        <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button variant="ghost" size="sm" className="h-8 text-xs"
-            onClick={(e) => { e.stopPropagation(); handleCloseBox(box); }}>
-            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Fechar
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive"
-            onClick={(e) => { e.stopPropagation(); handleCancelBox(box); }}>
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        </div>
       </div>
     );
   };
@@ -298,7 +266,7 @@ const BoxesPage = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <p className="text-muted-foreground text-sm">
-            Gerencie as caixas de separação e expedição
+            Gerencie as caixas — armazéns virtuais de peças
           </p>
           {lastSync && (
             <p className="text-xs text-muted-foreground/60 mt-0.5">
@@ -371,35 +339,6 @@ const BoxesPage = () => {
         )}
       </div>
 
-      {/* Histórico */}
-      {inactiveBoxes.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-            Histórico ({inactiveBoxes.length})
-          </h3>
-          <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
-            {inactiveBoxes.slice(0, 10).map((box) => (
-              <div
-                key={box.id}
-                className="flex items-center gap-4 px-4 py-2.5 hover:bg-accent/20 transition-colors cursor-pointer opacity-60 hover:opacity-80"
-                onClick={() => loadBoxItems(box)}
-              >
-                <div className="flex items-center justify-center h-8 w-8 rounded-md bg-muted text-muted-foreground shrink-0">
-                  <Box className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-medium text-foreground text-sm truncate">{box.name}</h3>
-                  <span className="text-xs text-muted-foreground">{formatDate(box.created_at)}</span>
-                </div>
-                <Badge variant="outline" className={statusConfig[box.status].color + " text-[10px]"}>
-                  {statusConfig[box.status].label}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Box Detail Dialog */}
       <BoxDetailDialog
         box={selectedBox}
@@ -410,12 +349,11 @@ const BoxesPage = () => {
           if (selectedBox) loadBoxItems(selectedBox);
           loadBoxes();
         }}
-        onCloseBox={handleCloseBox}
-        onCancelBox={handleCancelBox}
         onLinkTechnician={(box) => {
           setTechBox(box);
           setSelectedBox(null);
         }}
+        onUnlinkTechnician={handleUnlinkTechnician}
         onCheckin={handleOpenCheckin}
       />
 

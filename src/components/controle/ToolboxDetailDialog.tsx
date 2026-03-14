@@ -11,6 +11,7 @@ import {
   ClipboardCheck,
   UserCheck,
   UserX,
+  Undo2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,9 @@ export default function ToolboxDetailDialog({
   const [scannerOpen, setScannerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
+  const [returningItem, setReturningItem] = useState<ToolboxItemData | null>(null);
+  const [returnQty, setReturnQty] = useState(1);
+  const [returning, setReturning] = useState(false);
 
   const handleRename = async () => {
     if (!toolbox || !newName.trim() || newName.trim() === toolbox.name) {
@@ -190,6 +194,47 @@ export default function ToolboxDetailDialog({
         setSelectedProduct(product);
         toast.info(`Encontrado: ${product.nome}`);
       });
+  };
+
+  const handleReturnItem = async () => {
+    if (!returningItem || !toolbox || returnQty < 1) return;
+    setReturning(true);
+    try {
+      if (returnQty >= returningItem.quantidade) {
+        // Remove entirely
+        const { error } = await (supabase.from("toolbox_items") as any).delete().eq("id", returningItem.id);
+        if (error) throw error;
+      } else {
+        // Decrease quantity
+        const { error } = await (supabase.from("toolbox_items") as any)
+          .update({ quantidade: returningItem.quantidade - returnQty })
+          .eq("id", returningItem.id);
+        if (error) throw error;
+      }
+
+      await logToolboxMovement({
+        toolboxId: toolbox.id,
+        toolboxName: toolbox.name,
+        action: "devolucao",
+        produtoId: returningItem.produto_id,
+        produtoNome: returningItem.nome_produto,
+        quantidade: Math.min(returnQty, returningItem.quantidade),
+        precoUnitario: returningItem.preco_unitario,
+        technicianName: toolbox.technician_name || undefined,
+        technicianGcId: toolbox.technician_gc_id || undefined,
+        details: `Devolvido ${Math.min(returnQty, returningItem.quantidade)}x "${returningItem.nome_produto}"`,
+      });
+
+      toast.success(`${returningItem.nome_produto} devolvido`);
+      setReturningItem(null);
+      setReturnQty(1);
+      onItemsChanged();
+    } catch (e) {
+      toast.error("Erro ao devolver item");
+      console.error(e);
+    } finally {
+      setReturning(false);
+    }
   };
 
   const totalItems = items.reduce((sum, i) => sum + i.quantidade, 0);
@@ -301,21 +346,54 @@ export default function ToolboxDetailDialog({
                 </div>
                 <div className="divide-y divide-border">
                   {items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 py-2 px-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {item.nome_produto}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          ID: {item.produto_id} · Qtd: {item.quantidade}
-                          {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
-                        </p>
+                    <div key={item.id} className="py-2 px-2">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {item.nome_produto}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            ID: {item.produto_id} · Qtd: {item.quantidade}
+                            {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="icon"
+                          className="h-7 w-7 text-primary hover:text-primary"
+                          title="Devolver peça"
+                          onClick={() => { setReturningItem(item); setReturnQty(1); }}>
+                          <Undo2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveItem(item)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
-                        onClick={() => handleRemoveItem(item)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {returningItem?.id === item.id && (
+                        <div className="flex items-center gap-2 mt-2 p-2 bg-primary/5 rounded-md border border-primary/20">
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">Devolver:</span>
+                          <div className="flex items-center gap-1">
+                            <Button variant="outline" size="icon" className="h-6 w-6"
+                              onClick={() => setReturnQty(Math.max(1, returnQty - 1))}>
+                              <Minus className="h-3 w-3" />
+                            </Button>
+                            <Input type="number" value={returnQty}
+                              onChange={(e) => setReturnQty(Math.max(1, Math.min(item.quantidade, parseInt(e.target.value) || 1)))}
+                              className="w-12 h-6 text-center text-xs" min={1} max={item.quantidade} />
+                            <Button variant="outline" size="icon" className="h-6 w-6"
+                              onClick={() => setReturnQty(Math.min(item.quantidade, returnQty + 1))}>
+                              <Plus className="h-3 w-3" />
+                            </Button>
+                          </div>
+                          <span className="text-xs text-muted-foreground">de {item.quantidade}</span>
+                          <Button size="sm" className="h-6 text-xs ml-auto" onClick={handleReturnItem} disabled={returning}>
+                            {returning ? "..." : "Confirmar"}
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setReturningItem(null)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

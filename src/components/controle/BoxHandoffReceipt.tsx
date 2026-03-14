@@ -145,7 +145,7 @@ export default function BoxHandoffReceipt({
           >
             {/* Company Header */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", paddingBottom: "12px", borderBottom: "2px solid #333" }}>
-              <img src="/images/logo-wedo.jpeg" alt="WeDo" style={{ height: "50px" }} />
+              <img data-logo="true" src="/images/logo-wedo.jpeg" alt="WeDo" style={{ height: "50px" }} />
               <div>
                 <h2 style={{ fontSize: "13px", fontWeight: 700, marginBottom: "2px" }}>WD Comércio e Importação</h2>
                 <p style={{ fontSize: "9px", color: "#666", lineHeight: 1.4, margin: 0 }}>CNPJ: 43.572.954/0001-81</p>

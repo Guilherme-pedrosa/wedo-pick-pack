@@ -532,6 +532,240 @@ export type Database = {
         }
         Relationships: []
       }
+      toolbox_conference_items: {
+        Row: {
+          conference_id: string
+          created_at: string
+          id: string
+          nome_produto: string
+          observacao: string | null
+          presente: boolean
+          produto_id: string
+          quantidade_esperada: number
+          toolbox_id: string
+        }
+        Insert: {
+          conference_id: string
+          created_at?: string
+          id?: string
+          nome_produto: string
+          observacao?: string | null
+          presente?: boolean
+          produto_id: string
+          quantidade_esperada?: number
+          toolbox_id: string
+        }
+        Update: {
+          conference_id?: string
+          created_at?: string
+          id?: string
+          nome_produto?: string
+          observacao?: string | null
+          presente?: boolean
+          produto_id?: string
+          quantidade_esperada?: number
+          toolbox_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "toolbox_conference_items_conference_id_fkey"
+            columns: ["conference_id"]
+            isOneToOne: false
+            referencedRelation: "toolbox_conference_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "toolbox_conference_items_toolbox_id_fkey"
+            columns: ["toolbox_id"]
+            isOneToOne: false
+            referencedRelation: "toolboxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      toolbox_conference_records: {
+        Row: {
+          created_at: string
+          id: string
+          items_missing: number
+          items_present: number
+          items_total: number
+          notes: string | null
+          operator_id: string
+          operator_name: string
+          status: string
+          toolbox_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          items_missing?: number
+          items_present?: number
+          items_total?: number
+          notes?: string | null
+          operator_id: string
+          operator_name?: string
+          status?: string
+          toolbox_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          items_missing?: number
+          items_present?: number
+          items_total?: number
+          notes?: string | null
+          operator_id?: string
+          operator_name?: string
+          status?: string
+          toolbox_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "toolbox_conference_records_toolbox_id_fkey"
+            columns: ["toolbox_id"]
+            isOneToOne: false
+            referencedRelation: "toolboxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      toolbox_items: {
+        Row: {
+          added_at: string
+          id: string
+          nome_produto: string
+          preco_unitario: number | null
+          produto_id: string
+          quantidade: number
+          toolbox_id: string
+        }
+        Insert: {
+          added_at?: string
+          id?: string
+          nome_produto: string
+          preco_unitario?: number | null
+          produto_id: string
+          quantidade?: number
+          toolbox_id: string
+        }
+        Update: {
+          added_at?: string
+          id?: string
+          nome_produto?: string
+          preco_unitario?: number | null
+          produto_id?: string
+          quantidade?: number
+          toolbox_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "toolbox_items_toolbox_id_fkey"
+            columns: ["toolbox_id"]
+            isOneToOne: false
+            referencedRelation: "toolboxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      toolbox_movement_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: string | null
+          id: string
+          operator_id: string
+          operator_name: string
+          preco_unitario: number | null
+          produto_id: string | null
+          produto_nome: string | null
+          quantidade: number | null
+          ref_numero: string | null
+          ref_tipo: string | null
+          technician_gc_id: string | null
+          technician_name: string | null
+          toolbox_id: string
+          toolbox_name: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          operator_id: string
+          operator_name?: string
+          preco_unitario?: number | null
+          produto_id?: string | null
+          produto_nome?: string | null
+          quantidade?: number | null
+          ref_numero?: string | null
+          ref_tipo?: string | null
+          technician_gc_id?: string | null
+          technician_name?: string | null
+          toolbox_id: string
+          toolbox_name: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          operator_id?: string
+          operator_name?: string
+          preco_unitario?: number | null
+          produto_id?: string | null
+          produto_nome?: string | null
+          quantidade?: number | null
+          ref_numero?: string | null
+          ref_tipo?: string | null
+          technician_gc_id?: string | null
+          technician_name?: string | null
+          toolbox_id?: string
+          toolbox_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "toolbox_movement_logs_toolbox_id_fkey"
+            columns: ["toolbox_id"]
+            isOneToOne: false
+            referencedRelation: "toolboxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      toolboxes: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          id: string
+          name: string
+          status: string
+          technician_gc_id: string | null
+          technician_name: string | null
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          status?: string
+          technician_gc_id?: string | null
+          technician_name?: string | null
+          user_id: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          status?: string
+          technician_gc_id?: string | null
+          technician_name?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

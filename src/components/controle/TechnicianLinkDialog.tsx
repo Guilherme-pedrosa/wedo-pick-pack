@@ -39,6 +39,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 

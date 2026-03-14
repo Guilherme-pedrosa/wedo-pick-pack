@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.admin-users]
 verify_jwt = false
+
+[functions.sync-products]
+verify_jwt = false
+
+[functions.search-products-index]
+verify_jwt = false

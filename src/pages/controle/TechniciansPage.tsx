@@ -371,7 +371,7 @@ const TechniciansPage = () => {
                   </Button>
                 </div>
 
-                {hasBoxes && isExpanded && (
+                {hasContent && isExpanded && (
                   <div className="border-t border-border bg-muted/30 px-4 pb-4 pt-2 space-y-3">
                     {tech.boxes.map((box) => {
                       const boxTotal = box.items.reduce(
@@ -401,6 +401,54 @@ const TechniciansPage = () => {
                               </TableHeader>
                               <TableBody>
                                 {box.items.map((item) => (
+                                  <TableRow key={item.id} className="text-xs">
+                                    <TableCell className="py-1.5 text-xs">
+                                      {item.nome_produto}
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-xs text-center">
+                                      {item.quantidade}
+                                    </TableCell>
+                                    <TableCell className="py-1.5 text-xs text-right">
+                                      {item.preco_unitario
+                                        ? formatCurrency(item.quantidade * item.preco_unitario)
+                                        : "—"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {tech.toolboxes.map((tb) => {
+                      const tbTotal = tb.items.reduce(
+                        (s, i) => s + i.quantidade * (i.preco_unitario || 0),
+                        0
+                      );
+                      return (
+                        <div key={tb.id} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold text-foreground">
+                              🧰 {tb.name}
+                            </p>
+                            {tbTotal > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                Total: {formatCurrency(tbTotal)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="rounded-lg border border-border overflow-hidden">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="text-xs">
+                                  <TableHead className="py-1.5 text-xs">Ferramenta</TableHead>
+                                  <TableHead className="py-1.5 text-xs text-center w-16">Qtd</TableHead>
+                                  <TableHead className="py-1.5 text-xs text-right w-24">Valor</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {tb.items.map((item) => (
                                   <TableRow key={item.id} className="text-xs">
                                     <TableCell className="py-1.5 text-xs">
                                       {item.nome_produto}

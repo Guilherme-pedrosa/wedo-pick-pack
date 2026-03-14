@@ -196,6 +196,47 @@ export default function ToolboxDetailDialog({
       });
   };
 
+  const handleReturnItem = async () => {
+    if (!returningItem || !toolbox || returnQty < 1) return;
+    setReturning(true);
+    try {
+      if (returnQty >= returningItem.quantidade) {
+        // Remove entirely
+        const { error } = await (supabase.from("toolbox_items") as any).delete().eq("id", returningItem.id);
+        if (error) throw error;
+      } else {
+        // Decrease quantity
+        const { error } = await (supabase.from("toolbox_items") as any)
+          .update({ quantidade: returningItem.quantidade - returnQty })
+          .eq("id", returningItem.id);
+        if (error) throw error;
+      }
+
+      await logToolboxMovement({
+        toolboxId: toolbox.id,
+        toolboxName: toolbox.name,
+        action: "devolucao",
+        produtoId: returningItem.produto_id,
+        produtoNome: returningItem.nome_produto,
+        quantidade: Math.min(returnQty, returningItem.quantidade),
+        precoUnitario: returningItem.preco_unitario,
+        technicianName: toolbox.technician_name || undefined,
+        technicianGcId: toolbox.technician_gc_id || undefined,
+        details: `Devolvido ${Math.min(returnQty, returningItem.quantidade)}x "${returningItem.nome_produto}"`,
+      });
+
+      toast.success(`${returningItem.nome_produto} devolvido`);
+      setReturningItem(null);
+      setReturnQty(1);
+      onItemsChanged();
+    } catch (e) {
+      toast.error("Erro ao devolver item");
+      console.error(e);
+    } finally {
+      setReturning(false);
+    }
+  };
+
   const totalItems = items.reduce((sum, i) => sum + i.quantidade, 0);
   const totalValue = items.reduce((sum, i) => sum + i.quantidade * (i.preco_unitario || 0), 0);
   const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClipboardCheck, Check, X, AlertTriangle } from "lucide-react";
+import { ClipboardCheck, Check, X, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ToolboxData, ToolboxItemData } from "./ToolboxDetailDialog";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
+import { executeStockMovement } from "@/api/stockMovement";
 
 interface Props {
   toolbox: ToolboxData | null;
@@ -44,6 +45,7 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
   );
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [stockProgress, setStockProgress] = useState<string | null>(null);
 
   // Reset when items change
   useState(() => {
@@ -131,8 +133,66 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
         details: `Conferência: ${presentCount}/${checkItems.length} presentes, ${missingCount} ausentes`,
       });
 
-      // Unlink technician after conference if requested
+      // Stock movements on unlink (devolução)
       if (unlinkOnComplete && toolbox.technician_name) {
+        // Return stock for PRESENT items (devolved successfully)
+        const presentItems = checkItems.filter(i => i.presente);
+        if (presentItems.length > 0) {
+          setStockProgress(`Devolvendo estoque de ${presentItems.length} item(ns)...`);
+          try {
+            const result = await executeStockMovement({
+              items: presentItems.map(i => ({
+                produto_id: i.produto_id,
+                nome_produto: i.nome_produto,
+                quantidade: i.quantidade,
+              })),
+              justificativa: `Devolução de maleta "${toolbox.name}" - Técnico: ${toolbox.technician_name} devolveu ${presentItems.length} item(ns)`,
+              toolboxName: toolbox.name,
+              technicianName: toolbox.technician_name,
+              tipo: "entrada",
+            });
+
+            await logToolboxMovement({
+              toolboxId: toolbox.id,
+              toolboxName: toolbox.name,
+              action: "entrada_estoque",
+              technicianName: toolbox.technician_name || undefined,
+              technicianGcId: toolbox.technician_gc_id || undefined,
+              details: `Devolução de estoque: ${result.summary} (${presentItems.length} itens devolvidos)`,
+            });
+
+            const failedItems = result.results.filter(r => !r.success);
+            if (failedItems.length > 0) {
+              toast.warning(`Estoque devolvido parcialmente: ${result.summary}`);
+            } else {
+              toast.success(`Estoque devolvido: ${result.summary}`);
+            }
+          } catch (stockErr) {
+            console.error("Stock return error:", stockErr);
+            toast.error("Erro ao devolver estoque no ERP.");
+          }
+        }
+
+        // Log missing items (stock NOT returned - stays out)
+        const missingItems = checkItems.filter(i => !i.presente);
+        if (missingItems.length > 0) {
+          const missingDetails = missingItems
+            .map(i => `${i.nome_produto} (${i.quantidade}x)${i.observacao ? ` - ${i.observacao}` : ''}`)
+            .join('; ');
+
+          await logToolboxMovement({
+            toolboxId: toolbox.id,
+            toolboxName: toolbox.name,
+            action: "extravio",
+            technicianName: toolbox.technician_name || undefined,
+            technicianGcId: toolbox.technician_gc_id || undefined,
+            details: `Itens não devolvidos (estoque NÃO reposto): ${missingDetails}`,
+          });
+
+          toast.warning(`${missingItems.length} ferramenta(s) ausente(s) — estoque NÃO devolvido para esses itens.`, { duration: 8000 });
+        }
+
+        // Unlink technician
         await (supabase.from("toolboxes") as any)
           .update({ technician_name: null, technician_gc_id: null })
           .eq("id", toolbox.id);
@@ -150,7 +210,7 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
       }
 
       toast.success(`Conferência salva: ${presentCount}/${checkItems.length} presentes`);
-      if (missingCount > 0) {
+      if (missingCount > 0 && !unlinkOnComplete) {
         toast.warning(`${missingCount} ferramenta(s) ausente(s)!`);
       }
       onCompleted();
@@ -239,10 +299,17 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
           />
         </div>
 
+        {stockProgress && (
+          <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+            <span className="text-sm text-primary font-medium">{stockProgress}</span>
+          </div>
+        )}
+
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? "Salvando..." : "Finalizar Conferência"}
+            {saving ? "Salvando..." : unlinkOnComplete ? "Finalizar e Devolver" : "Finalizar Conferência"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -363,13 +363,25 @@ const BoxesPage = () => {
               </div>
               <div className="space-y-1.5">
                 {baixaAlerts.filter(a => a.reverted).map((alert, i) => (
-                  <div key={i} className="text-xs bg-warning/5 rounded px-3 py-2 border border-warning/10">
-                    <span className="font-medium text-warning">{alert.reason}</span>
-                    <span className="block text-muted-foreground mt-0.5">
+                  <div key={i} className="text-xs bg-warning/5 rounded px-3 py-2 border border-warning/10 space-y-0.5">
+                    <span className="font-semibold text-warning">{alert.reason}</span>
+                    {alert.gcModificadoEm && (
+                      <span className="block text-foreground/80">
+                        📋 Status GC: <span className="font-medium">{alert.gcSituacao || "—"}</span>
+                        {alert.gcUsuarioNome && <> · Responsável: <span className="font-medium">{alert.gcUsuarioNome}</span></>}
+                        {" "}· Última alteração: <span className="font-medium">{alert.gcModificadoEm}</span>
+                      </span>
+                    )}
+                    {alert.gcObsInterna && (
+                      <span className="block text-muted-foreground/70 italic">
+                        Obs interna: {alert.gcObsInterna.substring(0, 150)}
+                      </span>
+                    )}
+                    <span className="block text-muted-foreground">
                       ✅ {alert.quantidade}x "{alert.produtoNome}" devolvido para <span className="font-semibold">{alert.revertedTo}</span>
                     </span>
-                    <span className="block text-muted-foreground/60 mt-0.5">
-                      Baixa feita por: {alert.operatorName} em {new Date(alert.createdAt).toLocaleString("pt-BR")}
+                    <span className="block text-muted-foreground/60">
+                      Baixa original por: {alert.operatorName} em {new Date(alert.createdAt).toLocaleString("pt-BR")}
                     </span>
                   </div>
                 ))}

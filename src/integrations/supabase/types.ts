@@ -118,6 +118,56 @@ export type Database = {
           },
         ]
       }
+      box_handoff_logs: {
+        Row: {
+          box_id: string
+          box_name: string
+          created_at: string
+          handed_at: string
+          id: string
+          items_count: number
+          operator_id: string
+          operator_name: string
+          technician_gc_id: string
+          technician_name: string
+          total_value: number
+        }
+        Insert: {
+          box_id: string
+          box_name: string
+          created_at?: string
+          handed_at?: string
+          id?: string
+          items_count?: number
+          operator_id: string
+          operator_name?: string
+          technician_gc_id: string
+          technician_name: string
+          total_value?: number
+        }
+        Update: {
+          box_id?: string
+          box_name?: string
+          created_at?: string
+          handed_at?: string
+          id?: string
+          items_count?: number
+          operator_id?: string
+          operator_name?: string
+          technician_gc_id?: string
+          technician_name?: string
+          total_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "box_handoff_logs_box_id_fkey"
+            columns: ["box_id"]
+            isOneToOne: false
+            referencedRelation: "boxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       box_items: {
         Row: {
           added_at: string

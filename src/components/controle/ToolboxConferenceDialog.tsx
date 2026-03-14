@@ -260,12 +260,8 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
           />
         </div>
 
-        {stockProgress && (
-          <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-            <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
-            <span className="text-sm text-primary font-medium">{stockProgress}</span>
-          </div>
-        )}
+
+
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>

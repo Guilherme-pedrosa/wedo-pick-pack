@@ -81,9 +81,9 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
   };
 
   const hasDivergencias = checkinItems.some((ci) => ci.divergencia > 0);
-  const allDivergenciasJustified = checkinItems
+  const allDivergenciasValidated = checkinItems
     .filter((ci) => ci.divergencia > 0)
-    .every((ci) => ci.tipo && ci.ref);
+    .every((ci) => ci.tipo && ci.ref && ci.validado);
 
   const handleValidateRef = async (index: number) => {
     const ci = checkinItems[index];
@@ -299,10 +299,9 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                           <SelectContent>
                             <SelectItem value="os">OS</SelectItem>
                             <SelectItem value="venda">Venda</SelectItem>
-                            <SelectItem value="divergencia">Divergência</SelectItem>
                           </SelectContent>
                         </Select>
-                        {ci.tipo && ci.tipo !== "divergencia" && (
+                        {ci.tipo && (
                           <>
                             <Input
                               value={ci.ref}
@@ -323,14 +322,6 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                             </Button>
                           </>
                         )}
-                        {ci.tipo === "divergencia" && (
-                          <Input
-                            value={ci.ref}
-                            onChange={(e) => updateItem(index, { ref: e.target.value })}
-                            placeholder="Motivo/observação"
-                            className="flex-1 h-7 text-xs"
-                          />
-                        )}
                       </div>
                       {ci.validado && (
                         <Badge className="bg-success/10 text-success border-success/20 text-xs">
@@ -349,7 +340,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
               </Button>
               <Button
                 onClick={() => setStep("review")}
-                disabled={hasDivergencias && !allDivergenciasJustified}
+                disabled={hasDivergencias && !allDivergenciasValidated}
               >
                 Próximo: Reposição
               </Button>
@@ -368,7 +359,9 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                 .map((ci) => {
                   const index = checkinItems.indexOf(ci);
                   return (
-                    <div key={ci.item.id} className="flex items-center gap-3 p-3 bg-card rounded-lg border border-border">
+                    <div key={ci.item.id} className={`flex items-center gap-3 p-3 rounded-lg border ${
+                      !ci.validado ? "bg-destructive/5 border-destructive/30" : "bg-card border-border"
+                    }`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{ci.item.nome_produto}</p>
                         <p className="text-xs text-muted-foreground">
@@ -408,7 +401,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
               <Button variant="outline" onClick={() => setStep("conference")}>
                 Voltar
               </Button>
-              <Button onClick={handleComplete} disabled={saving}>
+              <Button onClick={handleComplete} disabled={saving || (hasDivergencias && !allDivergenciasValidated)}>
                 {saving ? "Salvando..." : "Concluir Check-in"}
               </Button>
             </DialogFooter>

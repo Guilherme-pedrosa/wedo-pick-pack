@@ -140,16 +140,23 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
       // Check if the OS/Venda date is after the box creation date
       const orderData = detailData?.data;
-      const orderDateStr = orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
+      const orderDateStr = orderData?.data_entrada || orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
       if (orderDateStr && box) {
-        const orderDate = new Date(orderDateStr);
+        let orderDate: Date;
+        const brMatch = String(orderDateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (brMatch) {
+          orderDate = new Date(parseInt(brMatch[3]), parseInt(brMatch[2]) - 1, parseInt(brMatch[1]));
+        } else {
+          orderDate = new Date(orderDateStr);
+        }
         const boxCreatedAt = new Date(box.created_at);
-        // Compare dates only (ignore time)
         const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
         const boxDay = new Date(boxCreatedAt.getFullYear(), boxCreatedAt.getMonth(), boxCreatedAt.getDate());
-        if (orderDay < boxDay) {
+        if (isNaN(orderDay.getTime())) {
+          console.warn("Could not parse order date:", orderDateStr);
+        } else if (orderDay < boxDay) {
           toast.error(
-            `${label} #${ci.ref} é do dia ${orderDateStr}, anterior à saída da caixa (${boxCreatedAt.toLocaleDateString("pt-BR")}). Não é permitido vincular.`
+            `${label} #${ci.ref} é de ${orderDay.toLocaleDateString("pt-BR")}, anterior à saída da caixa (${boxDay.toLocaleDateString("pt-BR")}). Não é permitido.`
           );
           return;
         }

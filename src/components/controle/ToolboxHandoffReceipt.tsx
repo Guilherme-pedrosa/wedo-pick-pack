@@ -196,10 +196,10 @@ export default function ToolboxHandoffReceipt({
                       {item.quantidade}
                     </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px", textAlign: "right" }}>
-                      {item.preco_unitario ? formatCurrency(item.preco_unitario) : "—"}
+                      {formatCurrency(item.preco_unitario || 0)}
                     </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px", textAlign: "right" }}>
-                      {item.preco_unitario ? formatCurrency(item.quantidade * item.preco_unitario) : "—"}
+                      {formatCurrency(item.quantidade * (item.preco_unitario || 0))}
                     </td>
                   </tr>
                 ))}

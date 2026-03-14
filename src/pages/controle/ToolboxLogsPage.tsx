@@ -46,6 +46,7 @@ export default function ToolboxLogsPage() {
   const [logs, setLogs] = useState<MovementLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [searchText, setSearchText] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {

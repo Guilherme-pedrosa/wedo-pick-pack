@@ -435,6 +435,43 @@ async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<
   }
 }
 
+async function rollbackVendaAsDevolucao(
+  vendaGcId: string,
+  toolboxName: string,
+  technicianName: string,
+  gcHeaders: Record<string, string>
+): Promise<string | null> {
+  try {
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    const rollbackObs = `[AUTO-ROLLBACK WeDo] Venda sem classificação balcão. Técnico: ${technicianName} | Maleta: ${toolboxName} | ${now}`;
+
+    const res = await fetch(`${GC_API_URL}/api/vendas/${vendaGcId}`, {
+      method: 'PUT',
+      headers: gcHeaders,
+      body: JSON.stringify({
+        situacao_id: SITUACAO_DEVOLUCAO,
+        observacoes: rollbackObs,
+      }),
+    });
+
+    const raw = await res.text();
+    let parsed: any = null;
+    try {
+      parsed = raw ? JSON.parse(raw) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (!res.ok || parsed?.status === 'error') {
+      return parsed?.message || parsed?.error || `Falha no rollback automático (${res.status})`;
+    }
+
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Erro desconhecido no rollback automático';
+  }
+}
+
 async function verifyVendaBalcao(vendaCodigo: string, gcHeaders: Record<string, string>): Promise<boolean> {
   for (let i = 0; i < 3; i += 1) {
     try {

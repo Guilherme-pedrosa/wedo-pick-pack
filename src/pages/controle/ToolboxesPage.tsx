@@ -138,7 +138,7 @@ const ToolboxesPage = () => {
     }
   };
 
-  const handleOpenConference = async (toolbox: ToolboxData) => {
+  const handleOpenConference = async (toolbox: ToolboxData, unlink = false) => {
     try {
       const { data, error } = await (supabase.from("toolbox_items") as any)
         .select("*")
@@ -146,10 +146,35 @@ const ToolboxesPage = () => {
         .order("added_at", { ascending: false });
       if (error) throw error;
       setConferenceItems(data || []);
+      setConferenceUnlink(unlink);
       setConferenceToolbox(toolbox);
       setSelectedToolbox(null);
     } catch {
       toast.error("Erro ao carregar itens para conferência");
+    }
+  };
+
+  const handleUnlinkTechnician = async (toolbox: ToolboxData) => {
+    // If toolbox has items, require conference first
+    const { data: items } = await (supabase.from("toolbox_items") as any)
+      .select("id")
+      .eq("toolbox_id", toolbox.id)
+      .limit(1);
+    if (items && items.length > 0) {
+      handleOpenConference(toolbox, true);
+      return;
+    }
+    // No items, unlink directly
+    try {
+      const { error } = await (supabase.from("toolboxes") as any)
+        .update({ technician_name: null, technician_gc_id: null })
+        .eq("id", toolbox.id);
+      if (error) throw error;
+      toast.success(`Técnico desvinculado de "${toolbox.name}"`);
+      loadToolboxes();
+      setSelectedToolbox(null);
+    } catch {
+      toast.error("Erro ao desvincular técnico");
     }
   };
 

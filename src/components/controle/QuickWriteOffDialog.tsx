@@ -111,46 +111,78 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
     const label = tipo === "os" ? "OS" : "Venda";
     setValidating(true);
     try {
-      const searchPath =
-        tipo === "os"
-          ? `/api/ordens_servicos?pesquisa=${encodeURIComponent(ref)}`
-          : `/api/vendas?pesquisa=${encodeURIComponent(ref)}`;
+      // Try multiple search strategies to find the OS/Venda
+      const refTrimmed = ref.trim();
+      const endpoint = tipo === "os" ? "ordens_servicos" : "vendas";
+      
+      // Strategy 1: Search by codigo parameter
+      const searchPaths = [
+        `/api/${endpoint}?codigo=${encodeURIComponent(refTrimmed)}`,
+        `/api/${endpoint}?pesquisa=${encodeURIComponent(refTrimmed)}`,
+      ];
 
-      const { data: searchData, error: searchError } = await supabase.functions.invoke("gc-proxy", {
-        body: { path: searchPath, method: "GET" },
-      });
-      if (searchError) throw searchError;
-      if (!searchData?._proxy?.ok) {
-        toast.error(`Erro ao buscar ${label} #${ref}`);
-        return;
+      let match: any = null;
+
+      for (const searchPath of searchPaths) {
+        if (match) break;
+        try {
+          const { data: searchData, error: searchError } = await supabase.functions.invoke("gc-proxy", {
+            body: { path: searchPath, method: "GET" },
+          });
+          if (searchError) continue;
+          if (!searchData?._proxy?.ok) continue;
+
+          const results: any[] = searchData?.data || [];
+          match = results.find(
+            (r: any) =>
+              String(r.codigo).trim() === refTrimmed ||
+              String(r.numero).trim() === refTrimmed ||
+              String(r.id).trim() === refTrimmed
+          );
+        } catch {
+          continue;
+        }
       }
 
-      const results: any[] = searchData?.data || [];
-      const match = results.find(
-        (r: any) => String(r.codigo) === String(ref) || String(r.numero) === String(ref)
-      );
+      // Strategy 3: Direct fetch by ID if ref looks numeric
+      if (!match && /^\d+$/.test(refTrimmed)) {
+        try {
+          const directPath = `/api/${endpoint}/${refTrimmed}`;
+          const { data: directData, error: directError } = await supabase.functions.invoke("gc-proxy", {
+            body: { path: directPath, method: "GET" },
+          });
+          if (!directError && directData?._proxy?.ok && directData?.data) {
+            match = directData.data;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (!match) {
         toast.error(`${label} #${ref} não encontrada no GestãoClick`);
         return;
       }
 
       const detailId = match.id || match.ordem_servico_id || match.venda_id;
-      const detailPath =
-        tipo === "os"
-          ? `/api/ordens_servicos/${detailId}`
-          : `/api/vendas/${detailId}`;
-
-      const { data: detailData, error: detailError } = await supabase.functions.invoke("gc-proxy", {
-        body: { path: detailPath, method: "GET" },
-      });
-      if (detailError) throw detailError;
-      if (!detailData?._proxy?.ok) {
-        toast.error(`Erro ao carregar detalhes da ${label} #${ref}`);
-        return;
+      
+      // If match already has produtos (from direct fetch), skip detail fetch
+      let orderData = match;
+      if (!match.produtos) {
+        const detailPath = `/api/${endpoint}/${detailId}`;
+        const { data: detailData, error: detailError } = await supabase.functions.invoke("gc-proxy", {
+          body: { path: detailPath, method: "GET" },
+        });
+        if (detailError) throw detailError;
+        if (!detailData?._proxy?.ok) {
+          toast.error(`Erro ao carregar detalhes da ${label} #${ref}`);
+          return;
+        }
+        orderData = detailData?.data;
       }
 
       // Date validation
-      const orderData = detailData?.data;
+      // orderData already set above
       const orderDateStr = orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
       if (orderDateStr && box) {
         const orderDate = new Date(orderDateStr);

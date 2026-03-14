@@ -216,9 +216,6 @@ export default function BoxDetailDialog({
                     {formatCurrency(totalValue)}
                   </span>
                 </div>
-                  </span>
-                </div>
-                <div className="divide-y divide-border">
                   {items.map((item) => (
                     <div key={item.id} className="flex items-center gap-3 py-2 px-2">
                       <div className="flex-1 min-w-0">

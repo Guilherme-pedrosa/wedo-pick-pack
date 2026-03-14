@@ -131,7 +131,6 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
       }
 
       // Date validation
-      const orderData = detailData?.data;
       const orderDateStr = orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
       if (orderDateStr && box) {
         const orderDate = new Date(orderDateStr);

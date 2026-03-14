@@ -240,12 +240,17 @@ async function handleSaida(body: SaidaRequest, gcHeaders: Record<string, string>
 
   const isBalcao = await verifyVendaBalcao(vendaCodigo, gcHeaders);
   if (!isBalcao) {
+    const rollbackError = vendaId
+      ? await rollbackVendaAsDevolucao(vendaId, toolbox_name, technician_name, gcHeaders)
+      : 'Venda criada sem ID para rollback automático.';
+
     return new Response(
       JSON.stringify({
         success: false,
         venda_gc_id: vendaId,
         venda_codigo: vendaCodigo,
-        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP.',
+        error: 'Venda criada, mas não foi classificada como venda de balcão no ERP. Rollback aplicado automaticamente.',
+        rollback_error: rollbackError,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -24,6 +24,7 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
   const [results, setResults] = useState<ProductResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [searched, setSearched] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -41,6 +42,7 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
     if (!q.trim()) {
       setResults([]);
       setOpen(false);
+      setSearched(false);
       return;
     }
     setLoading(true);
@@ -51,6 +53,7 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
       if (error) throw error;
       const items = (data?.data || []) as ProductResult[];
       setResults(items);
+      setSearched(true);
       setOpen(items.length > 0);
 
       // Auto-select if single exact match (barcode/code)
@@ -137,6 +140,13 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
               </div>
             </button>
           ))}
+        </div>
+      )}
+
+      {searched && !loading && results.length === 0 && query.trim() && (
+        <div className="absolute z-50 mt-1 w-full bg-popover border border-border rounded-lg shadow-lg p-4 text-center">
+          <p className="text-sm text-muted-foreground">Nenhum produto encontrado para "<span className="font-medium text-foreground">{query.trim()}</span>"</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Verifique o código ou nome e tente novamente</p>
         </div>
       )}
     </div>

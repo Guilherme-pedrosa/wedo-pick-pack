@@ -1,0 +1,1 @@
+UPDATE sync_runs SET status = 'failed', finished_at = now(), notes = 'Timed out - marked as failed' WHERE status = 'running' AND finished_at IS NULL;

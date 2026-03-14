@@ -301,6 +301,18 @@ export default function BoxDetailDialog({
                           ID: {item.produto_id} · Qtd: {item.quantidade}
                           {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
+                        {isPendenciasBox && reversalLogs[item.produto_id] && (
+                          <div className="mt-1 p-1.5 bg-warning/10 border border-warning/20 rounded text-[11px] space-y-0.5">
+                            <p className="flex items-center gap-1 font-medium text-warning">
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              {reversalLogs[item.produto_id].reason}
+                            </p>
+                            <p className="text-muted-foreground pl-4">
+                              Estornado em {new Date(reversalLogs[item.produto_id].date).toLocaleString("pt-BR")}
+                              {reversalLogs[item.produto_id].operator && <> · Operador: {reversalLogs[item.produto_id].operator}</>}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <Button variant="ghost" size="icon"

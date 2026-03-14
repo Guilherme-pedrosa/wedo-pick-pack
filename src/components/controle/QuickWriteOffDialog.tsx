@@ -361,20 +361,23 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
                       <CommandList>
                         <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
                         <CommandGroup>
-                          {boxItems.map((item) => (
-                            <CommandItem
-                              key={item.id}
-                              value={`${item.produto_id} ${item.nome_produto}`}
-                              onSelect={() => handleItemSelect(item)}
-                              className="flex flex-col items-start gap-0.5 py-2"
-                            >
-                              <span className="text-sm font-medium">{item.nome_produto}</span>
-                              <span className="text-xs text-muted-foreground">
-                                Cód: {item.produto_id} · Qtd: {item.quantidade}
-                                {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
-                              </span>
-                            </CommandItem>
-                          ))}
+                          {boxItems.map((item) => {
+                            const codigoInterno = productCodes[item.produto_id];
+                            return (
+                              <CommandItem
+                                key={item.id}
+                                value={`${codigoInterno || ""} ${item.produto_id} ${item.nome_produto}`.trim()}
+                                onSelect={() => handleItemSelect(item)}
+                                className="flex flex-col items-start gap-0.5 py-2"
+                              >
+                                <span className="text-sm font-medium">{item.nome_produto}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  Código: {codigoInterno || "—"} · ID: {item.produto_id} · Qtd: {item.quantidade}
+                                  {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
+                                </span>
+                              </CommandItem>
+                            );
+                          })}
                         </CommandGroup>
                       </CommandList>
                     </Command>

@@ -263,6 +263,20 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         })
         .eq("id", box.id);
 
+      const totalDevolvido = checkinItems.reduce((s, ci) => s + ci.devolvido, 0);
+      const totalEsperado = checkinItems.reduce((s, ci) => s + ci.item.quantidade, 0);
+      const totalDivergencia = checkinItems.reduce((s, ci) => s + ci.divergencia, 0);
+
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "entrada",
+        quantidade: totalDevolvido,
+        technicianName: box.technician_name || undefined,
+        technicianGcId: box.technician_gc_id || undefined,
+        details: `Check-in concluído. Esperado: ${totalEsperado}, Devolvido: ${totalDevolvido}, Divergências: ${totalDivergencia}`,
+      });
+
       toast.success("Check-in concluído! Caixa retornou para Stand By.");
       onCompleted();
     } catch (e) {

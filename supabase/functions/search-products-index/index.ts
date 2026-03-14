@@ -70,16 +70,28 @@ Deno.serve(async (req: Request) => {
     }
 
     if (results.length === 0) {
-      // Trigram search by name
+      // Search by produto_id exact match
       const { data } = await supabaseAdmin
         .from('products_index')
         .select('*')
-        .ilike('nome', `%${query}%`)
+        .eq('produto_id', query)
+        .limit(1);
+      if (data && data.length > 0) {
+        results = data;
+        resolvedId = data[0].produto_id as string;
+      }
+    }
+
+    if (results.length === 0) {
+      // Partial match on codigo_interno or nome
+      const { data } = await supabaseAdmin
+        .from('products_index')
+        .select('*')
+        .or(`codigo_interno.ilike.%${query}%,nome.ilike.%${query}%`)
         .order('nome')
         .limit(20);
       if (data && data.length > 0) {
         results = data;
-        // If single result, mark as resolved
         if (data.length === 1) resolvedId = data[0].produto_id as string;
       }
     }

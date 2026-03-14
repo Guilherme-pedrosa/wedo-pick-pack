@@ -54,6 +54,7 @@ interface Props {
 
 export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }: Props) {
   const [boxItems, setBoxItems] = useState<BoxItemData[]>([]);
+  const [productCodes, setProductCodes] = useState<Record<string, string>>({});
   const [matchedItem, setMatchedItem] = useState<BoxItemData | null>(null);
   const [comboOpen, setComboOpen] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);

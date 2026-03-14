@@ -270,6 +270,8 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
               reason,
               reverted: true,
               revertedTo: targetBoxName,
+              operatorName: log.operator_name || "",
+              createdAt: log.created_at,
             };
 
             await reverseItem(alert, targetBoxId, targetBoxName);

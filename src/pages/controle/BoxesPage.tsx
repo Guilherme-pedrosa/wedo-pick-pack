@@ -316,7 +316,7 @@ const BoxesPage = () => {
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+              className="h-7 text-xs"
               onClick={(e) => { e.stopPropagation(); setWriteOffBox(box); }}
             >
               <FileText className="h-3.5 w-3.5 mr-1" />

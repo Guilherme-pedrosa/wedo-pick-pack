@@ -238,6 +238,8 @@ const BoxesPage = () => {
   };
 
   const activeBoxes = boxes.filter((b) => b.status === "active");
+  const inOperationBoxes = activeBoxes.filter((b) => b.technician_name);
+  const standByBoxes = activeBoxes.filter((b) => !b.technician_name);
   const inactiveBoxes = boxes.filter((b) => b.status !== "active");
 
   return (

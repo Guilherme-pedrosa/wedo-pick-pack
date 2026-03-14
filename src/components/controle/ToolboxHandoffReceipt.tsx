@@ -14,6 +14,7 @@ interface ToolboxItem {
   nome_produto: string;
   quantidade: number;
   preco_unitario: number | null;
+  codigo_interno?: string;
 }
 
 interface Props {

@@ -14,6 +14,7 @@ interface ToolboxItem {
   nome_produto: string;
   quantidade: number;
   preco_unitario: number | null;
+  codigo_interno?: string;
 }
 
 interface Props {
@@ -171,6 +172,7 @@ export default function ToolboxHandoffReceipt({
             <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px" }}>
               <thead>
                 <tr>
+                  <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>ID</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Código</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Ferramenta</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "center", fontSize: "10px", textTransform: "uppercase" }}>Qtd</th>
@@ -183,6 +185,9 @@ export default function ToolboxHandoffReceipt({
                   <tr key={idx} style={{ background: idx % 2 === 0 ? "white" : "#fafafa" }}>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
                       {item.produto_id}
+                    </td>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
+                      {item.codigo_interno || "—"}
                     </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px" }}>
                       {item.nome_produto}

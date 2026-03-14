@@ -218,11 +218,30 @@ const ToolboxesPage = () => {
     const { data: items } = await (supabase.from("toolbox_items") as any)
       .select("*")
       .eq("toolbox_id", toolbox.id);
+
+    // Enrich items with codigo_interno from products_index
+    const produtoIds = (items || []).map((i: any) => i.produto_id);
+    let codigoMap = new Map<string, string>();
+    if (produtoIds.length > 0) {
+      const { data: products } = await supabase
+        .from("products_index")
+        .select("produto_id, codigo_interno")
+        .in("produto_id", produtoIds);
+      products?.forEach((p) => {
+        if (p.codigo_interno) codigoMap.set(p.produto_id, p.codigo_interno);
+      });
+    }
+
+    const enrichedItems = (items || []).map((i: any) => ({
+      ...i,
+      codigo_interno: codigoMap.get(i.produto_id) || "",
+    }));
+
     setReceiptData({
       toolboxName: toolbox.name,
       technicianName: techName,
       technicianGcId: techGcId,
-      items: items || [],
+      items: enrichedItems,
       date: new Date().toISOString(),
     });
     setReceiptOpen(true);

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 
 interface BoxItem {
+  produto_id: string;
   nome_produto: string;
   quantidade: number;
   preco_unitario: number | null;

@@ -17,6 +17,11 @@ export interface BaixaAlert {
   revertedTo: string;
   operatorName: string;
   createdAt: string;
+  /** GC audit info (when available) */
+  gcSituacao?: string;
+  gcModificadoEm?: string;
+  gcUsuarioNome?: string;
+  gcObsInterna?: string;
 }
 
 /**

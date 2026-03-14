@@ -364,7 +364,15 @@ async function findPdvPaymentMethod(gcHeaders: Record<string, string>): Promise<
       .map((row: any) => row?.FormasPagamento || row)
       .filter((row: any) => row?.id && row?.nome);
 
-    // Prefer PDV-enabled methods that don't force financial posting
+    // Prefer "A Combinar" when available (commonly configured for balcão)
+    const aCombinar = methods.find(
+      (m: any) => m.disponivel_pdv === '1' && String(m.nome || '').toLowerCase().includes('combinar')
+    );
+    if (aCombinar) {
+      return { id: String(aCombinar.id), nome: String(aCombinar.nome) };
+    }
+
+    // Then prefer PDV-enabled methods that don't force financial posting
     const preferred = methods.find((m: any) => m.disponivel_pdv === '1' && m.confirmar_financeiro === '0');
     if (preferred) {
       return { id: String(preferred.id), nome: String(preferred.nome) };

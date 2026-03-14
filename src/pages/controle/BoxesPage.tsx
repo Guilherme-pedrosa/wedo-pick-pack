@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Package, X, CheckCircle2, Clock, UserCheck } from "lucide-react";
+import { Plus, Package, X, CheckCircle2, Clock, UserCheck, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,10 @@ const BoxesPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [newBoxName, setNewBoxName] = useState("");
 
+  // Sync state
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
   // Detail dialog state
   const [selectedBox, setSelectedBox] = useState<BoxData | null>(null);
   const [boxItems, setBoxItems] = useState<BoxItemData[]>([]);
@@ -41,7 +45,37 @@ const BoxesPage = () => {
 
   useEffect(() => {
     loadBoxes();
+    loadLastSync();
   }, []);
+
+  const loadLastSync = async () => {
+    const { data } = await supabase
+      .from("sync_runs")
+      .select("finished_at, status")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data?.finished_at) {
+      setLastSync(data.finished_at);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-products", {
+        body: { run_type: "full" },
+      });
+      if (error) throw error;
+      toast.success(`Sync concluído! ${data?.upsertCount || 0} produtos atualizados`);
+      loadLastSync();
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao sincronizar produtos");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const loadBoxes = async () => {
     setLoading(true);
@@ -179,13 +213,26 @@ const BoxesPage = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <p className="text-muted-foreground text-sm">
-          Gerencie as caixas de separação e expedição
-        </p>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Caixa
-        </Button>
+        <div>
+          <p className="text-muted-foreground text-sm">
+            Gerencie as caixas de separação e expedição
+          </p>
+          {lastSync && (
+            <p className="text-xs text-muted-foreground/60 mt-0.5">
+              Última sync: {new Date(lastSync).toLocaleString("pt-BR")}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Sincronizando..." : "Sincronizar Produtos"}
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Caixa
+          </Button>
+        </div>
       </div>
 
       {/* Active Boxes */}

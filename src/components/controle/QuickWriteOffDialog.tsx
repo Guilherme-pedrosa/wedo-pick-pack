@@ -86,12 +86,34 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   const loadItems = async () => {
     if (!box) return;
     setLoadingItems(true);
+
     const { data } = await supabase
       .from("box_items")
       .select("*")
       .eq("box_id", box.id)
       .order("nome_produto", { ascending: true });
-    setBoxItems(data || []);
+
+    const items = data || [];
+    setBoxItems(items);
+
+    const produtoIds = [...new Set(items.map((item) => item.produto_id).filter(Boolean))];
+    if (produtoIds.length > 0) {
+      const { data: indexData } = await supabase
+        .from("products_index")
+        .select("produto_id, codigo_interno")
+        .in("produto_id", produtoIds);
+
+      const codesMap: Record<string, string> = {};
+      (indexData || []).forEach((p) => {
+        if (p.codigo_interno) {
+          codesMap[p.produto_id] = p.codigo_interno;
+        }
+      });
+      setProductCodes(codesMap);
+    } else {
+      setProductCodes({});
+    }
+
     setLoadingItems(false);
   };
 

@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   FileText,
   Search,
   CheckCircle2,
   Minus,
   Plus,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,10 +26,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
-import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
+import { cn } from "@/lib/utils";
 import type { BoxData, BoxItemData } from "./BoxDetailDialog";
 
 interface Props {
@@ -40,7 +54,7 @@ interface Props {
 export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }: Props) {
   const [boxItems, setBoxItems] = useState<BoxItemData[]>([]);
   const [matchedItem, setMatchedItem] = useState<BoxItemData | null>(null);
-  const [scannerOpen, setScannerOpen] = useState(false);
+  const [comboOpen, setComboOpen] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
 
   const [tipo, setTipo] = useState<"os" | "venda">("os");
@@ -57,6 +71,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
     setQty(1);
     setValidado(false);
     setBoxItems([]);
+    setComboOpen(false);
   };
 
   const handleClose = () => {
@@ -65,54 +80,30 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
   };
 
   // Load box items when dialog opens
-  const handleOpenChange = async (isOpen: boolean) => {
-    if (!isOpen) {
-      handleClose();
-      return;
-    }
-    if (box) {
-      setLoadingItems(true);
-      const { data } = await supabase
-        .from("box_items")
-        .select("*")
-        .eq("box_id", box.id)
-        .order("added_at", { ascending: false });
-      setBoxItems(data || []);
-      setLoadingItems(false);
-    }
+  const loadItems = async () => {
+    if (!box) return;
+    setLoadingItems(true);
+    const { data } = await supabase
+      .from("box_items")
+      .select("*")
+      .eq("box_id", box.id)
+      .order("nome_produto", { ascending: true });
+    setBoxItems(data || []);
+    setLoadingItems(false);
   };
 
-  // When dialog first opens, load items
-  useState(() => {
+  useEffect(() => {
     if (open && box) {
-      handleOpenChange(true);
+      loadItems();
     }
-  });
+  }, [open, box?.id]);
 
-  const handleProductSelect = (product: ProductResult) => {
-    const found = boxItems.find((i) => i.produto_id === product.produto_id);
-    if (!found) {
-      toast.error(`Produto "${product.nome}" não está nesta caixa`);
-      return;
-    }
-    setMatchedItem(found);
+  const handleItemSelect = (item: BoxItemData) => {
+    setMatchedItem(item);
+    setComboOpen(false);
     setQty(1);
     setValidado(false);
     setRef("");
-  };
-
-  const handleScan = (code: string) => {
-    supabase.functions
-      .invoke("search-products-index", {
-        body: { query: code, source: "box_writeoff_scan" },
-      })
-      .then(({ data, error }) => {
-        if (error || !data?.data?.length) {
-          toast.error(`Produto não encontrado: ${code}`);
-          return;
-        }
-        handleProductSelect(data.data[0] as ProductResult);
-      });
   };
 
   const handleValidate = async () => {
@@ -220,12 +211,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       setQty(1);
       setValidado(false);
       // Reload items
-      const { data } = await supabase
-        .from("box_items")
-        .select("*")
-        .eq("box_id", box.id)
-        .order("added_at", { ascending: false });
-      setBoxItems(data || []);
+      await loadItems();
       onCompleted();
     } catch (e) {
       toast.error("Erro ao realizar baixa");
@@ -240,7 +226,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
 
   return (
     <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose(); }}>
         <DialogContent className="max-w-md max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -250,20 +236,47 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
           </DialogHeader>
 
           <div className="space-y-4 flex-1 overflow-y-auto">
-            {/* Step 1: Search product */}
+            {/* Step 1: Select item from box */}
             {!matchedItem && (
               <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Busque o produto que foi utilizado:
-                </p>
-                <ProductSearchInput
-                  onSelect={handleProductSelect}
-                  onScanRequest={() => setScannerOpen(true)}
-                  autoFocus
-                />
-                {loadingItems && (
-                  <p className="text-xs text-muted-foreground">Carregando itens da caixa...</p>
-                )}
+                <Label className="text-xs">Selecione o item utilizado</Label>
+                <Popover open={comboOpen} onOpenChange={setComboOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={comboOpen}
+                      className="w-full justify-between h-9 text-sm font-normal"
+                    >
+                      {loadingItems ? "Carregando..." : "Selecionar produto..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Filtrar por nome..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {boxItems.map((item) => (
+                            <CommandItem
+                              key={item.id}
+                              value={item.nome_produto}
+                              onSelect={() => handleItemSelect(item)}
+                              className="flex flex-col items-start gap-0.5 py-2"
+                            >
+                              <span className="text-sm font-medium">{item.nome_produto}</span>
+                              <span className="text-xs text-muted-foreground">
+                                Qtd: {item.quantidade}
+                                {item.preco_unitario > 0 && ` · R$ ${item.preco_unitario.toFixed(2)}`}
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
 
@@ -371,11 +384,6 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         </DialogContent>
       </Dialog>
 
-      <BarcodeScannerModal
-        open={scannerOpen}
-        onClose={() => setScannerOpen(false)}
-        onScan={handleScan}
-      />
     </>
   );
 }

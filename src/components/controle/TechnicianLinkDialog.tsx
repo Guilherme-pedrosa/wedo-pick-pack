@@ -18,11 +18,20 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { BoxData } from "./BoxDetailDialog";
+import BoxHandoffReceipt from "./BoxHandoffReceipt";
 
 interface Technician {
   id: string;
   gc_id: string;
   name: string;
+}
+
+interface ReceiptData {
+  boxName: string;
+  technicianName: string;
+  technicianGcId: string;
+  items: { nome_produto: string; quantidade: number; preco_unitario: number | null }[];
+  date: string;
 }
 
 interface Props {
@@ -36,6 +45,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
   useEffect(() => {
     if (box) {
@@ -50,7 +60,6 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
             toast.error("Erro ao carregar técnicos");
           }
           setTechnicians(data || []);
-          // Pre-select if box already has a technician
           if (box.technician_gc_id) {
             const match = data?.find((t) => t.gc_id === box.technician_gc_id);
             if (match) setSelectedId(match.id);
@@ -59,6 +68,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         });
     } else {
       setSelectedId("");
+      setReceiptData(null);
     }
   }, [box]);
 
@@ -76,9 +86,28 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         })
         .eq("id", box.id);
       if (error) throw error;
+
+      // Fetch box items for the receipt
+      const { data: items } = await supabase
+        .from("box_items")
+        .select("nome_produto, quantidade, preco_unitario")
+        .eq("box_id", box.id)
+        .order("nome_produto");
+
+      setReceiptData({
+        boxName: box.name,
+        technicianName: tech.name,
+        technicianGcId: tech.gc_id,
+        items: (items || []).map((i) => ({
+          nome_produto: i.nome_produto,
+          quantidade: i.quantidade,
+          preco_unitario: i.preco_unitario,
+        })),
+        date: new Date().toISOString(),
+      });
+
       toast.success(`Técnico "${tech.name}" vinculado à caixa "${box.name}"`);
       onLinked();
-      onClose();
     } catch (e) {
       toast.error("Erro ao vincular técnico");
       console.error(e);
@@ -86,6 +115,26 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
       setSaving(false);
     }
   };
+
+  const handleCloseReceipt = () => {
+    setReceiptData(null);
+    onClose();
+  };
+
+  // Show receipt if available
+  if (receiptData) {
+    return (
+      <BoxHandoffReceipt
+        open
+        onClose={handleCloseReceipt}
+        boxName={receiptData.boxName}
+        technicianName={receiptData.technicianName}
+        technicianGcId={receiptData.technicianGcId}
+        items={receiptData.items}
+        date={receiptData.date}
+      />
+    );
+  }
 
   return (
     <Dialog open={!!box} onOpenChange={() => onClose()}>

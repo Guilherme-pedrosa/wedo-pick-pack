@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 
 interface BoxItem {
+  produto_id: string;
   nome_produto: string;
   quantidade: number;
   preco_unitario: number | null;
@@ -79,11 +80,11 @@ export default function BoxHandoffReceipt({
           .info-item span { font-size: 12px; font-weight: 600; }
           table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
           th { background: #333; color: white; padding: 6px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-          th:last-child, th:nth-child(3) { text-align: right; }
-          th:nth-child(2) { text-align: center; }
+          th:last-child, th:nth-child(4) { text-align: right; }
+          th:nth-child(3) { text-align: center; }
           td { padding: 5px 8px; border-bottom: 1px solid #e0e0e0; font-size: 11px; }
-          td:nth-child(2) { text-align: center; }
-          td:nth-child(3), td:last-child { text-align: right; }
+          td:nth-child(3) { text-align: center; }
+          td:nth-child(4), td:last-child { text-align: right; }
           tr:nth-child(even) { background: #fafafa; }
           .totals { display: flex; justify-content: flex-end; gap: 24px; padding: 8px 0; border-top: 2px solid #333; margin-bottom: 20px; font-size: 12px; font-weight: 700; }
           .termo { border: 1px solid #ccc; border-radius: 4px; padding: 14px; margin-bottom: 16px; }
@@ -162,6 +163,7 @@ export default function BoxHandoffReceipt({
             <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "16px" }}>
               <thead>
                 <tr>
+                  <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Código</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "left", fontSize: "10px", textTransform: "uppercase" }}>Produto</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "center", fontSize: "10px", textTransform: "uppercase" }}>Qtd</th>
                   <th style={{ background: "#333", color: "white", padding: "6px 8px", textAlign: "right", fontSize: "10px", textTransform: "uppercase" }}>Unit.</th>
@@ -171,6 +173,9 @@ export default function BoxHandoffReceipt({
               <tbody>
                 {items.map((item, idx) => (
                   <tr key={idx} style={{ background: idx % 2 === 0 ? "white" : "#fafafa" }}>
+                    <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
+                      {item.produto_id}
+                    </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px" }}>
                       {item.nome_produto}
                     </td>

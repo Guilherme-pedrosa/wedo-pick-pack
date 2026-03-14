@@ -30,7 +30,7 @@ interface ReceiptData {
   boxName: string;
   technicianName: string;
   technicianGcId: string;
-  items: { nome_produto: string; quantidade: number; preco_unitario: number | null }[];
+  items: { produto_id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
   date: string;
 }
 
@@ -90,11 +90,12 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
       // Fetch box items for the receipt
       const { data: items } = await supabase
         .from("box_items")
-        .select("nome_produto, quantidade, preco_unitario")
+        .select("produto_id, nome_produto, quantidade, preco_unitario")
         .eq("box_id", box.id)
         .order("nome_produto");
 
       const receiptItems = (items || []).map((i) => ({
+        produto_id: i.produto_id,
         nome_produto: i.nome_produto,
         quantidade: i.quantidade,
         preco_unitario: i.preco_unitario,

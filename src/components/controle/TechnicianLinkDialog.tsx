@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { UserCheck, Loader2 } from "lucide-react";
+import { UserCheck, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -8,13 +9,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { BoxData } from "./BoxDetailDialog";
@@ -45,6 +39,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
@@ -69,6 +64,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         });
     } else {
       setSelectedId("");
+      setSearch("");
       setReceiptData(null);
     }
   }, [box]);
@@ -200,20 +196,40 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
               <span className="font-medium text-foreground">Controle e Saída → Técnicos</span>.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <label className="text-sm font-medium">Selecione o técnico</label>
-              <Select value={selectedId} onValueChange={setSelectedId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Escolha um técnico..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {technicians.map((tech) => (
-                    <SelectItem key={tech.id} value={tech.id}>
-                      {tech.name}
-                    </SelectItem>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar técnico..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-48 overflow-y-auto divide-y divide-border rounded-md border">
+                {technicians
+                  .filter((t) => t.name.toLowerCase().includes(search.toLowerCase()))
+                  .map((tech) => (
+                    <button
+                      key={tech.id}
+                      onClick={() => setSelectedId(tech.id)}
+                      className={`flex items-center gap-3 w-full px-3 py-2 text-left transition-colors hover:bg-accent/30 ${
+                        selectedId === tech.id ? "bg-accent text-accent-foreground" : ""
+                      }`}
+                    >
+                      <UserCheck className="h-4 w-4 text-primary shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">{tech.name}</p>
+                        <p className="text-xs text-muted-foreground">Nº Identificação: {tech.gc_id}</p>
+                      </div>
+                    </button>
                   ))}
-                </SelectContent>
-              </Select>
+                {technicians.filter((t) => t.name.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+                  <div className="py-3 text-center text-sm text-muted-foreground">Nenhum técnico encontrado</div>
+                )}
+              </div>
             </div>
           )}
         </div>

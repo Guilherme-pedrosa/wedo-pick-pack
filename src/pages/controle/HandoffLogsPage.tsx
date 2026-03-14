@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Loader2, ClipboardList, ArrowLeft, LogOut, LogIn,
-  RefreshCw, PackagePlus, PackageMinus, FileText, UserX,
+  RefreshCw, PackagePlus, PackageMinus, FileText, UserX, Search,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -43,6 +44,7 @@ export default function HandoffLogsPage() {
   const [logs, setLogs] = useState<MovementLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [searchText, setSearchText] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -71,7 +73,21 @@ export default function HandoffLogsPage() {
   const formatCurrency = (v: number) =>
     v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.action === filter);
+  const filtered = logs.filter((l) => {
+    if (filter !== "all" && l.action !== filter) return false;
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      return (
+        l.box_name?.toLowerCase().includes(q) ||
+        l.produto_nome?.toLowerCase().includes(q) ||
+        l.technician_name?.toLowerCase().includes(q) ||
+        l.operator_name?.toLowerCase().includes(q) ||
+        l.details?.toLowerCase().includes(q) ||
+        l.ref_numero?.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   const filters: { key: FilterType; label: string }[] = [
     { key: "all", label: "Todas" },
@@ -109,18 +125,29 @@ export default function HandoffLogsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        {filters.map((f) => (
-          <Button
-            key={f.key}
-            size="sm"
-            variant={filter === f.key ? "default" : "outline"}
-            onClick={() => setFilter(f.key)}
-          >
-            {f.label}
-          </Button>
-        ))}
+      {/* Search + Filters */}
+      <div className="space-y-3">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar caixa, produto, técnico, operador..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {filters.map((f) => (
+            <Button
+              key={f.key}
+              size="sm"
+              variant={filter === f.key ? "default" : "outline"}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {loading ? (

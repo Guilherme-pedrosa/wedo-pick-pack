@@ -29,7 +29,9 @@ const BoxesPage = () => {
 
   // Sync state
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ fetched: number; total: number } | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval>>();
 
   // Detail dialog state
   const [selectedBox, setSelectedBox] = useState<BoxData | null>(null);
@@ -46,6 +48,9 @@ const BoxesPage = () => {
   useEffect(() => {
     loadBoxes();
     loadLastSync();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   const loadLastSync = async () => {
@@ -60,8 +65,32 @@ const BoxesPage = () => {
     }
   };
 
+  const startProgressPolling = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      const { data } = await supabase
+        .from("sync_runs")
+        .select("fetched_count, total_count, status, finished_at")
+        .eq("status", "running")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setSyncProgress({ fetched: data.fetched_count, total: data.total_count });
+      }
+
+      // If no running sync found, check latest completed
+      if (!data || data.finished_at) {
+        if (pollRef.current) clearInterval(pollRef.current);
+      }
+    }, 2000);
+  };
+
   const handleSync = async () => {
     setSyncing(true);
+    setSyncProgress({ fetched: 0, total: 0 });
+    startProgressPolling();
     try {
       const { data, error } = await supabase.functions.invoke("sync-products", {
         body: { run_type: "full" },
@@ -73,6 +102,8 @@ const BoxesPage = () => {
       console.error(e);
       toast.error("Erro ao sincronizar produtos");
     } finally {
+      if (pollRef.current) clearInterval(pollRef.current);
+      setSyncProgress(null);
       setSyncing(false);
     }
   };

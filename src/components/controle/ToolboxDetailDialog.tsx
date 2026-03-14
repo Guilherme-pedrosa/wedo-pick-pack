@@ -112,7 +112,7 @@ export default function ToolboxDetailDialog({
     if (!selectedProduct || !toolbox || qty < 1) return;
     setAdding(true);
     try {
-      const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || "0") || 0;
+      const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || selectedProduct.payload_min_json?.valor_custo || "0") || 0;
       const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
       if (existing) {
         const { error } = await (supabase.from("toolbox_items") as any)

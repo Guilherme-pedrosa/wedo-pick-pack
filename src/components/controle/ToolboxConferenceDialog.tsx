@@ -133,47 +133,8 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
         details: `Conferência: ${presentCount}/${checkItems.length} presentes, ${missingCount} ausentes`,
       });
 
-      // Stock movements on unlink (devolução)
+      // Log missing items
       if (unlinkOnComplete && toolbox.technician_name) {
-        // Return stock for PRESENT items (devolved successfully)
-        const presentItems = checkItems.filter(i => i.presente);
-        if (presentItems.length > 0) {
-          setStockProgress(`Devolvendo estoque de ${presentItems.length} item(ns)...`);
-          try {
-            const result = await executeStockMovement({
-              items: presentItems.map(i => ({
-                produto_id: i.produto_id,
-                nome_produto: i.nome_produto,
-                quantidade: i.quantidade,
-              })),
-              justificativa: `Devolução de maleta "${toolbox.name}" - Técnico: ${toolbox.technician_name} devolveu ${presentItems.length} item(ns)`,
-              toolboxName: toolbox.name,
-              technicianName: toolbox.technician_name,
-              tipo: "entrada",
-            });
-
-            await logToolboxMovement({
-              toolboxId: toolbox.id,
-              toolboxName: toolbox.name,
-              action: "entrada_estoque",
-              technicianName: toolbox.technician_name || undefined,
-              technicianGcId: toolbox.technician_gc_id || undefined,
-              details: `Devolução de estoque: ${result.summary} (${presentItems.length} itens devolvidos)`,
-            });
-
-            const failedItems = result.results.filter(r => !r.success);
-            if (failedItems.length > 0) {
-              toast.warning(`Estoque devolvido parcialmente: ${result.summary}`);
-            } else {
-              toast.success(`Estoque devolvido: ${result.summary}`);
-            }
-          } catch (stockErr) {
-            console.error("Stock return error:", stockErr);
-            toast.error("Erro ao devolver estoque no ERP.");
-          }
-        }
-
-        // Log missing items (stock NOT returned - stays out)
         const missingItems = checkItems.filter(i => !i.presente);
         if (missingItems.length > 0) {
           const missingDetails = missingItems
@@ -186,10 +147,10 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
             action: "extravio",
             technicianName: toolbox.technician_name || undefined,
             technicianGcId: toolbox.technician_gc_id || undefined,
-            details: `Itens não devolvidos (estoque NÃO reposto): ${missingDetails}`,
+            details: `Itens ausentes: ${missingDetails}`,
           });
 
-          toast.warning(`${missingItems.length} ferramenta(s) ausente(s) — estoque NÃO devolvido para esses itens.`, { duration: 8000 });
+          toast.warning(`${missingItems.length} ferramenta(s) ausente(s)!`, { duration: 8000 });
         }
 
         // Unlink technician

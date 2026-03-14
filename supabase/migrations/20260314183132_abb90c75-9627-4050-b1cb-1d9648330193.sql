@@ -1,0 +1,14 @@
+UPDATE public.box_items SET preco_unitario = 993.30 WHERE produto_id = '66867909' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 9.90 WHERE produto_id = '70236831' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 40.18 WHERE produto_id = '66867808' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 6.77 WHERE produto_id = '87221226' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 109.80 WHERE produto_id = '66867720' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 228.10 WHERE produto_id = '66867726' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 2.40 WHERE produto_id = '78285975' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 1.16 WHERE produto_id = '66867709' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 337.37 WHERE produto_id = '66867899' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 247.50 WHERE produto_id = '66868187' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 15.21 WHERE produto_id = '66867705' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 117.70 WHERE produto_id = '66867747' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 15.52 WHERE produto_id = '66867667' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);
+UPDATE public.box_items SET preco_unitario = 165.69 WHERE produto_id = '70016061' AND box_id = (SELECT id FROM boxes WHERE name ILIKE '%aquecimento 1%' LIMIT 1);

@@ -309,7 +309,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                       <Label className="text-xs whitespace-nowrap">Devolvido:</Label>
                       <Input
                         type="number"
-                        value={ci.devolvido}
+                        value={ci.devolvido || ""}
                         onChange={(e) =>
                           updateItem(index, {
                             devolvido: Math.max(

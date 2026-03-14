@@ -219,23 +219,32 @@ const ToolboxesPage = () => {
       .select("*")
       .eq("toolbox_id", toolbox.id);
 
-    // Enrich items with codigo_interno from products_index
+    // Enrich items with codigo_interno and valor_venda from products_index
     const produtoIds = (items || []).map((i: any) => i.produto_id);
-    let codigoMap = new Map<string, string>();
+    let productMap = new Map<string, { codigo_interno?: string; preco_venda?: number }>();
     if (produtoIds.length > 0) {
       const { data: products } = await supabase
         .from("products_index")
-        .select("produto_id, codigo_interno")
+        .select("produto_id, codigo_interno, payload_min_json")
         .in("produto_id", produtoIds);
       products?.forEach((p) => {
-        if (p.codigo_interno) codigoMap.set(p.produto_id, p.codigo_interno);
+        const payload = p.payload_min_json as any;
+        const precoVenda = parseFloat(payload?.preco_venda || payload?.valor_venda || "0") || 0;
+        productMap.set(p.produto_id, {
+          codigo_interno: p.codigo_interno || undefined,
+          preco_venda: precoVenda,
+        });
       });
     }
 
-    const enrichedItems = (items || []).map((i: any) => ({
-      ...i,
-      codigo_interno: codigoMap.get(i.produto_id) || "",
-    }));
+    const enrichedItems = (items || []).map((i: any) => {
+      const info = productMap.get(i.produto_id);
+      return {
+        ...i,
+        codigo_interno: info?.codigo_interno || "",
+        preco_unitario: i.preco_unitario && i.preco_unitario > 0 ? i.preco_unitario : (info?.preco_venda || 0),
+      };
+    });
 
     setReceiptData({
       toolboxName: toolbox.name,

@@ -384,11 +384,6 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         </DialogContent>
       </Dialog>
 
-      <BarcodeScannerModal
-        open={scannerOpen}
-        onClose={() => setScannerOpen(false)}
-        onScan={handleScan}
-      />
     </>
   );
 }

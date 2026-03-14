@@ -340,7 +340,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
               </Button>
               <Button
                 onClick={() => setStep("review")}
-                disabled={hasDivergencias && !allDivergenciasJustified}
+                disabled={hasDivergencias && !allDivergenciasValidated}
               >
                 Próximo: Reposição
               </Button>

@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
+import { executeStockEntrada } from "@/api/stockMovement";
 
 export interface ToolboxData {
   id: string;
@@ -226,6 +227,31 @@ export default function ToolboxDetailDialog({
       });
 
       toast.success(`${returningItem.nome_produto} devolvido`);
+
+      // Cancel the sale in GestãoClick if there's a linked sale
+      if (toolbox.venda_gc_id) {
+        try {
+          toast.info("Cancelando venda no GestãoClick...");
+          const result = await executeStockEntrada({
+            vendaGcId: toolbox.venda_gc_id,
+            toolboxName: toolbox.name,
+            technicianName: toolbox.technician_name || "",
+          });
+          if (result.success) {
+            // Clear venda_gc_id from toolbox
+            await (supabase.from("toolboxes") as any)
+              .update({ venda_gc_id: null })
+              .eq("id", toolbox.id);
+            toast.success("Venda cancelada no GestãoClick");
+          } else {
+            toast.error(`Erro ao cancelar venda: ${result.error}`);
+          }
+        } catch (err) {
+          console.error("Error cancelling sale:", err);
+          toast.error("Erro ao cancelar venda no GestãoClick");
+        }
+      }
+
       setReturningItem(null);
       setReturnQty(1);
       onItemsChanged();

@@ -165,18 +165,20 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       }
 
       const detailId = match.id || match.ordem_servico_id || match.venda_id;
-      const detailPath =
-        tipo === "os"
-          ? `/api/ordens_servicos/${detailId}`
-          : `/api/vendas/${detailId}`;
-
-      const { data: detailData, error: detailError } = await supabase.functions.invoke("gc-proxy", {
-        body: { path: detailPath, method: "GET" },
-      });
-      if (detailError) throw detailError;
-      if (!detailData?._proxy?.ok) {
-        toast.error(`Erro ao carregar detalhes da ${label} #${ref}`);
-        return;
+      
+      // If match already has produtos (from direct fetch), skip detail fetch
+      let orderData = match;
+      if (!match.produtos) {
+        const detailPath = `/api/${endpoint}/${detailId}`;
+        const { data: detailData, error: detailError } = await supabase.functions.invoke("gc-proxy", {
+          body: { path: detailPath, method: "GET" },
+        });
+        if (detailError) throw detailError;
+        if (!detailData?._proxy?.ok) {
+          toast.error(`Erro ao carregar detalhes da ${label} #${ref}`);
+          return;
+        }
+        orderData = detailData?.data;
       }
 
       // Date validation

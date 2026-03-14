@@ -123,10 +123,25 @@ export default function BoxDetailDialog({
     }
   };
 
-  const handleRemoveItem = async (itemId: string) => {
+  const handleRemoveItem = async (itemToRemove: BoxItemData) => {
+    if (!box) return;
     try {
-      const { error } = await supabase.from("box_items").delete().eq("id", itemId);
+      const { error } = await supabase.from("box_items").delete().eq("id", itemToRemove.id);
       if (error) throw error;
+
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "remocao",
+        produtoId: itemToRemove.produto_id,
+        produtoNome: itemToRemove.nome_produto,
+        quantidade: itemToRemove.quantidade,
+        precoUnitario: itemToRemove.preco_unitario,
+        technicianName: box.technician_name || undefined,
+        technicianGcId: box.technician_gc_id || undefined,
+        details: `Removido ${itemToRemove.quantidade}x "${itemToRemove.nome_produto}"`,
+      });
+
       toast.success("Item removido");
       onItemsChanged();
     } catch {

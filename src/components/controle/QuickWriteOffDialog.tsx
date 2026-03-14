@@ -246,6 +246,21 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         if (error) throw error;
       }
 
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "baixa",
+        produtoId: matchedItem.produto_id,
+        produtoNome: matchedItem.nome_produto,
+        quantidade: qty,
+        precoUnitario: matchedItem.preco_unitario,
+        refTipo: tipo,
+        refNumero: ref.trim(),
+        technicianName: box.technician_name || undefined,
+        technicianGcId: box.technician_gc_id || undefined,
+        details: `Baixa de ${qty}x vinculada à ${tipo === "os" ? "OS" : "Venda"} #${ref.trim()}`,
+      });
+
       const label = tipo === "os" ? "OS" : "Venda";
       toast.success(`Baixa de ${qty}x "${matchedItem.nome_produto}" vinculada à ${label} #${ref}`);
       // Reset for next item

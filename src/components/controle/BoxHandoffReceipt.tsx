@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,22 @@ export default function BoxHandoffReceipt({
   date,
 }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
+  const [logoBase64, setLogoBase64] = useState<string>("");
+
+  useEffect(() => {
+    // Convert logo to base64 so it works in print windows / PDF
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(img, 0, 0);
+      setLogoBase64(canvas.toDataURL("image/jpeg"));
+    };
+    img.src = "/images/logo-wedo.jpeg";
+  }, []);
 
   const totalValue = items.reduce(
     (sum, i) => sum + i.quantidade * (i.preco_unitario || 0),
@@ -55,10 +71,15 @@ export default function BoxHandoffReceipt({
     const content = printRef.current;
     if (!content) return;
 
+    // Replace the src in the cloned HTML with the base64 version
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = content.innerHTML;
+    const imgs = tempDiv.querySelectorAll("img[data-logo]");
+    imgs.forEach((img) => img.setAttribute("src", logoBase64));
+
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const logoUrl = window.location.origin + "/images/logo-wedo.jpeg";
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -95,7 +116,7 @@ export default function BoxHandoffReceipt({
         </style>
       </head>
       <body>
-        ${content.innerHTML}
+        ${tempDiv.innerHTML}
       </body>
       </html>
     `);
@@ -124,7 +145,7 @@ export default function BoxHandoffReceipt({
           >
             {/* Company Header */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px", paddingBottom: "12px", borderBottom: "2px solid #333" }}>
-              <img src="/images/logo-wedo.jpeg" alt="WeDo" style={{ height: "50px" }} />
+              <img data-logo="true" src="/images/logo-wedo.jpeg" alt="WeDo" style={{ height: "50px" }} />
               <div>
                 <h2 style={{ fontSize: "13px", fontWeight: 700, marginBottom: "2px" }}>WD Comércio e Importação</h2>
                 <p style={{ fontSize: "9px", color: "#666", lineHeight: 1.4, margin: 0 }}>CNPJ: 43.572.954/0001-81</p>

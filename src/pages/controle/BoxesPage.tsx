@@ -345,6 +345,28 @@ const BoxesPage = () => {
         </div>
       </div>
 
+      {/* Baixa Validation Alerts */}
+      {baixaAlerts.length > 0 && (
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <h3 className="text-sm font-semibold text-destructive">
+              Alertas de Baixas ({baixaAlerts.length})
+            </h3>
+          </div>
+          <div className="space-y-1.5">
+            {baixaAlerts.map((alert, i) => (
+              <div key={i} className="text-xs text-destructive/90 bg-destructive/5 rounded px-3 py-2 border border-destructive/10">
+                <span className="font-medium">{alert.reason}</span>
+                <span className="block text-destructive/60 mt-0.5">
+                  Caixa: {alert.boxName} · {alert.produtoNome} ({alert.quantidade}x)
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Em Operação */}
       <div>
         <div className="flex items-center gap-2 mb-3">

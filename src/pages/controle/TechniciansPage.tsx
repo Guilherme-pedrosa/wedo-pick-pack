@@ -201,7 +201,7 @@ const TechniciansPage = () => {
       setGcEmployees(employees);
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao buscar funcionários");
+      toast.error("Erro ao buscar técnicos");
     } finally {
       setSearching(false);
     }

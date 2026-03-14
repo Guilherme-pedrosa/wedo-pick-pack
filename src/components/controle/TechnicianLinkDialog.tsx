@@ -64,6 +64,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         });
     } else {
       setSelectedId("");
+      setSearch("");
       setReceiptData(null);
     }
   }, [box]);

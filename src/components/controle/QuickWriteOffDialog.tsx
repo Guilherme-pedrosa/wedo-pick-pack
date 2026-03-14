@@ -182,7 +182,7 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       }
 
       // Date validation
-      const orderData = detailData?.data;
+      // orderData already set above
       const orderDateStr = orderData?.data || orderData?.data_emissao || orderData?.data_criacao;
       if (orderDateStr && box) {
         const orderDate = new Date(orderDateStr);

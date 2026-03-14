@@ -30,7 +30,7 @@ interface ReceiptData {
   boxName: string;
   technicianName: string;
   technicianGcId: string;
-  items: { nome_produto: string; quantidade: number; preco_unitario: number | null }[];
+  items: { produto_id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
   date: string;
 }
 

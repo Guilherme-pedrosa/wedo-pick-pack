@@ -53,7 +53,6 @@ async function auvoLogin(): Promise<string> {
 }
 
 async function auvoCreateTask(token: string, payload: Record<string, unknown>): Promise<any> {
-  // Auvo uses PUT /tasks for upsert (create or update)
   const res = await fetch(`${AUVO_API_URL}/tasks`, {
     method: 'PUT',
     headers: {
@@ -66,9 +65,10 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
   let data: any;
   try { data = JSON.parse(text); } catch { data = { raw: text }; }
   if (!res.ok) {
-    throw new Error(`Auvo create task failed [${res.status}]: ${JSON.stringify(data).slice(0, 500)}`);
+    throw new Error(`Auvo create task failed [${res.status}]: ${text.slice(0, 500)}`);
   }
-  return data?.result ?? data;
+  // Return raw parsed response — caller handles taskID extraction
+  return data;
 }
 
 // ---------- GC: Discover OS attribute IDs ----------
@@ -172,33 +172,41 @@ Deno.serve(async (req: Request) => {
     // STEP 3: Create Auvo task (no technician, no date)
     // ============================================
     console.log('[generate-os] Step 2: Creating Auvo task...');
+    // Auvo requires: idUserFrom, latitude, longitude, address, orientation, priority
+    const clientAddress = orcamento.endereco_cliente || 'A definir';
     const auvoPayload: Record<string, unknown> = {
       taskType: 180177,
       idUserFrom: Number(auvo_user_id),
-      // No idUserTo (sem técnico)
-      // No taskDate (sem data)
       orientation,
-      priority: 2, // Medium
+      priority: 2,
       questionnaireId: 214757,
-      customerId: orcamento.auvo_customer_id || undefined,
+      // Always send geo (required by Auvo spec)
+      address: clientAddress,
+      latitude: 0,
+      longitude: 0,
     };
 
-    // Try to get address from budget client if available
-    // For now just set a placeholder - Auvo requires lat/lng/address
-    if (!auvoPayload.customerId) {
-      auvoPayload.address = orcamento.endereco_cliente || 'A definir';
-      auvoPayload.latitude = 0;
-      auvoPayload.longitude = 0;
+    // If we have an Auvo customer, set it (Auvo will use customer's geo)
+    if (orcamento.auvo_customer_id) {
+      auvoPayload.customerId = orcamento.auvo_customer_id;
     }
 
+    console.log(`[generate-os] Auvo payload: ${JSON.stringify(auvoPayload).slice(0, 500)}`);
     const auvoResult = await auvoCreateTask(auvoToken, auvoPayload);
-    // Auvo returns result as array: [{taskID, ...}]
-    const auvoTask = Array.isArray(auvoResult) ? auvoResult[0] : auvoResult;
-    const auvoTaskId = auvoTask?.taskID;
+
+    // Resilient taskID extraction: result can be object, array, or nested
+    const auvoTaskId =
+      auvoResult?.result?.taskID ??
+      auvoResult?.result?.[0]?.taskID ??
+      (Array.isArray(auvoResult) ? auvoResult[0]?.taskID : null) ??
+      auvoResult?.taskID ??
+      null;
+
+    console.log(`[generate-os] Auvo full response: ${JSON.stringify(auvoResult).slice(0, 500)}`);
     console.log(`[generate-os] Auvo task created: ID=${auvoTaskId}`);
 
     if (!auvoTaskId) {
-      throw new Error(`Auvo task creation returned no taskID: ${JSON.stringify(auvoResult).slice(0, 300)}`);
+      throw new Error(`Auvo task creation returned no taskID. Full response: ${JSON.stringify(auvoResult).slice(0, 500)}`);
     }
 
     await wait(500); // small pause between APIs

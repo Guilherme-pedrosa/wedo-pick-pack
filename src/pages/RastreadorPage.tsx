@@ -73,6 +73,64 @@ export default function RastreadorPage() {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [blockedExpanded, setBlockedExpanded] = useState(true);
 
+  // OS generation state
+  const [generatingOS, setGeneratingOS] = useState(false);
+  const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
+  const [generationResult, setGenerationResult] = useState<{
+    success: boolean;
+    auvoTaskId?: number;
+    osCodigo?: string;
+    error?: string;
+  } | null>(null);
+
+  const handleGenerateOS = async (entry: OrcamentoReadiness) => {
+    setGeneratingOS(true);
+    setGenerationResult(null);
+    try {
+      // Get current user profile for auvo_user_id and gc_usuario_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Sessão expirada');
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('auvo_user_id, gc_usuario_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const auvoUserId = (profile as any)?.auvo_user_id;
+      if (!auvoUserId) {
+        toast.error('Configure seu ID de Usuário Auvo nas Configurações antes de gerar OS.');
+        setConfirmEntry(null);
+        setGeneratingOS(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('generate-os', {
+        body: {
+          orcamento: entry.orcamento,
+          auvo_user_id: auvoUserId,
+          gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      setGenerationResult({
+        success: true,
+        auvoTaskId: data.auvo_task_id,
+        osCodigo: data.os_codigo,
+      });
+      toast.success(`OS #${data.os_codigo} criada com sucesso! Tarefa Auvo: ${data.auvo_task_id}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      setGenerationResult({ success: false, error: msg });
+      toast.error(`Erro ao gerar OS: ${msg}`);
+    } finally {
+      setGeneratingOS(false);
+    }
+  };
+
   const statusQuery = useQuery({
     queryKey: ['status-orcamentos'],
     queryFn: getStatusOrcamentos,

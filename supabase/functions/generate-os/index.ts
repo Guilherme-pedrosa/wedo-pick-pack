@@ -146,35 +146,20 @@ Deno.serve(async (req: Request) => {
     // ============================================
     // STEP 1: Login to Auvo + Fetch client address from GC (parallel)
     // ============================================
-    console.log('[generate-os] Step 1: Auvo login + GC client fetch...');
+    console.log('[generate-os] Step 1: Auvo login...');
 
-    // Fetch client details from GC to get address
-    const fetchClientAddress = async (): Promise<{ endereco: string; cidade: string; estado: string; cep: string }> => {
-      try {
-        const clientRes = await gcRequest(`/api/clientes/${orcamento.cliente_id}`, 'GET');
-        const c = clientRes?.data || {};
-        return {
-          endereco: c.endereco || '',
-          cidade: c.cidade || '',
-          estado: c.estado || '',
-          cep: c.cep || '',
-        };
-      } catch (e) {
-        console.warn('[generate-os] Could not fetch client address from GC:', e);
-        return { endereco: '', cidade: '', estado: '', cep: '' };
-      }
-    };
-
-    const [auvoToken, clientGeo] = await Promise.all([
-      auvoLogin(),
-      fetchClientAddress(),
-    ]);
+    const auvoToken = await auvoLogin();
     console.log('[generate-os] Auvo login OK');
 
-    // Build full address string
-    const addressParts = [clientGeo.endereco, clientGeo.cidade, clientGeo.estado, clientGeo.cep].filter(Boolean);
+    // Use address directly from orçamento — clone, don't fetch
+    const addressParts = [
+      orcamento.endereco,
+      orcamento.cidade,
+      orcamento.estado,
+      orcamento.cep,
+    ].filter(Boolean);
     const clientAddress = addressParts.length > 0 ? addressParts.join(', ') : orcamento.nome_cliente;
-    console.log(`[generate-os] Client address: ${clientAddress}`);
+    console.log(`[generate-os] Client address (from orçamento): ${clientAddress}`);
 
     // ============================================
     // STEP 2: Build orientation (product/service list)

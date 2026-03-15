@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useComprasStore } from "@/store/comprasStore";
+import { useCheckoutStore } from "@/store/checkoutStore";
 
 interface KpiData {
   title: string;
@@ -39,6 +41,9 @@ const DashboardPage = () => {
   const [recentSeparations, setRecentSeparations] = useState<RecentSeparation[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ status: string; finished_at: string | null } | null>(null);
+  const [totalSeparations, setTotalSeparations] = useState(0);
+  const comprasResult = useComprasStore((s) => s.result);
+  const checkoutSession = useCheckoutStore((s) => s.session);
 
   useEffect(() => {
     loadData();
@@ -57,6 +62,14 @@ const DashboardPage = () => {
 
       if (seps) setRecentSeparations(seps);
 
+      // Count total separations (not invalidated)
+      const { count } = await supabase
+        .from("separations")
+        .select("id", { count: "exact", head: true })
+        .eq("invalidated", false);
+
+      setTotalSeparations(count ?? 0);
+
       // Fetch last sync run
       const { data: lastSync } = await supabase
         .from("sync_runs")
@@ -73,28 +86,39 @@ const DashboardPage = () => {
     }
   };
 
+  const pendingSessionLabel = checkoutSession
+    ? `Em andamento: #${checkoutSession.codigo}`
+    : "Nenhum pedido em separação";
+
+  const comprasItens = comprasResult?.totalProdutosSemEstoque ?? 0;
+  const comprasSubtitle = comprasResult
+    ? `Última varredura: ${new Date(comprasResult.scannedAt).toLocaleString("pt-BR")}`
+    : "Nenhuma varredura realizada";
+
+  const todayCount = recentSeparations.filter(
+    (s) => new Date(s.concluded_at).toDateString() === new Date().toDateString()
+  ).length;
+
   const kpis: KpiData[] = [
     {
-      title: "Pedidos para Separar",
-      value: "—",
-      subtitle: "Carregar via Checkout",
+      title: "Separações",
+      value: totalSeparations,
+      subtitle: pendingSessionLabel,
       icon: Package,
       color: "text-primary",
       href: "/checkout",
     },
     {
       title: "Itens para Comprar",
-      value: "—",
-      subtitle: "Gerar lista em Compras",
+      value: comprasItens,
+      subtitle: comprasSubtitle,
       icon: ShoppingCart,
       color: "text-warning",
       href: "/compras",
     },
     {
       title: "Separações Hoje",
-      value: recentSeparations.filter(
-        (s) => new Date(s.concluded_at).toDateString() === new Date().toDateString()
-      ).length,
+      value: todayCount,
       subtitle: "Concluídas hoje",
       icon: PackageCheck,
       color: "text-success",

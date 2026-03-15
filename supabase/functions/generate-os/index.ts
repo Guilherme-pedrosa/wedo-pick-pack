@@ -250,18 +250,39 @@ Deno.serve(async (req: Request) => {
     // ============================================
     console.log('[generate-os] Step 4: Creating GC OS...');
 
+    // Start with all attributes from the original budget (orçamento)
+    // This ensures required OS attributes (LOCAL DO REPARO, HORAS TÉCNICAS, etc.) are carried over
     const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+    const usedAttrIds = new Set<string>();
+
+    // Copy all existing atributos from the orçamento
+    if (orcamento.atributos?.length) {
+      for (const a of orcamento.atributos) {
+        const attr = a.atributo || a;
+        const attrId = attr.atributo_id || attr.id;
+        const conteudo = attr.conteudo ?? '';
+        if (attrId && !usedAttrIds.has(String(attrId))) {
+          usedAttrIds.add(String(attrId));
+          atributos.push({ atributo: { atributo_id: String(attrId), conteudo: String(conteudo) } });
+        }
+      }
+    }
+
+    // Override/add specific attributes
     const pushAttr = (atributo_id: string | null, conteudo: string) => {
       if (!atributo_id) return;
-      if (atributos.some((a) => a.atributo.atributo_id === atributo_id)) return;
+      // Remove existing if present (to override with our value)
+      const idx = atributos.findIndex((a) => a.atributo.atributo_id === atributo_id);
+      if (idx >= 0) atributos.splice(idx, 1);
+      usedAttrIds.add(atributo_id);
       atributos.push({ atributo: { atributo_id, conteudo } });
     };
 
     pushAttr(attrIds.numOrcamento, String(orcamento.codigo));
     pushAttr(attrIds.tarefaExecucao, String(auvoTaskId));
-    pushAttr(attrIds.tarefaOs, String(auvoTaskId));
-    pushAttr(attrIds.localReparo, String(clientAddress || 'A definir'));
-    pushAttr(attrIds.horasTecnicas, String(orcamento.horas_tecnicas ?? '0'));
+    if (attrIds.tarefaOs) pushAttr(attrIds.tarefaOs, String(auvoTaskId));
+
+    console.log(`[generate-os] OS atributos count: ${atributos.length}`);
 
     // Build products array for OS from budget products
     const osProdutos = (orcamento.produtos || []).map((p: any) => {

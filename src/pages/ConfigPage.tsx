@@ -157,12 +157,20 @@ export default function ConfigPage() {
         )}
       </Card>
 
-      {/* Info */}
+      {/* Operador + Auvo */}
       <Card className="p-6 space-y-4">
         <h2 className="text-lg font-semibold">Operador</h2>
         <p className="text-sm text-muted-foreground">
           Logado como: <strong>{config.operatorName || '—'}</strong>
         </p>
+        <Separator />
+        <div>
+          <Label htmlFor="auvo-user-id" className="text-sm font-medium">ID Usuário Auvo</Label>
+          <p className="text-xs text-muted-foreground mb-2">
+            Necessário para gerar tarefas no Auvo a partir do Rastreador. É o userId do seu perfil no Auvo (campo idUserFrom).
+          </p>
+          <AuvoUserIdField />
+        </div>
         <p className="text-xs text-muted-foreground">
           O nome do operador é definido pelo seu perfil de usuário. Para gerenciar usuários, acesse a página de Usuários (somente admins).
         </p>

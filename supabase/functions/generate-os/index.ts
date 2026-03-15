@@ -42,11 +42,9 @@ async function auvoLogin(): Promise<string> {
   const apiToken = Deno.env.get('AUVO_API_TOKEN');
   if (!apiKey || !apiToken) throw new Error('Auvo credentials not configured');
 
-  const res = await fetch(`${AUVO_API_URL}/login/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ apiKey, apiToken }),
-  });
+  const url = `${AUVO_API_URL}/login/?apiKey=${encodeURIComponent(apiKey)}&apiToken=${encodeURIComponent(apiToken)}`;
+  const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+  if (!res.ok) throw new Error(`Auvo login failed (${res.status})`);
   const data = await res.json();
   if (!data?.result?.accessToken) {
     throw new Error(`Auvo login failed: ${JSON.stringify(data).slice(0, 300)}`);

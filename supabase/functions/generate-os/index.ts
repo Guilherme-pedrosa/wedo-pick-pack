@@ -442,6 +442,7 @@ Deno.serve(async (req: Request) => {
         auvo_task_id: auvoTaskId,
         os_id: osId,
         os_codigo: osCodigo,
+        warnings: warnings.length > 0 ? warnings : undefined,
         gc_response: gcResult?.data,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

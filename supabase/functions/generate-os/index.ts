@@ -42,11 +42,9 @@ async function auvoLogin(): Promise<string> {
   const apiToken = Deno.env.get('AUVO_API_TOKEN');
   if (!apiKey || !apiToken) throw new Error('Auvo credentials not configured');
 
-  const res = await fetch(`${AUVO_API_URL}/login/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ apiKey, apiToken }),
-  });
+  const url = `${AUVO_API_URL}/login/?apiKey=${encodeURIComponent(apiKey)}&apiToken=${encodeURIComponent(apiToken)}`;
+  const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+  if (!res.ok) throw new Error(`Auvo login failed (${res.status})`);
   const data = await res.json();
   if (!data?.result?.accessToken) {
     throw new Error(`Auvo login failed: ${JSON.stringify(data).slice(0, 300)}`);
@@ -55,16 +53,19 @@ async function auvoLogin(): Promise<string> {
 }
 
 async function auvoCreateTask(token: string, payload: Record<string, unknown>): Promise<any> {
-  const res = await fetch(`${AUVO_API_URL}/tasks/`, {
-    method: 'POST',
+  // Auvo uses PUT /tasks for upsert (create or update)
+  const res = await fetch(`${AUVO_API_URL}/tasks`, {
+    method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });
-  const data = await res.json();
-  if (!res.ok && res.status !== 201) {
+  const text = await res.text();
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!res.ok) {
     throw new Error(`Auvo create task failed [${res.status}]: ${JSON.stringify(data).slice(0, 500)}`);
   }
   return data?.result ?? data;

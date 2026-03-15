@@ -243,7 +243,7 @@ Deno.serve(async (req: Request) => {
     // ============================================
     console.log('[generate-os] Step 3: Discovering OS attribute IDs...');
     const attrIds = await getOSAtributoIds();
-    console.log(`[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}`);
+    console.log(`[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}, tarefaOS=${attrIds.tarefaOs}, localReparo=${attrIds.localReparo}, horasTecnicas=${attrIds.horasTecnicas}`);
 
     // ============================================
     // STEP 5: Create OS in GestãoClick

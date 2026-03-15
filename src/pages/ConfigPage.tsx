@@ -122,32 +122,47 @@ export default function ConfigPage() {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error('AUTH_REQUIRED');
 
-      const { error } = await supabase
+      const payload = {
+        os_status_to_show: osStatusToShow,
+        venda_status_to_show: vendaStatusToShow,
+        default_os_conclusion_status: defaultOSStatus,
+        default_venda_conclusion_status: defaultVendaStatus,
+      };
+
+      console.log('[ConfigPage] Saving config:', JSON.stringify(payload));
+
+      const { data, error } = await supabase
         .from('profiles')
-        .update({
-          os_status_to_show: osStatusToShow,
-          venda_status_to_show: vendaStatusToShow,
-          default_os_conclusion_status: defaultOSStatus,
-          default_venda_conclusion_status: defaultVendaStatus,
-        } as never)
-        .eq('id', user.id);
+        .update(payload as never)
+        .eq('id', user.id)
+        .select('os_status_to_show, venda_status_to_show, default_os_conclusion_status, default_venda_conclusion_status');
 
       if (error) throw error;
 
+      if (!data || data.length === 0) {
+        console.error('[ConfigPage] Update returned no rows — profile may not exist for user', user.id);
+        toast.error('Erro: perfil não encontrado. Faça logout e login novamente.');
+        return;
+      }
+
+      const saved = data[0];
+      console.log('[ConfigPage] Saved config confirmed:', JSON.stringify(saved));
+
       setConfig({
         operatorName,
-        osStatusToShow,
-        vendaStatusToShow,
-        defaultOSConclusionStatus: defaultOSStatus,
-        defaultVendaConclusionStatus: defaultVendaStatus,
+        osStatusToShow: saved.os_status_to_show ?? [],
+        vendaStatusToShow: saved.venda_status_to_show ?? [],
+        defaultOSConclusionStatus: saved.default_os_conclusion_status ?? '',
+        defaultVendaConclusionStatus: saved.default_venda_conclusion_status ?? '',
       });
       toast.success('Configurações salvas com sucesso!');
     } catch (err: unknown) {
+      console.error('[ConfigPage] Save error:', err);
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       if (msg === 'AUTH_REQUIRED') {
         toast.error('Sessão expirada. Faça login novamente.');
       } else {
-        toast.error('Não foi possível salvar suas configurações no perfil.');
+        toast.error(`Não foi possível salvar: ${msg}`);
       }
     } finally {
       setSaving(false);

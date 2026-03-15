@@ -120,6 +120,7 @@ export default function ConferencePanel() {
   const handlePrint = useCallback(() => {
     if (!session) return;
     const items = session.items;
+    const logoUrl = window.location.origin + '/images/logo-wedo-2.jpeg';
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório de Separação</title>
 <style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px}
 table{width:100%;border-collapse:collapse;margin-top:16px}
@@ -128,9 +129,20 @@ th{background:#f0f0f0;font-size:11px}
 h1{font-size:18px;margin:0}h2{font-size:14px;color:#666;margin:4px 0 16px}
 .meta{margin-bottom:8px;font-size:12px}
 .footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
+.header{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+.header img{height:60px}
+.disclaimer{margin-top:24px;padding:12px;border:1px solid #ccc;border-radius:6px;font-size:11px;line-height:1.6;color:#333;background:#fafafa}
+.disclaimer p{margin:0 0 8px 0}
+.disclaimer p:last-child{margin-bottom:0}
+@media print{.disclaimer{break-inside:avoid}}
 </style></head><body>
-<h1>WeDo — Relatório de Separação</h1>
-<h2>${session.tipo === 'os' ? 'Ordem de Serviço' : 'Venda'} #${session.codigo}</h2>
+<div class="header">
+  <img src="${logoUrl}" alt="WeDo" />
+  <div>
+    <h1>WeDo — Relatório de Separação</h1>
+    <h2>${session.tipo === 'os' ? 'Ordem de Serviço' : 'Venda'} #${session.codigo}</h2>
+  </div>
+</div>
 <div class="meta"><strong>Cliente:</strong> ${session.nomeCliente}</div>
 <div class="meta"><strong>Situação:</strong> ${session.nomeSituacao} · <strong>Valor:</strong> R$ ${session.valorTotal}</div>
 <div class="meta"><strong>Operador:</strong> ${config.operatorName || '—'}</div>
@@ -138,6 +150,12 @@ h1{font-size:18px;margin:0}h2{font-size:14px;color:#666;margin:4px 0 16px}
 <table><thead><tr><th>Produto</th><th>Cód. Produto</th><th>Qtd. Total</th><th>Qtd. Conferida</th><th>Horário</th><th>Status</th></tr></thead><tbody>
 ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>${i.qtd_total}</td><td>${i.qtd_conferida}</td><td>${i.confirmed_at ? new Date(i.confirmed_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}</td><td>${i.conferido ? '✓ Conferido' : '⚠ Pendente'}</td></tr>`).join('')}
 </tbody></table>
+<div class="disclaimer">
+  <p>Ao retirar estas peças, o técnico assume total responsabilidade.</p>
+  <p>Em caso de perda, extravio, dano, desaparecimento ou uso/montagem sem autorização e em equipamento que não é o indicado, deverá ressarcir integralmente o valor da peça constante neste recibo.</p>
+  <p>Caso empreste, transfira ou permita o uso delas por outro técnico ou terceiro, sem autorização expressa da direção, continuará sendo o responsável por qualquer perda, dano, extravio, desaparecimento ou uso indevido.</p>
+  <p>Não é necessária assinatura, pois o técnico foi verbalmente avisado e manteve uma cópia deste recibo.</p>
+</div>
 <div class="footer">Documento gerado pelo WeDo Checkout · wedocorp.com</div>
 <script>window.onload=function(){window.print()}</script>
 </body></html>`;

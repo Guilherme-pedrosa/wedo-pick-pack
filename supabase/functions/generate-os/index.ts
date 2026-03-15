@@ -164,7 +164,7 @@ Deno.serve(async (req: Request) => {
     console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente}`);
 
     // ============================================
-    // STEP 1: Login to Auvo + Fetch client address from GC (parallel)
+    // STEP 1: Login to Auvo
     // ============================================
     console.log('[generate-os] Step 1: Auvo login...');
 

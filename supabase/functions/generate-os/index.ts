@@ -71,6 +71,26 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
   return data;
 }
 
+async function auvoGetTask(token: string, taskId: string | number): Promise<any> {
+  const res = await fetch(`${AUVO_API_URL}/tasks/${taskId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const text = await res.text();
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+  if (!res.ok) {
+    throw new Error(`Auvo get task failed [${res.status}] for task ${taskId}: ${text.slice(0, 500)}`);
+  }
+
+  return data;
+}
+
 // ---------- GC: Discover OS attribute IDs ----------
 interface AtributoMeta { id: string; nome: string }
 

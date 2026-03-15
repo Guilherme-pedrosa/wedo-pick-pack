@@ -62,6 +62,14 @@ const DashboardPage = () => {
 
       if (seps) setRecentSeparations(seps);
 
+      // Count total separations (not invalidated)
+      const { count } = await supabase
+        .from("separations")
+        .select("id", { count: "exact", head: true })
+        .eq("invalidated", false);
+
+      setTotalSeparations(count ?? 0);
+
       // Fetch last sync run
       const { data: lastSync } = await supabase
         .from("sync_runs")

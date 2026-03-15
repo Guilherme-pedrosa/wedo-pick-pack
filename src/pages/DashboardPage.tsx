@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useComprasStore } from "@/store/comprasStore";
+import { useCheckoutStore } from "@/store/checkoutStore";
 
 interface KpiData {
   title: string;

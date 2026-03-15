@@ -324,6 +324,15 @@ Deno.serve(async (req: Request) => {
     console.log(`[generate-os] Auvo full response: ${JSON.stringify(auvoResult).slice(0, 500)}`);
     console.log(`[generate-os] Auvo task created: ID=${auvoTaskId}`);
 
+    const warnings: string[] = [];
+    if (equipmentsToSend.length === 0) {
+      const warnMsg = sourceTaskOsId
+        ? `Tarefa OS de origem (${sourceTaskOsId}) não possui equipamento vinculado no Auvo. Tarefa criada SEM equipamento.`
+        : 'Nenhuma tarefa OS de origem encontrada no orçamento. Tarefa criada SEM equipamento.';
+      warnings.push(warnMsg);
+      console.warn(`[generate-os] ⚠️ ${warnMsg}`);
+    }
+
     if (!auvoTaskId) {
       throw new Error(`Auvo task creation returned no taskID. Full response: ${JSON.stringify(auvoResult).slice(0, 500)}`);
     }

@@ -74,23 +74,50 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
 // ---------- GC: Discover OS attribute IDs ----------
 interface AtributoMeta { id: string; nome: string }
 
-async function getOSAtributoIds(): Promise<{ numOrcamento: string | null; tarefaExecucao: string | null }> {
+const normalize = (value: string) =>
+  (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+async function getOSAtributoIds(): Promise<{
+  numOrcamento: string | null;
+  tarefaExecucao: string | null;
+  tarefaOs: string | null;
+  localReparo: string | null;
+  horasTecnicas: string | null;
+}> {
   const res = await gcRequest('/api/atributos_ordens_servicos', 'GET');
   const list: AtributoMeta[] = res?.data || [];
+
   let numOrcamento: string | null = null;
   let tarefaExecucao: string | null = null;
+  let tarefaOs: string | null = null;
+  let localReparo: string | null = null;
+  let horasTecnicas: string | null = null;
 
   for (const a of list) {
-    const nome = (a.nome || '').toLowerCase().trim();
-    if (nome.includes('número') && nome.includes('orçamento') || nome.includes('numero') && nome.includes('orcamento') || nome === 'número do orçamento' || nome === 'numero orcamento') {
+    const nome = normalize(a.nome || '');
+
+    if (!numOrcamento && (nome.includes('numero') && nome.includes('orcamento'))) {
       numOrcamento = a.id;
     }
-    if (nome.includes('tarefa') && nome.includes('execu')) {
+    if (!tarefaExecucao && nome.includes('tarefa') && nome.includes('execu')) {
       tarefaExecucao = a.id;
+    }
+    if (!tarefaOs && (nome === 'tarefa os' || (nome.includes('tarefa') && nome.includes('os')))) {
+      tarefaOs = a.id;
+    }
+    if (!localReparo && nome.includes('local') && nome.includes('reparo')) {
+      localReparo = a.id;
+    }
+    if (!horasTecnicas && nome.includes('horas') && nome.includes('tecnic')) {
+      horasTecnicas = a.id;
     }
   }
 
-  return { numOrcamento, tarefaExecucao };
+  return { numOrcamento, tarefaExecucao, tarefaOs, localReparo, horasTecnicas };
 }
 
 // ---------- Main handler ----------

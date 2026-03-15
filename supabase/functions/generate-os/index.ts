@@ -251,16 +251,17 @@ Deno.serve(async (req: Request) => {
     console.log('[generate-os] Step 4: Creating GC OS...');
 
     const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-    if (attrIds.numOrcamento) {
-      atributos.push({
-        atributo: { atributo_id: attrIds.numOrcamento, conteudo: String(orcamento.codigo) },
-      });
-    }
-    if (attrIds.tarefaExecucao) {
-      atributos.push({
-        atributo: { atributo_id: attrIds.tarefaExecucao, conteudo: String(auvoTaskId) },
-      });
-    }
+    const pushAttr = (atributo_id: string | null, conteudo: string) => {
+      if (!atributo_id) return;
+      if (atributos.some((a) => a.atributo.atributo_id === atributo_id)) return;
+      atributos.push({ atributo: { atributo_id, conteudo } });
+    };
+
+    pushAttr(attrIds.numOrcamento, String(orcamento.codigo));
+    pushAttr(attrIds.tarefaExecucao, String(auvoTaskId));
+    pushAttr(attrIds.tarefaOs, String(auvoTaskId));
+    pushAttr(attrIds.localReparo, String(clientAddress || 'A definir'));
+    pushAttr(attrIds.horasTecnicas, String(orcamento.horas_tecnicas ?? '0'));
 
     // Build products array for OS from budget products
     const osProdutos = (orcamento.produtos || []).map((p: any) => {

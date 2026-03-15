@@ -192,7 +192,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const auvoResult = await auvoCreateTask(auvoToken, auvoPayload);
-    const auvoTaskId = auvoResult?.taskID;
+    // Auvo returns result as array: [{taskID, ...}]
+    const auvoTask = Array.isArray(auvoResult) ? auvoResult[0] : auvoResult;
+    const auvoTaskId = auvoTask?.taskID;
     console.log(`[generate-os] Auvo task created: ID=${auvoTaskId}`);
 
     if (!auvoTaskId) {

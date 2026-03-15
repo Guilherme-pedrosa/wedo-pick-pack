@@ -144,11 +144,37 @@ Deno.serve(async (req: Request) => {
     console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente}`);
 
     // ============================================
-    // STEP 1: Login to Auvo
+    // STEP 1: Login to Auvo + Fetch client address from GC (parallel)
     // ============================================
-    console.log('[generate-os] Step 1: Auvo login...');
-    const auvoToken = await auvoLogin();
+    console.log('[generate-os] Step 1: Auvo login + GC client fetch...');
+
+    // Fetch client details from GC to get address
+    const fetchClientAddress = async (): Promise<{ endereco: string; cidade: string; estado: string; cep: string }> => {
+      try {
+        const clientRes = await gcRequest(`/api/clientes/${orcamento.cliente_id}`, 'GET');
+        const c = clientRes?.data || {};
+        return {
+          endereco: c.endereco || '',
+          cidade: c.cidade || '',
+          estado: c.estado || '',
+          cep: c.cep || '',
+        };
+      } catch (e) {
+        console.warn('[generate-os] Could not fetch client address from GC:', e);
+        return { endereco: '', cidade: '', estado: '', cep: '' };
+      }
+    };
+
+    const [auvoToken, clientGeo] = await Promise.all([
+      auvoLogin(),
+      fetchClientAddress(),
+    ]);
     console.log('[generate-os] Auvo login OK');
+
+    // Build full address string
+    const addressParts = [clientGeo.endereco, clientGeo.cidade, clientGeo.estado, clientGeo.cep].filter(Boolean);
+    const clientAddress = addressParts.length > 0 ? addressParts.join(', ') : orcamento.nome_cliente;
+    console.log(`[generate-os] Client address: ${clientAddress}`);
 
     // ============================================
     // STEP 2: Build orientation (product/service list)
@@ -171,19 +197,20 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Equipment info
+    // Equipment info — check atributos first (campo extra "Equipamento"), then equipamentos array
     let equipText = '';
-    const equip = orcamento.equipamentos?.[0]?.equipamento;
-    if (equip) {
-      const parts = [equip.equipamento, equip.marca, equip.modelo].filter(Boolean);
-      equipText = parts.join(' · ');
-    }
-    // Also check atributos for "Equipamento"
-    if (!equipText && orcamento.atributos?.length) {
+    if (orcamento.atributos?.length) {
       const eqAttr = orcamento.atributos.find((a: any) =>
         (a.atributo?.descricao || '').toLowerCase() === 'equipamento'
       );
       if (eqAttr?.atributo?.conteudo) equipText = eqAttr.atributo.conteudo;
+    }
+    if (!equipText) {
+      const equip = orcamento.equipamentos?.[0]?.equipamento;
+      if (equip) {
+        const parts = [equip.equipamento, equip.marca, equip.modelo].filter(Boolean);
+        equipText = parts.join(' · ');
+      }
     }
 
     const orientationParts = [
@@ -196,24 +223,21 @@ Deno.serve(async (req: Request) => {
     const orientation = orientationParts.join('\n');
 
     // ============================================
-    // STEP 3: Create Auvo task (no technician, no date)
+    // STEP 3: Create Auvo task
     // ============================================
     console.log('[generate-os] Step 2: Creating Auvo task...');
-    // Auvo requires: idUserFrom, latitude, longitude, address, orientation, priority
-    const clientAddress = orcamento.endereco_cliente || 'A definir';
     const auvoPayload: Record<string, unknown> = {
       taskType: 180177,
       idUserFrom: Number(auvo_user_id),
       orientation,
       priority: 2,
       questionnaireId: 214757,
-      // Always send geo (required by Auvo spec)
+      // Use real client address from GC
       address: clientAddress,
-      latitude: 0,
-      longitude: 0,
+      latitude: -23.55, // São Paulo default fallback (Brazil, not Italy!)
+      longitude: -46.63,
     };
 
-    // If we have an Auvo customer, set it (Auvo will use customer's geo)
     if (orcamento.auvo_customer_id) {
       auvoPayload.customerId = orcamento.auvo_customer_id;
     }

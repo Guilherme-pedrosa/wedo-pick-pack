@@ -288,10 +288,31 @@ Deno.serve(async (req: Request) => {
 
     upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
     upsertAttr(attrIds.tarefaExecucao, String(auvoTaskId));
-    upsertAttr(attrIds.tarefaOs, String(auvoTaskId));
-    // Ensure mandatory OS attrs exist even if not in orçamento
-    upsertAttr(attrIds.localReparo, '');
-    upsertAttr(attrIds.horasTecnicas, '');
+
+    // Map orçamento attribute values to OS mandatory attribute IDs
+    // Orçamento attrs have different IDs than OS attrs, so we find by name/content
+    const findOrcAttrValue = (orcAttrId: string): string => {
+      if (!orcamento.atributos?.length) return '';
+      const found = orcamento.atributos.find((a: any) => {
+        const attr = a?.atributo || a;
+        return String(attr?.atributo_id || attr?.id) === orcAttrId;
+      });
+      if (found) {
+        const attr = found?.atributo || found;
+        return String(attr?.conteudo ?? '');
+      }
+      return '';
+    };
+
+    // OS mandatory attr IDs (from GC) ← orçamento attr IDs
+    // 73341 = Tarefa OS, 73350 = Local do Reparo, 67350 = Horas Técnicas
+    const ORC_TAREFA_OS = '73341';
+    const ORC_LOCAL_REPARO = '73350';
+    const ORC_HORAS_TECNICAS = '67350';
+
+    upsertAttr(attrIds.tarefaOs, findOrcAttrValue(ORC_TAREFA_OS) || String(auvoTaskId));
+    upsertAttr(attrIds.localReparo, findOrcAttrValue(ORC_LOCAL_REPARO));
+    upsertAttr(attrIds.horasTecnicas, findOrcAttrValue(ORC_HORAS_TECNICAS));
 
     // Copy OS payload from orçamento as-is (to preserve values)
     const osPayload: Record<string, any> = {

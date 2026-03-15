@@ -122,6 +122,11 @@ export default function RastreadorPage() {
         osCodigo: data.os_codigo,
       });
       toast.success(`OS #${data.os_codigo} criada com sucesso! Tarefa Auvo: ${data.auvo_task_id}`);
+      if (data.warnings?.length) {
+        for (const w of data.warnings) {
+          toast.warning(w, { duration: 8000 });
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       setGenerationResult({ success: false, error: msg });

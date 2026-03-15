@@ -74,23 +74,50 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
 // ---------- GC: Discover OS attribute IDs ----------
 interface AtributoMeta { id: string; nome: string }
 
-async function getOSAtributoIds(): Promise<{ numOrcamento: string | null; tarefaExecucao: string | null }> {
+const normalize = (value: string) =>
+  (value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+async function getOSAtributoIds(): Promise<{
+  numOrcamento: string | null;
+  tarefaExecucao: string | null;
+  tarefaOs: string | null;
+  localReparo: string | null;
+  horasTecnicas: string | null;
+}> {
   const res = await gcRequest('/api/atributos_ordens_servicos', 'GET');
   const list: AtributoMeta[] = res?.data || [];
+
   let numOrcamento: string | null = null;
   let tarefaExecucao: string | null = null;
+  let tarefaOs: string | null = null;
+  let localReparo: string | null = null;
+  let horasTecnicas: string | null = null;
 
   for (const a of list) {
-    const nome = (a.nome || '').toLowerCase().trim();
-    if (nome.includes('número') && nome.includes('orçamento') || nome.includes('numero') && nome.includes('orcamento') || nome === 'número do orçamento' || nome === 'numero orcamento') {
+    const nome = normalize(a.nome || '');
+
+    if (!numOrcamento && (nome.includes('numero') && nome.includes('orcamento'))) {
       numOrcamento = a.id;
     }
-    if (nome.includes('tarefa') && nome.includes('execu')) {
+    if (!tarefaExecucao && nome.includes('tarefa') && nome.includes('execu')) {
       tarefaExecucao = a.id;
+    }
+    if (!tarefaOs && (nome === 'tarefa os' || (nome.includes('tarefa') && nome.includes('os')))) {
+      tarefaOs = a.id;
+    }
+    if (!localReparo && nome.includes('local') && nome.includes('reparo')) {
+      localReparo = a.id;
+    }
+    if (!horasTecnicas && nome.includes('horas') && nome.includes('tecnic')) {
+      horasTecnicas = a.id;
     }
   }
 
-  return { numOrcamento, tarefaExecucao };
+  return { numOrcamento, tarefaExecucao, tarefaOs, localReparo, horasTecnicas };
 }
 
 // ---------- Main handler ----------
@@ -216,7 +243,7 @@ Deno.serve(async (req: Request) => {
     // ============================================
     console.log('[generate-os] Step 3: Discovering OS attribute IDs...');
     const attrIds = await getOSAtributoIds();
-    console.log(`[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}`);
+    console.log(`[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}, tarefaOS=${attrIds.tarefaOs}, localReparo=${attrIds.localReparo}, horasTecnicas=${attrIds.horasTecnicas}`);
 
     // ============================================
     // STEP 5: Create OS in GestãoClick
@@ -224,16 +251,17 @@ Deno.serve(async (req: Request) => {
     console.log('[generate-os] Step 4: Creating GC OS...');
 
     const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-    if (attrIds.numOrcamento) {
-      atributos.push({
-        atributo: { atributo_id: attrIds.numOrcamento, conteudo: String(orcamento.codigo) },
-      });
-    }
-    if (attrIds.tarefaExecucao) {
-      atributos.push({
-        atributo: { atributo_id: attrIds.tarefaExecucao, conteudo: String(auvoTaskId) },
-      });
-    }
+    const pushAttr = (atributo_id: string | null, conteudo: string) => {
+      if (!atributo_id) return;
+      if (atributos.some((a) => a.atributo.atributo_id === atributo_id)) return;
+      atributos.push({ atributo: { atributo_id, conteudo } });
+    };
+
+    pushAttr(attrIds.numOrcamento, String(orcamento.codigo));
+    pushAttr(attrIds.tarefaExecucao, String(auvoTaskId));
+    pushAttr(attrIds.tarefaOs, String(auvoTaskId));
+    pushAttr(attrIds.localReparo, String(clientAddress || 'A definir'));
+    pushAttr(attrIds.horasTecnicas, String(orcamento.horas_tecnicas ?? '0'));
 
     // Build products array for OS from budget products
     const osProdutos = (orcamento.produtos || []).map((p: any) => {

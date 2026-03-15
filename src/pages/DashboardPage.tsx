@@ -87,7 +87,7 @@ const DashboardPage = () => {
   };
 
   const pendingSessionLabel = checkoutSession
-    ? `Em andamento: #${checkoutSession.order.codigo}`
+    ? `Em andamento: #${checkoutSession.codigo}`
     : "Nenhum pedido em separação";
 
   const comprasItens = comprasResult?.totalProdutosSemEstoque ?? 0;

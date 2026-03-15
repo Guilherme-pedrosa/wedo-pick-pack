@@ -407,6 +407,9 @@ Deno.serve(async (req: Request) => {
       servicos: orcamento.servicos || [],
       equipamentos: orcamento.equipamentos || [],
       atributos,
+      // Always: Centro de custo "OPERAÇÕES COZINHAS" + Situação "Pedido em Conferência"
+      centro_custo_id: orcamento.centro_custo_id || '501357',
+      situacao_id: '7063581',
     };
 
     // Preserve optional fields from orçamento when available

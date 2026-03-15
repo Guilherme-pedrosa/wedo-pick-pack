@@ -41,6 +41,9 @@ const DashboardPage = () => {
   const [recentSeparations, setRecentSeparations] = useState<RecentSeparation[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ status: string; finished_at: string | null } | null>(null);
+  const [totalSeparations, setTotalSeparations] = useState(0);
+  const comprasResult = useComprasStore((s) => s.result);
+  const checkoutSession = useCheckoutStore((s) => s.session);
 
   useEffect(() => {
     loadData();

@@ -288,6 +288,10 @@ Deno.serve(async (req: Request) => {
 
     upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
     upsertAttr(attrIds.tarefaExecucao, String(auvoTaskId));
+    upsertAttr(attrIds.tarefaOs, String(auvoTaskId));
+    // Ensure mandatory OS attrs exist even if not in orçamento
+    upsertAttr(attrIds.localReparo, '');
+    upsertAttr(attrIds.horasTecnicas, '');
 
     // Copy OS payload from orçamento as-is (to preserve values)
     const osPayload: Record<string, any> = {

@@ -53,7 +53,6 @@ async function auvoLogin(): Promise<string> {
 }
 
 async function auvoCreateTask(token: string, payload: Record<string, unknown>): Promise<any> {
-  // Auvo uses PUT /tasks for upsert (create or update)
   const res = await fetch(`${AUVO_API_URL}/tasks`, {
     method: 'PUT',
     headers: {
@@ -66,9 +65,10 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
   let data: any;
   try { data = JSON.parse(text); } catch { data = { raw: text }; }
   if (!res.ok) {
-    throw new Error(`Auvo create task failed [${res.status}]: ${JSON.stringify(data).slice(0, 500)}`);
+    throw new Error(`Auvo create task failed [${res.status}]: ${text.slice(0, 500)}`);
   }
-  return data?.result ?? data;
+  // Return raw parsed response — caller handles taskID extraction
+  return data;
 }
 
 // ---------- GC: Discover OS attribute IDs ----------

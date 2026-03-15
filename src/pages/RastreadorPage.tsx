@@ -610,6 +610,86 @@ export default function RastreadorPage() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={!!confirmEntry} onOpenChange={(open) => { if (!open) { setConfirmEntry(null); setGenerationResult(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerar OS + Tarefa Auvo</DialogTitle>
+            <DialogDescription>
+              Confirme a geração da OS e tarefa de execução.
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmEntry && !generationResult && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border p-3 space-y-1.5">
+                <p className="text-sm font-semibold">Orçamento #{confirmEntry.orcamento.codigo}</p>
+                <p className="text-xs text-muted-foreground">{confirmEntry.orcamento.nome_cliente}</p>
+                {getEquipamento(confirmEntry.orcamento) && (
+                  <p className="text-xs text-muted-foreground">🔧 {getEquipamento(confirmEntry.orcamento)}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {confirmEntry.totalItens} produto(s) • R$ {Number(confirmEntry.orcamento.valor_total || 0).toFixed(2)}
+                </p>
+              </div>
+
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>O sistema irá:</p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Criar tarefa no Auvo (sem técnico, sem data)</li>
+                  <li>Criar OS no GestãoClick com o nº da tarefa</li>
+                  <li>Vincular nº do orçamento e tarefa de execução</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {generationResult?.success && (
+            <div className="rounded-lg border border-green-500/50 bg-green-500/5 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <span className="font-semibold text-sm text-green-600">Gerado com sucesso!</span>
+              </div>
+              <p className="text-sm">OS: <strong>#{generationResult.osCodigo}</strong></p>
+              <p className="text-sm">Tarefa Auvo: <strong>#{generationResult.auvoTaskId}</strong></p>
+            </div>
+          )}
+
+          {generationResult?.error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                <span className="font-semibold text-sm text-destructive">Erro na geração</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{generationResult.error}</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            {!generationResult && (
+              <>
+                <Button variant="outline" onClick={() => setConfirmEntry(null)} disabled={generatingOS}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
+                  disabled={generatingOS}
+                  className="gap-2"
+                >
+                  {generatingOS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                  {generatingOS ? 'Gerando...' : 'Confirmar'}
+                </Button>
+              </>
+            )}
+            {generationResult && (
+              <Button onClick={() => { setConfirmEntry(null); setGenerationResult(null); }}>
+                Fechar
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

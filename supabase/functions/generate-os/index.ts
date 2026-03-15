@@ -71,6 +71,26 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
   return data;
 }
 
+async function auvoGetTask(token: string, taskId: string | number): Promise<any> {
+  const res = await fetch(`${AUVO_API_URL}/tasks/${taskId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+
+  const text = await res.text();
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+  if (!res.ok) {
+    throw new Error(`Auvo get task failed [${res.status}] for task ${taskId}: ${text.slice(0, 500)}`);
+  }
+
+  return data;
+}
+
 // ---------- GC: Discover OS attribute IDs ----------
 interface AtributoMeta { id: string; nome: string }
 
@@ -144,7 +164,7 @@ Deno.serve(async (req: Request) => {
     console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente}`);
 
     // ============================================
-    // STEP 1: Login to Auvo + Fetch client address from GC (parallel)
+    // STEP 1: Login to Auvo
     // ============================================
     console.log('[generate-os] Step 1: Auvo login...');
 
@@ -207,6 +227,58 @@ Deno.serve(async (req: Request) => {
     ].filter(Boolean);
     const orientation = orientationParts.join('\n');
 
+    const readOrcAttrByIdOrName = (targetId: string, nameIncludes: string): string => {
+      if (!orcamento.atributos?.length) return '';
+      for (const a of orcamento.atributos) {
+        const attr = a?.atributo || a;
+        const attrId = String(attr?.atributo_id || attr?.id || '');
+        const attrName = normalize(String(attr?.descricao || ''));
+        if (attrId === targetId || attrName.includes(normalize(nameIncludes))) {
+          return String(attr?.conteudo ?? '').trim();
+        }
+      }
+      return '';
+    };
+
+    // Clone references from orçamento attributes
+    const sourceTaskOsId = readOrcAttrByIdOrName('73341', 'tarefa os');
+    const idEquipamentoRaw = readOrcAttrByIdOrName('88695', 'id equipamento');
+
+    const equipmentIdsFromOrcamento = Array.from(
+      new Set(
+        String(idEquipamentoRaw || '')
+          .split(/[^0-9]+/)
+          .map((v) => Number(v))
+          .filter((n) => Number.isFinite(n) && n > 0)
+      )
+    );
+
+    let clonedCustomerId: number | null = null;
+    let clonedEquipmentIds: number[] = [];
+
+    if (sourceTaskOsId) {
+      try {
+        const sourceTask = await auvoGetTask(auvoToken, sourceTaskOsId);
+        const source = sourceTask?.result || sourceTask;
+
+        const sourceCustomer = Number(source?.customerId ?? 0);
+        if (Number.isFinite(sourceCustomer) && sourceCustomer > 0) {
+          clonedCustomerId = sourceCustomer;
+        }
+
+        const sourceEquipments = source?.equipmentsId;
+        if (Array.isArray(sourceEquipments)) {
+          clonedEquipmentIds = sourceEquipments
+            .map((v: unknown) => Number(v))
+            .filter((n: number) => Number.isFinite(n) && n > 0);
+        }
+
+        console.log(`[generate-os] Cloned source tarefa OS ${sourceTaskOsId}: customerId=${clonedCustomerId ?? 0}, equipments=${clonedEquipmentIds.length}`);
+      } catch (e) {
+        console.warn(`[generate-os] Could not clone from source tarefa OS ${sourceTaskOsId}:`, e);
+      }
+    }
+
     // ============================================
     // STEP 3: Create Auvo task
     // ============================================
@@ -217,14 +289,25 @@ Deno.serve(async (req: Request) => {
       orientation,
       priority: 2,
       questionnaireId: 214757,
-      // Use real client address from GC
+      // Clone address from orçamento only
       address: clientAddress,
-      latitude: -23.55, // São Paulo default fallback (Brazil, not Italy!)
+      latitude: -23.55,
       longitude: -46.63,
     };
 
-    if (orcamento.auvo_customer_id) {
-      auvoPayload.customerId = orcamento.auvo_customer_id;
+    // Priority: clone from source tarefa OS -> orçamento explicit mapping
+    if (clonedCustomerId) {
+      auvoPayload.customerId = clonedCustomerId;
+    } else if (orcamento.auvo_customer_id) {
+      auvoPayload.customerId = Number(orcamento.auvo_customer_id);
+    }
+
+    const equipmentsToSend = equipmentIdsFromOrcamento.length > 0
+      ? equipmentIdsFromOrcamento
+      : clonedEquipmentIds;
+
+    if (equipmentsToSend.length > 0) {
+      auvoPayload.equipmentsId = equipmentsToSend;
     }
 
     console.log(`[generate-os] Auvo payload: ${JSON.stringify(auvoPayload).slice(0, 500)}`);

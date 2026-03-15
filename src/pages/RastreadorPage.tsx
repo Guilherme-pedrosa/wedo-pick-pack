@@ -227,6 +227,18 @@ export default function RastreadorPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {ready && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[10px] px-2 gap-1 border-green-500 text-green-600 hover:bg-green-50"
+                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); }}
+                disabled={isGenerating}
+              >
+                {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Gerar OS
+              </Button>
+            )}
             <span className="text-xs text-muted-foreground">{formatDate(entry.orcamento.data)}</span>
             {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </div>

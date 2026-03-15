@@ -189,6 +189,7 @@ export default function RastreadorPage() {
   const OrcamentoCard = ({ entry, ready }: { entry: OrcamentoReadiness; ready: boolean }) => {
     const expanded = expandedId === entry.orcamento.id;
     const equip = getEquipamento(entry.orcamento);
+    const isGenerating = generatingOS && confirmEntry?.orcamento.id === entry.orcamento.id;
     return (
       <Card
         className={`p-3 border-l-4 cursor-pointer transition-colors hover:bg-muted/50 ${

@@ -250,85 +250,56 @@ Deno.serve(async (req: Request) => {
     // ============================================
     console.log('[generate-os] Step 4: Creating GC OS...');
 
-    // Start with all attributes from the original budget (orçamento)
-    // This ensures required OS attributes (LOCAL DO REPARO, HORAS TÉCNICAS, etc.) are carried over
+    // Copy atributos exactly from orçamento
     const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-    const usedAttrIds = new Set<string>();
-
-    // Copy all existing atributos from the orçamento
     if (orcamento.atributos?.length) {
       for (const a of orcamento.atributos) {
-        const attr = a.atributo || a;
-        const attrId = attr.atributo_id || attr.id;
-        const conteudo = attr.conteudo ?? '';
-        if (attrId && !usedAttrIds.has(String(attrId))) {
-          usedAttrIds.add(String(attrId));
-          atributos.push({ atributo: { atributo_id: String(attrId), conteudo: String(conteudo) } });
-        }
+        const attr = a?.atributo || a;
+        const attrId = attr?.atributo_id || attr?.id;
+        if (!attrId) continue;
+        atributos.push({
+          atributo: {
+            atributo_id: String(attrId),
+            conteudo: String(attr?.conteudo ?? ''),
+          },
+        });
       }
     }
 
-    // Override/add specific attributes
-    const pushAttr = (atributo_id: string | null, conteudo: string) => {
+    // Override only the two required link attributes
+    const upsertAttr = (atributo_id: string | null, conteudo: string) => {
       if (!atributo_id) return;
-      // Remove existing if present (to override with our value)
       const idx = atributos.findIndex((a) => a.atributo.atributo_id === atributo_id);
-      if (idx >= 0) atributos.splice(idx, 1);
-      usedAttrIds.add(atributo_id);
-      atributos.push({ atributo: { atributo_id, conteudo } });
+      if (idx >= 0) {
+        atributos[idx] = { atributo: { atributo_id, conteudo } };
+      } else {
+        atributos.push({ atributo: { atributo_id, conteudo } });
+      }
     };
 
-    pushAttr(attrIds.numOrcamento, String(orcamento.codigo));
-    pushAttr(attrIds.tarefaExecucao, String(auvoTaskId));
-    if (attrIds.tarefaOs) pushAttr(attrIds.tarefaOs, String(auvoTaskId));
+    upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
+    upsertAttr(attrIds.tarefaExecucao, String(auvoTaskId));
 
-    console.log(`[generate-os] OS atributos count: ${atributos.length}`);
-
-    // Build products array for OS from budget products
-    const osProdutos = (orcamento.produtos || []).map((p: any) => {
-      const prod = p.produto || p;
-      return {
-        produto: {
-          produto_id: prod.produto_id,
-          variacao_id: prod.variacao_id || '',
-          nome_produto: prod.nome_produto,
-          quantidade: String(prod.quantidade || prod.qtd_necessaria || 1),
-          valor_venda: prod.valor_venda || prod.valor_custo || '0.00',
-        },
-      };
-    });
-
-    // Build services array
-    const osServicos = (orcamento.servicos || []).map((s: any) => {
-      const svc = s.servico || s;
-      return {
-        servico: {
-          servico_id: svc.servico_id || svc.id || '',
-          nome_servico: svc.nome_servico || svc.nome || '',
-          quantidade: String(svc.quantidade || 1),
-          valor_venda: svc.valor_venda || '0.00',
-        },
-      };
-    });
-
+    // Copy OS payload from orçamento as-is (to preserve values)
     const osPayload: Record<string, any> = {
       cliente_id: orcamento.cliente_id,
-      data: new Date().toISOString().split('T')[0],
-      condicao_pagamento: 'a_vista',
-      valor_frete: '0.00',
-      observacoes: `Gerada automaticamente a partir do Orçamento #${orcamento.codigo}.\nTarefa Auvo: ${auvoTaskId}`,
-      produtos: osProdutos,
-      servicos: osServicos,
+      data: orcamento.data || new Date().toISOString().split('T')[0],
+      valor_frete: orcamento.valor_frete ?? '0.00',
+      condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
+      produtos: orcamento.produtos || [],
+      servicos: orcamento.servicos || [],
       equipamentos: orcamento.equipamentos || [],
       atributos,
     };
 
-    if (gc_usuario_id) {
-      osPayload.usuario_id = gc_usuario_id;
-    }
-    if (orcamento.vendedor_id) {
-      osPayload.vendedor_id = orcamento.vendedor_id;
-    }
+    // Preserve optional fields from orçamento when available
+    if (orcamento.vendedor_id) osPayload.vendedor_id = orcamento.vendedor_id;
+    if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
+    if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
+    if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
+    if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
+
+    console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 
     const gcResult = await gcRequest('/api/ordens_servicos', 'POST', osPayload);
 

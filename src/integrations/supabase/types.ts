@@ -369,6 +369,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auvo_user_id: string | null
           created_at: string
           default_os_conclusion_status: string
           default_venda_conclusion_status: string
@@ -379,6 +380,7 @@ export type Database = {
           venda_status_to_show: string[]
         }
         Insert: {
+          auvo_user_id?: string | null
           created_at?: string
           default_os_conclusion_status?: string
           default_venda_conclusion_status?: string
@@ -389,6 +391,7 @@ export type Database = {
           venda_status_to_show?: string[]
         }
         Update: {
+          auvo_user_id?: string | null
           created_at?: string
           default_os_conclusion_status?: string
           default_venda_conclusion_status?: string

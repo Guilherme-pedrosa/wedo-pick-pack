@@ -12,9 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Search, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight,
   PackageCheck, Clock, RefreshCw, Download, Printer, User, Filter, Ban, X,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -69,6 +72,64 @@ export default function RastreadorPage() {
   const [isPrintView, setIsPrintView] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [blockedExpanded, setBlockedExpanded] = useState(true);
+
+  // OS generation state
+  const [generatingOS, setGeneratingOS] = useState(false);
+  const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
+  const [generationResult, setGenerationResult] = useState<{
+    success: boolean;
+    auvoTaskId?: number;
+    osCodigo?: string;
+    error?: string;
+  } | null>(null);
+
+  const handleGenerateOS = async (entry: OrcamentoReadiness) => {
+    setGeneratingOS(true);
+    setGenerationResult(null);
+    try {
+      // Get current user profile for auvo_user_id and gc_usuario_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Sessão expirada');
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('auvo_user_id, gc_usuario_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const auvoUserId = (profile as any)?.auvo_user_id;
+      if (!auvoUserId) {
+        toast.error('Configure seu ID de Usuário Auvo nas Configurações antes de gerar OS.');
+        setConfirmEntry(null);
+        setGeneratingOS(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('generate-os', {
+        body: {
+          orcamento: entry.orcamento,
+          auvo_user_id: auvoUserId,
+          gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      setGenerationResult({
+        success: true,
+        auvoTaskId: data.auvo_task_id,
+        osCodigo: data.os_codigo,
+      });
+      toast.success(`OS #${data.os_codigo} criada com sucesso! Tarefa Auvo: ${data.auvo_task_id}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      setGenerationResult({ success: false, error: msg });
+      toast.error(`Erro ao gerar OS: ${msg}`);
+    } finally {
+      setGeneratingOS(false);
+    }
+  };
 
   const statusQuery = useQuery({
     queryKey: ['status-orcamentos'],
@@ -128,6 +189,7 @@ export default function RastreadorPage() {
   const OrcamentoCard = ({ entry, ready }: { entry: OrcamentoReadiness; ready: boolean }) => {
     const expanded = expandedId === entry.orcamento.id;
     const equip = getEquipamento(entry.orcamento);
+    const isGenerating = generatingOS && confirmEntry?.orcamento.id === entry.orcamento.id;
     return (
       <Card
         className={`p-3 border-l-4 cursor-pointer transition-colors hover:bg-muted/50 ${
@@ -165,6 +227,18 @@ export default function RastreadorPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {ready && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 text-[10px] px-2 gap-1 border-green-500 text-green-600 hover:bg-green-50"
+                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); }}
+                disabled={isGenerating}
+              >
+                {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Gerar OS
+              </Button>
+            )}
             <span className="text-xs text-muted-foreground">{formatDate(entry.orcamento.data)}</span>
             {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </div>
@@ -536,6 +610,86 @@ export default function RastreadorPage() {
           </div>
         )}
       </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={!!confirmEntry} onOpenChange={(open) => { if (!open) { setConfirmEntry(null); setGenerationResult(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerar OS + Tarefa Auvo</DialogTitle>
+            <DialogDescription>
+              Confirme a geração da OS e tarefa de execução.
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmEntry && !generationResult && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border p-3 space-y-1.5">
+                <p className="text-sm font-semibold">Orçamento #{confirmEntry.orcamento.codigo}</p>
+                <p className="text-xs text-muted-foreground">{confirmEntry.orcamento.nome_cliente}</p>
+                {getEquipamento(confirmEntry.orcamento) && (
+                  <p className="text-xs text-muted-foreground">🔧 {getEquipamento(confirmEntry.orcamento)}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {confirmEntry.totalItens} produto(s) • R$ {Number(confirmEntry.orcamento.valor_total || 0).toFixed(2)}
+                </p>
+              </div>
+
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>O sistema irá:</p>
+                <ol className="list-decimal list-inside space-y-0.5 ml-1">
+                  <li>Criar tarefa no Auvo (sem técnico, sem data)</li>
+                  <li>Criar OS no GestãoClick com o nº da tarefa</li>
+                  <li>Vincular nº do orçamento e tarefa de execução</li>
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {generationResult?.success && (
+            <div className="rounded-lg border border-green-500/50 bg-green-500/5 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <span className="font-semibold text-sm text-green-600">Gerado com sucesso!</span>
+              </div>
+              <p className="text-sm">OS: <strong>#{generationResult.osCodigo}</strong></p>
+              <p className="text-sm">Tarefa Auvo: <strong>#{generationResult.auvoTaskId}</strong></p>
+            </div>
+          )}
+
+          {generationResult?.error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+                <span className="font-semibold text-sm text-destructive">Erro na geração</span>
+              </div>
+              <p className="text-xs text-muted-foreground">{generationResult.error}</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            {!generationResult && (
+              <>
+                <Button variant="outline" onClick={() => setConfirmEntry(null)} disabled={generatingOS}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
+                  disabled={generatingOS}
+                  className="gap-2"
+                >
+                  {generatingOS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                  {generatingOS ? 'Gerando...' : 'Confirmar'}
+                </Button>
+              </>
+            )}
+            {generationResult && (
+              <Button onClick={() => { setConfirmEntry(null); setGenerationResult(null); }}>
+                Fechar
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

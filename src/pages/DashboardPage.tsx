@@ -86,28 +86,39 @@ const DashboardPage = () => {
     }
   };
 
+  const pendingSessionLabel = checkoutSession
+    ? `Em andamento: #${checkoutSession.order.codigo}`
+    : "Nenhum pedido em separação";
+
+  const comprasItens = comprasResult?.totalProdutosSemEstoque ?? 0;
+  const comprasSubtitle = comprasResult
+    ? `Última varredura: ${new Date(comprasResult.scannedAt).toLocaleString("pt-BR")}`
+    : "Nenhuma varredura realizada";
+
+  const todayCount = recentSeparations.filter(
+    (s) => new Date(s.concluded_at).toDateString() === new Date().toDateString()
+  ).length;
+
   const kpis: KpiData[] = [
     {
-      title: "Pedidos para Separar",
-      value: "—",
-      subtitle: "Carregar via Checkout",
+      title: "Separações",
+      value: totalSeparations,
+      subtitle: pendingSessionLabel,
       icon: Package,
       color: "text-primary",
       href: "/checkout",
     },
     {
       title: "Itens para Comprar",
-      value: "—",
-      subtitle: "Gerar lista em Compras",
+      value: comprasItens,
+      subtitle: comprasSubtitle,
       icon: ShoppingCart,
       color: "text-warning",
       href: "/compras",
     },
     {
       title: "Separações Hoje",
-      value: recentSeparations.filter(
-        (s) => new Date(s.concluded_at).toDateString() === new Date().toDateString()
-      ).length,
+      value: todayCount,
       subtitle: "Concluídas hoje",
       icon: PackageCheck,
       color: "text-success",

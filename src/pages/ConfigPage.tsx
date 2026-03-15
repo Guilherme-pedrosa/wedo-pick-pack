@@ -11,8 +11,48 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle2, XCircle, Info, Loader2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Info, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+
+function AuvoUserIdField() {
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from('profiles').select('auvo_user_id').eq('id', user.id).maybeSingle();
+      setValue((data as any)?.auvo_user_id || '');
+      setLoaded(true);
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Sessão expirada');
+      await (supabase.from('profiles') as any).update({ auvo_user_id: value || null }).eq('id', user.id);
+      toast.success('ID Auvo salvo!');
+    } catch { toast.error('Erro ao salvar ID Auvo'); }
+    finally { setSaving(false); }
+  };
+
+  if (!loaded) return <div className="text-xs text-muted-foreground">Carregando...</div>;
+
+  return (
+    <div className="flex gap-2">
+      <Input id="auvo-user-id" value={value} onChange={e => setValue(e.target.value)} placeholder="Ex: 12345" className="h-8 text-sm max-w-[200px]" />
+      <Button variant="outline" size="sm" onClick={handleSave} disabled={saving} className="gap-1 h-8">
+        {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+        Salvar
+      </Button>
+    </div>
+  );
+}
 
 export default function ConfigPage() {
   const config = useCheckoutStore(s => s.config);

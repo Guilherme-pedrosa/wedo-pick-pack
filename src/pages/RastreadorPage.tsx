@@ -12,9 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Search, Loader2, CheckCircle2, AlertTriangle, ChevronDown, ChevronRight,
   PackageCheck, Clock, RefreshCw, Download, Printer, User, Filter, Ban, X,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 

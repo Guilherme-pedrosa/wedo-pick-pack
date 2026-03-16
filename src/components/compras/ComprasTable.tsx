@@ -84,7 +84,9 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
             <SortHeader label="Produto" col="nome_produto" />
             <SortHeader label="Grupo" col="grupo" />
             <TableHead className="text-xs">UN</TableHead>
-            <SortHeader label="Estoque" col="estoque_atual" />
+            <SortHeader label="Estoque GC" col="estoque_atual" />
+            <TableHead className="text-xs">Reserv. OS</TableHead>
+            <TableHead className="text-xs">Disponível</TableHead>
             <SortHeader label="Necessário" col="qtd_necessaria" />
             <SortHeader label="Em Pedido" col="qtd_ja_em_compra" />
             <SortHeader label="A Comprar" col="qtd_efetiva_a_comprar" />
@@ -117,8 +119,34 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.grupo || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.sigla_unidade}</TableCell>
-                  <TableCell className={`text-sm font-medium ${item.estoque_atual < item.qtd_necessaria ? 'text-destructive' : 'text-green-700'}`}>
+                  <TableCell className="text-sm font-medium">
                     {formatQty(item.estoque_atual)}
+                  </TableCell>
+                  {/* Reservado por OS */}
+                  <TableCell className="text-sm">
+                    {(item.estoque_reservado_os ?? 0) > 0 ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-amber-700 font-medium cursor-help">
+                              −{formatQty(item.estoque_reservado_os)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="font-bold text-xs mb-1">Reservado por OS pendentes:</p>
+                            {(item.os_reservas || []).map((r, i) => (
+                              <p key={i} className="text-xs">OS #{r.os_codigo} — {r.nome_cliente} — Qtd: {r.qtd}</p>
+                            ))}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  {/* Disponível */}
+                  <TableCell className={`text-sm font-bold ${(item.estoque_disponivel ?? item.estoque_atual) < item.qtd_necessaria ? 'text-destructive' : 'text-green-700'}`}>
+                    {formatQty(item.estoque_disponivel ?? item.estoque_atual)}
                   </TableCell>
                   <TableCell className="text-sm">{formatQty(item.qtd_necessaria)}</TableCell>
                   {/* Em Pedido */}
@@ -193,7 +221,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                 {/* Expanded purchase orders detail */}
                 {isExpanded && hasOrdens && (
                   <TableRow key={`${key}-orders`} className="bg-amber-50/30">
-                    <TableCell colSpan={12} className="py-2 px-6">
+                    <TableCell colSpan={14} className="py-2 px-6">
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground mb-1">PEDIDOS DE COMPRA</p>
                         {ordensCompra.map(oc => (
@@ -215,7 +243,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
         </TableBody>
         <TableFooter>
           <TableRow className="font-bold">
-             <TableCell colSpan={5} className="text-right text-xs">TOTAL</TableCell>
+             <TableCell colSpan={7} className="text-right text-xs">TOTAL</TableCell>
             <TableCell className="text-sm">{formatQty(totalNecessario)}</TableCell>
             <TableCell className="text-sm text-amber-700">{totalEmPedido > 0 ? formatQty(totalEmPedido) : '—'}</TableCell>
             <TableCell className="text-sm text-destructive">{formatQty(totalEfetivo)}</TableCell>

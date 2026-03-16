@@ -335,7 +335,7 @@ export async function buildListaCompras(
 
   // PHASE 1b: Build reverse OS index and detect converted budgets
   onProgress?.('Construindo índice de OS…', 0, 1);
-  const { index: osIndex, totalVinculos } = await buildOSIndex(
+  const { index: osIndex, totalVinculos, reservedDemand } = await buildOSIndex(
     (step, checked, total) => onProgress?.(step, checked, total),
   );
   console.log(`[COMPRAS] OS Index ready: ${totalVinculos} vínculos`);
@@ -549,10 +549,17 @@ export async function buildListaCompras(
       valorCusto = parseDecimal(detail.valor_custo);
     }
 
-    // Lookup — try exact key first, fall back to produto_id only
+    // OS reserved demand — try exact key, then fallback to produto_id only
     const fullKey = makeProdutoKey(entry.produto_id, entry.variacao_id);
     const pidOnly = String(entry.produto_id).trim();
+    const reservaEntry = reservedDemand[fullKey] ?? reservedDemand[pidOnly];
+    const estoqueReservadoOS = reservaEntry?.qty ?? 0;
+    const osReservas = reservaEntry?.orcamentos ?? [];
 
+    // Effective available stock after OS reservations
+    const estoqueDisponivel = Math.max(0, estoqueAtual - estoqueReservadoOS);
+
+    // Lookup purchase orders — try exact key first, fall back to produto_id only
     const compraEntry =
       compraMap.get(fullKey) ??
       compraMapByProduto.get(pidOnly);
@@ -569,7 +576,7 @@ export async function buildListaCompras(
     const qtdJaEmCompra = compraEntry?.qtd ?? 0;
 
     const qtdNecessaria = entry.qtd_total;
-    const deficit = Math.max(0, qtdNecessaria - estoqueAtual);
+    const deficit = Math.max(0, qtdNecessaria - estoqueDisponivel);
     const qtdEfetivaAComprar = Math.max(0, deficit - qtdJaEmCompra);
     const estimativa = qtdEfetivaAComprar * valorCusto;
 
@@ -586,6 +593,8 @@ export async function buildListaCompras(
       sigla_unidade: entry.sigla_unidade,
       grupo: detail?.nome_grupo,
       estoque_atual: estoqueAtual,
+      estoque_reservado_os: estoqueReservadoOS,
+      estoque_disponivel: estoqueDisponivel,
       qtd_necessaria: qtdNecessaria,
       qtd_a_comprar: deficit,
       qtd_ja_em_compra: qtdJaEmCompra,
@@ -598,6 +607,7 @@ export async function buildListaCompras(
       fornecedor_telefone: undefined,
       orcamentos: entry.orcamentos,
       ordens_compra: ordensCompra,
+      os_reservas: osReservas.length > 0 ? osReservas : undefined,
     });
   }
 

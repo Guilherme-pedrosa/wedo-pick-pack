@@ -152,6 +152,7 @@ Deno.serve(async (req: Request) => {
       orcamento,        // GCOrcamento object from frontend
       auvo_user_id,     // number - idUserFrom in Auvo
       gc_usuario_id,    // optional - GC user ID for attribution
+      auvo_customer_id, // optional - Auvo customer ID (when no source task to clone from)
     } = body;
 
     if (!orcamento || !auvo_user_id) {
@@ -323,9 +324,12 @@ Deno.serve(async (req: Request) => {
       longitude: -46.63,
     };
 
-    // Priority: clone from source tarefa OS -> orçamento explicit mapping
+    // Priority: clone from source tarefa OS -> frontend-provided -> orçamento explicit mapping
     if (clonedCustomerId) {
       auvoPayload.customerId = clonedCustomerId;
+    } else if (auvo_customer_id && Number.isFinite(Number(auvo_customer_id)) && Number(auvo_customer_id) > 0) {
+      auvoPayload.customerId = Number(auvo_customer_id);
+      console.log(`[generate-os] Using frontend-provided auvo_customer_id: ${auvo_customer_id}`);
     } else if (orcamento.auvo_customer_id) {
       auvoPayload.customerId = Number(orcamento.auvo_customer_id);
     }

@@ -76,6 +76,7 @@ export default function RastreadorPage() {
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
+  const [auvoCustomerIdInput, setAuvoCustomerIdInput] = useState('');
   const [generationResult, setGenerationResult] = useState<{
     success: boolean;
     auvoTaskId?: number | string;
@@ -106,12 +107,33 @@ export default function RastreadorPage() {
         return;
       }
 
+      // Check if source tarefa OS exists to clone customer data
+      const hasSourceTask = entry.orcamento.atributos?.some((a: any) => {
+        const attr = a?.atributo || a;
+        const attrId = String(attr?.atributo_id || attr?.id || '');
+        const content = String(attr?.conteudo ?? '').trim();
+        return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
+      });
+
+      if (!hasSourceTask && !auvoCustomerIdInput.trim()) {
+        toast.error('Informe o código do cliente Auvo antes de gerar a OS.');
+        setGeneratingOS(false);
+        return;
+      }
+
+      const bodyPayload: Record<string, unknown> = {
+        orcamento: entry.orcamento,
+        auvo_user_id: auvoUserId,
+        gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
+      };
+
+      // If no source task and user provided auvo_customer_id, include it
+      if (!hasSourceTask && auvoCustomerIdInput.trim()) {
+        bodyPayload.auvo_customer_id = Number(auvoCustomerIdInput.trim());
+      }
+
       const { data, error } = await supabase.functions.invoke('generate-os', {
-        body: {
-          orcamento: entry.orcamento,
-          auvo_user_id: auvoUserId,
-          gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
-        },
+        body: bodyPayload,
       });
 
       // Handle 409 duplicate from edge function (non-2xx returns error object)
@@ -311,7 +333,7 @@ export default function RastreadorPage() {
                 variant="outline"
                 size="sm"
                 className="h-6 text-[10px] px-2 gap-1 border-green-500 text-green-600 hover:bg-green-50"
-                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); }}
+                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoCustomerIdInput(''); }}
                 disabled={isGenerating}
               >
                 {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
@@ -722,6 +744,37 @@ export default function RastreadorPage() {
                   {confirmEntry.totalItens} produto(s) • R$ {Number(confirmEntry.orcamento.valor_total || 0).toFixed(2)}
                 </p>
               </div>
+
+              {/* Show customer ID input when no source tarefa OS to clone from */}
+              {(() => {
+                const hasSourceTask = confirmEntry.orcamento.atributos?.some((a: any) => {
+                  const attr = a?.atributo || a;
+                  const attrId = String(attr?.atributo_id || attr?.id || '');
+                  const content = String(attr?.conteudo ?? '').trim();
+                  return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
+                });
+                if (!hasSourceTask) {
+                  return (
+                    <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <span className="text-xs font-semibold text-amber-700">Sem tarefa OS de origem</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Este orçamento não possui uma tarefa OS anterior para clonar dados do cliente. Informe o código do cliente no Auvo:
+                      </p>
+                      <Input
+                        type="number"
+                        placeholder="Código do cliente (Auvo)"
+                        value={auvoCustomerIdInput}
+                        onChange={(e) => setAuvoCustomerIdInput(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div className="text-xs text-muted-foreground space-y-1">
                 <p>O sistema irá:</p>

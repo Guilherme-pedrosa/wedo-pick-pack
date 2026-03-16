@@ -270,6 +270,21 @@ export default function OrderQueue() {
             </Button>
           </div>
         )}
+        {/* Sort selector */}
+        <div className="flex items-center gap-1.5">
+          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+            <SelectTrigger className="h-7 text-xs flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="codigo">Código (mais novo)</SelectItem>
+              <SelectItem value="cliente">Cliente (A-Z)</SelectItem>
+              <SelectItem value="data">Data (mais recente)</SelectItem>
+              <SelectItem value="valor">Valor (maior)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Order list */}

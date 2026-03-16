@@ -119,8 +119,34 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.grupo || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.sigla_unidade}</TableCell>
-                  <TableCell className={`text-sm font-medium ${item.estoque_atual < item.qtd_necessaria ? 'text-destructive' : 'text-green-700'}`}>
+                  <TableCell className="text-sm font-medium">
                     {formatQty(item.estoque_atual)}
+                  </TableCell>
+                  {/* Reservado por OS */}
+                  <TableCell className="text-sm">
+                    {(item.estoque_reservado_os ?? 0) > 0 ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-amber-700 font-medium cursor-help">
+                              −{formatQty(item.estoque_reservado_os)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p className="font-bold text-xs mb-1">Reservado por OS pendentes:</p>
+                            {(item.os_reservas || []).map((r, i) => (
+                              <p key={i} className="text-xs">OS #{r.os_codigo} — {r.nome_cliente} — Qtd: {r.qtd}</p>
+                            ))}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  {/* Disponível */}
+                  <TableCell className={`text-sm font-bold ${(item.estoque_disponivel ?? item.estoque_atual) < item.qtd_necessaria ? 'text-destructive' : 'text-green-700'}`}>
+                    {formatQty(item.estoque_disponivel ?? item.estoque_atual)}
                   </TableCell>
                   <TableCell className="text-sm">{formatQty(item.qtd_necessaria)}</TableCell>
                   {/* Em Pedido */}

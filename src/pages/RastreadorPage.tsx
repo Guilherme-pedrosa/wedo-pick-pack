@@ -78,9 +78,10 @@ export default function RastreadorPage() {
   const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
   const [generationResult, setGenerationResult] = useState<{
     success: boolean;
-    auvoTaskId?: number;
+    auvoTaskId?: number | string;
     osCodigo?: string;
     error?: string;
+    duplicate?: boolean;
   } | null>(null);
 
   const handleGenerateOS = async (entry: OrcamentoReadiness) => {

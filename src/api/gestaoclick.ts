@@ -93,7 +93,11 @@ export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string)
   const params = new URLSearchParams({ pagina: String(pagina) });
   if (situacaoId) params.set('situacao_id', situacaoId);
   if (term) {
-    params.set('pesquisa', term);
+    if (/^\d+$/.test(term)) {
+      params.set('codigo', term);
+    } else {
+      params.set('pesquisa', term);
+    }
     params.set('limite', '100');
   }
 

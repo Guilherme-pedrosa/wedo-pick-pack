@@ -75,14 +75,18 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
     if (!tech) return;
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { data: updatedBox, error } = await supabase
         .from("boxes")
         .update({
           technician_name: tech.name,
           technician_gc_id: tech.gc_id,
         })
-        .eq("id", box.id);
+        .eq("id", box.id)
+        .select("id, technician_name, technician_gc_id")
+        .maybeSingle();
+
       if (error) throw error;
+      if (!updatedBox) throw new Error("Sem permissão para vincular esta caixa.");
 
       // Fetch box items for the receipt
       const { data: items } = await supabase

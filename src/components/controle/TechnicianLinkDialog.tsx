@@ -32,7 +32,7 @@ interface ReceiptData {
 interface Props {
   box: BoxData | null;
   onClose: () => void;
-  onLinked: () => void;
+  onLinked: (techName?: string, techGcId?: string) => void;
 }
 
 export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) {

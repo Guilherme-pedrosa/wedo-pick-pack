@@ -147,6 +147,8 @@ export interface GCOrcamento {
       tipo: string;
     };
   }>;
+  pagamentos?: unknown[];
+  servicos?: unknown[];
 }
 
 export interface OrcamentoConvertidoWarning {

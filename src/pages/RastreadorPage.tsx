@@ -334,7 +334,7 @@ export default function RastreadorPage() {
                 variant="outline"
                 size="sm"
                 className="h-6 text-[10px] px-2 gap-1 border-green-500 text-green-600 hover:bg-green-50"
-                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoCustomerIdInput(''); }}
+                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoCustomerIdInput(''); setAuvoCustomerLookup({ loading: false }); }}
                 disabled={isGenerating}
               >
                 {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}

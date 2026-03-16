@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders } from '@/api/gestaoclick';
+import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
@@ -27,6 +27,7 @@ export default function OrderQueue() {
   const [stockScanning, setStockScanning] = useState(false);
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
   const [stockFilter, setStockFilter] = useState<Set<string> | null>(null);
+  const [stockConflicts, setStockConflicts] = useState<StockConflict[]>([]);
   const [sortField, setSortField] = useState<SortField>('codigo');
 
   const queryClient = useQueryClient();
@@ -120,12 +121,19 @@ export default function OrderQueue() {
     setStockScanning(true);
     setStockProgress({ checked: 0, total: 0 });
     try {
-      const result = await checkStockForOrders(filteredByConfig, (checked, total) => {
+      const scanResult = await checkStockForOrders(filteredByConfig, (checked, total) => {
         setStockProgress({ checked, total });
       });
-      setStockFilter(result);
-      const removed = filteredByConfig.length - result.size;
-      toast.success(`Varredura concluída! ${result.size} pedidos com estoque, ${removed} sem estoque completo.`);
+      setStockFilter(scanResult.fullStockOrders);
+      setStockConflicts(scanResult.conflicts);
+      const removed = filteredByConfig.length - scanResult.fullStockOrders.size;
+      let msg = `Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo.`;
+      if (scanResult.conflicts.length > 0) {
+        msg += ` ⚠️ ${scanResult.conflicts.length} conflito(s) de estoque encontrado(s)!`;
+        toast.warning(msg, { duration: 8000 });
+      } else {
+        toast.success(msg);
+      }
     } catch (err) {
       toast.error('Erro durante varredura de estoque');
     } finally {
@@ -233,6 +241,7 @@ export default function OrderQueue() {
               queryClient.invalidateQueries({ queryKey: ['statuses'] });
               separatedQuery.refetch();
               setStockFilter(null);
+              setStockConflicts([]);
               toast.info('Atualizando pedidos do GestãoClick…');
             }}
             disabled={ordersQuery.isFetching}
@@ -265,9 +274,32 @@ export default function OrderQueue() {
             <p className="text-xs text-muted-foreground">
               Mostrando {stockFilter.size} pedidos com estoque
             </p>
-            <Button variant="ghost" size="sm" className="text-xs h-6 px-2" onClick={() => setStockFilter(null)}>
+            <Button variant="ghost" size="sm" className="text-xs h-6 px-2" onClick={() => { setStockFilter(null); setStockConflicts([]); }}>
               Limpar filtro
             </Button>
+          </div>
+        )}
+
+        {/* Stock conflicts */}
+        {stockConflicts.length > 0 && !stockScanning && (
+          <div className="bg-amber-50 border border-amber-200 rounded-md p-2 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+              <span className="text-xs font-semibold text-amber-800">
+                {stockConflicts.length} conflito(s) de estoque
+              </span>
+            </div>
+            {stockConflicts.map(c => (
+              <div key={c.produto_id} className="text-[10px] text-amber-900 bg-amber-100/50 rounded px-1.5 py-1">
+                <p className="font-medium">{c.nome_produto}</p>
+                <p>Estoque: {c.estoque} · Demanda: {c.demanda_total}</p>
+                <div className="mt-0.5 space-y-0.5">
+                  {c.pedidos.map((p, i) => (
+                    <p key={i}>#{p.codigo} — {p.nome_cliente} — precisa {p.qtd}</p>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
         {/* Sort selector */}

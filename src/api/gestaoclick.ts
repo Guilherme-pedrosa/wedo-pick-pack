@@ -307,6 +307,19 @@ export interface ProductStockInfo {
   estoque: number;
 }
 
+export interface StockConflict {
+  nome_produto: string;
+  produto_id: string;
+  estoque: number;
+  demanda_total: number;
+  pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
+}
+
+export interface StockScanResult {
+  fullStockOrders: Set<string>;
+  conflicts: StockConflict[];
+}
+
 export async function getProductStock(produtoId: string): Promise<ProductStockInfo | null> {
   try {
     const res = await apiRequest<{ data: { id: string; estoque: string | number } }>(`/api/produtos/${produtoId}`);
@@ -317,20 +330,26 @@ export async function getProductStock(produtoId: string): Promise<ProductStockIn
   }
 }
 
-/** Check stock for a list of orders. Returns Set of order IDs that have full stock. */
+/** Check stock for a list of orders. Returns Set of order IDs that have full stock + conflicts. */
 export async function checkStockForOrders(
   orders: Array<GCOrdemServico | GCVenda>,
   onProgress?: (checked: number, total: number) => void,
-): Promise<Set<string>> {
+): Promise<StockScanResult> {
   // Collect all unique produto_ids across all orders
-  const productOrderMap = new Map<string, { orderId: string; qty: number }[]>();
+  const productOrderMap = new Map<string, { orderId: string; orderCodigo: string; orderCliente: string; qty: number; nome: string }[]>();
   
   for (const order of orders) {
     for (const p of order.produtos || []) {
       const pid = p.produto.produto_id;
       const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
       if (!productOrderMap.has(pid)) productOrderMap.set(pid, []);
-      productOrderMap.get(pid)!.push({ orderId: order.id, qty });
+      productOrderMap.get(pid)!.push({
+        orderId: order.id,
+        orderCodigo: order.codigo,
+        orderCliente: order.nome_cliente,
+        qty,
+        nome: p.produto.nome_produto,
+      });
     }
   }
 
@@ -365,7 +384,23 @@ export async function checkStockForOrders(
     if (allInStock) fullStockOrders.add(order.id);
   }
 
-  return fullStockOrders;
+  // Detect conflicts: products where total demand across orders > stock
+  const conflicts: StockConflict[] = [];
+  for (const [pid, entries] of productOrderMap) {
+    const stock = stockMap.get(pid) ?? 0;
+    const totalDemand = entries.reduce((s, e) => s + e.qty, 0);
+    if (totalDemand > stock && entries.length > 1) {
+      conflicts.push({
+        produto_id: pid,
+        nome_produto: entries[0].nome,
+        estoque: stock,
+        demanda_total: totalDemand,
+        pedidos: entries.map(e => ({ codigo: e.orderCodigo, nome_cliente: e.orderCliente, qtd: e.qty })),
+      });
+    }
+  }
+
+  return { fullStockOrders, conflicts };
 }
 
 // --- PRODUCT DETAILS (for barcode enrichment) ---

@@ -107,12 +107,27 @@ export default function RastreadorPage() {
         return;
       }
 
+      // Check if source tarefa OS exists to clone customer data
+      const hasSourceTask = entry.orcamento.atributos?.some((a: any) => {
+        const attr = a?.atributo || a;
+        const attrId = String(attr?.atributo_id || attr?.id || '');
+        const content = String(attr?.conteudo ?? '').trim();
+        return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
+      });
+
+      const bodyPayload: Record<string, unknown> = {
+        orcamento: entry.orcamento,
+        auvo_user_id: auvoUserId,
+        gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
+      };
+
+      // If no source task and user provided auvo_customer_id, include it
+      if (!hasSourceTask && auvoCustomerIdInput.trim()) {
+        bodyPayload.auvo_customer_id = Number(auvoCustomerIdInput.trim());
+      }
+
       const { data, error } = await supabase.functions.invoke('generate-os', {
-        body: {
-          orcamento: entry.orcamento,
-          auvo_user_id: auvoUserId,
-          gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
-        },
+        body: bodyPayload,
       });
 
       // Handle 409 duplicate from edge function (non-2xx returns error object)

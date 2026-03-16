@@ -206,10 +206,9 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         orderData = detailData?.data;
       }
 
-      // Date validation
+      // Date validation — compare against last technician link date (handoff)
       const orderDateStr = orderData?.cadastrado_em || orderData?.created_at;
       if (orderDateStr && box) {
-        // Parse date - handle dd/mm/yyyy, dd/mm/yyyy - HH:mm, and ISO formats
         let orderDate: Date;
         const brMatch = String(orderDateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
         if (brMatch) {
@@ -217,16 +216,25 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         } else {
           orderDate = new Date(orderDateStr);
         }
-        
-        const boxCreatedAt = new Date(box.created_at);
+
+        // Get latest handoff date for this box
+        const { data: lastHandoff } = await supabase
+          .from("box_handoff_logs")
+          .select("handed_at")
+          .eq("box_id", box.id)
+          .order("handed_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const referenceDate = lastHandoff?.handed_at ? new Date(lastHandoff.handed_at) : new Date(box.created_at);
         const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
-        const boxDay = new Date(boxCreatedAt.getFullYear(), boxCreatedAt.getMonth(), boxCreatedAt.getDate());
-        
+        const refDay = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+
         if (isNaN(orderDay.getTime())) {
           console.warn("Could not parse order date:", orderDateStr);
-        } else if (orderDay < boxDay) {
+        } else if (orderDay < refDay) {
           toast.error(
-            `${label} #${ref} é de ${orderDay.toLocaleDateString("pt-BR")}, anterior à saída da caixa (${boxDay.toLocaleDateString("pt-BR")}). Não é permitido.`
+            `${label} #${ref} é de ${orderDay.toLocaleDateString("pt-BR")}, anterior à vinculação da caixa (${refDay.toLocaleDateString("pt-BR")}). Não é permitido.`
           );
           return;
         }
@@ -249,13 +257,28 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       // Check how many units of this product were already used with this ref
       const { data: existingLogs } = await supabase
         .from("box_movement_logs")
-        .select("quantidade")
+        .select("id, quantidade")
         .eq("action", "baixa")
         .eq("ref_tipo", tipo)
         .eq("ref_numero", ref.trim())
         .eq("produto_id", matchedItem.produto_id);
 
-      const alreadyUsed = (existingLogs || []).reduce((sum, l) => sum + (l.quantidade || 0), 0);
+      // Check which baixas were auto-reversed (estornadas)
+      const { data: revertLogs } = await supabase
+        .from("box_movement_logs")
+        .select("details")
+        .like("details", "Estorno automático:%");
+
+      const revertedIds = new Set<string>();
+      for (const r of revertLogs || []) {
+        const m = r.details?.match(/ref:\w+:\w+:([a-f0-9-]+)/);
+        if (m) revertedIds.add(m[1]);
+      }
+
+      // Only count non-reverted baixas
+      const alreadyUsed = (existingLogs || [])
+        .filter((l) => !revertedIds.has(l.id))
+        .reduce((sum, l) => sum + (l.quantidade || 0), 0);
       const remaining = orderQty - alreadyUsed;
 
       if (remaining <= 0) {

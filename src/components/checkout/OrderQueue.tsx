@@ -241,6 +241,7 @@ export default function OrderQueue() {
               queryClient.invalidateQueries({ queryKey: ['statuses'] });
               separatedQuery.refetch();
               setStockFilter(null);
+              setStockConflicts([]);
               toast.info('Atualizando pedidos do GestãoClick…');
             }}
             disabled={ordersQuery.isFetching}

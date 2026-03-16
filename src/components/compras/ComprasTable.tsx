@@ -221,7 +221,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                 {/* Expanded purchase orders detail */}
                 {isExpanded && hasOrdens && (
                   <TableRow key={`${key}-orders`} className="bg-amber-50/30">
-                    <TableCell colSpan={12} className="py-2 px-6">
+                    <TableCell colSpan={14} className="py-2 px-6">
                       <div className="space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground mb-1">PEDIDOS DE COMPRA</p>
                         {ordensCompra.map(oc => (

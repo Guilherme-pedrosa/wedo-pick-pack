@@ -73,28 +73,58 @@ async function confirmStatusApplied(tipo: 'os' | 'venda', id: string, expectedSt
 }
 
 // --- LIST ---
-export async function listOS(situacaoId?: string, pagina = 1): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
+export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
+  const term = pesquisa?.trim();
+
   if (isUsingMock()) {
     await mockDelay();
     let data = [...MOCK_OS];
     if (situacaoId) data = data.filter(o => o.situacao_id === situacaoId);
+    if (term) {
+      const q = term.toLowerCase();
+      data = data.filter(o =>
+        o.codigo.toLowerCase().includes(q) ||
+        o.nome_cliente.toLowerCase().includes(q)
+      );
+    }
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
-  let path = `/api/ordens_servicos?pagina=${pagina}`;
-  if (situacaoId) path += `&situacao_id=${situacaoId}`;
-  return apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(path);
+
+  const params = new URLSearchParams({ pagina: String(pagina) });
+  if (situacaoId) params.set('situacao_id', situacaoId);
+  if (term) {
+    params.set('pesquisa', term);
+    params.set('limite', '100');
+  }
+
+  return apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(`/api/ordens_servicos?${params.toString()}`);
 }
 
-export async function listVendas(situacaoId?: string, pagina = 1): Promise<{ data: GCVenda[]; meta: GCMeta }> {
+export async function listVendas(situacaoId?: string, pagina = 1, pesquisa?: string): Promise<{ data: GCVenda[]; meta: GCMeta }> {
+  const term = pesquisa?.trim();
+
   if (isUsingMock()) {
     await mockDelay();
     let data = [...MOCK_VENDAS];
     if (situacaoId) data = data.filter(v => v.situacao_id === situacaoId);
+    if (term) {
+      const q = term.toLowerCase();
+      data = data.filter(v =>
+        v.codigo.toLowerCase().includes(q) ||
+        v.nome_cliente.toLowerCase().includes(q)
+      );
+    }
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
-  let path = `/api/vendas?pagina=${pagina}`;
-  if (situacaoId) path += `&situacao_id=${situacaoId}`;
-  return apiRequest<{ data: GCVenda[]; meta: GCMeta }>(path);
+
+  const params = new URLSearchParams({ pagina: String(pagina) });
+  if (situacaoId) params.set('situacao_id', situacaoId);
+  if (term) {
+    params.set('pesquisa', term);
+    params.set('limite', '100');
+  }
+
+  return apiRequest<{ data: GCVenda[]; meta: GCMeta }>(`/api/vendas?${params.toString()}`);
 }
 
 // --- GET SINGLE ---

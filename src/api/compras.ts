@@ -335,7 +335,7 @@ export async function buildListaCompras(
 
   // PHASE 1b: Build reverse OS index and detect converted budgets
   onProgress?.('Construindo índice de OS…', 0, 1);
-  const { index: osIndex, totalVinculos } = await buildOSIndex(
+  const { index: osIndex, totalVinculos, reservedDemand } = await buildOSIndex(
     (step, checked, total) => onProgress?.(step, checked, total),
   );
   console.log(`[COMPRAS] OS Index ready: ${totalVinculos} vínculos`);

@@ -235,6 +235,10 @@ export interface ItemCompra {
   sigla_unidade: string;
   grupo?: string;
   estoque_atual: number;
+  /** Stock reserved by pending OS (Ag. Compra, Ag. Chegada, etc.) */
+  estoque_reservado_os: number;
+  /** Effective available stock = estoque_atual - estoque_reservado_os */
+  estoque_disponivel: number;
   qtd_necessaria: number;
   qtd_a_comprar: number;
   qtd_ja_em_compra: number;
@@ -257,6 +261,12 @@ export interface ItemCompra {
     qtd: number;
     nome_fornecedor: string;
     situacao: string;
+  }>;
+  /** OS that are reserving stock for this product */
+  os_reservas?: Array<{
+    os_codigo: string;
+    nome_cliente: string;
+    qtd: number;
   }>;
 }
 

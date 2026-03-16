@@ -86,8 +86,22 @@ function hasConvertedBudgetByFlags(orcamento: GCOrcamento): boolean {
 // Scans all OS records and maps orçamento codes found in OS atributos → OS info
 // Cached in memory with 5min TTL
 
-let osIndexCache: { index: OSIndex; builtAt: number; totalVinculos: number } | null = null;
+export interface OSReservedDemand {
+  /** product key (pid or pid::vid) -> total qty reserved by pending OSs */
+  [key: string]: { qty: number; orcamentos: Array<{ os_codigo: string; nome_cliente: string; qtd: number }> };
+}
+
+let osIndexCache: { index: OSIndex; builtAt: number; totalVinculos: number; reservedDemand: OSReservedDemand } | null = null;
 const OS_INDEX_TTL = 5 * 60 * 1000; // 5 minutes
+
+// OS statuses that consume stock but don't move it in GC
+const OS_RESERVED_STATUS_NAMES = [
+  'AGUARDANDO COMPRA DE PECAS',
+  'AGUARDANDO CHEGADA DE PECAS',
+  'AGUARDANDO FABRICACAO',
+  'PEDIDO EM CONFERENCIA',
+  'SERVICO AGUARDANDO EXECUCAO',
+];
 
 function normalizeForMatch(value: string): string {
   return value
@@ -100,13 +114,14 @@ function normalizeForMatch(value: string): string {
 export async function buildOSIndex(
   onProgress?: (step: string, checked: number, total: number) => void,
   forceRebuild = false,
-): Promise<{ index: OSIndex; totalVinculos: number; builtAt: number }> {
+): Promise<{ index: OSIndex; totalVinculos: number; builtAt: number; reservedDemand: OSReservedDemand }> {
   // Return cache if still valid
   if (!forceRebuild && osIndexCache && (Date.now() - osIndexCache.builtAt < OS_INDEX_TTL)) {
     return osIndexCache;
   }
 
   const index: OSIndex = {};
+  const reservedDemand: OSReservedDemand = {};
   let page = 1;
   let totalPages = 1;
   let vinculos = 0;
@@ -122,7 +137,9 @@ export async function buildOSIndex(
       const osId = String(item.id ?? '');
       const nomeSituacao = String(item.nome_situacao ?? '');
       const nomeCliente = String(item.nome_cliente ?? '');
+      const normalizedSituacao = normalizeForMatch(nomeSituacao);
 
+      // Collect budget-to-OS links from atributos
       for (const wrapper of item.atributos || []) {
         const atributo = wrapper?.atributo;
         if (!atributo) continue;
@@ -130,16 +147,34 @@ export async function buildOSIndex(
         const desc = normalizeForMatch(String(atributo.descricao ?? ''));
         if (!desc) continue;
 
-        // Match: "NÚMERO ORÇAMENTO", "NUMERO ORCAMENTO", "NUMERO ORC", "ORCAMENTO", etc.
         const isOrcRef = desc.includes('ORCAMENTO') || desc.includes('NUMERO ORC');
         if (!isOrcRef) continue;
 
         const conteudo = String(atributo.conteudo ?? '').trim();
         if (!conteudo || !/^\d+$/.test(conteudo)) continue;
 
-        // Store: budget code → OS info
         index[conteudo] = { os_codigo: osCodigo, os_id: osId, nome_situacao: nomeSituacao, nome_cliente: nomeCliente };
         vinculos++;
+      }
+
+      // Collect reserved stock from OSs in non-stock-moving statuses
+      if (OS_RESERVED_STATUS_NAMES.includes(normalizedSituacao)) {
+        for (const wrapper of item.produtos || []) {
+          const p = wrapper?.produto;
+          if (!p) continue;
+          const pid = normalizeId(p.produto_id);
+          if (!pid) continue;
+          const vid = normalizeId(p.variacao_id);
+          const key = vid ? `${pid}::${vid}` : pid;
+          const qtd = parseDecimal(p.quantidade);
+          if (qtd <= 0) continue;
+
+          if (!reservedDemand[key]) {
+            reservedDemand[key] = { qty: 0, orcamentos: [] };
+          }
+          reservedDemand[key].qty += qtd;
+          reservedDemand[key].orcamentos.push({ os_codigo: osCodigo, nome_cliente: nomeCliente, qtd });
+        }
       }
     }
 
@@ -148,8 +183,9 @@ export async function buildOSIndex(
     if (page <= totalPages && !isUsingMock()) await new Promise(r => setTimeout(r, 350));
   }
 
-  osIndexCache = { index, builtAt: Date.now(), totalVinculos: vinculos };
-  console.log(`[COMPRAS] OS Index built: ${vinculos} vínculos from ${totalPages} pages`);
+  const reservedKeys = Object.keys(reservedDemand).length;
+  osIndexCache = { index, builtAt: Date.now(), totalVinculos: vinculos, reservedDemand };
+  console.log(`[COMPRAS] OS Index built: ${vinculos} vínculos, ${reservedKeys} produtos reservados por OS pendentes`);
   return osIndexCache;
 }
 

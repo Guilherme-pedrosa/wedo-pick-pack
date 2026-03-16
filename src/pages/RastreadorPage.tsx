@@ -77,6 +77,7 @@ export default function RastreadorPage() {
   const [generatingOS, setGeneratingOS] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
   const [auvoCustomerIdInput, setAuvoCustomerIdInput] = useState('');
+  const [auvoCustomerLookup, setAuvoCustomerLookup] = useState<{ loading: boolean; name?: string; error?: string }>({ loading: false });
   const [generationResult, setGenerationResult] = useState<{
     success: boolean;
     auvoTaskId?: number | string;
@@ -333,7 +334,7 @@ export default function RastreadorPage() {
                 variant="outline"
                 size="sm"
                 className="h-6 text-[10px] px-2 gap-1 border-green-500 text-green-600 hover:bg-green-50"
-                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoCustomerIdInput(''); }}
+                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoCustomerIdInput(''); setAuvoCustomerLookup({ loading: false }); }}
                 disabled={isGenerating}
               >
                 {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
@@ -754,6 +755,20 @@ export default function RastreadorPage() {
                   return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
                 });
                 if (!hasSourceTask) {
+                  const handleLookup = async () => {
+                    if (!auvoCustomerIdInput.trim()) return;
+                    setAuvoCustomerLookup({ loading: true });
+                    try {
+                      const { data, error } = await supabase.functions.invoke('auvo-lookup-customer', {
+                        body: { customer_id: auvoCustomerIdInput.trim() },
+                      });
+                      if (error) throw new Error('Falha na consulta');
+                      if (data?.error) throw new Error(data.error);
+                      setAuvoCustomerLookup({ loading: false, name: data.name });
+                    } catch (e: any) {
+                      setAuvoCustomerLookup({ loading: false, error: e.message || 'Erro ao consultar' });
+                    }
+                  };
                   return (
                     <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 space-y-2">
                       <div className="flex items-center gap-2">
@@ -763,13 +778,38 @@ export default function RastreadorPage() {
                       <p className="text-xs text-muted-foreground">
                         Este orçamento não possui uma tarefa OS anterior para clonar dados do cliente. Informe o código do cliente no Auvo:
                       </p>
-                      <Input
-                        type="number"
-                        placeholder="Código do cliente (Auvo)"
-                        value={auvoCustomerIdInput}
-                        onChange={(e) => setAuvoCustomerIdInput(e.target.value)}
-                        className="h-8 text-sm"
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          placeholder="Código do cliente (Auvo)"
+                          value={auvoCustomerIdInput}
+                          onChange={(e) => { setAuvoCustomerIdInput(e.target.value); setAuvoCustomerLookup({ loading: false }); }}
+                          className="h-8 text-sm flex-1"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs px-3"
+                          disabled={!auvoCustomerIdInput.trim() || auvoCustomerLookup.loading}
+                          onClick={handleLookup}
+                        >
+                          {auvoCustomerLookup.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                          <span className="ml-1">Verificar</span>
+                        </Button>
+                      </div>
+                      {auvoCustomerLookup.name && (
+                        <div className="flex items-center gap-2 rounded border border-green-500/50 bg-green-500/5 p-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                          <span className="text-xs font-medium text-green-700">{auvoCustomerLookup.name}</span>
+                        </div>
+                      )}
+                      {auvoCustomerLookup.error && (
+                        <div className="flex items-center gap-2 rounded border border-destructive/50 bg-destructive/5 p-2">
+                          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+                          <span className="text-xs text-destructive">{auvoCustomerLookup.error}</span>
+                        </div>
+                      )}
                     </div>
                   );
                 }

@@ -14,6 +14,8 @@ import { Progress } from '@/components/ui/progress';
 import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch } from 'lucide-react';
 import { toast } from 'sonner';
 
+type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
+
 export default function OrderQueue() {
   const [activeType, setActiveType] = useState<OrderType>('os');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -24,7 +26,8 @@ export default function OrderQueue() {
   const [loading, setLoading] = useState(false);
   const [stockScanning, setStockScanning] = useState(false);
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
-  const [stockFilter, setStockFilter] = useState<Set<string> | null>(null); // null = not scanned
+  const [stockFilter, setStockFilter] = useState<Set<string> | null>(null);
+  const [sortField, setSortField] = useState<SortField>('codigo');
 
   const queryClient = useQueryClient();
   const session = useCheckoutStore(s => s.session);

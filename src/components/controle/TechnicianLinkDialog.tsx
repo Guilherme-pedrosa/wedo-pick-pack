@@ -153,7 +153,8 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
       toast.success(`Técnico "${tech.name}" vinculado à caixa "${box.name}"`);
       onLinked();
     } catch (e) {
-      toast.error("Erro ao vincular técnico");
+      const message = e instanceof Error ? e.message : "Erro ao vincular técnico";
+      toast.error(message);
       console.error(e);
     } finally {
       setSaving(false);

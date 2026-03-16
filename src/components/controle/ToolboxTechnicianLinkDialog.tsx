@@ -102,11 +102,14 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         toolboxUpdatePayload.venda_gc_id = vendaGcId;
       }
 
-      const { error: linkError } = await (supabase.from("toolboxes") as any)
+      const { data: updatedToolbox, error: linkError } = await (supabase.from("toolboxes") as any)
         .update(toolboxUpdatePayload)
-        .eq("id", toolbox.id);
+        .eq("id", toolbox.id)
+        .select("id, technician_name, technician_gc_id")
+        .maybeSingle();
 
       if (linkError) throw linkError;
+      if (!updatedToolbox) throw new Error("Sem permissão para vincular esta maleta.");
 
       await logToolboxMovement({
         toolboxId: toolbox.id,

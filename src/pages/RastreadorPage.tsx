@@ -739,6 +739,37 @@ export default function RastreadorPage() {
                 </p>
               </div>
 
+              {/* Show customer ID input when no source tarefa OS to clone from */}
+              {(() => {
+                const hasSourceTask = confirmEntry.orcamento.atributos?.some((a: any) => {
+                  const attr = a?.atributo || a;
+                  const attrId = String(attr?.atributo_id || attr?.id || '');
+                  const content = String(attr?.conteudo ?? '').trim();
+                  return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
+                });
+                if (!hasSourceTask) {
+                  return (
+                    <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <span className="text-xs font-semibold text-amber-700">Sem tarefa OS de origem</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Este orçamento não possui uma tarefa OS anterior para clonar dados do cliente. Informe o código do cliente no Auvo:
+                      </p>
+                      <Input
+                        type="number"
+                        placeholder="Código do cliente (Auvo)"
+                        value={auvoCustomerIdInput}
+                        onChange={(e) => setAuvoCustomerIdInput(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div className="text-xs text-muted-foreground space-y-1">
                 <p>O sistema irá:</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">

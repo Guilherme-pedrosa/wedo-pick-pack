@@ -257,13 +257,28 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
       // Check how many units of this product were already used with this ref
       const { data: existingLogs } = await supabase
         .from("box_movement_logs")
-        .select("quantidade")
+        .select("id, quantidade")
         .eq("action", "baixa")
         .eq("ref_tipo", tipo)
         .eq("ref_numero", ref.trim())
         .eq("produto_id", matchedItem.produto_id);
 
-      const alreadyUsed = (existingLogs || []).reduce((sum, l) => sum + (l.quantidade || 0), 0);
+      // Check which baixas were auto-reversed (estornadas)
+      const { data: revertLogs } = await supabase
+        .from("box_movement_logs")
+        .select("details")
+        .like("details", "Estorno automático:%");
+
+      const revertedIds = new Set<string>();
+      for (const r of revertLogs || []) {
+        const m = r.details?.match(/ref:\w+:\w+:([a-f0-9-]+)/);
+        if (m) revertedIds.add(m[1]);
+      }
+
+      // Only count non-reverted baixas
+      const alreadyUsed = (existingLogs || [])
+        .filter((l) => !revertedIds.has(l.id))
+        .reduce((sum, l) => sum + (l.quantidade || 0), 0);
       const remaining = orderQty - alreadyUsed;
 
       if (remaining <= 0) {

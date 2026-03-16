@@ -121,12 +121,19 @@ export default function OrderQueue() {
     setStockScanning(true);
     setStockProgress({ checked: 0, total: 0 });
     try {
-      const result = await checkStockForOrders(filteredByConfig, (checked, total) => {
+      const scanResult = await checkStockForOrders(filteredByConfig, (checked, total) => {
         setStockProgress({ checked, total });
       });
-      setStockFilter(result);
-      const removed = filteredByConfig.length - result.size;
-      toast.success(`Varredura concluída! ${result.size} pedidos com estoque, ${removed} sem estoque completo.`);
+      setStockFilter(scanResult.fullStockOrders);
+      setStockConflicts(scanResult.conflicts);
+      const removed = filteredByConfig.length - scanResult.fullStockOrders.size;
+      let msg = `Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo.`;
+      if (scanResult.conflicts.length > 0) {
+        msg += ` ⚠️ ${scanResult.conflicts.length} conflito(s) de estoque encontrado(s)!`;
+        toast.warning(msg, { duration: 8000 });
+      } else {
+        toast.success(msg);
+      }
     } catch (err) {
       toast.error('Erro durante varredura de estoque');
     } finally {

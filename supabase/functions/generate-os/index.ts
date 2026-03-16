@@ -475,6 +475,7 @@ Deno.serve(async (req: Request) => {
         cliente_id: orcamento.cliente_id,
         data: orcamento.data || new Date().toISOString().split('T')[0],
         situacao_id: NEW_ORC_STATUS_ID,
+        valor_total: orcamento.valor_total,
         valor_frete: orcamento.valor_frete ?? '0.00',
         condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
         produtos: orcamento.produtos || [],
@@ -482,6 +483,8 @@ Deno.serve(async (req: Request) => {
         atributos: orcamento.atributos || [],
         equipamentos: orcamento.equipamentos || [],
       };
+      // Preserve pagamentos to avoid total vs parcelas mismatch
+      if (orcamento.pagamentos?.length) orcUpdatePayload.pagamentos = orcamento.pagamentos;
       if (orcamento.vendedor_id) orcUpdatePayload.vendedor_id = orcamento.vendedor_id;
       if (orcamento.observacoes) orcUpdatePayload.observacoes = orcamento.observacoes;
       if (orcamento.observacoes_interna) orcUpdatePayload.observacoes_interna = orcamento.observacoes_interna;

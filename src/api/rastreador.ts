@@ -354,6 +354,7 @@ export async function rastrearOrcamentos(
     orcamentosPendentes: pendentes,
     orcamentosBloqueados: bloqueados,
     conflitos,
+    osReservadas: relevantReservadas,
     totalOrcamentos: uniqueOrcamentos.length,
     totalProntos: prontos.length,
     totalBloqueados: bloqueados.length,

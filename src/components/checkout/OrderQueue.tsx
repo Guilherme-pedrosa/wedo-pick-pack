@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listOS, listVendas, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
 import { useCheckoutStore } from '@/store/checkoutStore';
@@ -26,6 +26,7 @@ export default function OrderQueue() {
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
   const [stockFilter, setStockFilter] = useState<Set<string> | null>(null); // null = not scanned
 
+  const queryClient = useQueryClient();
   const session = useCheckoutStore(s => s.session);
   const startSession = useCheckoutStore(s => s.startSession);
   const cancelSession = useCheckoutStore(s => s.cancelSession);
@@ -200,7 +201,13 @@ export default function OrderQueue() {
           <Button
             variant="outline"
             className="flex-1 text-sm gap-1.5"
-            onClick={() => { ordersQuery.refetch(); separatedQuery.refetch(); setStockFilter(null); }}
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ['orders'] });
+              queryClient.invalidateQueries({ queryKey: ['statuses'] });
+              separatedQuery.refetch();
+              setStockFilter(null);
+              toast.info('Atualizando pedidos do GestãoClick…');
+            }}
             disabled={ordersQuery.isFetching}
           >
             <RefreshCw className={`h-4 w-4 ${ordersQuery.isFetching ? 'animate-spin' : ''}`} />

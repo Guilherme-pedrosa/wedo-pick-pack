@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos } from '@/api/compras';
-import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo } from '@/api/rastreador';
+import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo, OSReservedInfo } from '@/api/rastreador';
 import { OrcamentoConvertidoWarning } from '@/api/types';
 import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -409,9 +409,15 @@ export default function RastreadorPage() {
               <div key={c.produto_key} className="mb-2 text-xs">
                 <span className="font-medium">{c.nome_produto}</span> — Estoque: {c.estoque_total}, Demanda: {c.demanda_total}
                 <div className="ml-4">
-                  {c.orcamentos_envolvidos.map(o => (
-                    <div key={o.id}>#{o.codigo} — {o.nome_cliente} — precisa {o.qtd}</div>
-                  ))}
+                  {c.orcamentos_envolvidos.map(o => {
+                    const isOS = o.id.startsWith('os-');
+                    return (
+                      <div key={o.id} className={isOS ? 'font-medium' : ''}>
+                        {isOS ? '🔧' : '📋'} {isOS ? o.codigo : `#${o.codigo}`} — {o.nome_cliente} — precisa {o.qtd}
+                        {isOS && ' (OS pendente)'}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -644,7 +650,7 @@ export default function RastreadorPage() {
                     </h2>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Peças disputadas por múltiplos orçamentos — o estoque não atende todos.
+                    Peças disputadas por múltiplos orçamentos ou reservadas por OSs pendentes — o estoque não atende todos.
                   </p>
                   <div className="space-y-2">
                     {result.conflitos.map(c => (
@@ -655,11 +661,15 @@ export default function RastreadorPage() {
                           <span>Demanda total: <strong className="text-red-500">{c.demanda_total}</strong></span>
                         </div>
                         <div className="mt-2 space-y-0.5">
-                          {c.orcamentos_envolvidos.map(o => (
-                            <div key={o.id} className="text-xs text-muted-foreground">
-                              #{o.codigo} — {o.nome_cliente} — precisa {o.qtd}
-                            </div>
-                          ))}
+                          {c.orcamentos_envolvidos.map(o => {
+                            const isOS = o.id.startsWith('os-');
+                            return (
+                              <div key={o.id} className={`text-xs ${isOS ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
+                                {isOS ? '🔧' : '📋'} {isOS ? o.codigo : `#${o.codigo}`} — {o.nome_cliente} — precisa {o.qtd}
+                                {isOS && <span className="text-[10px] ml-1">(reservado, sem mov. estoque)</span>}
+                              </div>
+                            );
+                          })}
                         </div>
                       </Card>
                     ))}

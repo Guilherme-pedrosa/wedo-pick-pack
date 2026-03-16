@@ -35,6 +35,7 @@ const BoxesPage = () => {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [productsCount, setProductsCount] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const loadBoxesRequestRef = useRef(0);
 
   // Detail dialog state
   const [selectedBox, setSelectedBox] = useState<BoxData | null>(null);

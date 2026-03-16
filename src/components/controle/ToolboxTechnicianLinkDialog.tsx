@@ -24,7 +24,7 @@ interface Technician {
 interface Props {
   toolbox: ToolboxData | null;
   onClose: () => void;
-  onLinked: () => void;
+  onLinked: (techName?: string, techGcId?: string) => void;
   onShowReceipt?: (toolbox: ToolboxData, techName: string, techGcId: string) => void;
 }
 
@@ -125,9 +125,9 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         throw new Error("Falha ao vincular: o registro não foi encontrado ou a permissão foi negada. Recarregue a página e tente novamente.");
       }
 
-      console.info("[ToolboxLink] UPDATE confirmado, chamando onLinked()");
-      // Atualiza listas imediatamente após vínculo confirmado.
-      onLinked();
+      console.info("[ToolboxLink] UPDATE confirmado, chamando onLinked() com dados do técnico");
+      // Optimistic: pass tech data back so parent can patch state immediately
+      onLinked(tech.name, tech.gc_id);
 
       let warningMessage: string | null = null;
       try {

@@ -440,7 +440,21 @@ const ToolboxesPage = () => {
       <ToolboxTechnicianLinkDialog
         toolbox={techToolbox}
         onClose={() => setTechToolbox(null)}
-        onLinked={loadToolboxes}
+        onLinked={(linkedTechName?: string, linkedTechGcId?: string) => {
+          if (linkedTechName && linkedTechGcId && techToolbox) {
+            // Optimistic: patch local state immediately
+            setToolboxes((prev) =>
+              prev.map((t) =>
+                t.id === techToolbox.id
+                  ? { ...t, technician_name: linkedTechName, technician_gc_id: linkedTechGcId }
+                  : t
+              )
+            );
+            console.info("[ToolboxesPage] Optimistic patch applied", { toolboxId: techToolbox.id, linkedTechName });
+          } else {
+            loadToolboxes();
+          }
+        }}
         onShowReceipt={handleShowReceipt}
       />
 

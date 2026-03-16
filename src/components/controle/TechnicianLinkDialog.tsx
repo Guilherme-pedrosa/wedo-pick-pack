@@ -32,7 +32,7 @@ interface ReceiptData {
 interface Props {
   box: BoxData | null;
   onClose: () => void;
-  onLinked: () => void;
+  onLinked: (techName?: string, techGcId?: string) => void;
 }
 
 export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) {
@@ -102,9 +102,9 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         throw new Error("Falha ao vincular: o registro não foi encontrado ou a permissão foi negada. Recarregue a página e tente novamente.");
       }
 
-      console.info("[TechLink] UPDATE confirmado, chamando onLinked()");
-      // Atualiza a lista imediatamente após confirmação do vínculo.
-      onLinked();
+      console.info("[TechLink] UPDATE confirmado, chamando onLinked() com dados do técnico");
+      // Optimistic: pass tech data back so parent can patch state immediately
+      onLinked(tech.name, tech.gc_id);
 
       let receiptItems: ReceiptData["items"] = [];
       let warningMessage: string | null = null;

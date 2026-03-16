@@ -304,6 +304,60 @@ export type Database = {
         }
         Relationships: []
       }
+      os_generation_logs: {
+        Row: {
+          auvo_task_id: string | null
+          created_at: string
+          equipamento: string | null
+          error_message: string | null
+          id: string
+          nome_cliente: string
+          operator_id: string
+          operator_name: string
+          orcamento_codigo: string
+          orcamento_id: string
+          os_codigo: string | null
+          os_id: string | null
+          success: boolean
+          valor_total: number | null
+          warnings: string[] | null
+        }
+        Insert: {
+          auvo_task_id?: string | null
+          created_at?: string
+          equipamento?: string | null
+          error_message?: string | null
+          id?: string
+          nome_cliente: string
+          operator_id: string
+          operator_name?: string
+          orcamento_codigo: string
+          orcamento_id: string
+          os_codigo?: string | null
+          os_id?: string | null
+          success?: boolean
+          valor_total?: number | null
+          warnings?: string[] | null
+        }
+        Update: {
+          auvo_task_id?: string | null
+          created_at?: string
+          equipamento?: string | null
+          error_message?: string | null
+          id?: string
+          nome_cliente?: string
+          operator_id?: string
+          operator_name?: string
+          orcamento_codigo?: string
+          orcamento_id?: string
+          os_codigo?: string | null
+          os_id?: string | null
+          success?: boolean
+          valor_total?: number | null
+          warnings?: string[] | null
+        }
+        Relationships: []
+      }
       product_queries: {
         Row: {
           created_at: string

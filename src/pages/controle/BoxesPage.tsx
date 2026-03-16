@@ -565,8 +565,21 @@ const BoxesPage = () => {
       <TechnicianLinkDialog
         box={techBox}
         onClose={() => setTechBox(null)}
-        onLinked={() => {
-          loadBoxes();
+        onLinked={(linkedTechName?: string, linkedTechGcId?: string) => {
+          if (linkedTechName && linkedTechGcId && techBox) {
+            // Optimistic: patch local state immediately
+            setBoxes((prev) =>
+              prev.map((b) =>
+                b.id === techBox.id
+                  ? { ...b, technician_name: linkedTechName, technician_gc_id: linkedTechGcId }
+                  : b
+              )
+            );
+            console.info("[BoxesPage] Optimistic patch applied", { boxId: techBox.id, linkedTechName });
+          } else {
+            // Fallback: refetch
+            loadBoxes();
+          }
         }}
       />
 

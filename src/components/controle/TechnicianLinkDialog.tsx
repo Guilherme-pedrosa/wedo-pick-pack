@@ -74,7 +74,12 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
     const tech = technicians.find((t) => t.id === selectedId);
     if (!tech) return;
 
+    // Guard against double-submit
+    if (saving) return;
     setSaving(true);
+
+    console.info("[TechLink] Iniciando vínculo", { boxId: box.id, boxName: box.name, techName: tech.name, techGcId: tech.gc_id });
+
     try {
       const { data: updatedBox, error } = await supabase
         .from("boxes")
@@ -86,9 +91,18 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         .select("id, technician_name, technician_gc_id")
         .maybeSingle();
 
-      if (error) throw error;
-      if (!updatedBox) throw new Error("Sem permissão para vincular esta caixa.");
+      console.info("[TechLink] Resultado UPDATE", { updatedBox, error });
 
+      if (error) {
+        console.error("[TechLink] Supabase UPDATE error:", error);
+        throw error;
+      }
+      if (!updatedBox) {
+        console.error("[TechLink] UPDATE retornou null — possível RLS bloqueando ou ID inválido", { boxId: box.id });
+        throw new Error("Falha ao vincular: o registro não foi encontrado ou a permissão foi negada. Recarregue a página e tente novamente.");
+      }
+
+      console.info("[TechLink] UPDATE confirmado, chamando onLinked()");
       // Atualiza a lista imediatamente após confirmação do vínculo.
       onLinked();
 
@@ -139,8 +153,12 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
             total_value: totalValue,
           });
 
-          if (handoffError) throw handoffError;
+          if (handoffError) {
+            console.error("[TechLink] handoff_logs insert error:", handoffError);
+            throw handoffError;
+          }
         } else {
+          console.warn("[TechLink] currentUser null — skipping handoff log");
           warningMessage = "Vínculo salvo, mas não foi possível identificar o operador para o recibo.";
         }
 
@@ -154,7 +172,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
           details: `Caixa entregue ao técnico ${tech.name} com ${totalItems} itens (${totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`,
         });
       } catch (secondaryError) {
-        console.error("Erro ao registrar recibo/log da caixa:", secondaryError);
+        console.error("[TechLink] Erro secundário (recibo/log):", secondaryError);
         warningMessage = warningMessage || "Vínculo salvo, mas houve falha ao registrar recibo/log.";
       }
 
@@ -171,7 +189,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
     } catch (e) {
       const message = e instanceof Error ? e.message : "Erro ao vincular técnico";
       toast.error(message);
-      console.error(e);
+      console.error("[TechLink] ERRO PRINCIPAL:", e);
     } finally {
       setSaving(false);
     }

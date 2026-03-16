@@ -194,35 +194,45 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                       <span className="text-muted-foreground">Sem fornecedor</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-xs max-w-[200px]">
-                    <div className="flex flex-wrap gap-1">
-                      {orcamentos.map(orc => {
-                        const isConverted = convertedOrcamentoIds?.has(orc.id);
-                        return (
-                          <TooltipProvider key={orc.id}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge
-                                  variant="outline"
-                                  className={`text-[10px] font-mono whitespace-nowrap ${isConverted ? 'bg-amber-100 text-amber-800 border-amber-300' : ''}`}
-                                >
-                                  {orc.codigo} ({orc.qtd})
+                    <TableCell className="text-xs max-w-[200px]">
+                      {isOsOnlyDeficit ? (
+                        <div className="space-y-0.5">
+                          {(item.os_reservas || []).map((r, i) => (
+                            <Badge key={i} variant="outline" className="text-[10px] font-mono bg-orange-50 text-orange-800 border-orange-200 whitespace-nowrap block w-fit">
+                              OS #{r.os_codigo} — {r.nome_cliente} ({r.qtd})
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {orcamentos.map(orc => {
+                            const isConverted = convertedOrcamentoIds?.has(orc.id);
+                            return (
+                              <TooltipProvider key={orc.id}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] font-mono whitespace-nowrap ${isConverted ? 'bg-amber-100 text-amber-800 border-amber-300' : ''}`}
+                                    >
+                                      {orc.codigo} ({orc.qtd})
+                                      {isConverted && (
+                                        <span className="ml-1 text-[9px] font-semibold text-amber-700">• Convertido</span>
+                                      )}
+                                    </Badge>
+                                  </TooltipTrigger>
                                   {isConverted && (
-                                    <span className="ml-1 text-[9px] font-semibold text-amber-700">• Convertido</span>
+                                    <TooltipContent>
+                                      <p>Este orçamento já gerou Venda ou OS no GestãoClick</p>
+                                    </TooltipContent>
                                   )}
-                                </Badge>
-                              </TooltipTrigger>
-                              {isConverted && (
-                                <TooltipContent>
-                                  <p>Este orçamento já gerou Venda ou OS no GestãoClick</p>
-                                </TooltipContent>
-                              )}
-                            </Tooltip>
-                          </TooltipProvider>
-                        );
-                      })}
-                    </div>
-                  </TableCell>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </TableCell>
                 </TableRow>
                 {/* Expanded purchase orders detail */}
                 {isExpanded && hasOrdens && (

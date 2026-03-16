@@ -105,17 +105,23 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
             const qtdJaEmCompra = item.qtd_ja_em_compra ?? 0;
             const qtdEfetiva = item.qtd_efetiva_a_comprar ?? item.qtd_a_comprar ?? 0;
             const orcamentos = item.orcamentos ?? [];
-            return (
-              <> 
-                <TableRow key={key} className={rowBg}>
-                  <TableCell className="font-mono text-xs">{item.codigo_produto}</TableCell>
-                  <TableCell className="text-sm max-w-[200px]">
-                    <span className="block truncate">{item.nome_produto}</span>
-                    {!item.movimenta_estoque && (
-                      <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[10px] mt-0.5 gap-0.5">
-                        <AlertTriangle className="h-2.5 w-2.5" /> Não mov. estoque
-                      </Badge>
-                    )}
+            const isOsOnlyDeficit = item.qtd_necessaria === 0 && (item.estoque_reservado_os ?? 0) > 0;
+              return (
+                <> 
+                  <TableRow key={key} className={`${rowBg} ${isOsOnlyDeficit ? 'bg-orange-50/60' : ''}`}>
+                    <TableCell className="font-mono text-xs">{item.codigo_produto}</TableCell>
+                    <TableCell className="text-sm max-w-[200px]">
+                      <span className="block truncate">{item.nome_produto}</span>
+                      {isOsOnlyDeficit && (
+                        <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-[10px] mt-0.5 gap-0.5">
+                          <AlertTriangle className="h-2.5 w-2.5" /> Déficit entre OS
+                        </Badge>
+                      )}
+                      {!item.movimenta_estoque && (
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[10px] mt-0.5 gap-0.5">
+                          <AlertTriangle className="h-2.5 w-2.5" /> Não mov. estoque
+                        </Badge>
+                      )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.grupo || '—'}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{item.sigla_unidade}</TableCell>

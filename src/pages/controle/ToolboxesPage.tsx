@@ -50,6 +50,8 @@ const ToolboxesPage = () => {
     date: string;
   } | null>(null);
 
+  const loadToolboxesRequestRef = useRef(0);
+
   useEffect(() => {
     loadToolboxes();
   }, []);

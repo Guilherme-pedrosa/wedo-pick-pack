@@ -73,6 +73,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
     if (!selectedId || !box) return;
     const tech = technicians.find((t) => t.id === selectedId);
     if (!tech) return;
+
     setSaving(true);
     try {
       const { data: updatedBox, error } = await supabase
@@ -88,59 +89,74 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
       if (error) throw error;
       if (!updatedBox) throw new Error("Sem permissão para vincular esta caixa.");
 
-      // Fetch box items for the receipt
-      const { data: items } = await supabase
-        .from("box_items")
-        .select("produto_id, nome_produto, quantidade, preco_unitario")
-        .eq("box_id", box.id)
-        .order("nome_produto");
+      // Atualiza a lista imediatamente após confirmação do vínculo.
+      onLinked();
 
-      const receiptItems = (items || []).map((i) => ({
-        produto_id: i.produto_id,
-        nome_produto: i.nome_produto,
-        quantidade: i.quantidade,
-        preco_unitario: i.preco_unitario,
-      }));
+      let receiptItems: ReceiptData["items"] = [];
+      let warningMessage: string | null = null;
 
-      const totalItems = receiptItems.reduce((s, i) => s + i.quantidade, 0);
-      const totalValue = receiptItems.reduce(
-        (s, i) => s + i.quantidade * (Number(i.preco_unitario) || 0),
-        0
-      );
+      try {
+        const { data: items } = await supabase
+          .from("box_items")
+          .select("produto_id, nome_produto, quantidade, preco_unitario")
+          .eq("box_id", box.id)
+          .order("nome_produto");
 
-      // Get current user info for operator attribution
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      let operatorName = currentUser?.email || "";
-      if (currentUser) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("name")
-          .eq("id", currentUser.id)
-          .single();
-        if (prof) operatorName = prof.name;
+        receiptItems = (items || []).map((i) => ({
+          produto_id: i.produto_id,
+          nome_produto: i.nome_produto,
+          quantidade: i.quantidade,
+          preco_unitario: i.preco_unitario,
+        }));
+
+        const totalItems = receiptItems.reduce((s, i) => s + i.quantidade, 0);
+        const totalValue = receiptItems.reduce(
+          (s, i) => s + i.quantidade * (Number(i.preco_unitario) || 0),
+          0
+        );
+
+        const {
+          data: { user: currentUser },
+        } = await supabase.auth.getUser();
+
+        if (currentUser) {
+          let operatorName = currentUser.email || "";
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("name")
+            .eq("id", currentUser.id)
+            .maybeSingle();
+          if (prof?.name) operatorName = prof.name;
+
+          const { error: handoffError } = await supabase.from("box_handoff_logs").insert({
+            box_id: box.id,
+            box_name: box.name,
+            technician_name: tech.name,
+            technician_gc_id: tech.gc_id,
+            operator_id: currentUser.id,
+            operator_name: operatorName,
+            items_count: totalItems,
+            total_value: totalValue,
+          });
+
+          if (handoffError) throw handoffError;
+        } else {
+          warningMessage = "Vínculo salvo, mas não foi possível identificar o operador para o recibo.";
+        }
+
+        await logBoxMovement({
+          boxId: box.id,
+          boxName: box.name,
+          action: "saida",
+          quantidade: totalItems,
+          technicianName: tech.name,
+          technicianGcId: tech.gc_id,
+          details: `Caixa entregue ao técnico ${tech.name} com ${totalItems} itens (${totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`,
+        });
+      } catch (secondaryError) {
+        console.error("Erro ao registrar recibo/log da caixa:", secondaryError);
+        warningMessage = warningMessage || "Vínculo salvo, mas houve falha ao registrar recibo/log.";
       }
-
-      // Log the handoff (legacy table + unified log)
-      await supabase.from("box_handoff_logs").insert({
-        box_id: box.id,
-        box_name: box.name,
-        technician_name: tech.name,
-        technician_gc_id: tech.gc_id,
-        operator_id: currentUser!.id,
-        operator_name: operatorName,
-        items_count: totalItems,
-        total_value: totalValue,
-      });
-
-      await logBoxMovement({
-        boxId: box.id,
-        boxName: box.name,
-        action: "saida",
-        quantidade: totalItems,
-        technicianName: tech.name,
-        technicianGcId: tech.gc_id,
-        details: `Caixa entregue ao técnico ${tech.name} com ${totalItems} itens (${totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`,
-      });
 
       setReceiptData({
         boxName: box.name,
@@ -151,7 +167,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
       });
 
       toast.success(`Técnico "${tech.name}" vinculado à caixa "${box.name}"`);
-      onLinked();
+      if (warningMessage) toast.warning(warningMessage);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Erro ao vincular técnico";
       toast.error(message);

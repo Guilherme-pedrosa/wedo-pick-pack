@@ -409,9 +409,15 @@ export default function RastreadorPage() {
               <div key={c.produto_key} className="mb-2 text-xs">
                 <span className="font-medium">{c.nome_produto}</span> — Estoque: {c.estoque_total}, Demanda: {c.demanda_total}
                 <div className="ml-4">
-                  {c.orcamentos_envolvidos.map(o => (
-                    <div key={o.id}>#{o.codigo} — {o.nome_cliente} — precisa {o.qtd}</div>
-                  ))}
+                  {c.orcamentos_envolvidos.map(o => {
+                    const isOS = o.id.startsWith('os-');
+                    return (
+                      <div key={o.id} className={isOS ? 'font-medium' : ''}>
+                        {isOS ? '🔧' : '📋'} {isOS ? o.codigo : `#${o.codigo}`} — {o.nome_cliente} — precisa {o.qtd}
+                        {isOS && ' (OS pendente)'}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}

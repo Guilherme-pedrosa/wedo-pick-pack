@@ -243,7 +243,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
         </TableBody>
         <TableFooter>
           <TableRow className="font-bold">
-             <TableCell colSpan={5} className="text-right text-xs">TOTAL</TableCell>
+             <TableCell colSpan={7} className="text-right text-xs">TOTAL</TableCell>
             <TableCell className="text-sm">{formatQty(totalNecessario)}</TableCell>
             <TableCell className="text-sm text-amber-700">{totalEmPedido > 0 ? formatQty(totalEmPedido) : '—'}</TableCell>
             <TableCell className="text-sm text-destructive">{formatQty(totalEfetivo)}</TableCell>

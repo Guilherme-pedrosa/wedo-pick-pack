@@ -114,19 +114,46 @@ export default function RastreadorPage() {
         },
       });
 
-      // Handle 409 duplicate from edge function
+      // Handle 409 duplicate from edge function (non-2xx returns error object)
+      if (error) {
+        // Try to parse the response body for duplicate info
+        let errorBody: any = null;
+        try {
+          if (error.context?.body) {
+            const reader = error.context.body.getReader?.();
+            if (reader) {
+              const { value } = await reader.read();
+              errorBody = JSON.parse(new TextDecoder().decode(value));
+            }
+          }
+        } catch { /* ignore parse errors */ }
+
+        if (!errorBody) errorBody = data;
+
+        if (errorBody?.duplicate) {
+          setGenerationResult({
+            success: false,
+            error: errorBody.error,
+            osCodigo: errorBody.existing?.os_codigo,
+            auvoTaskId: errorBody.existing?.auvo_task_id,
+            duplicate: true,
+          });
+          toast.error(errorBody.error);
+          return;
+        }
+        throw new Error(errorBody?.error || error.message);
+      }
       if (data?.duplicate) {
         setGenerationResult({
           success: false,
           error: data.error,
           osCodigo: data.existing?.os_codigo,
           auvoTaskId: data.existing?.auvo_task_id,
+          duplicate: true,
         });
         toast.error(data.error);
         return;
       }
-
-      if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
       setGenerationResult({

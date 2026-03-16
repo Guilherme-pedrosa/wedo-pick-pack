@@ -11,8 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
+
+type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
 
 export default function OrderQueue() {
   const [activeType, setActiveType] = useState<OrderType>('os');
@@ -24,7 +26,8 @@ export default function OrderQueue() {
   const [loading, setLoading] = useState(false);
   const [stockScanning, setStockScanning] = useState(false);
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
-  const [stockFilter, setStockFilter] = useState<Set<string> | null>(null); // null = not scanned
+  const [stockFilter, setStockFilter] = useState<Set<string> | null>(null);
+  const [sortField, setSortField] = useState<SortField>('codigo');
 
   const queryClient = useQueryClient();
   const session = useCheckoutStore(s => s.session);
@@ -84,12 +87,30 @@ export default function OrderQueue() {
   // Client-side search (uses debounced value)
   const filtered = useMemo(() => {
     const s = debouncedSearch.trim().toLowerCase();
-    if (!s) return filteredByStock;
-    return filteredByStock.filter(o =>
-      o.codigo.toLowerCase().includes(s) ||
-      o.nome_cliente.toLowerCase().includes(s)
-    );
-  }, [filteredByStock, debouncedSearch]);
+    let result = s
+      ? filteredByStock.filter(o =>
+          o.codigo.toLowerCase().includes(s) ||
+          o.nome_cliente.toLowerCase().includes(s)
+        )
+      : [...filteredByStock];
+
+    // Sort
+    result.sort((a, b) => {
+      switch (sortField) {
+        case 'cliente':
+          return a.nome_cliente.localeCompare(b.nome_cliente);
+        case 'data':
+          return b.data.localeCompare(a.data);
+        case 'valor':
+          return parseFloat(b.valor_total) - parseFloat(a.valor_total);
+        case 'codigo':
+        default:
+          return b.codigo.localeCompare(a.codigo, undefined, { numeric: true });
+      }
+    });
+
+    return result;
+  }, [filteredByStock, debouncedSearch, sortField]);
 
   const handleStockScan = useCallback(async () => {
     if (filteredByConfig.length === 0) {
@@ -249,6 +270,21 @@ export default function OrderQueue() {
             </Button>
           </div>
         )}
+        {/* Sort selector */}
+        <div className="flex items-center gap-1.5">
+          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+            <SelectTrigger className="h-7 text-xs flex-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="codigo">Código (mais novo)</SelectItem>
+              <SelectItem value="cliente">Cliente (A-Z)</SelectItem>
+              <SelectItem value="data">Data (mais recente)</SelectItem>
+              <SelectItem value="valor">Valor (maior)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Order list */}

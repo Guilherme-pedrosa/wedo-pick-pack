@@ -106,7 +106,7 @@ export default function OrderQueue() {
           return parseFloat(b.valor_total) - parseFloat(a.valor_total);
         case 'codigo':
         default:
-          return b.codigo.localeCompare(a.codigo, undefined, { numeric: true });
+          return a.codigo.localeCompare(b.codigo, undefined, { numeric: true });
       }
     });
 

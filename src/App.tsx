@@ -18,6 +18,7 @@ import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import ComprasPage from "./pages/ComprasPage";
 import RastreadorPage from "./pages/RastreadorPage";
+import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
 import LoginPage from "./pages/LoginPage";

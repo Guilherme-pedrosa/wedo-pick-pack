@@ -26,6 +26,7 @@ export default function OrderQueue() {
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
   const [stockFilter, setStockFilter] = useState<Set<string> | null>(null); // null = not scanned
 
+  const queryClient = useQueryClient();
   const session = useCheckoutStore(s => s.session);
   const startSession = useCheckoutStore(s => s.startSession);
   const cancelSession = useCheckoutStore(s => s.cancelSession);

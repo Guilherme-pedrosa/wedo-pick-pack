@@ -24,7 +24,7 @@ interface Technician {
 interface Props {
   toolbox: ToolboxData | null;
   onClose: () => void;
-  onLinked: () => void;
+  onLinked: (techName?: string, techGcId?: string) => void;
   onShowReceipt?: (toolbox: ToolboxData, techName: string, techGcId: string) => void;
 }
 

@@ -310,7 +310,7 @@ export default function OrderQueue() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="codigo">Código (mais novo)</SelectItem>
+              <SelectItem value="codigo">Código (mais antigo)</SelectItem>
               <SelectItem value="cliente">Cliente (A-Z)</SelectItem>
               <SelectItem value="data">Data (mais recente)</SelectItem>
               <SelectItem value="valor">Valor (maior)</SelectItem>

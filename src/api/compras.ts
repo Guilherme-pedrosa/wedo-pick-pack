@@ -611,6 +611,96 @@ export async function buildListaCompras(
     });
   }
 
+  // PHASE 5b: Inject OS-only deficit items (reserved by OS but not in any orçamento)
+  const processedProductKeys = new Set(productMap.keys());
+  const osOnlyKeys = Object.keys(reservedDemand).filter(k => !processedProductKeys.has(k));
+
+  if (osOnlyKeys.length > 0) {
+    onProgress?.('Verificando déficits de OS sem orçamento…', 0, osOnlyKeys.length);
+    // Fetch stock for OS-only products
+    for (let i = 0; i < osOnlyKeys.length; i += 2) {
+      const batch = osOnlyKeys.slice(i, i + 2);
+      await Promise.all(batch.map(async key => {
+        const reserva = reservedDemand[key];
+        // Extract produto_id from key (may be "pid::vid" or just "pid")
+        const parts = key.split('::');
+        const produtoId = parts[0];
+        const variacaoId = parts[1] || '';
+
+        if (!detailCache.has(produtoId)) {
+          const detail = await getProdutoDetalhe(produtoId);
+          detailCache.set(produtoId, detail);
+        }
+        const detail = detailCache.get(produtoId);
+
+        let estoqueAtual = 0;
+        let valorCusto = 0;
+        let movimentaEstoque = true;
+
+        if (detail) {
+          movimentaEstoque = detail.movimenta_estoque === '1';
+          if (variacaoId && detail.variacoes?.length) {
+            const v = detail.variacoes.find(v => String(v.variacao.id) === String(variacaoId));
+            estoqueAtual = v ? parseDecimal(v.variacao.estoque) : parseDecimal(detail.estoque);
+          } else {
+            estoqueAtual = parseDecimal(detail.estoque);
+          }
+          valorCusto = parseDecimal(detail.valor_custo);
+        }
+
+        const estoqueReservadoOS = reserva.qty;
+        const osReservas = reserva.orcamentos;
+        const estoqueDisponivel = Math.max(0, estoqueAtual - estoqueReservadoOS);
+        const deficit = estoqueReservadoOS - estoqueAtual; // pure OS deficit
+
+        if (deficit > 0) {
+          // Check purchase orders
+          const fullKey = variacaoId ? `${produtoId}::${variacaoId}` : produtoId;
+          const compraEntry = compraMap.get(fullKey) ?? compraMapByProduto.get(produtoId);
+          const qtdJaEmCompra = compraEntry?.qtd ?? 0;
+          const rawOrdens = compraEntry?.ordens ?? [];
+          const seenOrdemIds = new Set<string>();
+          const ordensCompra = rawOrdens.filter(o => {
+            if (seenOrdemIds.has(o.id)) return false;
+            seenOrdemIds.add(o.id);
+            return true;
+          });
+
+          const qtdEfetivaAComprar = Math.max(0, deficit - qtdJaEmCompra);
+          const estimativa = qtdEfetivaAComprar * valorCusto;
+
+          const fornecedorInfo = fornecedorPorProduto.get(produtoId);
+
+          allItems.push({
+            produto_id: produtoId,
+            variacao_id: variacaoId,
+            nome_produto: detail?.nome || `Produto ${produtoId}`,
+            codigo_produto: detail?.codigo_interno || '',
+            sigla_unidade: 'UN',
+            grupo: detail?.nome_grupo,
+            estoque_atual: estoqueAtual,
+            estoque_reservado_os: estoqueReservadoOS,
+            estoque_disponivel: estoqueDisponivel,
+            qtd_necessaria: 0, // no quote demand
+            qtd_a_comprar: deficit,
+            qtd_ja_em_compra: qtdJaEmCompra,
+            qtd_efetiva_a_comprar: qtdEfetivaAComprar,
+            ultimo_preco: valorCusto,
+            estimativa,
+            movimenta_estoque: movimentaEstoque,
+            fornecedor_id: fornecedorInfo?.fornecedor_id,
+            fornecedor_nome: fornecedorInfo?.nome_fornecedor,
+            fornecedor_telefone: undefined,
+            orcamentos: [], // no budgets — pure OS deficit
+            ordens_compra: ordensCompra,
+            os_reservas: osReservas,
+          });
+        }
+      }));
+      if (i + 2 < osOnlyKeys.length && !isUsingMock()) await new Promise(r => setTimeout(r, 500));
+    }
+  }
+
   const itensList = allItems.filter(i => i.qtd_efetiva_a_comprar > 0);
   const itensCobertos = allItems.filter(i => i.qtd_efetiva_a_comprar === 0 && i.qtd_a_comprar > 0);
   const itensOkList = allItems.filter(i => i.qtd_a_comprar === 0);

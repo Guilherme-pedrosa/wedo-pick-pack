@@ -115,6 +115,12 @@ export default function RastreadorPage() {
         return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
       });
 
+      if (!hasSourceTask && !auvoCustomerIdInput.trim()) {
+        toast.error('Informe o código do cliente Auvo antes de gerar a OS.');
+        setGeneratingOS(false);
+        return;
+      }
+
       const bodyPayload: Record<string, unknown> = {
         orcamento: entry.orcamento,
         auvo_user_id: auvoUserId,

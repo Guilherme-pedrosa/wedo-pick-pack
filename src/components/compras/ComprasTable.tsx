@@ -84,7 +84,9 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
             <SortHeader label="Produto" col="nome_produto" />
             <SortHeader label="Grupo" col="grupo" />
             <TableHead className="text-xs">UN</TableHead>
-            <SortHeader label="Estoque" col="estoque_atual" />
+            <SortHeader label="Estoque GC" col="estoque_atual" />
+            <TableHead className="text-xs">Reserv. OS</TableHead>
+            <TableHead className="text-xs">Disponível</TableHead>
             <SortHeader label="Necessário" col="qtd_necessaria" />
             <SortHeader label="Em Pedido" col="qtd_ja_em_compra" />
             <SortHeader label="A Comprar" col="qtd_efetiva_a_comprar" />

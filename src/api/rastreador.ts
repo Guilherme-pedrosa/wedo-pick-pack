@@ -188,6 +188,22 @@ export async function rastrearOrcamentos(
     }
   }
 
+  // Phase 4b: Subtract OS reserved stock (OSs in non-stock-moving statuses)
+  const osReservadas: OSReservedInfo[] = [];
+  for (const [key, reserved] of Object.entries(reservedDemand)) {
+    const currentStock = stockMap.get(key);
+    if (currentStock !== undefined) {
+      stockMap.set(key, Math.max(0, currentStock - reserved.qty));
+    }
+    // We don't know the product name from the OS data yet; we'll try to find it from demand map later
+    osReservadas.push({
+      produto_key: key,
+      nome_produto: '', // will fill below
+      qtd_reservada: reserved.qty,
+      os_envolvidas: reserved.orcamentos,
+    });
+  }
+
   // Phase 5: Compute total demand per product across all budgets (for conflict detection)
   const demandMap = new Map<string, { total: number; nome: string; orcamentos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }> }>();
   for (const orc of uniqueOrcamentos) {
@@ -204,17 +220,41 @@ export async function rastrearOrcamentos(
     }
   }
 
-  // Detect conflicts: products where total demand > stock AND multiple budgets need it
+  // Fill product names in osReservadas from demandMap
+  for (const info of osReservadas) {
+    const demand = demandMap.get(info.produto_key);
+    if (demand) info.nome_produto = demand.nome;
+  }
+  // Remove entries that don't affect any tracked product (no overlap with budgets)
+  const relevantReservadas = osReservadas.filter(r => {
+    const stock = stockMap.get(r.produto_key);
+    const demand = demandMap.get(r.produto_key);
+    // Show if this product is also needed by budgets
+    return demand !== undefined;
+  });
+
+  // Detect conflicts: products where total demand > available stock (after OS reserved subtraction)
+  // Also consider when a single budget can't be fulfilled due to OS reservations
   const conflitos: ConflictInfo[] = [];
   for (const [key, demand] of demandMap) {
     const stock = stockMap.get(key) ?? 0;
-    if (demand.total > stock && demand.orcamentos.length > 1) {
+    const reserved = reservedDemand[key];
+    if (demand.total > stock && (demand.orcamentos.length > 1 || reserved)) {
       conflitos.push({
         produto_key: key,
         nome_produto: demand.nome,
-        estoque_total: stock,
-        demanda_total: demand.total,
-        orcamentos_envolvidos: demand.orcamentos,
+        estoque_total: stock + (reserved?.qty ?? 0), // show original stock
+        demanda_total: demand.total + (reserved?.qty ?? 0), // include OS reserved demand
+        orcamentos_envolvidos: [
+          ...demand.orcamentos,
+          // Add OS entries as "virtual" entries in the conflict
+          ...(reserved?.orcamentos.map(os => ({
+            id: `os-${os.os_codigo}`,
+            codigo: `OS #${os.os_codigo}`,
+            nome_cliente: os.nome_cliente,
+            qtd: os.qtd,
+          })) ?? []),
+        ],
       });
     }
   }

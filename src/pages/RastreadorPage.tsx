@@ -93,7 +93,7 @@ export default function RastreadorPage() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('auvo_user_id, gc_usuario_id')
+        .select('auvo_user_id, gc_usuario_id, name')
         .eq('id', user.id)
         .maybeSingle();
 

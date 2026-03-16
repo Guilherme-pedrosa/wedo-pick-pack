@@ -201,7 +201,13 @@ export default function OrderQueue() {
           <Button
             variant="outline"
             className="flex-1 text-sm gap-1.5"
-            onClick={() => { ordersQuery.refetch(); separatedQuery.refetch(); setStockFilter(null); }}
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ['orders'] });
+              queryClient.invalidateQueries({ queryKey: ['statuses'] });
+              separatedQuery.refetch();
+              setStockFilter(null);
+              toast.info('Atualizando pedidos do GestãoClick…');
+            }}
             disabled={ordersQuery.isFetching}
           >
             <RefreshCw className={`h-4 w-4 ${ordersQuery.isFetching ? 'animate-spin' : ''}`} />

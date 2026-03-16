@@ -96,7 +96,7 @@ export async function rastrearOrcamentos(
 
   // Phase 1b: Build OS index and filter out converted budgets
   onProgress?.('Construindo índice de OS…', 0, 1);
-  const { index: osIndex } = await buildOSIndex(
+  const { index: osIndex, reservedDemand } = await buildOSIndex(
     (step, checked, total) => onProgress?.(step, checked, total),
   );
 

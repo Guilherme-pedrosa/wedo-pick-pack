@@ -154,7 +154,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                   <TableCell className={`text-sm font-bold ${(item.estoque_disponivel ?? item.estoque_atual) < item.qtd_necessaria ? 'text-destructive' : 'text-green-700'}`}>
                     {formatQty(item.estoque_disponivel ?? item.estoque_atual)}
                   </TableCell>
-                  <TableCell className="text-sm">{formatQty(item.qtd_necessaria)}</TableCell>
+                  <TableCell className="text-sm">{item.qtd_necessaria > 0 ? formatQty(item.qtd_necessaria) : <span className="text-muted-foreground">—</span>}</TableCell>
                   {/* Em Pedido */}
                   <TableCell className="text-sm">
                     {qtdJaEmCompra === 0 ? (

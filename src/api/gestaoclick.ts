@@ -92,11 +92,16 @@ export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string)
 
   const params = new URLSearchParams({ pagina: String(pagina) });
   if (situacaoId) params.set('situacao_id', situacaoId);
+
+  // Mantém a fila com os códigos mais novos no topo (ex.: OS 9090)
+  params.set('ordenacao', 'codigo');
+  params.set('direcao', 'desc');
+
   if (term) {
     if (/^\d+$/.test(term)) {
       params.set('codigo', term);
     } else {
-      params.set('pesquisa', term);
+      params.set('nome', term);
     }
     params.set('limite', '100');
   }

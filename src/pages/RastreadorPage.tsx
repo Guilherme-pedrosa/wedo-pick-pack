@@ -113,6 +113,18 @@ export default function RastreadorPage() {
         },
       });
 
+      // Handle 409 duplicate from edge function
+      if (data?.duplicate) {
+        setGenerationResult({
+          success: false,
+          error: data.error,
+          osCodigo: data.existing?.os_codigo,
+          auvoTaskId: data.existing?.auvo_task_id,
+        });
+        toast.error(data.error);
+        return;
+      }
+
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 

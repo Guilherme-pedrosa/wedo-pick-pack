@@ -164,6 +164,34 @@ Deno.serve(async (req: Request) => {
     console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente}`);
 
     // ============================================
+    // GUARD: Check for existing successful generation
+    // ============================================
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    const checkRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/os_generation_logs?orcamento_id=eq.${encodeURIComponent(orcamento.id)}&success=eq.true&select=id,os_codigo,auvo_task_id,operator_name,created_at&order=created_at.desc&limit=1`,
+      {
+        headers: {
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      }
+    );
+    const existingLogs = await checkRes.json();
+
+    if (Array.isArray(existingLogs) && existingLogs.length > 0) {
+      const prev = existingLogs[0];
+      const msg = `OS já gerada para este orçamento! OS #${prev.os_codigo || '?'} / Auvo #${prev.auvo_task_id || '?'} por ${prev.operator_name || 'operador'} em ${new Date(prev.created_at).toLocaleString('pt-BR')}`;
+      console.warn(`[generate-os] BLOCKED duplicate: ${msg}`);
+      return new Response(
+        JSON.stringify({ error: msg, duplicate: true, existing: prev }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    console.log('[generate-os] No previous generation found, proceeding...');
+
+    // ============================================
     // STEP 1: Login to Auvo
     // ============================================
     console.log('[generate-os] Step 1: Auvo login...');

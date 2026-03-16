@@ -464,6 +464,37 @@ Deno.serve(async (req: Request) => {
     const osCodigo = gcResult?.data?.codigo;
     console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
 
+    // ============================================
+    // STEP 6: Update orçamento status to "OS Gerada" (7109779)
+    // ============================================
+    const NEW_ORC_STATUS_ID = '7109779';
+    try {
+      console.log(`[generate-os] Step 6: Updating orçamento #${orcamento.codigo} status to ${NEW_ORC_STATUS_ID}...`);
+
+      const orcUpdatePayload: Record<string, any> = {
+        cliente_id: orcamento.cliente_id,
+        data: orcamento.data || new Date().toISOString().split('T')[0],
+        situacao_id: NEW_ORC_STATUS_ID,
+        valor_frete: orcamento.valor_frete ?? '0.00',
+        condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
+        produtos: orcamento.produtos || [],
+        servicos: orcamento.servicos || [],
+        atributos: orcamento.atributos || [],
+        equipamentos: orcamento.equipamentos || [],
+      };
+      if (orcamento.vendedor_id) orcUpdatePayload.vendedor_id = orcamento.vendedor_id;
+      if (orcamento.observacoes) orcUpdatePayload.observacoes = orcamento.observacoes;
+      if (orcamento.observacoes_interna) orcUpdatePayload.observacoes_interna = orcamento.observacoes_interna;
+      if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
+
+      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', orcUpdatePayload);
+      console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);
+    } catch (orcErr) {
+      const orcMsg = orcErr instanceof Error ? orcErr.message : String(orcErr);
+      console.warn(`[generate-os] ⚠️ Failed to update orçamento status: ${orcMsg}`);
+      warnings.push(`Não foi possível atualizar o status do orçamento: ${orcMsg}`);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

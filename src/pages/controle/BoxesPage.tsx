@@ -35,6 +35,7 @@ const BoxesPage = () => {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [productsCount, setProductsCount] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const loadBoxesRequestRef = useRef(0);
 
   // Detail dialog state
   const [selectedBox, setSelectedBox] = useState<BoxData | null>(null);
@@ -142,6 +143,7 @@ const BoxesPage = () => {
   };
 
   const loadBoxes = async () => {
+    const requestId = ++loadBoxesRequestRef.current;
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -151,11 +153,15 @@ const BoxesPage = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+      if (requestId !== loadBoxesRequestRef.current) return;
 
       if (data && data.length > 0) {
         const { data: itemsData } = await supabase
           .from("box_items")
           .select("box_id, quantidade, preco_unitario");
+
+        if (requestId !== loadBoxesRequestRef.current) return;
+
         const countMap = new Map<string, number>();
         const valueMap = new Map<string, number>();
         itemsData?.forEach((c: any) => {
@@ -175,9 +181,13 @@ const BoxesPage = () => {
         setBoxes([]);
       }
     } catch {
-      toast.error("Erro ao carregar caixas");
+      if (requestId === loadBoxesRequestRef.current) {
+        toast.error("Erro ao carregar caixas");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadBoxesRequestRef.current) {
+        setLoading(false);
+      }
     }
   };
 

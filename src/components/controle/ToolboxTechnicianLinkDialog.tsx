@@ -111,30 +111,39 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
       if (linkError) throw linkError;
       if (!updatedToolbox) throw new Error("Sem permissão para vincular esta maleta.");
 
-      await logToolboxMovement({
-        toolboxId: toolbox.id,
-        toolboxName: toolbox.name,
-        action: "vinculacao",
-        technicianName: tech.name,
-        technicianGcId: tech.gc_id,
-        details: `Maleta vinculada ao técnico ${tech.name}`,
-      });
+      // Atualiza listas imediatamente após vínculo confirmado.
+      onLinked();
 
-      if (vendaGcId) {
-        toast.success(`Ajuste de estoque aplicado (${vendaCodigo || "ref interna"})`);
-
+      let warningMessage: string | null = null;
+      try {
         await logToolboxMovement({
           toolboxId: toolbox.id,
           toolboxName: toolbox.name,
-          action: "saida_estoque",
+          action: "vinculacao",
           technicianName: tech.name,
           technicianGcId: tech.gc_id,
-          details: `Ajuste ERP ${vendaCodigo || "(sem código)"} — ${vendaSummary || "Saída registrada"}`,
+          details: `Maleta vinculada ao técnico ${tech.name}`,
         });
+
+        if (vendaGcId) {
+          toast.success(`Ajuste de estoque aplicado (${vendaCodigo || "ref interna"})`);
+
+          await logToolboxMovement({
+            toolboxId: toolbox.id,
+            toolboxName: toolbox.name,
+            action: "saida_estoque",
+            technicianName: tech.name,
+            technicianGcId: tech.gc_id,
+            details: `Ajuste ERP ${vendaCodigo || "(sem código)"} — ${vendaSummary || "Saída registrada"}`,
+          });
+        }
+      } catch (logError) {
+        console.error("Erro ao registrar logs da maleta:", logError);
+        warningMessage = "Vínculo salvo, mas houve falha ao registrar movimentação.";
       }
 
       toast.success(`Técnico ${tech.name} vinculado à maleta "${toolbox.name}"`);
-      onLinked();
+      if (warningMessage) toast.warning(warningMessage);
 
       if (onShowReceipt) {
         onShowReceipt(toolbox, tech.name, tech.gc_id);

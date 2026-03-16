@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Plus, Clock, UserCheck, Wrench, Pause, ArrowUpRight, Printer, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,11 +50,14 @@ const ToolboxesPage = () => {
     date: string;
   } | null>(null);
 
+  const loadToolboxesRequestRef = useRef(0);
+
   useEffect(() => {
     loadToolboxes();
   }, []);
 
   const loadToolboxes = async () => {
+    const requestId = ++loadToolboxesRequestRef.current;
     setLoading(true);
     try {
       const { data, error } = await (supabase.from("toolboxes") as any)
@@ -63,10 +66,13 @@ const ToolboxesPage = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+      if (requestId !== loadToolboxesRequestRef.current) return;
 
       if (data?.length) {
         const { data: itemsData } = await (supabase.from("toolbox_items") as any)
           .select("toolbox_id, quantidade, preco_unitario");
+
+        if (requestId !== loadToolboxesRequestRef.current) return;
 
         const countMap = new Map<string, number>();
         const valueMap = new Map<string, number>();
@@ -86,9 +92,13 @@ const ToolboxesPage = () => {
         setToolboxes([]);
       }
     } catch {
-      toast.error("Erro ao carregar maletas");
+      if (requestId === loadToolboxesRequestRef.current) {
+        toast.error("Erro ao carregar maletas");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadToolboxesRequestRef.current) {
+        setLoading(false);
+      }
     }
   };
 

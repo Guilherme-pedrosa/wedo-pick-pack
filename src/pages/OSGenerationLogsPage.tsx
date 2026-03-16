@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useCallback } from "react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ interface OSLog {
 
 export default function OSGenerationLogsPage() {
   const [search, setSearch] = useState("");
+  const queryClient = useQueryClient();
 
   const { data: logs, isLoading, refetch } = useQuery({
     queryKey: ["os-generation-logs"],
@@ -46,6 +47,23 @@ export default function OSGenerationLogsPage() {
     },
   });
 
+  // Realtime subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel("os-generation-logs-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "os_generation_logs" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["os-generation-logs"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
   const filtered = (logs || []).filter((l) => {
     if (!search) return true;
     const term = search.toLowerCase();

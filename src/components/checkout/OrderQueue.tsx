@@ -87,12 +87,30 @@ export default function OrderQueue() {
   // Client-side search (uses debounced value)
   const filtered = useMemo(() => {
     const s = debouncedSearch.trim().toLowerCase();
-    if (!s) return filteredByStock;
-    return filteredByStock.filter(o =>
-      o.codigo.toLowerCase().includes(s) ||
-      o.nome_cliente.toLowerCase().includes(s)
-    );
-  }, [filteredByStock, debouncedSearch]);
+    let result = s
+      ? filteredByStock.filter(o =>
+          o.codigo.toLowerCase().includes(s) ||
+          o.nome_cliente.toLowerCase().includes(s)
+        )
+      : [...filteredByStock];
+
+    // Sort
+    result.sort((a, b) => {
+      switch (sortField) {
+        case 'cliente':
+          return a.nome_cliente.localeCompare(b.nome_cliente);
+        case 'data':
+          return b.data.localeCompare(a.data);
+        case 'valor':
+          return parseFloat(b.valor_total) - parseFloat(a.valor_total);
+        case 'codigo':
+        default:
+          return b.codigo.localeCompare(a.codigo, undefined, { numeric: true });
+      }
+    });
+
+    return result;
+  }, [filteredByStock, debouncedSearch, sortField]);
 
   const handleStockScan = useCallback(async () => {
     if (filteredByConfig.length === 0) {

@@ -196,7 +196,10 @@ export default function OrderQueue() {
         <Input
           placeholder="Buscar por código ou cliente…"
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           className="text-sm"
         />
 

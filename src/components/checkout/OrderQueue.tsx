@@ -50,10 +50,13 @@ export default function OrderQueue() {
   });
 
   const filterStatusId = statusFilter === 'all' ? undefined : statusFilter;
+  const searchTerm = debouncedSearch.trim();
 
   const ordersQuery = useQuery({
-    queryKey: ['orders', activeType, filterStatusId, page],
-    queryFn: () => activeType === 'os' ? listOS(filterStatusId, page) : listVendas(filterStatusId, page),
+    queryKey: ['orders', activeType, filterStatusId, page, searchTerm],
+    queryFn: () => activeType === 'os'
+      ? listOS(filterStatusId, page, searchTerm || undefined)
+      : listVendas(filterStatusId, page, searchTerm || undefined),
     staleTime: 30000, // consider fresh for 30s — prevents refetch on focus
     refetchOnWindowFocus: false,
   });

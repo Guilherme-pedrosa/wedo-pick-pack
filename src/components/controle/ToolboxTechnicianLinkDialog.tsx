@@ -52,9 +52,11 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
   };
 
   const handleLink = async (tech: Technician) => {
-    if (!toolbox) return;
+    if (!toolbox || linking) return;
     setLinking(true);
     setStockProgress(null);
+
+    console.info("[ToolboxLink] Iniciando vínculo", { toolboxId: toolbox.id, toolboxName: toolbox.name, techName: tech.name, techGcId: tech.gc_id });
 
     try {
       // 1) Carregar itens da maleta
@@ -83,6 +85,8 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
           technicianGcId: tech.gc_id,
         });
 
+        console.info("[ToolboxLink] Resultado estoque:", result);
+
         if (!result.success || !result.venda_gc_id) {
           throw new Error(result.error || "Falha ao aplicar ajuste de estoque no ERP.");
         }
@@ -102,15 +106,26 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         toolboxUpdatePayload.venda_gc_id = vendaGcId;
       }
 
+      console.info("[ToolboxLink] Enviando UPDATE", { toolboxId: toolbox.id, payload: toolboxUpdatePayload });
+
       const { data: updatedToolbox, error: linkError } = await (supabase.from("toolboxes") as any)
         .update(toolboxUpdatePayload)
         .eq("id", toolbox.id)
         .select("id, technician_name, technician_gc_id")
         .maybeSingle();
 
-      if (linkError) throw linkError;
-      if (!updatedToolbox) throw new Error("Sem permissão para vincular esta maleta.");
+      console.info("[ToolboxLink] Resultado UPDATE", { updatedToolbox, linkError });
 
+      if (linkError) {
+        console.error("[ToolboxLink] Supabase UPDATE error:", linkError);
+        throw linkError;
+      }
+      if (!updatedToolbox) {
+        console.error("[ToolboxLink] UPDATE retornou null — possível RLS ou ID inválido", { toolboxId: toolbox.id });
+        throw new Error("Falha ao vincular: o registro não foi encontrado ou a permissão foi negada. Recarregue a página e tente novamente.");
+      }
+
+      console.info("[ToolboxLink] UPDATE confirmado, chamando onLinked()");
       // Atualiza listas imediatamente após vínculo confirmado.
       onLinked();
 
@@ -138,7 +153,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
           });
         }
       } catch (logError) {
-        console.error("Erro ao registrar logs da maleta:", logError);
+        console.error("[ToolboxLink] Erro ao registrar logs:", logError);
         warningMessage = "Vínculo salvo, mas houve falha ao registrar movimentação.";
       }
 
@@ -151,7 +166,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
 
       onClose();
     } catch (error) {
-      console.error("Erro ao vincular técnico na maleta:", error);
+      console.error("[ToolboxLink] ERRO PRINCIPAL:", error);
       const message = error instanceof Error ? error.message : "Erro ao vincular técnico";
       toast.error(message);
     } finally {

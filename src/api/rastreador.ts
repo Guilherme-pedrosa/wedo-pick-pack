@@ -26,11 +26,19 @@ export interface ConflictInfo {
   orcamentos_envolvidos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }>;
 }
 
+export interface OSReservedInfo {
+  produto_key: string;
+  nome_produto: string;
+  qtd_reservada: number;
+  os_envolvidas: Array<{ os_codigo: string; nome_cliente: string; qtd: number }>;
+}
+
 export interface RastreadorResult {
   orcamentosProntos: OrcamentoReadiness[];
   orcamentosPendentes: OrcamentoReadiness[];
   orcamentosBloqueados: OrcamentoConvertidoWarning[];
   conflitos: ConflictInfo[];
+  osReservadas: OSReservedInfo[];
   totalOrcamentos: number;
   totalProntos: number;
   totalBloqueados: number;

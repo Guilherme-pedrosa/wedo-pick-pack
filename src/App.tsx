@@ -103,6 +103,7 @@ function AuthenticatedApp() {
         <Route path="/controle/logs" element={<HandoffLogsPage />} />
         <Route path="/controle/logs-maletas" element={<ToolboxLogsPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />
+        <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route
           path="/admin/users"

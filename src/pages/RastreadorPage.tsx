@@ -121,6 +121,23 @@ export default function RastreadorPage() {
         auvoTaskId: data.auvo_task_id,
         osCodigo: data.os_codigo,
       });
+
+      // Log successful generation
+      await (supabase.from("os_generation_logs") as any).insert({
+        orcamento_codigo: entry.orcamento.codigo,
+        orcamento_id: entry.orcamento.id,
+        nome_cliente: entry.orcamento.nome_cliente,
+        os_id: String(data.os_id || ''),
+        os_codigo: String(data.os_codigo || ''),
+        auvo_task_id: String(data.auvo_task_id || ''),
+        operator_id: user!.id,
+        operator_name: (profile as any)?.name || user!.email || '',
+        valor_total: Number(entry.orcamento.valor_total || 0),
+        equipamento: getEquipamento(entry.orcamento) || null,
+        warnings: data.warnings || null,
+        success: true,
+      });
+
       toast.success(`OS #${data.os_codigo} criada com sucesso! Tarefa Auvo: ${data.auvo_task_id}`);
       if (data.warnings?.length) {
         for (const w of data.warnings) {
@@ -130,6 +147,23 @@ export default function RastreadorPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       setGenerationResult({ success: false, error: msg });
+
+      // Log failed generation
+      const { data: { user: failUser } } = await supabase.auth.getUser();
+      if (failUser) {
+        await (supabase.from("os_generation_logs") as any).insert({
+          orcamento_codigo: entry.orcamento.codigo,
+          orcamento_id: entry.orcamento.id,
+          nome_cliente: entry.orcamento.nome_cliente,
+          operator_id: failUser.id,
+          operator_name: failUser.email || '',
+          valor_total: Number(entry.orcamento.valor_total || 0),
+          equipamento: getEquipamento(entry.orcamento) || null,
+          error_message: msg,
+          success: false,
+        });
+      }
+
       toast.error(`Erro ao gerar OS: ${msg}`);
     } finally {
       setGeneratingOS(false);

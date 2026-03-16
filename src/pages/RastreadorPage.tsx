@@ -709,12 +709,17 @@ export default function RastreadorPage() {
           )}
 
           {generationResult?.error && (
-            <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-2">
+            <div className={`rounded-lg border p-4 space-y-2 ${generationResult.duplicate ? 'border-amber-500/50 bg-amber-500/5' : 'border-destructive/50 bg-destructive/5'}`}>
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-destructive" />
-                <span className="font-semibold text-sm text-destructive">Erro na geração</span>
+                <AlertTriangle className={`h-5 w-5 ${generationResult.duplicate ? 'text-amber-600' : 'text-destructive'}`} />
+                <span className={`font-semibold text-sm ${generationResult.duplicate ? 'text-amber-600' : 'text-destructive'}`}>
+                  {generationResult.duplicate ? 'OS já gerada!' : 'Erro na geração'}
+                </span>
               </div>
               <p className="text-xs text-muted-foreground">{generationResult.error}</p>
+              {generationResult.duplicate && generationResult.osCodigo && (
+                <p className="text-sm font-medium">OS existente: <strong>#{generationResult.osCodigo}</strong></p>
+              )}
             </div>
           )}
 

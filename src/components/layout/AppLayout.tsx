@@ -57,8 +57,11 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
           showMenuButton={isMobile}
         />
 
-        <main className="flex-1 overflow-x-hidden page-enter">
-          <Outlet />
+        <main className="flex-1 p-4 md:p-8 overflow-x-hidden page-enter">
+          <div className="mx-auto max-w-7xl">
+            <Outlet />
+          </div>
+        </main>
         </main>
       </div>
     </div>

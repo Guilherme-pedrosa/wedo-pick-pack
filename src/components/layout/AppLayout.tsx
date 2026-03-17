@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppLayoutHeader } from "./AppLayoutHeader";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { logSystemAction } from "@/lib/systemLog";
 
 interface AppLayoutProps {
   isAdmin: boolean;
@@ -22,6 +23,32 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
       setMobileOpen(false);
     }
   }, [isMobile]);
+
+  // Log page navigation
+  const prevPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevPathRef.current !== location.pathname) {
+      prevPathRef.current = location.pathname;
+      const ROUTE_MODULES: Record<string, string> = {
+        '/dashboard': 'dashboard',
+        '/checkout': 'checkout',
+        '/separations': 'separations',
+        '/compras': 'compras',
+        '/rastreador': 'rastreador',
+        '/controle/caixas': 'controle_caixas',
+        '/controle/maletas': 'controle_maletas',
+        '/controle/tecnicos': 'controle_tecnicos',
+        '/controle/logs': 'controle_caixas',
+        '/controle/logs-maletas': 'controle_maletas',
+        '/config': 'config',
+        '/admin/users': 'admin',
+        '/admin/logs': 'admin',
+        '/rastreador/logs': 'rastreador',
+      };
+      const module = ROUTE_MODULES[location.pathname] || 'navigation';
+      logSystemAction({ module, action: `Acessou ${location.pathname}` });
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     setMobileOpen(false);

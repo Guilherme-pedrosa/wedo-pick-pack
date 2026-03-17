@@ -91,6 +91,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose, isA
   const location = useLocation();
 
   const handleLogout = async () => {
+    await logSystemAction({ module: "auth", action: "Logout realizado" });
     await supabase.auth.signOut();
   };
 

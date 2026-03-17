@@ -23,13 +23,15 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: result, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         if (error.message.includes('Invalid login')) {
           toast.error('E-mail ou senha incorretos');
         } else {
           toast.error(error.message);
         }
+      } else if (result.user) {
+        logSystemAction({ module: "auth", action: "Login realizado", entityType: "user", entityName: email });
       }
     } catch {
       toast.error('Erro ao conectar');

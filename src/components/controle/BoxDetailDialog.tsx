@@ -177,10 +177,26 @@ export default function BoxDetailDialog({
 
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
+
+    // Stock validation
+    if (stockDisponivel !== null && stockDisponivel <= 0) {
+      toast.error(`Produto "${selectedProduct.nome}" está sem estoque no GestãoClick`);
+      return;
+    }
+
+    const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
+    const currentInBox = existing ? existing.quantidade : 0;
+
+    if (stockDisponivel !== null && (currentInBox + qty) > stockDisponivel) {
+      toast.error(
+        `Estoque insuficiente: ${stockDisponivel} disponível no GC, ${currentInBox} já na caixa. Máximo para adicionar: ${Math.max(0, stockDisponivel - currentInBox)}`
+      );
+      return;
+    }
+
     setAdding(true);
     try {
       const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || "0") || 0;
-      const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
         if (existing) {
           const { error } = await supabase
             .from("box_items")
@@ -212,8 +228,7 @@ export default function BoxDetailDialog({
           technicianGcId: box.technician_gc_id || undefined,
           details: `Adicionado ${qty}x "${selectedProduct.nome}"`,
         });
-      setSelectedProduct(null);
-      setQty(1);
+      handleProductSelect(null);
       onItemsChanged();
     } catch (e) {
       toast.error("Erro ao adicionar item");

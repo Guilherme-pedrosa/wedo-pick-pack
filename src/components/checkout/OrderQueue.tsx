@@ -298,6 +298,20 @@ export default function OrderQueue() {
                     <p key={i}>#{p.codigo} — {p.nome_cliente} — precisa {p.qtd}</p>
                   ))}
                 </div>
+                {c.pedidos_compra.length > 0 ? (
+                  <div className="mt-1 pt-1 border-t border-amber-300/50">
+                    <p className="font-semibold text-green-800">✅ Coberto por pedido de compra:</p>
+                    {c.pedidos_compra.map((po, i) => (
+                      <p key={i} className="text-green-800">
+                        PC #{po.codigo} — {po.nome_fornecedor} — qtd {po.qtd} ({po.situacao})
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1 pt-1 border-t border-amber-300/50 font-semibold text-red-700">
+                    ❌ Sem pedido de compra
+                  </p>
+                )}
               </div>
             ))}
           </div>

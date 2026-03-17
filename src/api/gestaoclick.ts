@@ -1,4 +1,5 @@
-import { GCOrdemServico, GCVenda, GCSituacao, GCMeta, GCProdutoItem } from './types';
+import { GCOrdemServico, GCVenda, GCSituacao, GCMeta, GCProdutoItem, GCOrdemCompra } from './types';
+import { listOrdensCompra } from './compras';
 import { MOCK_OS, MOCK_VENDAS, MOCK_STATUS_OS, MOCK_STATUS_VENDA } from './mockData';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -307,12 +308,20 @@ export interface ProductStockInfo {
   estoque: number;
 }
 
+export interface StockConflictPO {
+  codigo: string;
+  nome_fornecedor: string;
+  qtd: number;
+  situacao: string;
+}
+
 export interface StockConflict {
   nome_produto: string;
   produto_id: string;
   estoque: number;
   demanda_total: number;
   pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
+  pedidos_compra: StockConflictPO[];
 }
 
 export interface StockScanResult {
@@ -386,17 +395,55 @@ export async function checkStockForOrders(
 
   // Detect conflicts: products where total demand across orders > stock
   const conflicts: StockConflict[] = [];
+  const conflictPids = new Set<string>();
   for (const [pid, entries] of productOrderMap) {
     const stock = stockMap.get(pid) ?? 0;
     const totalDemand = entries.reduce((s, e) => s + e.qty, 0);
     if (totalDemand > stock && entries.length > 1) {
+      conflictPids.add(pid);
       conflicts.push({
         produto_id: pid,
         nome_produto: entries[0].nome,
         estoque: stock,
         demanda_total: totalDemand,
         pedidos: entries.map(e => ({ codigo: e.orderCodigo, nome_cliente: e.orderCliente, qtd: e.qty })),
+        pedidos_compra: [],
       });
+    }
+  }
+
+  // If there are conflicts, fetch purchase orders to check coverage
+  if (conflicts.length > 0) {
+    try {
+      onProgress?.(checked, total); // signal we're checking POs
+      const poMap = new Map<string, StockConflictPO[]>();
+      let page = 1;
+      while (true) {
+        const res = await listOrdensCompra(undefined, page);
+        for (const po of res.data) {
+          for (const p of po.produtos || []) {
+            const pid = p.produto.produto_id;
+            if (conflictPids.has(pid)) {
+              const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
+              if (!poMap.has(pid)) poMap.set(pid, []);
+              poMap.get(pid)!.push({
+                codigo: po.codigo,
+                nome_fornecedor: po.nome_fornecedor,
+                qtd: qty,
+                situacao: po.nome_situacao,
+              });
+            }
+          }
+        }
+        if (page >= res.meta.total_paginas) break;
+        page++;
+      }
+      // Attach PO data to conflicts
+      for (const c of conflicts) {
+        c.pedidos_compra = poMap.get(c.produto_id) || [];
+      }
+    } catch (e) {
+      console.warn('[STOCK SCAN] Failed to fetch purchase orders for conflicts:', e);
     }
   }
 

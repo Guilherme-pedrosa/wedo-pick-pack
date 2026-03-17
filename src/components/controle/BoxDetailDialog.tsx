@@ -200,7 +200,7 @@ export default function BoxDetailDialog({
         if (existing) {
           const { error } = await supabase
             .from("box_items")
-            .update({ quantidade: existing.quantidade + qty, preco_unitario: preco })
+            .update({ quantidade: existing.quantidade + qty, preco_unitario: preco, estoque_gc: stockDisponivel })
             .eq("id", existing.id);
           if (error) throw error;
           toast.success(`Quantidade atualizada: ${existing.quantidade + qty}`);
@@ -211,6 +211,7 @@ export default function BoxDetailDialog({
             nome_produto: selectedProduct.nome,
             quantidade: qty,
             preco_unitario: preco,
+            estoque_gc: stockDisponivel,
           });
           if (error) throw error;
           toast.success(`${selectedProduct.nome} adicionado`);

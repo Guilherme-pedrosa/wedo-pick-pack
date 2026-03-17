@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserCheck, Loader2, Search } from "lucide-react";
+import { UserCheck, Loader2, Search, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import type { BoxData } from "./BoxDetailDialog";
 import BoxHandoffReceipt from "./BoxHandoffReceipt";
 import { logBoxMovement } from "@/lib/boxMovementLog";
+import { getProdutoDetalhe } from "@/api/compras";
 
 interface Technician {
   id: string;

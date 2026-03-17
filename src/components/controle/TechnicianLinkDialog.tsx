@@ -379,6 +379,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
               <p className="text-xs text-success font-medium">✅ Estoque validado — todos os itens disponíveis</p>
             </div>
           )}
+        </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancelar

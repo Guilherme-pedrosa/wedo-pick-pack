@@ -308,12 +308,20 @@ export interface ProductStockInfo {
   estoque: number;
 }
 
+export interface StockConflictPO {
+  codigo: string;
+  nome_fornecedor: string;
+  qtd: number;
+  situacao: string;
+}
+
 export interface StockConflict {
   nome_produto: string;
   produto_id: string;
   estoque: number;
   demanda_total: number;
   pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
+  pedidos_compra: StockConflictPO[];
 }
 
 export interface StockScanResult {

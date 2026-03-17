@@ -33,6 +33,13 @@ import { useAuth } from "@/hooks/useAuth";
 import type { BoxData, BoxItemData } from "./BoxDetailDialog";
 import { logBoxMovement } from "@/lib/boxMovementLog";
 
+interface BaixaSuggestion {
+  produtoId: string;
+  quantidade: number;
+  refTipo: "os" | "venda";
+  refNumero: string;
+}
+
 interface CheckinItemState {
   item: BoxItemData;
   devolvido: number;
@@ -41,6 +48,7 @@ interface CheckinItemState {
   ref: string;
   validado: boolean;
   reposto: boolean;
+  baixaSuggestions: BaixaSuggestion[];
 }
 
 interface Props {
@@ -58,22 +66,96 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
   const [step, setStep] = useState<"conference" | "review">("conference");
   const [observacao, setObservacao] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [loadingBaixas, setLoadingBaixas] = useState(false);
 
   useEffect(() => {
-    if (items.length > 0) {
-      setCheckinItems(
-        items.map((item) => ({
-          item,
-          devolvido: 0, // start blank for manual input
-          divergencia: 0,
-          tipo: "",
-          ref: "",
-          validado: false,
-          reposto: false,
-        }))
-      );
-    }
-  }, [items]);
+    if (!box || items.length === 0) return;
+
+    const loadBaixaSuggestions = async () => {
+      setLoadingBaixas(true);
+      try {
+        // Fetch all "baixa" movements for this box
+        const { data: baixaLogs } = await supabase
+          .from("box_movement_logs")
+          .select("produto_id, produto_nome, quantidade, ref_tipo, ref_numero")
+          .eq("box_id", box.id)
+          .eq("action", "baixa")
+          .not("ref_numero", "is", null);
+
+        // Group by produto_id
+        const suggestionsByProduct = new Map<string, BaixaSuggestion[]>();
+        for (const log of baixaLogs || []) {
+          if (!log.produto_id || !log.ref_tipo || !log.ref_numero) continue;
+          const existing = suggestionsByProduct.get(log.produto_id) || [];
+          // Merge same ref
+          const sameRef = existing.find(
+            (s) => s.refTipo === log.ref_tipo && s.refNumero === log.ref_numero
+          );
+          if (sameRef) {
+            sameRef.quantidade += log.quantidade || 0;
+          } else {
+            existing.push({
+              produtoId: log.produto_id,
+              quantidade: log.quantidade || 0,
+              refTipo: log.ref_tipo as "os" | "venda",
+              refNumero: log.ref_numero,
+            });
+          }
+          suggestionsByProduct.set(log.produto_id, existing);
+        }
+
+        setCheckinItems(
+          items.map((item) => {
+            const suggestions = suggestionsByProduct.get(item.produto_id) || [];
+            const totalBaixa = suggestions.reduce((s, b) => s + b.quantidade, 0);
+            const expectedReturn = Math.max(0, item.quantidade - totalBaixa);
+            // If there are baixas, pre-fill devolvido and divergence info
+            if (suggestions.length > 0) {
+              return {
+                item,
+                devolvido: expectedReturn,
+                divergencia: totalBaixa,
+                tipo: suggestions[0].refTipo,
+                ref: suggestions[0].refNumero,
+                validado: false,
+                reposto: false,
+                baixaSuggestions: suggestions,
+              };
+            }
+            return {
+              item,
+              devolvido: 0,
+              divergencia: 0,
+              tipo: "",
+              ref: "",
+              validado: false,
+              reposto: false,
+              baixaSuggestions: [],
+            };
+          })
+        );
+      } catch (e) {
+        console.error("Error loading baixa suggestions:", e);
+        // Fallback: no suggestions
+        setCheckinItems(
+          items.map((item) => ({
+            item,
+            devolvido: 0,
+            divergencia: 0,
+            tipo: "",
+            ref: "",
+            validado: false,
+            reposto: false,
+            baixaSuggestions: [],
+          }))
+        );
+      } finally {
+        setLoadingBaixas(false);
+      }
+    };
+
+    loadBaixaSuggestions();
+  }, [items, box]);
 
   const updateItem = (index: number, updates: Partial<CheckinItemState>) => {
     setCheckinItems((prev) =>

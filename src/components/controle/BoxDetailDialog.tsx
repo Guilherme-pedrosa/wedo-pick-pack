@@ -340,35 +340,56 @@ export default function BoxDetailDialog({
                 Adicionar item
               </p>
               <ProductSearchInput
-                onSelect={setSelectedProduct}
+                onSelect={handleProductSelect}
                 onScanRequest={() => setScannerOpen(true)}
                 autoFocus
               />
               {selectedProduct && (
-                <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
-                    <p className="text-xs text-muted-foreground">
-                      ID: {selectedProduct.produto_id}
-                      {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon" className="h-7 w-7"
-                      onClick={() => setQty(Math.max(1, qty - 1))}>
-                      <Minus className="h-3 w-3" />
+                <div className="space-y-2">
+                  {/* Stock info */}
+                  {loadingStock && (
+                    <p className="text-xs text-muted-foreground animate-pulse">Consultando estoque no GC...</p>
+                  )}
+                  {stockDisponivel !== null && !loadingStock && (
+                    <div className={`text-xs px-2 py-1 rounded ${stockDisponivel > 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+                      Estoque GC: <span className="font-semibold">{stockDisponivel}</span> unidade(s)
+                      {(() => {
+                        const existing = items.find(i => i.produto_id === selectedProduct.produto_id);
+                        const inBox = existing ? existing.quantidade : 0;
+                        const maxAdd = Math.max(0, stockDisponivel - inBox);
+                        if (inBox > 0) return <> · Já na caixa: {inBox} · Máx. adicionar: {maxAdd}</>;
+                        return null;
+                      })()}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
+                      <p className="text-xs text-muted-foreground">
+                        ID: {selectedProduct.produto_id}
+                        {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="icon" className="h-7 w-7"
+                        onClick={() => setQty(Math.max(1, qty - 1))}>
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <Input type="number" value={qty}
+                        onChange={(e) => {
+                          const val = Math.max(1, parseInt(e.target.value) || 1);
+                          setQty(val);
+                        }}
+                        className="w-14 h-7 text-center text-sm" min={1} />
+                      <Button variant="outline" size="icon" className="h-7 w-7"
+                        onClick={() => setQty(qty + 1)}>
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <Button size="sm" onClick={handleAddItem} disabled={adding || loadingStock || (stockDisponivel !== null && stockDisponivel <= 0)} className="h-7">
+                      {adding ? "..." : "Adicionar"}
                     </Button>
-                    <Input type="number" value={qty}
-                      onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-14 h-7 text-center text-sm" min={1} />
-                    <Button variant="outline" size="icon" className="h-7 w-7"
-                      onClick={() => setQty(qty + 1)}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
                   </div>
-                  <Button size="sm" onClick={handleAddItem} disabled={adding} className="h-7">
-                    {adding ? "..." : "Adicionar"}
-                  </Button>
                 </div>
               )}
             </div>

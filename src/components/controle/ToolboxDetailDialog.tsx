@@ -467,6 +467,12 @@ export default function ToolboxDetailDialog({
                       Conferência
                     </Button>
                   )}
+                  {items.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)} className="text-xs">
+                      <Printer className="h-3.5 w-3.5 mr-1" />
+                      Reimprimir recibo
+                    </Button>
+                  )}
                   <Button variant="ghost" size="sm" onClick={() => {
                     if (items.length > 0) {
                       onConference(toolbox);

@@ -1,0 +1,1 @@
+ALTER TABLE public.box_items ADD COLUMN IF NOT EXISTS estoque_gc integer DEFAULT NULL;

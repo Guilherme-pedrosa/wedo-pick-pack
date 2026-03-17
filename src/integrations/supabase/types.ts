@@ -172,6 +172,7 @@ export type Database = {
         Row: {
           added_at: string
           box_id: string
+          estoque_gc: number | null
           id: string
           nome_produto: string
           preco_unitario: number | null
@@ -181,6 +182,7 @@ export type Database = {
         Insert: {
           added_at?: string
           box_id: string
+          estoque_gc?: number | null
           id?: string
           nome_produto: string
           preco_unitario?: number | null
@@ -190,6 +192,7 @@ export type Database = {
         Update: {
           added_at?: string
           box_id?: string
+          estoque_gc?: number | null
           id?: string
           nome_produto?: string
           preco_unitario?: number | null

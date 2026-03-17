@@ -93,6 +93,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
       <thead><tr style="background:#f3f4f6">
         <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Código</th>
         <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Produto</th>
+        <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Grupo</th>
         <th style="padding:6px 8px;border:1px solid #ddd">UN</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Estoque</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Reserv. OS</th>

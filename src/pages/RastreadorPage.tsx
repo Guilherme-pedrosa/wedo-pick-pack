@@ -202,6 +202,7 @@ export default function RastreadorPage() {
         success: true,
       });
 
+      logSystemAction({ module: "rastreador", action: "OS gerada", entityType: "OS", entityId: String(data.os_id || ''), entityName: `OS #${data.os_codigo} - ${entry.orcamento.nome_cliente}`, details: { orcamento_codigo: entry.orcamento.codigo, auvo_task_id: data.auvo_task_id } });
       toast.success(`OS #${data.os_codigo} criada com sucesso! Tarefa Auvo: ${data.auvo_task_id}`);
       if (data.warnings?.length) {
         for (const w of data.warnings) {

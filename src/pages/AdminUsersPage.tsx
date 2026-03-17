@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserPlus, Trash2, Shield, ShieldOff, Loader2, Users, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
+import { logSystemAction } from '@/lib/systemLog';
 
 interface UserEntry {
   id: string;

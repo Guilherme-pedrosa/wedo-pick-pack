@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle2, XCircle, Info, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { logSystemAction } from '@/lib/systemLog';
 
 function AuvoUserIdField() {
   const [value, setValue] = useState('');

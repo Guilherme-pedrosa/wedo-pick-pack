@@ -20,6 +20,7 @@ import ToolboxDetailDialog, {
 import ToolboxTechnicianLinkDialog from "@/components/controle/ToolboxTechnicianLinkDialog";
 import ToolboxConferenceDialog from "@/components/controle/ToolboxConferenceDialog";
 import ToolboxHandoffReceipt from "@/components/controle/ToolboxHandoffReceipt";
+import { logSystemAction } from "@/lib/systemLog";
 
 const ToolboxesPage = () => {
   const { user, isAdmin } = useAuth();

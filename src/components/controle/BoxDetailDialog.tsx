@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import ItemWriteOffDialog from "./ItemWriteOffDialog";
+import BoxHandoffReceipt from "./BoxHandoffReceipt";
 import { logBoxMovement } from "@/lib/boxMovementLog";
 
 export interface BoxData {

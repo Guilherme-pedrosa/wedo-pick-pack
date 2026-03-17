@@ -94,15 +94,12 @@ export default function SystemLogsPage() {
   }, [page, moduleFilter, userFilter]);
 
   const fetchUsers = async () => {
-    const { data } = await (supabase.from("system_logs" as any) as any)
-      .select("user_id, user_name")
-      .order("user_name");
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, name")
+      .order("name");
     if (data) {
-      const unique = new Map<string, string>();
-      for (const d of data as any[]) {
-        if (!unique.has(d.user_id)) unique.set(d.user_id, d.user_name);
-      }
-      setUsers(Array.from(unique.entries()).map(([id, name]) => ({ id, name })));
+      setUsers(data.map(d => ({ id: d.id, name: d.name })));
     }
   };
 

@@ -108,6 +108,7 @@ export default function OrcamentosPanel() {
       if (result.orcamentosConvertidos.length > 0) parts.push(`${result.orcamentosConvertidos.length} bloqueado(s) por OS`);
       parts.push(`${result.totalProdutosOk} com estoque`);
       toast.success(`Lista gerada! ${parts.join(', ')}.`);
+      logSystemAction({ module: "compras", action: "Lista de compras gerada", details: { itens_comprar: result.totalProdutosSemEstoque, cobertos_pedido: result.totalItensCobertosporPedido, orcamentos: selected.length } });
     } catch (err) {
       toast.error('Erro ao gerar lista de compras');
       console.error(err);

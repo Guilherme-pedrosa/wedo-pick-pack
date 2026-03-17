@@ -22,6 +22,7 @@ import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
 import LoginPage from "./pages/LoginPage";
+import SystemLogsPage from "./pages/SystemLogsPage";
 import SetupPage from "./pages/SetupPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";

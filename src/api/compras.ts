@@ -293,9 +293,23 @@ export async function listOrcamentos(situacaoId?: string, pagina = 1, nomeClient
 export async function getProdutoDetalhe(produtoId: string): Promise<GCProdutoDetalhe | null> {
   if (isUsingMock()) { await mockDelay(); return MOCK_PRODUTOS_DETALHE[produtoId] ?? null; }
   try {
-    const res = await apiRequest<{ data: GCProdutoDetalhe }>(`/api/produtos/${produtoId}`);
-    return res.data;
-  } catch { return null; }
+    const res = await apiRequest<{ data: any }>(`/api/produtos/${produtoId}`);
+    const raw = res?.data?.Produto ?? res?.data?.produto ?? res?.data;
+    if (!raw || typeof raw !== 'object') return null;
+
+    return {
+      ...raw,
+      nome_grupo: String(
+        raw?.nome_grupo ??
+        raw?.grupo_nome ??
+        raw?.grupo?.nome ??
+        raw?.categoria?.nome ??
+        ''
+      ).trim() || undefined,
+    } as GCProdutoDetalhe;
+  } catch {
+    return null;
+  }
 }
 
 // --- FORNECEDOR ---

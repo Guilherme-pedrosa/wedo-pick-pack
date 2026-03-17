@@ -458,6 +458,22 @@ export default function BoxDetailDialog({
         onClose={() => setWriteOffItem(null)}
         onCompleted={onItemsChanged}
       />
+      {box && box.technician_name && box.technician_gc_id && (
+        <BoxHandoffReceipt
+          open={receiptOpen}
+          onClose={() => setReceiptOpen(false)}
+          boxName={box.name}
+          technicianName={box.technician_name}
+          technicianGcId={box.technician_gc_id}
+          items={items.map(i => ({
+            produto_id: i.produto_id,
+            nome_produto: i.nome_produto,
+            quantidade: i.quantidade,
+            preco_unitario: i.preco_unitario,
+          }))}
+          date={new Date().toISOString()}
+        />
+      )}
     </>
   );
 }

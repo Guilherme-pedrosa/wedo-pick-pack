@@ -275,7 +275,7 @@ export default function BoxDetailDialog({
           return;
         }
         const product = data.data[0] as ProductResult;
-        setSelectedProduct(product);
+        handleProductSelect(product);
         toast.info(`Encontrado: ${product.nome}`);
       });
   };

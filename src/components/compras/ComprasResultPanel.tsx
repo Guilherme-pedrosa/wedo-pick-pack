@@ -34,7 +34,7 @@ function formatPrintReferences(item: ItemCompra): string {
 }
 
 function exportCSV(itensList: ItemCompra[], scannedAt: string) {
-  const header = ['Código', 'Produto', 'Grupo', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra', 'Reservas OS'];
+  const header = ['Código', 'Produto', 'Grupo', 'UN', 'Estoque GC', 'Reserv. OS', 'Disponível', 'Necessário', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra', 'Reservas OS (Detalhes)'];
   const rows = itensList.map(i => {
     const osRefs = (i.os_reservas ?? [])
       .map(r => `${(r.os_codigo || '').trim() || 'OS s/ nº'}(${r.qtd})`)
@@ -45,6 +45,8 @@ function exportCSV(itensList: ItemCompra[], scannedAt: string) {
       i.grupo || '',
       i.sigla_unidade,
       i.estoque_atual,
+      i.estoque_reservado_os ? -i.estoque_reservado_os : '',
+      i.estoque_disponivel,
       i.qtd_necessaria,
       i.qtd_efetiva_a_comprar,
       i.qtd_ja_em_compra,

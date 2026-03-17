@@ -34,22 +34,29 @@ function formatPrintReferences(item: ItemCompra): string {
 }
 
 function exportCSV(itensList: ItemCompra[], scannedAt: string) {
-  const header = ['Código', 'Produto', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra'];
-  const rows = itensList.map(i => [
-    i.codigo_produto,
-    i.nome_produto,
-    i.sigla_unidade,
-    i.estoque_atual,
-    i.qtd_necessaria,
-    i.qtd_efetiva_a_comprar,
-    i.qtd_ja_em_compra,
-    i.ultimo_preco.toFixed(2).replace('.', ','),
-    i.estimativa.toFixed(2).replace('.', ','),
-    i.fornecedor_nome || '',
-    i.fornecedor_telefone || '',
-    i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
-    i.ordens_compra.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
-  ]);
+  const header = ['Código', 'Produto', 'Grupo', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra', 'Reservas OS'];
+  const rows = itensList.map(i => {
+    const osRefs = (i.os_reservas ?? [])
+      .map(r => `${(r.os_codigo || '').trim() || 'OS s/ nº'}(${r.qtd})`)
+      .join(' | ');
+    return [
+      i.codigo_produto,
+      i.nome_produto,
+      i.grupo || '',
+      i.sigla_unidade,
+      i.estoque_atual,
+      i.qtd_necessaria,
+      i.qtd_efetiva_a_comprar,
+      i.qtd_ja_em_compra,
+      i.ultimo_preco.toFixed(2).replace('.', ','),
+      i.estimativa.toFixed(2).replace('.', ','),
+      i.fornecedor_nome || '',
+      i.fornecedor_telefone || '',
+      i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
+      i.ordens_compra.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
+      osRefs,
+    ];
+  });
   const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -64,6 +71,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
     `<tr>
       <td style="padding:4px 8px;border:1px solid #ddd;font-family:monospace;font-size:11px">${i.codigo_produto}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;font-size:12px">${i.nome_produto}${!i.movimenta_estoque ? ' ⚠️' : ''}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;font-size:10px">${i.grupo || '—'}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.sigla_unidade}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;color:${i.estoque_atual < i.qtd_necessaria ? 'red' : 'green'}">${i.estoque_atual}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;color:${i.estoque_reservado_os > 0 ? '#b45309' : 'inherit'}">${i.estoque_reservado_os > 0 ? i.estoque_reservado_os : '—'}</td>
@@ -85,6 +93,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
       <thead><tr style="background:#f3f4f6">
         <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Código</th>
         <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Produto</th>
+        <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Grupo</th>
         <th style="padding:6px 8px;border:1px solid #ddd">UN</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Estoque</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Reserv. OS</th>

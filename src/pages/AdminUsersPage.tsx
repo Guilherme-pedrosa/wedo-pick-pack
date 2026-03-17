@@ -105,6 +105,7 @@ export default function AdminUsersPage() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       toast.success(`${name} removido`);
+      logSystemAction({ module: "admin", action: "Usuário removido", entityType: "user", entityId: userId, entityName: name });
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao excluir');

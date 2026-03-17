@@ -93,6 +93,14 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
 
       concludeSession();
       queryClient.invalidateQueries({ queryKey: ['today-separations'] });
+      logSystemAction({
+        module: "checkout",
+        action: "Separação concluída",
+        entityType: session.tipo === 'os' ? 'OS' : 'Venda',
+        entityId: session.documentoId,
+        entityName: `#${session.codigo} - ${session.nomeCliente}`,
+        details: { items_total: session.items.length, items_confirmed: session.items.filter(i => i.conferido).length },
+      });
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
       onClose();
     } catch (err: unknown) {

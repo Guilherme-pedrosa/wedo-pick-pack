@@ -132,6 +132,30 @@ function resolveOSCode(osRecord: any): string {
   return '';
 }
 
+function resolveProductGroup(detail: GCProdutoDetalhe | null | undefined): string | undefined {
+  if (!detail) return undefined;
+  const raw = detail as any;
+
+  const candidates = [
+    raw?.nome_grupo,
+    raw?.grupo_nome,
+    raw?.grupo,
+    raw?.nome_categoria,
+    raw?.categoria_nome,
+    raw?.grupo_produto?.nome,
+    raw?.grupo?.nome,
+    raw?.categoria?.nome,
+    raw?.payload_min_json?.nome_grupo,
+  ];
+
+  for (const value of candidates) {
+    const normalized = String(value ?? '').trim();
+    if (normalized) return normalized;
+  }
+
+  return undefined;
+}
+
 export async function buildOSIndex(
   onProgress?: (step: string, checked: number, total: number) => void,
   forceRebuild = false,

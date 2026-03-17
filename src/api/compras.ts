@@ -132,6 +132,30 @@ function resolveOSCode(osRecord: any): string {
   return '';
 }
 
+function resolveProductGroup(detail: GCProdutoDetalhe | null | undefined): string | undefined {
+  if (!detail) return undefined;
+  const raw = detail as any;
+
+  const candidates = [
+    raw?.nome_grupo,
+    raw?.grupo_nome,
+    raw?.grupo,
+    raw?.nome_categoria,
+    raw?.categoria_nome,
+    raw?.grupo_produto?.nome,
+    raw?.grupo?.nome,
+    raw?.categoria?.nome,
+    raw?.payload_min_json?.nome_grupo,
+  ];
+
+  for (const value of candidates) {
+    const normalized = String(value ?? '').trim();
+    if (normalized) return normalized;
+  }
+
+  return undefined;
+}
+
 export async function buildOSIndex(
   onProgress?: (step: string, checked: number, total: number) => void,
   forceRebuild = false,
@@ -269,9 +293,23 @@ export async function listOrcamentos(situacaoId?: string, pagina = 1, nomeClient
 export async function getProdutoDetalhe(produtoId: string): Promise<GCProdutoDetalhe | null> {
   if (isUsingMock()) { await mockDelay(); return MOCK_PRODUTOS_DETALHE[produtoId] ?? null; }
   try {
-    const res = await apiRequest<{ data: GCProdutoDetalhe }>(`/api/produtos/${produtoId}`);
-    return res.data;
-  } catch { return null; }
+    const res = await apiRequest<{ data: any }>(`/api/produtos/${produtoId}`);
+    const raw = res?.data?.Produto ?? res?.data?.produto ?? res?.data;
+    if (!raw || typeof raw !== 'object') return null;
+
+    return {
+      ...raw,
+      nome_grupo: String(
+        raw?.nome_grupo ??
+        raw?.grupo_nome ??
+        raw?.grupo?.nome ??
+        raw?.categoria?.nome ??
+        ''
+      ).trim() || undefined,
+    } as GCProdutoDetalhe;
+  } catch {
+    return null;
+  }
 }
 
 // --- FORNECEDOR ---
@@ -614,7 +652,7 @@ export async function buildListaCompras(
       nome_produto: detail?.nome || entry.nome_produto,
       codigo_produto: detail?.codigo_interno || entry.codigo_produto,
       sigla_unidade: entry.sigla_unidade,
-      grupo: detail?.nome_grupo,
+      grupo: resolveProductGroup(detail),
       estoque_atual: estoqueAtual,
       estoque_reservado_os: estoqueReservadoOS,
       estoque_disponivel: estoqueDisponivel,
@@ -700,7 +738,7 @@ export async function buildListaCompras(
             nome_produto: detail?.nome || `Produto ${produtoId}`,
             codigo_produto: detail?.codigo_interno || '',
             sigla_unidade: 'UN',
-            grupo: detail?.nome_grupo,
+            grupo: resolveProductGroup(detail),
             estoque_atual: estoqueAtual,
             estoque_reservado_os: estoqueReservadoOS,
             estoque_disponivel: estoqueDisponivel,

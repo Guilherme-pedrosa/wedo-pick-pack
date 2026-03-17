@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Package,
   Trash2,
@@ -31,6 +31,7 @@ import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import ItemWriteOffDialog from "./ItemWriteOffDialog";
 import BoxHandoffReceipt from "./BoxHandoffReceipt";
 import { logBoxMovement } from "@/lib/boxMovementLog";
+import { getProdutoDetalhe } from "@/api/compras";
 
 export interface BoxData {
   id: string;
@@ -90,6 +91,39 @@ export default function BoxDetailDialog({
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [stockDisponivel, setStockDisponivel] = useState<number | null>(null);
+  const [loadingStock, setLoadingStock] = useState(false);
+
+  // Fetch GC stock when product is selected
+  const fetchStock = useCallback(async (produto: ProductResult) => {
+    setLoadingStock(true);
+    setStockDisponivel(null);
+    try {
+      const detail = await getProdutoDetalhe(produto.produto_id);
+      if (detail) {
+        const raw = detail.estoque;
+        const estoque = typeof raw === "number" ? raw : parseFloat(String(raw).replace(",", ".")) || 0;
+        setStockDisponivel(Math.max(0, Math.floor(estoque)));
+      } else {
+        setStockDisponivel(null);
+      }
+    } catch (e) {
+      console.error("Erro ao buscar estoque:", e);
+      setStockDisponivel(null);
+    } finally {
+      setLoadingStock(false);
+    }
+  }, []);
+
+  const handleProductSelect = useCallback((product: ProductResult | null) => {
+    setSelectedProduct(product);
+    setQty(1);
+    if (product) {
+      fetchStock(product);
+    } else {
+      setStockDisponivel(null);
+    }
+  }, [fetchStock]);
 
   const handleRename = async () => {
     if (!box || !newName.trim() || newName.trim() === box.name) {
@@ -143,10 +177,26 @@ export default function BoxDetailDialog({
 
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
+
+    // Stock validation
+    if (stockDisponivel !== null && stockDisponivel <= 0) {
+      toast.error(`Produto "${selectedProduct.nome}" está sem estoque no GestãoClick`);
+      return;
+    }
+
+    const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
+    const currentInBox = existing ? existing.quantidade : 0;
+
+    if (stockDisponivel !== null && (currentInBox + qty) > stockDisponivel) {
+      toast.error(
+        `Estoque insuficiente: ${stockDisponivel} disponível no GC, ${currentInBox} já na caixa. Máximo para adicionar: ${Math.max(0, stockDisponivel - currentInBox)}`
+      );
+      return;
+    }
+
     setAdding(true);
     try {
       const preco = parseFloat(selectedProduct.payload_min_json?.preco_venda || "0") || 0;
-      const existing = items.find((i) => i.produto_id === selectedProduct.produto_id);
         if (existing) {
           const { error } = await supabase
             .from("box_items")
@@ -178,8 +228,7 @@ export default function BoxDetailDialog({
           technicianGcId: box.technician_gc_id || undefined,
           details: `Adicionado ${qty}x "${selectedProduct.nome}"`,
         });
-      setSelectedProduct(null);
-      setQty(1);
+      handleProductSelect(null);
       onItemsChanged();
     } catch (e) {
       toast.error("Erro ao adicionar item");
@@ -226,7 +275,7 @@ export default function BoxDetailDialog({
           return;
         }
         const product = data.data[0] as ProductResult;
-        setSelectedProduct(product);
+        handleProductSelect(product);
         toast.info(`Encontrado: ${product.nome}`);
       });
   };
@@ -291,35 +340,56 @@ export default function BoxDetailDialog({
                 Adicionar item
               </p>
               <ProductSearchInput
-                onSelect={setSelectedProduct}
+                onSelect={handleProductSelect}
                 onScanRequest={() => setScannerOpen(true)}
                 autoFocus
               />
               {selectedProduct && (
-                <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
-                    <p className="text-xs text-muted-foreground">
-                      ID: {selectedProduct.produto_id}
-                      {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon" className="h-7 w-7"
-                      onClick={() => setQty(Math.max(1, qty - 1))}>
-                      <Minus className="h-3 w-3" />
+                <div className="space-y-2">
+                  {/* Stock info */}
+                  {loadingStock && (
+                    <p className="text-xs text-muted-foreground animate-pulse">Consultando estoque no GC...</p>
+                  )}
+                  {stockDisponivel !== null && !loadingStock && (
+                    <div className={`text-xs px-2 py-1 rounded ${stockDisponivel > 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+                      Estoque GC: <span className="font-semibold">{stockDisponivel}</span> unidade(s)
+                      {(() => {
+                        const existing = items.find(i => i.produto_id === selectedProduct.produto_id);
+                        const inBox = existing ? existing.quantidade : 0;
+                        const maxAdd = Math.max(0, stockDisponivel - inBox);
+                        if (inBox > 0) return <> · Já na caixa: {inBox} · Máx. adicionar: {maxAdd}</>;
+                        return null;
+                      })()}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 p-2 bg-card rounded-lg border border-border">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
+                      <p className="text-xs text-muted-foreground">
+                        ID: {selectedProduct.produto_id}
+                        {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="icon" className="h-7 w-7"
+                        onClick={() => setQty(Math.max(1, qty - 1))}>
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <Input type="number" value={qty}
+                        onChange={(e) => {
+                          const val = Math.max(1, parseInt(e.target.value) || 1);
+                          setQty(val);
+                        }}
+                        className="w-14 h-7 text-center text-sm" min={1} />
+                      <Button variant="outline" size="icon" className="h-7 w-7"
+                        onClick={() => setQty(qty + 1)}>
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <Button size="sm" onClick={handleAddItem} disabled={adding || loadingStock || (stockDisponivel !== null && stockDisponivel <= 0)} className="h-7">
+                      {adding ? "..." : "Adicionar"}
                     </Button>
-                    <Input type="number" value={qty}
-                      onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-14 h-7 text-center text-sm" min={1} />
-                    <Button variant="outline" size="icon" className="h-7 w-7"
-                      onClick={() => setQty(qty + 1)}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
                   </div>
-                  <Button size="sm" onClick={handleAddItem} disabled={adding} className="h-7">
-                    {adding ? "..." : "Adicionar"}
-                  </Button>
                 </div>
               )}
             </div>

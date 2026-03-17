@@ -332,8 +332,44 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
       if (itemsError) throw itemsError;
 
-      // Items are NEVER removed during check-in.
-      // The check-in only records the conference; items always stay in the box.
+      // === REPLENISHMENT: update box_items for items marked as "reposto" ===
+      const itemsToReplenish = checkinItems.filter(
+        (ci) => ci.reposto && ci.baixaSuggestions.length > 0
+      );
+      for (const ci of itemsToReplenish) {
+        const totalBaixa = ci.baixaSuggestions.reduce((s, b) => s + b.quantidade, 0);
+        if (totalBaixa <= 0) continue;
+
+        // Increase quantity back in box_items
+        const { data: currentItem } = await supabase
+          .from("box_items")
+          .select("id, quantidade")
+          .eq("box_id", box.id)
+          .eq("produto_id", ci.item.produto_id)
+          .maybeSingle();
+
+        if (currentItem) {
+          await supabase
+            .from("box_items")
+            .update({ quantidade: currentItem.quantidade + totalBaixa })
+            .eq("id", currentItem.id);
+        }
+
+        // Log the replenishment
+        const refs = ci.baixaSuggestions
+          .map((s) => `${s.refTipo === "os" ? "OS" : "Venda"} #${s.refNumero} (${s.quantidade}x)`)
+          .join(", ");
+        await logBoxMovement({
+          boxId: box.id,
+          boxName: box.name,
+          action: "adicao",
+          produtoId: ci.item.produto_id,
+          produtoNome: ci.item.nome_produto,
+          quantidade: totalBaixa,
+          precoUnitario: ci.item.preco_unitario || 0,
+          details: `Reposição no check-in: ${refs}`,
+        });
+      }
 
       // Return box to stand by after check-in
       await supabase
@@ -349,6 +385,10 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
       const totalDevolvido = checkinItems.reduce((s, ci) => s + ci.devolvido, 0);
       const totalEsperado = checkinItems.reduce((s, ci) => s + ci.item.quantidade, 0);
       const totalDivergencia = checkinItems.reduce((s, ci) => s + ci.divergencia, 0);
+      const totalReposto = itemsToReplenish.reduce(
+        (s, ci) => s + ci.baixaSuggestions.reduce((ss, b) => ss + b.quantidade, 0),
+        0
+      );
 
       await logBoxMovement({
         boxId: box.id,
@@ -357,7 +397,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         quantidade: totalDevolvido,
         technicianName: box.technician_name || undefined,
         technicianGcId: box.technician_gc_id || undefined,
-        details: `Check-in concluído. Esperado: ${totalEsperado}, Devolvido: ${totalDevolvido}, Divergências: ${totalDivergencia}`,
+        details: `Check-in concluído. Esperado: ${totalEsperado}, Devolvido: ${totalDevolvido}, Divergências: ${totalDivergencia}${totalReposto > 0 ? `, Repostos: ${totalReposto}` : ""}`,
       });
 
       toast.success("Check-in concluído! Caixa retornou para Stand By.");

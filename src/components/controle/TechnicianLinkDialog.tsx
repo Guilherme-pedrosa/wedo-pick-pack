@@ -147,6 +147,22 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
     const tech = technicians.find((t) => t.id === selectedId);
     if (!tech) return;
 
+    // If stock wasn't checked yet, run check first
+    if (!stockChecked) {
+      await checkBoxStock();
+      return; // User will need to click Vincular again after reviewing
+    }
+
+    // If there are stock issues, warn but allow (user already saw the issues)
+    if (stockIssues.length > 0) {
+      const confirmed = window.confirm(
+        `Existem ${stockIssues.length} item(ns) com estoque insuficiente no GC.\n\n` +
+        stockIssues.map(i => `• ${i.nome}: ${i.naBox} na caixa, ${i.estoqueGC} no GC`).join("\n") +
+        "\n\nDeseja vincular mesmo assim?"
+      );
+      if (!confirmed) return;
+    }
+
     // Guard against double-submit
     if (saving) return;
     setSaving(true);

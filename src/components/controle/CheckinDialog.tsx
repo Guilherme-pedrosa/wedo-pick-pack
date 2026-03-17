@@ -391,7 +391,14 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Informe a quantidade devolvida para cada item. Divergências precisam de justificativa.
+                {loadingBaixas ? (
+                  <span className="flex items-center gap-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Carregando baixas...
+                  </span>
+                ) : (
+                  "Informe a quantidade devolvida para cada item. Divergências precisam de justificativa."
+                )}
               </p>
               <Button
                 variant="outline"

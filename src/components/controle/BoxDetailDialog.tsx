@@ -89,6 +89,7 @@ export default function BoxDetailDialog({
   const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
+  const [receiptOpen, setReceiptOpen] = useState(false);
 
   const handleRename = async () => {
     if (!box || !newName.trim() || newName.trim() === box.name) {

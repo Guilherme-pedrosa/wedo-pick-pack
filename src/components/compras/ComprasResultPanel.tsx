@@ -42,7 +42,7 @@ function exportCSV(itensList: ItemCompra[], scannedAt: string) {
     return [
       i.codigo_produto,
       i.nome_produto,
-      i.grupo || '',
+      (i.grupo || '').trim() || 'Sem grupo',
       i.sigla_unidade,
       i.estoque_atual,
       i.estoque_reservado_os ? -i.estoque_reservado_os : '',

@@ -738,7 +738,7 @@ export async function buildListaCompras(
             nome_produto: detail?.nome || `Produto ${produtoId}`,
             codigo_produto: detail?.codigo_interno || '',
             sigla_unidade: 'UN',
-            grupo: detail?.nome_grupo,
+            grupo: resolveProductGroup(detail),
             estoque_atual: estoqueAtual,
             estoque_reservado_os: estoqueReservadoOS,
             estoque_disponivel: estoqueDisponivel,

@@ -332,8 +332,44 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
       if (itemsError) throw itemsError;
 
-      // Items are NEVER removed during check-in.
-      // The check-in only records the conference; items always stay in the box.
+      // === REPLENISHMENT: update box_items for items marked as "reposto" ===
+      const itemsToReplenish = checkinItems.filter(
+        (ci) => ci.reposto && ci.baixaSuggestions.length > 0
+      );
+      for (const ci of itemsToReplenish) {
+        const totalBaixa = ci.baixaSuggestions.reduce((s, b) => s + b.quantidade, 0);
+        if (totalBaixa <= 0) continue;
+
+        // Increase quantity back in box_items
+        const { data: currentItem } = await supabase
+          .from("box_items")
+          .select("id, quantidade")
+          .eq("box_id", box.id)
+          .eq("produto_id", ci.item.produto_id)
+          .maybeSingle();
+
+        if (currentItem) {
+          await supabase
+            .from("box_items")
+            .update({ quantidade: currentItem.quantidade + totalBaixa })
+            .eq("id", currentItem.id);
+        }
+
+        // Log the replenishment
+        const refs = ci.baixaSuggestions
+          .map((s) => `${s.refTipo === "os" ? "OS" : "Venda"} #${s.refNumero} (${s.quantidade}x)`)
+          .join(", ");
+        await logBoxMovement({
+          boxId: box.id,
+          boxName: box.name,
+          action: "adicao",
+          produtoId: ci.item.produto_id,
+          produtoNome: ci.item.nome_produto,
+          quantidade: totalBaixa,
+          precoUnitario: ci.item.preco_unitario || 0,
+          details: `Reposição no check-in: ${refs}`,
+        });
+      }
 
       // Return box to stand by after check-in
       await supabase
@@ -349,6 +385,10 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
       const totalDevolvido = checkinItems.reduce((s, ci) => s + ci.devolvido, 0);
       const totalEsperado = checkinItems.reduce((s, ci) => s + ci.item.quantidade, 0);
       const totalDivergencia = checkinItems.reduce((s, ci) => s + ci.divergencia, 0);
+      const totalReposto = itemsToReplenish.reduce(
+        (s, ci) => s + ci.baixaSuggestions.reduce((ss, b) => ss + b.quantidade, 0),
+        0
+      );
 
       await logBoxMovement({
         boxId: box.id,
@@ -357,7 +397,7 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         quantidade: totalDevolvido,
         technicianName: box.technician_name || undefined,
         technicianGcId: box.technician_gc_id || undefined,
-        details: `Check-in concluído. Esperado: ${totalEsperado}, Devolvido: ${totalDevolvido}, Divergências: ${totalDivergencia}`,
+        details: `Check-in concluído. Esperado: ${totalEsperado}, Devolvido: ${totalDevolvido}, Divergências: ${totalDivergencia}${totalReposto > 0 ? `, Repostos: ${totalReposto}` : ""}`,
       });
 
       toast.success("Check-in concluído! Caixa retornou para Stand By.");
@@ -569,11 +609,61 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         {step === "review" && (
           <>
             <p className="text-sm text-muted-foreground">
-              Para cada item com divergência, informe se o saldo foi reposto na caixa.
+              Peças consumidas em OS/Vendas e divergências. Deseja repor na caixa?
             </p>
             <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+              {/* Baixa replenishment suggestions */}
               {checkinItems
-                .filter((ci) => ci.divergencia > 0)
+                .filter((ci) => ci.baixaSuggestions.length > 0)
+                .map((ci) => {
+                  const index = checkinItems.indexOf(ci);
+                  const totalBaixa = ci.baixaSuggestions.reduce((s, b) => s + b.quantidade, 0);
+                  return (
+                    <div key={`baixa-${ci.item.id}`} className={`p-3 rounded-lg border ${
+                      ci.reposto ? "border-success/30 bg-success/5" : "border-primary/30 bg-primary/5"
+                    }`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{ci.item.nome_produto}</p>
+                          <div className="mt-1 space-y-0.5">
+                            {ci.baixaSuggestions.map((s, si) => (
+                              <p key={si} className="text-xs text-muted-foreground">
+                                <PackageOpen className="h-3 w-3 inline mr-1" />
+                                {s.quantidade}x saiu na {s.refTipo === "os" ? "OS" : "Venda"} #{s.refNumero}
+                              </p>
+                            ))}
+                          </div>
+                          <p className="text-xs font-medium mt-1 text-primary">
+                            Repor {totalBaixa}x na caixa?
+                          </p>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <Button
+                            variant={ci.reposto ? "default" : "outline"}
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => updateItem(index, { reposto: true })}
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            Sim, repor
+                          </Button>
+                          <Button
+                            variant={!ci.reposto ? "default" : "outline"}
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => updateItem(index, { reposto: false })}
+                          >
+                            Não
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {/* Regular divergence items (without baixa) */}
+              {checkinItems
+                .filter((ci) => ci.divergencia > 0 && ci.baixaSuggestions.length === 0)
                 .map((ci) => {
                   const index = checkinItems.indexOf(ci);
                   return (
@@ -608,10 +698,11 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                     </div>
                   );
                 })}
-              {!hasDivergencias && (
+
+              {checkinItems.every((ci) => ci.baixaSuggestions.length === 0 && ci.divergencia <= 0) && (
                 <div className="text-center py-6 text-muted-foreground">
                   <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-success" />
-                  <p className="text-sm">Tudo confere! Nenhuma divergência encontrada.</p>
+                  <p className="text-sm">Tudo confere! Nenhuma divergência ou baixa encontrada.</p>
                 </div>
               )}
 

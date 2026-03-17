@@ -20,6 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { logSystemAction } from '@/lib/systemLog';
 
 function exportCSV(result: RastreadorResult) {
   const header = ['Status', 'Código ORC', 'Cliente', 'Data', 'Itens Prontos', 'Total Itens', 'Produto', 'Qtd Necessária', 'Estoque Disponível', 'Estoque Total', 'Item Pronto'];

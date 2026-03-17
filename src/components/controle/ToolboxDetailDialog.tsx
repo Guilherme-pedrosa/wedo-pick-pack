@@ -91,6 +91,7 @@ export default function ToolboxDetailDialog({
   const [returningItem, setReturningItem] = useState<ToolboxItemData | null>(null);
   const [returnQty, setReturnQty] = useState(1);
   const [returning, setReturning] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
 
   const handleRename = async () => {
     if (!toolbox || !newName.trim() || newName.trim() === toolbox.name) {

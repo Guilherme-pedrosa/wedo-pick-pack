@@ -71,6 +71,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
     `<tr>
       <td style="padding:4px 8px;border:1px solid #ddd;font-family:monospace;font-size:11px">${i.codigo_produto}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;font-size:12px">${i.nome_produto}${!i.movimenta_estoque ? ' ⚠️' : ''}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;font-size:10px">${i.grupo || '—'}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.sigla_unidade}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;color:${i.estoque_atual < i.qtd_necessaria ? 'red' : 'green'}">${i.estoque_atual}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;color:${i.estoque_reservado_os > 0 ? '#b45309' : 'inherit'}">${i.estoque_reservado_os > 0 ? i.estoque_reservado_os : '—'}</td>

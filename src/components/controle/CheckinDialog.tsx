@@ -195,6 +195,20 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
   const handleComplete = async () => {
     if (!box || !user) return;
+
+    // Safeguard: warn if ALL items will be removed (devolvido=0 and not restocked)
+    const allWillBeRemoved = checkinItems.every((ci) => ci.devolvido === 0 && !ci.reposto);
+    if (allWillBeRemoved && checkinItems.length > 0) {
+      const confirmed = window.confirm(
+        "⚠️ ATENÇÃO: Todos os itens estão com devolução ZERO e sem reposição. " +
+        "Isso vai REMOVER todos os itens da caixa!\n\n" +
+        "Se você quer devolver a caixa com todos os itens intactos, clique em 'Cancelar' " +
+        "e use o botão 'Devolver tudo' na tela anterior.\n\n" +
+        "Deseja continuar mesmo assim?"
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     try {
       // Create checkin record

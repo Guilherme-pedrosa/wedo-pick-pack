@@ -62,7 +62,6 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
             <Outlet />
           </div>
         </main>
-        </main>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
 import { GCOrdemServico, GCVenda } from '@/api/types';
 import { createSeparation } from '@/api/separations';
+import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

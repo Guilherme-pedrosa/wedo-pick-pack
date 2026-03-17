@@ -16,6 +16,23 @@ function formatBRL(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function formatPrintReferences(item: ItemCompra): string {
+  const refsOrcamento = item.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(', ');
+  const refsOs = (item.os_reservas ?? [])
+    .map(r => `${(r.os_codigo || '').trim() || 'OS s/ nº'}(${r.qtd})`)
+    .join(', ');
+
+  if (refsOs) {
+    return `${refsOrcamento}${refsOrcamento ? '<br>' : ''}<span style="color:#b45309;font-style:italic">${refsOs}</span>`;
+  }
+
+  if (item.estoque_reservado_os > 0) {
+    return `${refsOrcamento}${refsOrcamento ? '<br>' : ''}<span style="color:#b45309;font-style:italic">Reserva OS: ${item.estoque_reservado_os}</span>`;
+  }
+
+  return refsOrcamento || '—';
+}
+
 function exportCSV(itensList: ItemCompra[], scannedAt: string) {
   const header = ['Código', 'Produto', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra'];
   const rows = itensList.map(i => [
@@ -56,7 +73,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:right">${i.ultimo_preco > 0 ? formatBRL(i.ultimo_preco) : '—'}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:right;font-weight:bold">${formatBRL(i.estimativa)}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${i.fornecedor_nome || '—'}<br><small>${i.fornecedor_telefone || ''}</small></td>
-      <td style="padding:4px 8px;border:1px solid #ddd;font-size:10px">${i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(', ')}${(i.os_reservas && i.os_reservas.length > 0) ? '<br><span style="color:#b45309;font-style:italic">' + i.os_reservas.map(r => `${r.os_codigo}(${r.qtd})`).join(', ') + '</span>' : ''}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;font-size:10px">${formatPrintReferences(i)}</td>
     </tr>`
   ).join('');
 

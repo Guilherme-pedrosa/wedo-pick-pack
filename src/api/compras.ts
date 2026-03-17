@@ -111,6 +111,27 @@ function normalizeForMatch(value: string): string {
     .trim();
 }
 
+function unwrapOSRecord(rawItem: any): any {
+  return rawItem?.OrdemServico ?? rawItem?.ordem_servico ?? rawItem?.ordemServico ?? rawItem;
+}
+
+function resolveOSCode(osRecord: any): string {
+  const candidates = [
+    osRecord?.codigo,
+    osRecord?.numero,
+    osRecord?.os_codigo,
+    osRecord?.numero_os,
+    osRecord?.id,
+  ];
+
+  for (const value of candidates) {
+    const normalized = normalizeId(value);
+    if (normalized) return normalized;
+  }
+
+  return '';
+}
+
 export async function buildOSIndex(
   onProgress?: (step: string, checked: number, total: number) => void,
   forceRebuild = false,
@@ -133,14 +154,16 @@ export async function buildOSIndex(
     totalPages = res.meta.total_paginas;
 
     for (const item of res.data || []) {
-      const osCodigo = String(item.codigo ?? '');
-      const osId = String(item.id ?? '');
-      const nomeSituacao = String(item.nome_situacao ?? '');
-      const nomeCliente = String(item.nome_cliente ?? '');
+      const os = unwrapOSRecord(item);
+      const osCodigo = resolveOSCode(os);
+      const osId = normalizeId(os?.id);
+      const osRef = osCodigo || osId || '—';
+      const nomeSituacao = String(os?.nome_situacao ?? '');
+      const nomeCliente = String(os?.nome_cliente ?? '');
       const normalizedSituacao = normalizeForMatch(nomeSituacao);
 
       // Collect budget-to-OS links from atributos
-      for (const wrapper of item.atributos || []) {
+      for (const wrapper of os?.atributos || []) {
         const atributo = wrapper?.atributo;
         if (!atributo) continue;
 
@@ -153,13 +176,13 @@ export async function buildOSIndex(
         const conteudo = String(atributo.conteudo ?? '').trim();
         if (!conteudo || !/^\d+$/.test(conteudo)) continue;
 
-        index[conteudo] = { os_codigo: osCodigo, os_id: osId, nome_situacao: nomeSituacao, nome_cliente: nomeCliente };
+        index[conteudo] = { os_codigo: osRef, os_id: osId, nome_situacao: nomeSituacao, nome_cliente: nomeCliente };
         vinculos++;
       }
 
       // Collect reserved stock from OSs in non-stock-moving statuses
       if (OS_RESERVED_STATUS_NAMES.includes(normalizedSituacao)) {
-        for (const wrapper of item.produtos || []) {
+        for (const wrapper of os?.produtos || []) {
           const p = wrapper?.produto;
           if (!p) continue;
           const pid = normalizeId(p.produto_id);
@@ -173,7 +196,7 @@ export async function buildOSIndex(
             reservedDemand[key] = { qty: 0, orcamentos: [] };
           }
           reservedDemand[key].qty += qtd;
-          reservedDemand[key].orcamentos.push({ os_codigo: osCodigo, nome_cliente: nomeCliente, qtd });
+          reservedDemand[key].orcamentos.push({ os_codigo: osRef, nome_cliente: nomeCliente, qtd });
         }
       }
     }

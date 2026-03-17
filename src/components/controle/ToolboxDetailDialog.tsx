@@ -12,6 +12,7 @@ import {
   UserCheck,
   UserX,
   Undo2,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
 import { executeStockEntrada } from "@/api/stockMovement";
+import ToolboxHandoffReceipt from "./ToolboxHandoffReceipt";
 
 export interface ToolboxData {
   id: string;
@@ -89,6 +91,7 @@ export default function ToolboxDetailDialog({
   const [returningItem, setReturningItem] = useState<ToolboxItemData | null>(null);
   const [returnQty, setReturnQty] = useState(1);
   const [returning, setReturning] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
 
   const handleRename = async () => {
     if (!toolbox || !newName.trim() || newName.trim() === toolbox.name) {
@@ -464,6 +467,12 @@ export default function ToolboxDetailDialog({
                       Conferência
                     </Button>
                   )}
+                  {items.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)} className="text-xs">
+                      <Printer className="h-3.5 w-3.5 mr-1" />
+                      Reimprimir recibo
+                    </Button>
+                  )}
                   <Button variant="ghost" size="sm" onClick={() => {
                     if (items.length > 0) {
                       onConference(toolbox);
@@ -493,6 +502,23 @@ export default function ToolboxDetailDialog({
         onClose={() => setScannerOpen(false)}
         onScan={handleScan}
       />
+
+      {toolbox?.technician_name && (
+        <ToolboxHandoffReceipt
+          open={receiptOpen}
+          onClose={() => setReceiptOpen(false)}
+          toolboxName={toolbox.name}
+          technicianName={toolbox.technician_name}
+          technicianGcId={toolbox.technician_gc_id || ""}
+          items={items.map((i) => ({
+            produto_id: i.produto_id,
+            nome_produto: i.nome_produto,
+            quantidade: i.quantidade,
+            preco_unitario: i.preco_unitario,
+          }))}
+          date={new Date().toISOString()}
+        />
+      )}
     </>
   );
 }

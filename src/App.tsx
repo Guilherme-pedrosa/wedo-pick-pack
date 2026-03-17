@@ -110,6 +110,10 @@ function AuthenticatedApp() {
           path="/admin/users"
           element={isAdmin ? <AdminUsersPage /> : <Navigate to="/dashboard" replace />}
         />
+        <Route
+          path="/admin/logs"
+          element={isAdmin ? <SystemLogsPage /> : <Navigate to="/dashboard" replace />}
+        />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

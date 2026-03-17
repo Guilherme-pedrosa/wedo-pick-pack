@@ -43,6 +43,9 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [stockIssues, setStockIssues] = useState<Array<{ nome: string; naBox: number; estoqueGC: number }>>([]);
+  const [stockChecked, setStockChecked] = useState(false);
+  const [checkingStock, setCheckingStock] = useState(false);
 
   useEffect(() => {
     if (box) {

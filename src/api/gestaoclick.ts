@@ -1,4 +1,5 @@
-import { GCOrdemServico, GCVenda, GCSituacao, GCMeta, GCProdutoItem } from './types';
+import { GCOrdemServico, GCVenda, GCSituacao, GCMeta, GCProdutoItem, GCOrdemCompra } from './types';
+import { listOrdensCompra } from './compras';
 import { MOCK_OS, MOCK_VENDAS, MOCK_STATUS_OS, MOCK_STATUS_VENDA } from './mockData';
 import { supabase } from '@/integrations/supabase/client';
 

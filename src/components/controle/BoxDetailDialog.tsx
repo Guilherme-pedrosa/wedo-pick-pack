@@ -13,6 +13,7 @@ import {
   Check,
   X,
   Copy,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import ItemWriteOffDialog from "./ItemWriteOffDialog";
+import BoxHandoffReceipt from "./BoxHandoffReceipt";
 import { logBoxMovement } from "@/lib/boxMovementLog";
 
 export interface BoxData {
@@ -87,6 +89,7 @@ export default function BoxDetailDialog({
   const [writeOffItem, setWriteOffItem] = useState<BoxItemData | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
+  const [receiptOpen, setReceiptOpen] = useState(false);
 
   const handleRename = async () => {
     if (!box || !newName.trim() || newName.trim() === box.name) {
@@ -421,6 +424,10 @@ export default function BoxDetailDialog({
                     <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
                     Check-in
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)} className="text-xs">
+                    <Printer className="h-3.5 w-3.5 mr-1" />
+                    Reimprimir recibo
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => onUnlinkTechnician(box)}
                     className="text-xs text-muted-foreground">
                     <UserX className="h-3.5 w-3.5 mr-1" />
@@ -451,6 +458,22 @@ export default function BoxDetailDialog({
         onClose={() => setWriteOffItem(null)}
         onCompleted={onItemsChanged}
       />
+      {box && box.technician_name && box.technician_gc_id && (
+        <BoxHandoffReceipt
+          open={receiptOpen}
+          onClose={() => setReceiptOpen(false)}
+          boxName={box.name}
+          technicianName={box.technician_name}
+          technicianGcId={box.technician_gc_id}
+          items={items.map(i => ({
+            produto_id: i.produto_id,
+            nome_produto: i.nome_produto,
+            quantidade: i.quantidade,
+            preco_unitario: i.preco_unitario,
+          }))}
+          date={new Date().toISOString()}
+        />
+      )}
     </>
   );
 }

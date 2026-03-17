@@ -97,7 +97,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         module: "checkout",
         action: "Separação concluída",
         entityType: session.tipo === 'os' ? 'OS' : 'Venda',
-        entityId: session.documentoId,
+        entityId: session.refId,
         entityName: `#${session.codigo} - ${session.nomeCliente}`,
         details: { items_total: session.items.length, items_confirmed: session.items.filter(i => i.conferido).length },
       });

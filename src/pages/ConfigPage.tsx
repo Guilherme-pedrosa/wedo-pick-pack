@@ -157,6 +157,7 @@ export default function ConfigPage() {
         defaultVendaConclusionStatus: saved.default_venda_conclusion_status ?? '',
       });
       toast.success('Configurações salvas com sucesso!');
+      logSystemAction({ module: "config", action: "Configurações salvas", details: { osStatusCount: osStatusToShow.length, vendaStatusCount: vendaStatusToShow.length } });
     } catch (err: unknown) {
       console.error('[ConfigPage] Save error:', err);
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';

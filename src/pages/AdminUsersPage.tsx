@@ -122,6 +122,7 @@ export default function AdminUsersPage() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       toast.success('Permissão atualizada');
+      logSystemAction({ module: "admin", action: "Permissão admin alternada", entityType: "user", entityId: userId });
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao atualizar permissão');

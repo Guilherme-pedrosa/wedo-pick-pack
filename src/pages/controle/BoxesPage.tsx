@@ -199,6 +199,7 @@ const BoxesPage = () => {
         .from("boxes")
         .insert({ name: newBoxName.trim(), user_id: user.id });
       if (error) throw error;
+      logSystemAction({ module: "controle_caixas", action: "Caixa criada", entityType: "box", entityName: newBoxName.trim() });
       toast.success("Caixa criada!");
       setCreateOpen(false);
       setNewBoxName("");

@@ -109,6 +109,7 @@ const ToolboxesPage = () => {
       const { error } = await (supabase.from("toolboxes") as any)
         .insert({ name: newName.trim(), user_id: user.id });
       if (error) throw error;
+      logSystemAction({ module: "controle_maletas", action: "Maleta criada", entityType: "toolbox", entityName: newName.trim() });
       toast.success("Maleta criada!");
       setCreateOpen(false);
       setNewName("");

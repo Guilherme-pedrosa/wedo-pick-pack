@@ -195,6 +195,20 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
   const handleComplete = async () => {
     if (!box || !user) return;
+
+    // Safeguard: warn if ALL items will be removed (devolvido=0 and not restocked)
+    const allWillBeRemoved = checkinItems.every((ci) => ci.devolvido === 0 && !ci.reposto);
+    if (allWillBeRemoved && checkinItems.length > 0) {
+      const confirmed = window.confirm(
+        "⚠️ ATENÇÃO: Todos os itens estão com devolução ZERO e sem reposição. " +
+        "Isso vai REMOVER todos os itens da caixa!\n\n" +
+        "Se você quer devolver a caixa com todos os itens intactos, clique em 'Cancelar' " +
+        "e use o botão 'Devolver tudo' na tela anterior.\n\n" +
+        "Deseja continuar mesmo assim?"
+      );
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     try {
       // Create checkin record
@@ -306,9 +320,32 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
         {step === "conference" && (
           <>
-            <p className="text-sm text-muted-foreground">
-              Informe a quantidade devolvida para cada item. Divergências precisam de justificativa.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Informe a quantidade devolvida para cada item. Divergências precisam de justificativa.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs shrink-0"
+                onClick={() => {
+                  setCheckinItems((prev) =>
+                    prev.map((ci) => ({
+                      ...ci,
+                      devolvido: ci.item.quantidade,
+                      divergencia: 0,
+                      tipo: "",
+                      ref: "",
+                      validado: false,
+                    }))
+                  );
+                  toast.info("Todos os itens marcados como devolvidos integralmente.");
+                }}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                Devolver tudo
+              </Button>
+            </div>
             <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
               {checkinItems.map((ci, index) => (
                 <div

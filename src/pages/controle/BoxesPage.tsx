@@ -547,18 +547,8 @@ const BoxesPage = () => {
         loadingItems={loadingItems}
         isAdmin={isAdmin}
         onClose={() => setSelectedBox(null)}
-        onItemsChanged={async () => {
-          // Re-fetch items using the box reference from the dialog prop (not stale closure)
-          if (selectedBox) {
-            try {
-              const { data, error } = await supabase
-                .from("box_items")
-                .select("*")
-                .eq("box_id", selectedBox.id)
-                .order("added_at", { ascending: false });
-              if (!error) setBoxItems(data || []);
-            } catch {}
-          }
+        onItemsChanged={() => {
+          if (selectedBox) loadBoxItems(selectedBox, false);
           loadBoxes();
         }}
         onLinkTechnician={(box) => {

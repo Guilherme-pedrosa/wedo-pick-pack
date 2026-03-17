@@ -6,6 +6,8 @@ import {
   Search,
   RotateCcw,
   ShieldAlert,
+  PackageOpen,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +35,13 @@ import { useAuth } from "@/hooks/useAuth";
 import type { BoxData, BoxItemData } from "./BoxDetailDialog";
 import { logBoxMovement } from "@/lib/boxMovementLog";
 
+interface BaixaSuggestion {
+  produtoId: string;
+  quantidade: number;
+  refTipo: "os" | "venda";
+  refNumero: string;
+}
+
 interface CheckinItemState {
   item: BoxItemData;
   devolvido: number;
@@ -41,6 +50,7 @@ interface CheckinItemState {
   ref: string;
   validado: boolean;
   reposto: boolean;
+  baixaSuggestions: BaixaSuggestion[];
 }
 
 interface Props {
@@ -58,22 +68,96 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
   const [step, setStep] = useState<"conference" | "review">("conference");
   const [observacao, setObservacao] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [loadingBaixas, setLoadingBaixas] = useState(false);
 
   useEffect(() => {
-    if (items.length > 0) {
-      setCheckinItems(
-        items.map((item) => ({
-          item,
-          devolvido: 0, // start blank for manual input
-          divergencia: 0,
-          tipo: "",
-          ref: "",
-          validado: false,
-          reposto: false,
-        }))
-      );
-    }
-  }, [items]);
+    if (!box || items.length === 0) return;
+
+    const loadBaixaSuggestions = async () => {
+      setLoadingBaixas(true);
+      try {
+        // Fetch all "baixa" movements for this box
+        const { data: baixaLogs } = await supabase
+          .from("box_movement_logs")
+          .select("produto_id, produto_nome, quantidade, ref_tipo, ref_numero")
+          .eq("box_id", box.id)
+          .eq("action", "baixa")
+          .not("ref_numero", "is", null);
+
+        // Group by produto_id
+        const suggestionsByProduct = new Map<string, BaixaSuggestion[]>();
+        for (const log of baixaLogs || []) {
+          if (!log.produto_id || !log.ref_tipo || !log.ref_numero) continue;
+          const existing = suggestionsByProduct.get(log.produto_id) || [];
+          // Merge same ref
+          const sameRef = existing.find(
+            (s) => s.refTipo === log.ref_tipo && s.refNumero === log.ref_numero
+          );
+          if (sameRef) {
+            sameRef.quantidade += log.quantidade || 0;
+          } else {
+            existing.push({
+              produtoId: log.produto_id,
+              quantidade: log.quantidade || 0,
+              refTipo: log.ref_tipo as "os" | "venda",
+              refNumero: log.ref_numero,
+            });
+          }
+          suggestionsByProduct.set(log.produto_id, existing);
+        }
+
+        setCheckinItems(
+          items.map((item) => {
+            const suggestions = suggestionsByProduct.get(item.produto_id) || [];
+            const totalBaixa = suggestions.reduce((s, b) => s + b.quantidade, 0);
+            const expectedReturn = Math.max(0, item.quantidade - totalBaixa);
+            // If there are baixas, pre-fill devolvido and divergence info
+            if (suggestions.length > 0) {
+              return {
+                item,
+                devolvido: expectedReturn,
+                divergencia: totalBaixa,
+                tipo: suggestions[0].refTipo,
+                ref: suggestions[0].refNumero,
+                validado: false,
+                reposto: false,
+                baixaSuggestions: suggestions,
+              };
+            }
+            return {
+              item,
+              devolvido: 0,
+              divergencia: 0,
+              tipo: "",
+              ref: "",
+              validado: false,
+              reposto: false,
+              baixaSuggestions: [],
+            };
+          })
+        );
+      } catch (e) {
+        console.error("Error loading baixa suggestions:", e);
+        // Fallback: no suggestions
+        setCheckinItems(
+          items.map((item) => ({
+            item,
+            devolvido: 0,
+            divergencia: 0,
+            tipo: "",
+            ref: "",
+            validado: false,
+            reposto: false,
+            baixaSuggestions: [],
+          }))
+        );
+      } finally {
+        setLoadingBaixas(false);
+      }
+    };
+
+    loadBaixaSuggestions();
+  }, [items, box]);
 
   const updateItem = (index: number, updates: Partial<CheckinItemState>) => {
     setCheckinItems((prev) =>
@@ -307,7 +391,14 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Informe a quantidade devolvida para cada item. Divergências precisam de justificativa.
+                {loadingBaixas ? (
+                  <span className="flex items-center gap-1">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Carregando baixas...
+                  </span>
+                ) : (
+                  "Informe a quantidade devolvida para cada item. Divergências precisam de justificativa."
+                )}
               </p>
               <Button
                 variant="outline"
@@ -359,6 +450,33 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                     )}
                   </div>
 
+                  {/* Baixa suggestions */}
+                  {ci.baixaSuggestions.length > 0 && (
+                    <div className="mb-2 p-2 rounded-md bg-primary/5 border border-primary/20">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <PackageOpen className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-xs font-medium text-primary">Baixas registradas:</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {ci.baixaSuggestions.map((s, si) => (
+                          <p key={si} className="text-xs text-muted-foreground">
+                            • {s.quantidade}x saiu na {s.refTipo === "os" ? "OS" : "Venda"} #{s.refNumero}
+                            {" — "}
+                            <button
+                              type="button"
+                              className="text-primary underline hover:text-primary/80"
+                              onClick={() => updateItem(index, { tipo: s.refTipo, ref: s.refNumero, validado: false })}
+                            >
+                              usar como justificativa
+                            </button>
+                          </p>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 italic">
+                        Devolução esperada: {Math.max(0, ci.item.quantidade - ci.baixaSuggestions.reduce((s, b) => s + b.quantidade, 0))} de {ci.item.quantidade}
+                      </p>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
                       <Label className="text-xs whitespace-nowrap">Devolvido:</Label>

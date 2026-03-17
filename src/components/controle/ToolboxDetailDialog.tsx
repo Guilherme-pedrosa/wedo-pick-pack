@@ -502,6 +502,23 @@ export default function ToolboxDetailDialog({
         onClose={() => setScannerOpen(false)}
         onScan={handleScan}
       />
+
+      {toolbox?.technician_name && (
+        <ToolboxHandoffReceipt
+          open={receiptOpen}
+          onClose={() => setReceiptOpen(false)}
+          toolboxName={toolbox.name}
+          technicianName={toolbox.technician_name}
+          technicianGcId={toolbox.technician_gc_id || ""}
+          items={items.map((i) => ({
+            produto_id: i.produto_id,
+            nome_produto: i.nome_produto,
+            quantidade: i.quantidade,
+            preco_unitario: i.preco_unitario,
+          }))}
+          date={new Date().toISOString()}
+        />
+      )}
     </>
   );
 }

@@ -29,6 +29,7 @@ import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
 import { executeStockEntrada } from "@/api/stockMovement";
+import ToolboxHandoffReceipt from "./ToolboxHandoffReceipt";
 
 export interface ToolboxData {
   id: string;

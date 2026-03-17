@@ -248,23 +248,8 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
 
       if (itemsError) throw itemsError;
 
-      // Update box items based on restock decisions
-      for (const ci of checkinItems) {
-        if (ci.reposto) {
-          // Keep original quantity (restocked)
-          continue;
-        } else {
-          // Set quantity to returned amount
-          if (ci.devolvido === 0) {
-            await supabase.from("box_items").delete().eq("id", ci.item.id);
-          } else {
-            await supabase
-              .from("box_items")
-              .update({ quantidade: ci.devolvido })
-              .eq("id", ci.item.id);
-          }
-        }
-      }
+      // Items are NEVER removed during check-in.
+      // The check-in only records the conference; items always stay in the box.
 
       // Return box to stand by after check-in
       await supabase

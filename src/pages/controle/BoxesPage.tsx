@@ -222,8 +222,8 @@ const BoxesPage = () => {
     }
   };
 
-  const loadBoxItems = async (box: BoxData) => {
-    setSelectedBox(box);
+  const loadBoxItems = async (box: BoxData, setAsSelected = true) => {
+    if (setAsSelected) setSelectedBox(box);
     setLoadingItems(true);
     try {
       const { data, error } = await supabase

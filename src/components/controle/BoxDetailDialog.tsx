@@ -91,6 +91,39 @@ export default function BoxDetailDialog({
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [stockDisponivel, setStockDisponivel] = useState<number | null>(null);
+  const [loadingStock, setLoadingStock] = useState(false);
+
+  // Fetch GC stock when product is selected
+  const fetchStock = useCallback(async (produto: ProductResult) => {
+    setLoadingStock(true);
+    setStockDisponivel(null);
+    try {
+      const detail = await getProdutoDetalhe(produto.produto_id);
+      if (detail) {
+        const raw = detail.estoque;
+        const estoque = typeof raw === "number" ? raw : parseFloat(String(raw).replace(",", ".")) || 0;
+        setStockDisponivel(Math.max(0, Math.floor(estoque)));
+      } else {
+        setStockDisponivel(null);
+      }
+    } catch (e) {
+      console.error("Erro ao buscar estoque:", e);
+      setStockDisponivel(null);
+    } finally {
+      setLoadingStock(false);
+    }
+  }, []);
+
+  const handleProductSelect = useCallback((product: ProductResult | null) => {
+    setSelectedProduct(product);
+    setQty(1);
+    if (product) {
+      fetchStock(product);
+    } else {
+      setStockDisponivel(null);
+    }
+  }, [fetchStock]);
 
   const handleRename = async () => {
     if (!box || !newName.trim() || newName.trim() === box.name) {

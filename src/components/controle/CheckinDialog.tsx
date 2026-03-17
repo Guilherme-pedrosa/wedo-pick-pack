@@ -450,6 +450,33 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
                     )}
                   </div>
 
+                  {/* Baixa suggestions */}
+                  {ci.baixaSuggestions.length > 0 && (
+                    <div className="mb-2 p-2 rounded-md bg-primary/5 border border-primary/20">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <PackageOpen className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-xs font-medium text-primary">Baixas registradas:</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {ci.baixaSuggestions.map((s, si) => (
+                          <p key={si} className="text-xs text-muted-foreground">
+                            • {s.quantidade}x saiu na {s.refTipo === "os" ? "OS" : "Venda"} #{s.refNumero}
+                            {" — "}
+                            <button
+                              type="button"
+                              className="text-primary underline hover:text-primary/80"
+                              onClick={() => updateItem(index, { tipo: s.refTipo, ref: s.refNumero, validado: false })}
+                            >
+                              usar como justificativa
+                            </button>
+                          </p>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 italic">
+                        Devolução esperada: {Math.max(0, ci.item.quantidade - ci.baixaSuggestions.reduce((s, b) => s + b.quantidade, 0))} de {ci.item.quantidade}
+                      </p>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
                       <Label className="text-xs whitespace-nowrap">Devolvido:</Label>

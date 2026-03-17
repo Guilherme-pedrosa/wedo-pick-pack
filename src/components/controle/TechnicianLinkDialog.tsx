@@ -358,26 +358,27 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
                   <div className="py-3 text-center text-sm text-muted-foreground">Nenhum técnico encontrado</div>
                 )}
               </div>
-        {/* Stock issues warning */}
-        {stockChecked && stockIssues.length > 0 && (
-          <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg space-y-1">
-            <p className="text-xs font-semibold text-destructive flex items-center gap-1">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Itens com estoque insuficiente no GC:
-            </p>
-            {stockIssues.map((issue, idx) => (
-              <p key={idx} className="text-xs text-destructive/80 pl-5">
-                • {issue.nome}: <strong>{issue.naBox}</strong> na caixa, <strong>{issue.estoqueGC}</strong> disponível
+            </div>
+          )}
+          {/* Stock issues warning */}
+          {stockChecked && stockIssues.length > 0 && (
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg space-y-1">
+              <p className="text-xs font-semibold text-destructive flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Itens com estoque insuficiente no GC:
               </p>
-            ))}
-          </div>
-        )}
-        {stockChecked && stockIssues.length === 0 && (
-          <div className="p-2 bg-success/10 border border-success/20 rounded-lg">
-            <p className="text-xs text-success font-medium">✅ Estoque validado — todos os itens disponíveis</p>
-          </div>
-        )}
-        </div>
+              {stockIssues.map((issue, idx) => (
+                <p key={idx} className="text-xs text-destructive/80 pl-5">
+                  • {issue.nome}: <strong>{issue.naBox}</strong> na caixa, <strong>{issue.estoqueGC}</strong> disponível
+                </p>
+              ))}
+            </div>
+          )}
+          {stockChecked && stockIssues.length === 0 && (
+            <div className="p-2 bg-success/10 border border-success/20 rounded-lg">
+              <p className="text-xs text-success font-medium">✅ Estoque validado — todos os itens disponíveis</p>
+            </div>
+          )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancelar

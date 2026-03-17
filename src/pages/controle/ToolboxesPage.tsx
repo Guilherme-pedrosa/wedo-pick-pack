@@ -20,6 +20,7 @@ import ToolboxDetailDialog, {
 import ToolboxTechnicianLinkDialog from "@/components/controle/ToolboxTechnicianLinkDialog";
 import ToolboxConferenceDialog from "@/components/controle/ToolboxConferenceDialog";
 import ToolboxHandoffReceipt from "@/components/controle/ToolboxHandoffReceipt";
+import { logSystemAction } from "@/lib/systemLog";
 
 const ToolboxesPage = () => {
   const { user, isAdmin } = useAuth();
@@ -108,6 +109,7 @@ const ToolboxesPage = () => {
       const { error } = await (supabase.from("toolboxes") as any)
         .insert({ name: newName.trim(), user_id: user.id });
       if (error) throw error;
+      logSystemAction({ module: "controle_maletas", action: "Maleta criada", entityType: "toolbox", entityName: newName.trim() });
       toast.success("Maleta criada!");
       setCreateOpen(false);
       setNewName("");

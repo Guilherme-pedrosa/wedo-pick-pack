@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { logSystemAction } from '@/lib/systemLog';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { FileText, RefreshCw, ShoppingCart, Loader2, Package } from 'lucide-react';
@@ -107,6 +108,7 @@ export default function OrcamentosPanel() {
       if (result.orcamentosConvertidos.length > 0) parts.push(`${result.orcamentosConvertidos.length} bloqueado(s) por OS`);
       parts.push(`${result.totalProdutosOk} com estoque`);
       toast.success(`Lista gerada! ${parts.join(', ')}.`);
+      logSystemAction({ module: "compras", action: "Lista de compras gerada", details: { itens_comprar: result.totalProdutosSemEstoque, cobertos_pedido: result.totalItensCobertosporPedido, situacoes: selectedSituacoes.length } });
     } catch (err) {
       toast.error('Erro ao gerar lista de compras');
       console.error(err);

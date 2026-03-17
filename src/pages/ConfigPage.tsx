@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle2, XCircle, Info, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { logSystemAction } from '@/lib/systemLog';
 
 function AuvoUserIdField() {
   const [value, setValue] = useState('');
@@ -156,6 +157,7 @@ export default function ConfigPage() {
         defaultVendaConclusionStatus: saved.default_venda_conclusion_status ?? '',
       });
       toast.success('Configurações salvas com sucesso!');
+      logSystemAction({ module: "config", action: "Configurações salvas", details: { osStatusCount: osStatusToShow.length, vendaStatusCount: vendaStatusToShow.length } });
     } catch (err: unknown) {
       console.error('[ConfigPage] Save error:', err);
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';

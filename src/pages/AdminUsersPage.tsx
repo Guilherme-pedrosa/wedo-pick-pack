@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserPlus, Trash2, Shield, ShieldOff, Loader2, Users, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
+import { logSystemAction } from '@/lib/systemLog';
 
 interface UserEntry {
   id: string;
@@ -79,6 +80,7 @@ export default function AdminUsersPage() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       toast.success(`Usuário ${newName} criado!`);
+      logSystemAction({ module: "admin", action: "Usuário criado", entityType: "user", entityName: newName, details: { email: newEmail, role: newRole } });
       setCreateOpen(false);
       setNewEmail('');
       setNewPassword('');
@@ -103,6 +105,7 @@ export default function AdminUsersPage() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       toast.success(`${name} removido`);
+      logSystemAction({ module: "admin", action: "Usuário removido", entityType: "user", entityId: userId, entityName: name });
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao excluir');
@@ -119,6 +122,7 @@ export default function AdminUsersPage() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       toast.success('Permissão atualizada');
+      logSystemAction({ module: "admin", action: "Permissão admin alternada", entityType: "user", entityId: userId });
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao atualizar permissão');

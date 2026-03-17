@@ -21,6 +21,7 @@ import TechnicianLinkDialog from "@/components/controle/TechnicianLinkDialog";
 import CheckinDialog from "@/components/controle/CheckinDialog";
 import QuickWriteOffDialog from "@/components/controle/QuickWriteOffDialog";
 import { runBaixaValidationWithAlerts, type BaixaAlert } from "@/lib/baixaValidator";
+import { logSystemAction } from "@/lib/systemLog";
 
 const BoxesPage = () => {
   const { user, isAdmin } = useAuth();
@@ -198,6 +199,7 @@ const BoxesPage = () => {
         .from("boxes")
         .insert({ name: newBoxName.trim(), user_id: user.id });
       if (error) throw error;
+      logSystemAction({ module: "controle_caixas", action: "Caixa criada", entityType: "box", entityName: newBoxName.trim() });
       toast.success("Caixa criada!");
       setCreateOpen(false);
       setNewBoxName("");

@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
+import { logSystemAction } from "@/lib/systemLog";
 
 interface AppSidebarProps {
   collapsed: boolean;
@@ -81,6 +82,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: "Configurações", icon: Settings, href: "/config" },
       { title: "Usuários", icon: Users, href: "/admin/users", adminOnly: true },
+      { title: "Logs do Sistema", icon: ClipboardList, href: "/admin/logs", adminOnly: true },
     ],
   },
 ];
@@ -89,6 +91,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose, isA
   const location = useLocation();
 
   const handleLogout = async () => {
+    await logSystemAction({ module: "auth", action: "Logout realizado" });
     await supabase.auth.signOut();
   };
 

@@ -22,6 +22,7 @@ import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
 import LoginPage from "./pages/LoginPage";
+import SystemLogsPage from "./pages/SystemLogsPage";
 import SetupPage from "./pages/SetupPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -108,6 +109,10 @@ function AuthenticatedApp() {
         <Route
           path="/admin/users"
           element={isAdmin ? <AdminUsersPage /> : <Navigate to="/dashboard" replace />}
+        />
+        <Route
+          path="/admin/logs"
+          element={isAdmin ? <SystemLogsPage /> : <Navigate to="/dashboard" replace />}
         />
       </Route>
       <Route path="*" element={<NotFound />} />

@@ -4,6 +4,7 @@ import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
 import { GCOrdemServico, GCVenda } from '@/api/types';
 import { createSeparation } from '@/api/separations';
+import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -92,6 +93,14 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
 
       concludeSession();
       queryClient.invalidateQueries({ queryKey: ['today-separations'] });
+      logSystemAction({
+        module: "checkout",
+        action: "Separação concluída",
+        entityType: session.tipo === 'os' ? 'OS' : 'Venda',
+        entityId: session.refId,
+        entityName: `#${session.codigo} - ${session.nomeCliente}`,
+        details: { items_total: session.items.length, items_confirmed: session.items.filter(i => i.conferido).length },
+      });
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
       onClose();
     } catch (err: unknown) {

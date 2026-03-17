@@ -31,6 +31,7 @@ import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import ItemWriteOffDialog from "./ItemWriteOffDialog";
 import BoxHandoffReceipt from "./BoxHandoffReceipt";
 import { logBoxMovement } from "@/lib/boxMovementLog";
+import { getProdutoDetalhe } from "@/api/compras";
 
 export interface BoxData {
   id: string;

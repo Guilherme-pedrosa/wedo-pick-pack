@@ -34,22 +34,29 @@ function formatPrintReferences(item: ItemCompra): string {
 }
 
 function exportCSV(itensList: ItemCompra[], scannedAt: string) {
-  const header = ['Código', 'Produto', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra'];
-  const rows = itensList.map(i => [
-    i.codigo_produto,
-    i.nome_produto,
-    i.sigla_unidade,
-    i.estoque_atual,
-    i.qtd_necessaria,
-    i.qtd_efetiva_a_comprar,
-    i.qtd_ja_em_compra,
-    i.ultimo_preco.toFixed(2).replace('.', ','),
-    i.estimativa.toFixed(2).replace('.', ','),
-    i.fornecedor_nome || '',
-    i.fornecedor_telefone || '',
-    i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
-    i.ordens_compra.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
-  ]);
+  const header = ['Código', 'Produto', 'Grupo', 'UN', 'Estoque Atual', 'Qtd Necessária', 'A Comprar', 'Em Pedido (Qtd)', 'Último Preço (R$)', 'Estimativa (R$)', 'Fornecedor', 'Telefone Fornecedor', 'Orçamentos', 'Pedidos de Compra', 'Reservas OS'];
+  const rows = itensList.map(i => {
+    const osRefs = (i.os_reservas ?? [])
+      .map(r => `${(r.os_codigo || '').trim() || 'OS s/ nº'}(${r.qtd})`)
+      .join(' | ');
+    return [
+      i.codigo_produto,
+      i.nome_produto,
+      i.grupo || '',
+      i.sigla_unidade,
+      i.estoque_atual,
+      i.qtd_necessaria,
+      i.qtd_efetiva_a_comprar,
+      i.qtd_ja_em_compra,
+      i.ultimo_preco.toFixed(2).replace('.', ','),
+      i.estimativa.toFixed(2).replace('.', ','),
+      i.fornecedor_nome || '',
+      i.fornecedor_telefone || '',
+      i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
+      i.ordens_compra.map(o => `${o.codigo}(${o.qtd})`).join(' | '),
+      osRefs,
+    ];
+  });
   const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

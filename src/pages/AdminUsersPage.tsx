@@ -80,6 +80,7 @@ export default function AdminUsersPage() {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
       toast.success(`Usuário ${newName} criado!`);
+      logSystemAction({ module: "admin", action: "Usuário criado", entityType: "user", entityName: newName, details: { email: newEmail, role: newRole } });
       setCreateOpen(false);
       setNewEmail('');
       setNewPassword('');

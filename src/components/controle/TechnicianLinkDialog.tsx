@@ -70,8 +70,77 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
       setSelectedId("");
       setSearch("");
       setReceiptData(null);
+      setStockIssues([]);
+      setStockChecked(false);
     }
   }, [box]);
+
+  // Re-check stock for all box items before handoff
+  const checkBoxStock = async () => {
+    if (!box) return;
+    setCheckingStock(true);
+    setStockIssues([]);
+    try {
+      const { data: boxItems } = await supabase
+        .from("box_items")
+        .select("produto_id, nome_produto, quantidade")
+        .eq("box_id", box.id);
+
+      if (!boxItems?.length) {
+        setStockChecked(true);
+        setCheckingStock(false);
+        return;
+      }
+
+      const issues: Array<{ nome: string; naBox: number; estoqueGC: number }> = [];
+
+      // Check stock in batches of 3 to respect rate limits
+      for (let i = 0; i < boxItems.length; i += 3) {
+        const batch = boxItems.slice(i, i + 3);
+        const results = await Promise.all(
+          batch.map(async (item) => {
+            const detail = await getProdutoDetalhe(item.produto_id);
+            if (!detail) return { item, estoque: null };
+            const raw = detail.estoque;
+            const estoque = typeof raw === "number" ? raw : parseFloat(String(raw).replace(",", ".")) || 0;
+            return { item, estoque: Math.max(0, Math.floor(estoque)) };
+          })
+        );
+
+        for (const { item, estoque } of results) {
+          if (estoque !== null) {
+            // Update stored stock in DB
+            await supabase
+              .from("box_items")
+              .update({ estoque_gc: estoque })
+              .eq("box_id", box.id)
+              .eq("produto_id", item.produto_id);
+
+            if (item.quantidade > estoque) {
+              issues.push({ nome: item.nome_produto, naBox: item.quantidade, estoqueGC: estoque });
+            }
+          }
+        }
+
+        // Small delay between batches
+        if (i + 3 < boxItems.length) await new Promise(r => setTimeout(r, 1100));
+      }
+
+      setStockIssues(issues);
+      setStockChecked(true);
+
+      if (issues.length === 0) {
+        toast.success("Estoque validado — todos os itens disponíveis");
+      } else {
+        toast.warning(`${issues.length} item(ns) com estoque insuficiente no GC`);
+      }
+    } catch (e) {
+      console.error("Erro ao verificar estoque:", e);
+      toast.error("Erro ao verificar estoque no GestãoClick");
+    } finally {
+      setCheckingStock(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!selectedId || !box) return;

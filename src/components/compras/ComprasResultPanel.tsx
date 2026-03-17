@@ -49,13 +49,14 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
       <td style="padding:4px 8px;border:1px solid #ddd;font-size:12px">${i.nome_produto}${!i.movimenta_estoque ? ' ⚠️' : ''}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.sigla_unidade}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;color:${i.estoque_atual < i.qtd_necessaria ? 'red' : 'green'}">${i.estoque_atual}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;color:${i.estoque_reservado_os > 0 ? '#b45309' : 'inherit'}">${i.estoque_reservado_os > 0 ? i.estoque_reservado_os : '—'}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.qtd_necessaria}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i.qtd_ja_em_compra > 0 ? i.qtd_ja_em_compra : '—'}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:center;font-weight:bold;color:red">${i.qtd_efetiva_a_comprar}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:right">${i.ultimo_preco > 0 ? formatBRL(i.ultimo_preco) : '—'}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;text-align:right;font-weight:bold">${formatBRL(i.estimativa)}</td>
       <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${i.fornecedor_nome || '—'}<br><small>${i.fornecedor_telefone || ''}</small></td>
-      <td style="padding:4px 8px;border:1px solid #ddd;font-size:10px">${i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(', ')}</td>
+      <td style="padding:4px 8px;border:1px solid #ddd;font-size:10px">${i.orcamentos.map(o => `${o.codigo}(${o.qtd})`).join(', ')}${(i.os_reservas && i.os_reservas.length > 0) ? '<br><span style="color:#b45309;font-style:italic">' + i.os_reservas.map(r => `${r.os_codigo}(${r.qtd})`).join(', ') + '</span>' : ''}</td>
     </tr>`
   ).join('');
 
@@ -69,6 +70,7 @@ function handlePrint(result: NonNullable<ReturnType<typeof useComprasStore.getSt
         <th style="padding:6px 8px;border:1px solid #ddd;text-align:left">Produto</th>
         <th style="padding:6px 8px;border:1px solid #ddd">UN</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Estoque</th>
+        <th style="padding:6px 8px;border:1px solid #ddd">Reserv. OS</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Necessário</th>
         <th style="padding:6px 8px;border:1px solid #ddd">Em Pedido</th>
         <th style="padding:6px 8px;border:1px solid #ddd">A Comprar</th>

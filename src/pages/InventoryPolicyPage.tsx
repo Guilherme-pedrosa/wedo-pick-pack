@@ -40,6 +40,7 @@ export default function InventoryPolicyPage() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [syncProgress, setSyncProgress] = useState<any>(null);
 
   // Load config from DB
   const configQuery = useQuery({

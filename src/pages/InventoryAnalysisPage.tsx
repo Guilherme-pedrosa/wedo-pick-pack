@@ -466,7 +466,7 @@ export default function InventoryAnalysisPage() {
                 )}
               </div>
               <div className="mt-4 text-xs text-muted-foreground space-y-1">
-                <p>📊 Cobertura alvo: <strong>A={ABC_COVERAGE.A}d</strong>, B={ABC_COVERAGE.B}d, C={ABC_COVERAGE.C}d</p>
+                <p>📊 Cobertura = Lead Time ({globalLeadTime}d) · Segurança: <strong>A ×{ABC_SAFETY.A}</strong>, B ×{ABC_SAFETY.B}, C ×{ABC_SAFETY.C}</p>
                 <p>⏱ Lead time médio: <strong>{globalLeadTime} dias</strong> ({leadTimes.length > 0 ? 'calculado do histórico' : 'padrão — clique "Calcular Lead Times"'})</p>
                 <p>🛡 Margem de segurança: 20%</p>
               </div>

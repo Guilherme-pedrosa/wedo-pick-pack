@@ -76,13 +76,13 @@ const menuGroups: MenuGroup[] = [
       { title: "Compras", icon: ShoppingCart, href: "/compras" },
       { title: "Rastreador", icon: Search, href: "/rastreador" },
       { title: "Log OS Geradas", icon: ClipboardList, href: "/rastreador/logs" },
+      { title: "Política Estoque", icon: BarChart3, href: "/config/estoque" },
     ],
   },
   {
     label: "Sistema",
     items: [
       { title: "Configurações", icon: Settings, href: "/config" },
-      { title: "Política Estoque", icon: BarChart3, href: "/config/estoque" },
       { title: "Usuários", icon: Users, href: "/admin/users", adminOnly: true },
       { title: "Logs do Sistema", icon: ClipboardList, href: "/admin/logs", adminOnly: true },
     ],

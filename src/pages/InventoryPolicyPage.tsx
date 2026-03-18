@@ -24,6 +24,7 @@ interface PolicyConfig {
   os_stockout_situacao_ids: string[];
   purchase_lt_start_situacao_id: string;
   purchase_arrived_situacao_ids: string[];
+  purchase_crossref_situacao_ids: string[];
 }
 
 const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
   os_stockout_situacao_ids: [],
   purchase_lt_start_situacao_id: '1675083',
   purchase_arrived_situacao_ids: [],
+  purchase_crossref_situacao_ids: [],
 };
 
 export default function InventoryPolicyPage() {

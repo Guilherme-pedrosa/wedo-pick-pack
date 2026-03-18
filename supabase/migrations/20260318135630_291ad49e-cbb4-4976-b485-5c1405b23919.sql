@@ -1,0 +1,1 @@
+ALTER TABLE public.products_index ADD COLUMN IF NOT EXISTS fornecedor_id text DEFAULT NULL;

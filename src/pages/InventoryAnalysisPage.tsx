@@ -28,6 +28,7 @@ interface ProductInfo {
   produto_id: string;
   nome: string;
   codigo_interno: string | null;
+  fornecedor_id: string | null;
 }
 
 interface SupplierLeadTime {
@@ -43,6 +44,8 @@ interface AnalysisItem {
   produto_id: string;
   nome: string;
   codigo_interno: string | null;
+  fornecedor_id: string | null;
+  fornecedor_nome: string | null;
   total_qty: number;
   total_value: number;
   event_count: number;
@@ -52,6 +55,7 @@ interface AnalysisItem {
   cumulative_pct: number;
   estoque_atual: number | null;
   dias_cobertura: number | null;
+  lead_time_days: number;
   rop: number | null;
   qty_a_comprar: number | null;
   coverage_target: number;
@@ -123,10 +127,10 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
   if (ids.length === 0) return map;
   const { data } = await supabase
     .from('products_index')
-    .select('produto_id, nome, codigo_interno')
+    .select('produto_id, nome, codigo_interno, fornecedor_id')
     .in('produto_id', ids);
   for (const p of (data || [])) {
-    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno });
+    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null });
   }
   return map;
 }
@@ -171,22 +175,30 @@ export default function InventoryAnalysisPage() {
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
   const lookbackDays = configQuery.data?.lookback_days || 180;
 
-  // Global avg lead time from supplier data
-  const globalLeadTime = useMemo(() => {
-    const lts = leadTimesQuery.data || [];
-    if (lts.length === 0) return 14; // default 14 days
-    const weighted = lts.reduce((s, lt) => s + lt.avg_lead_time_days * lt.sample_count, 0);
-    const totalSamples = lts.reduce((s, lt) => s + lt.sample_count, 0);
-    return totalSamples > 0 ? Math.round(weighted / totalSamples) : 14;
+  // Build supplier lead time lookup map (fornecedor_id → lead time data)
+  const supplierLTMap = useMemo(() => {
+    const map = new Map<string, SupplierLeadTime>();
+    for (const lt of (leadTimesQuery.data || [])) {
+      map.set(lt.fornecedor_id, lt);
+    }
+    return map;
   }, [leadTimesQuery.data]);
 
-  // Build analysis items with ABC + smart ROP
+  // Fallback lead time (median of all suppliers, not average — more robust)
+  const fallbackLeadTime = useMemo(() => {
+    const lts = leadTimesQuery.data || [];
+    if (lts.length === 0) return 14;
+    const sorted = [...lts].sort((a, b) => a.avg_lead_time_days - b.avg_lead_time_days);
+    const mid = Math.floor(sorted.length / 2);
+    return Math.round(sorted.length % 2 ? sorted[mid].avg_lead_time_days : (sorted[mid - 1].avg_lead_time_days + sorted[mid].avg_lead_time_days) / 2);
+  }, [leadTimesQuery.data]);
+
+  // Build analysis items with ABC + per-supplier ROP
   const analysisItems: AnalysisItem[] = useMemo(() => {
     const rows = consumptionQuery.data || [];
     const names = namesQuery.data || new Map();
     if (rows.length === 0) return [];
 
-    // ABC is based on hybrid_score (value × frequency)
     const totalScore = rows.reduce((s, r) => s + r.hybrid_score, 0);
     let cumulative = 0;
 
@@ -198,9 +210,15 @@ export default function InventoryAnalysisPage() {
       const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
       const estoque = stockMap.get(r.produto_id) ?? null;
       
+      // Use THIS product's supplier lead time, not global average
+      const fornecedorId = info?.fornecedor_id || null;
+      const supplierLT = fornecedorId ? supplierLTMap.get(fornecedorId) : null;
+      const leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : fallbackLeadTime;
+      const fornecedorNome = supplierLT?.fornecedor_nome || null;
+
       const safetyFactor = ABC_SAFETY[abcClass];
-      const coverageTarget = globalLeadTime;
-      const rop = avgDaily * globalLeadTime * safetyFactor;
+      const coverageTarget = leadTimeDays;
+      const rop = avgDaily * leadTimeDays * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
 
@@ -208,6 +226,8 @@ export default function InventoryAnalysisPage() {
         produto_id: r.produto_id,
         nome: info?.nome || `Produto ${r.produto_id}`,
         codigo_interno: info?.codigo_interno || null,
+        fornecedor_id: fornecedorId,
+        fornecedor_nome: fornecedorNome,
         total_qty: r.total_qty,
         total_value: r.total_value,
         event_count: r.event_count,
@@ -217,12 +237,13 @@ export default function InventoryAnalysisPage() {
         cumulative_pct: pct,
         estoque_atual: estoque,
         dias_cobertura: diasCobertura,
+        lead_time_days: leadTimeDays,
         rop,
         qty_a_comprar: qtyAComprar,
         coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, lookbackDays, thresholds, globalLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -258,11 +279,11 @@ export default function InventoryAnalysisPage() {
     const aCount = items.filter(i => i.abc_class === 'A').length;
     const bCount = items.filter(i => i.abc_class === 'B').length;
     const cCount = items.filter(i => i.abc_class === 'C').length;
-    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < globalLeadTime).length;
+    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days).length;
     const totalConsumo = items.reduce((s, i) => s + i.total_qty, 0);
     const totalValor = items.reduce((s, i) => s + i.total_value, 0);
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
-  }, [analysisItems, globalLeadTime]);
+  }, [analysisItems]);
 
   // Purchase items
   const purchaseItems = useMemo(() => 
@@ -429,9 +450,9 @@ export default function InventoryAnalysisPage() {
           <p className="text-[10px] text-muted-foreground">{((1 - thresholds.B) * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.C}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Time Médio</p>
-          <p className="text-xl font-bold text-foreground mt-0.5">{globalLeadTime}d</p>
-          <p className="text-[10px] text-muted-foreground">{leadTimes.length} fornecedores</p>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Time (fallback)</p>
+          <p className="text-xl font-bold text-foreground mt-0.5">{fallbackLeadTime}d</p>
+          <p className="text-[10px] text-muted-foreground">{leadTimes.length} fornecedores · por produto</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Precisam Reposição</p>
@@ -478,9 +499,9 @@ export default function InventoryAnalysisPage() {
                 )}
               </div>
               <div className="mt-4 text-xs text-muted-foreground space-y-1">
-                <p>📊 Cobertura = Lead Time ({globalLeadTime}d) · Segurança: <strong>A ×{ABC_SAFETY.A}</strong>, B ×{ABC_SAFETY.B}, C ×{ABC_SAFETY.C}</p>
-                <p>⏱ Lead time médio: <strong>{globalLeadTime} dias</strong> ({leadTimes.length > 0 ? 'calculado do histórico' : 'padrão — clique "Calcular Lead Times"'})</p>
-                <p>🛡 Margem de segurança: 20%</p>
+                <p>📊 Cobertura = Lead Time <strong>por fornecedor</strong> · Segurança: <strong>A ×{ABC_SAFETY.A}</strong>, B ×{ABC_SAFETY.B}, C ×{ABC_SAFETY.C}</p>
+                <p>⏱ Lead time: <strong>por fornecedor do produto</strong> (fallback: {fallbackLeadTime}d se sem vínculo)</p>
+                <p>🛡 {leadTimes.length} fornecedores com lead time calculado</p>
               </div>
             </Card>
           ) : purchaseItems.length === 0 ? (
@@ -499,7 +520,7 @@ export default function InventoryAnalysisPage() {
                     🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × lead time ({globalLeadTime}d) × segurança (A ×{ABC_SAFETY.A} / B ×{ABC_SAFETY.B} / C ×{ABC_SAFETY.C})
+                    ROP = consumo médio × lead time (por fornecedor) × segurança (A ×{ABC_SAFETY.A} / B ×{ABC_SAFETY.B} / C ×{ABC_SAFETY.C})
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
@@ -515,9 +536,9 @@ export default function InventoryAnalysisPage() {
                       <TableHead>Produto</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
                       <TableHead className="text-right">Méd/dia</TableHead>
+                      <TableHead className="text-right">LT</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
                       <TableHead className="text-right">Cobertura</TableHead>
-                      <TableHead className="text-right">Segurança</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -530,17 +551,20 @@ export default function InventoryAnalysisPage() {
                         <TableCell>{abcBadge(item.abc_class)}</TableCell>
                         <TableCell>
                           <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
-                          {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
+                          <p className="text-[10px] text-muted-foreground">
+                            {item.codigo_interno && `${item.codigo_interno} · `}
+                            {item.fornecedor_nome || 'Sem fornecedor'}
+                          </p>
                         </TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>
                         <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
+                        <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
                         <TableCell className="text-right text-xs">{item.rop?.toFixed(0)}</TableCell>
                         <TableCell className="text-right">
-                          <span className={`font-bold ${(item.dias_cobertura ?? 0) < globalLeadTime ? 'text-destructive' : 'text-amber-600'}`}>
+                          <span className={`font-bold ${(item.dias_cobertura ?? 0) < item.lead_time_days ? 'text-destructive' : 'text-amber-600'}`}>
                             {item.dias_cobertura?.toFixed(0) || '0'}d
                           </span>
                         </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">×{ABC_SAFETY[item.abc_class]}</TableCell>
                         <TableCell className="text-right">
                           <Badge variant="destructive" className="font-bold text-sm">{item.qty_a_comprar}</Badge>
                         </TableCell>
@@ -599,7 +623,7 @@ export default function InventoryAnalysisPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredItems.map((item, idx) => (
-                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < globalLeadTime ? 'bg-destructive/5' : ''}>
+                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < item.lead_time_days ? 'bg-destructive/5' : ''}>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>{abcBadge(item.abc_class)}</TableCell>
                       <TableCell>
@@ -615,7 +639,7 @@ export default function InventoryAnalysisPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {item.dias_cobertura !== null ? (
-                          <span className={item.dias_cobertura < globalLeadTime ? 'text-destructive font-bold' : 'text-xs'}>
+                          <span className={item.dias_cobertura < item.lead_time_days ? 'text-destructive font-bold' : 'text-xs'}>
                             {item.dias_cobertura.toFixed(0)}d
                           </span>
                         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -703,11 +727,10 @@ export default function InventoryAnalysisPage() {
 
               <Card className="p-4">
                 <p className="text-sm">
-                  <strong>Lead time médio ponderado: {globalLeadTime} dias</strong>
+                  <strong>Lead time por fornecedor</strong> (fallback: {fallbackLeadTime}d para produtos sem vínculo)
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Usado no cálculo do ROP (ponto de reposição) para todos os produtos. 
-                  Fornecedores com lead time mais longo impactam proporcionalmente mais itens de Classe A.
+                  Cada produto usa o lead time do SEU fornecedor para calcular o ROP. Produtos sem fornecedor vinculado usam a mediana.
                 </p>
               </Card>
             </>

@@ -390,6 +390,7 @@ export type Database = {
           lookback_days: number
           os_stockout_situacao_ids: Json
           purchase_arrived_situacao_ids: Json
+          purchase_crossref_situacao_ids: Json
           purchase_lt_start_situacao_id: string
           updated_at: string
           updated_by: string | null
@@ -402,6 +403,7 @@ export type Database = {
           lookback_days?: number
           os_stockout_situacao_ids?: Json
           purchase_arrived_situacao_ids?: Json
+          purchase_crossref_situacao_ids?: Json
           purchase_lt_start_situacao_id?: string
           updated_at?: string
           updated_by?: string | null
@@ -414,6 +416,7 @@ export type Database = {
           lookback_days?: number
           os_stockout_situacao_ids?: Json
           purchase_arrived_situacao_ids?: Json
+          purchase_crossref_situacao_ids?: Json
           purchase_lt_start_situacao_id?: string
           updated_at?: string
           updated_by?: string | null

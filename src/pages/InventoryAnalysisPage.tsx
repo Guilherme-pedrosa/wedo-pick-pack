@@ -55,8 +55,9 @@ interface AnalysisItem {
   coverage_target: number;
 }
 
-// ABC-specific coverage targets (days)
-const ABC_COVERAGE = { A: 30, B: 15, C: 7 };
+// ABC-specific safety margins on top of lead time
+// A = critical items, 40% safety; B = 25%; C = 10%
+const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
 
 // --- Data fetchers ---
 async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {

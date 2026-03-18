@@ -69,6 +69,7 @@ export default function InventoryPolicyPage() {
         os_stockout_situacao_ids: d.os_stockout_situacao_ids || [],
         purchase_lt_start_situacao_id: d.purchase_lt_start_situacao_id || '1675083',
         purchase_arrived_situacao_ids: d.purchase_arrived_situacao_ids || [],
+        purchase_crossref_situacao_ids: d.purchase_crossref_situacao_ids || [],
       });
     }
   }, [configQuery.data]);

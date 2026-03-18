@@ -121,7 +121,7 @@ export default function InventoryPolicyPage() {
   const handleSync = async () => {
     setSyncing(true);
     setSyncResult(null);
-    setSyncProgress({ taskIndex: 0, totalTasks: 0, page: 0, totalPages: 0, docs_seen: 0, docs_debited: 0, items_created: 0, errors: 0, status: 'Iniciando...' });
+    setSyncProgress({ taskIndex: 0, totalTasks: 0, page: 0, totalPages: 0, os_seen: 0, vendas_seen: 0, os_debited: 0, vendas_debited: 0, pecas_created: 0, skipped: 0, errors: 0, status: 'Iniciando...' });
     let cursor: any = null;
     let callCount = 0;
 

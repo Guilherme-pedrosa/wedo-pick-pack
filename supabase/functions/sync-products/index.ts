@@ -350,6 +350,11 @@ async function syncIncremental(
             const codigoInterno = product.codigo_interno ? String(product.codigo_interno).trim() : null;
             const codigoBarra = product.codigo_barra ? String(product.codigo_barra).trim() : null;
 
+            const fornecedores = product.fornecedores as { fornecedor_id?: string }[] | undefined;
+            const fornecedorId = fornecedores?.[0]?.fornecedor_id 
+              ? String(fornecedores[0].fornecedor_id) 
+              : (product.fornecedor_id ? String(product.fornecedor_id) : null);
+
             await supabaseAdmin.from('products_index').upsert(
               {
                 produto_id: produtoId,
@@ -359,6 +364,7 @@ async function syncIncremental(
                 possui_variacao: hasVariacao,
                 ativo: isAtivo,
                 fingerprint: fp,
+                fornecedor_id: fornecedorId,
                 last_synced_at: new Date().toISOString(),
                 last_seen_at: new Date().toISOString(),
                 payload_min_json: {

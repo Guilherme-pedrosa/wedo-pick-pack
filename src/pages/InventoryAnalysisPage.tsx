@@ -314,11 +314,62 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase items
+  // Purchase items — use qty_liquida (after PC deduction) to filter
   const purchaseItems = useMemo(() => 
-    analysisItems.filter(i => i.qty_a_comprar !== null && i.qty_a_comprar > 0),
+    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0),
     [analysisItems]
   );
+
+  // Fetch active purchase orders from GC
+  const handleFetchPCs = useCallback(async () => {
+    setLoadingPCs(true);
+    try {
+      // Get configured "em andamento" statuses from compras store, or fetch all non-finalized
+      let statusIds = comprasConfig.situacoesCompraEmAndamento;
+      if (!statusIds || statusIds.length === 0) {
+        // Fallback: fetch all statuses and use all of them (user should configure in Compras)
+        const allStatus = await getStatusCompras();
+        statusIds = allStatus.map(s => s.id);
+        toast.info('Dica: Configure os status de compra "em andamento" no módulo Compras para melhor precisão.');
+      }
+
+      const newPcMap = new Map<string, PCEntry>();
+      for (const sid of statusIds) {
+        let page = 1;
+        while (true) {
+          const res = await listOrdensCompra(sid, page);
+          for (const ordem of res.data) {
+            for (const p of ordem.produtos || []) {
+              const pid = String(p.produto?.produto_id || '').trim();
+              if (!pid) continue;
+              const qty = parseFloat(String(p.produto?.quantidade || '0')) || 0;
+              if (qty <= 0) continue;
+
+              if (!newPcMap.has(pid)) newPcMap.set(pid, { qtd: 0, refs: [] });
+              const entry = newPcMap.get(pid)!;
+              entry.qtd += qty;
+              entry.refs.push({
+                codigo: ordem.codigo,
+                qtd: qty,
+                fornecedor: ordem.nome_fornecedor,
+                situacao: ordem.nome_situacao,
+              });
+            }
+          }
+          if (page >= res.meta.total_paginas) break;
+          page++;
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+
+      setPcMap(newPcMap);
+      toast.success(`${newPcMap.size} produtos com pedido de compra em andamento`);
+    } catch (err) {
+      toast.error('Erro ao buscar pedidos de compra: ' + (err instanceof Error ? err.message : 'Erro'));
+    } finally {
+      setLoadingPCs(false);
+    }
+  }, [comprasConfig.situacoesCompraEmAndamento]);
 
   // Auto-fetch stock on mount when we have analysis data
   const handleFetchStock = useCallback(async () => {
@@ -344,7 +395,12 @@ export default function InventoryAnalysisPage() {
     setStockMap(newMap);
     setLoadingStock(false);
     toast.success(`Estoque atualizado para ${topItems.length} produtos`);
-  }, [analysisItems, stockMap]);
+    
+    // Also fetch PCs if not loaded yet
+    if (pcMap.size === 0) {
+      handleFetchPCs();
+    }
+  }, [analysisItems, stockMap, pcMap, handleFetchPCs]);
 
   // Sync lead times
   const handleSyncLeadTimes = async () => {

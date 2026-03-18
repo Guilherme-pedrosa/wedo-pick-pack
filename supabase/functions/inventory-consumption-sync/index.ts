@@ -150,10 +150,7 @@ function buildProgress(taskIndex: number, totalTasks: number, page: number, tota
     page,
     totalPages,
     totalRegistros: totalRegistros || 0,
-    docs_seen: stats.docs_seen,
-    docs_debited: stats.docs_debited,
-    items_created: stats.items_created,
-    errors: stats.errors,
+    ...stats,
   };
 }
 

@@ -367,7 +367,7 @@ export default function InventoryAnalysisPage() {
     } finally {
       setLoadingPCs(false);
     }
-  }, [comprasConfig.situacoesCompraEmAndamento]);
+  }, [crossrefSituacaoIds]);
 
   // Auto-fetch stock on mount when we have analysis data
   const handleFetchStock = useCallback(async () => {

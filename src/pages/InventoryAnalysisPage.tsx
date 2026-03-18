@@ -536,9 +536,9 @@ export default function InventoryAnalysisPage() {
                       <TableHead>Produto</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
                       <TableHead className="text-right">Méd/dia</TableHead>
+                      <TableHead className="text-right">LT</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
                       <TableHead className="text-right">Cobertura</TableHead>
-                      <TableHead className="text-right">Segurança</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -551,17 +551,20 @@ export default function InventoryAnalysisPage() {
                         <TableCell>{abcBadge(item.abc_class)}</TableCell>
                         <TableCell>
                           <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
-                          {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
+                          <p className="text-[10px] text-muted-foreground">
+                            {item.codigo_interno && `${item.codigo_interno} · `}
+                            {item.fornecedor_nome || 'Sem fornecedor'}
+                          </p>
                         </TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>
                         <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
+                        <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
                         <TableCell className="text-right text-xs">{item.rop?.toFixed(0)}</TableCell>
                         <TableCell className="text-right">
                           <span className={`font-bold ${(item.dias_cobertura ?? 0) < item.lead_time_days ? 'text-destructive' : 'text-amber-600'}`}>
                             {item.dias_cobertura?.toFixed(0) || '0'}d
                           </span>
                         </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">×{ABC_SAFETY[item.abc_class]}</TableCell>
                         <TableCell className="text-right">
                           <Badge variant="destructive" className="font-bold text-sm">{item.qty_a_comprar}</Badge>
                         </TableCell>

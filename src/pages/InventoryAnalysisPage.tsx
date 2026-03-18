@@ -82,24 +82,48 @@ interface AnalysisItem {
 const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
 
 // --- Data fetchers ---
+async function fetchAllRows(
+  table: string,
+  select: string,
+  filters?: { gte?: [string, string] },
+): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  let allRows: any[] = [];
+  let from = 0;
+  while (true) {
+    let query = supabase
+      .from(table as any)
+      .select(select)
+      .range(from, from + PAGE_SIZE - 1)
+      .order('occurred_at', { ascending: true });
+    if (filters?.gte) {
+      query = query.gte(filters.gte[0], filters.gte[1]);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    const rows = data as any[] || [];
+    allRows = allRows.concat(rows);
+    if (rows.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return allRows;
+}
+
 async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - lookbackDays);
   const cutoffStr = cutoff.toISOString();
 
-  const { data, error } = await supabase
-    .from('inventory_consumption_events' as any)
-    .select('produto_id, variacao_id, qty, valor_custo, occurred_at')
-    .gte('occurred_at', cutoffStr)
-    .order('occurred_at', { ascending: true });
-
-  if (error) throw error;
-  const rows = data as any[] || [];
+  const rows = await fetchAllRows(
+    'inventory_consumption_events',
+    'produto_id, variacao_id, qty, valor_custo, occurred_at',
+    { gte: ['occurred_at', cutoffStr] },
+  );
 
   const map = new Map<string, ConsumptionRow>();
   for (const r of rows) {
     const key = r.produto_id;
-    if (!key || key.trim() === '') continue; // skip empty IDs
+    if (!key || key.trim() === '') continue;
     const existing = map.get(key);
     const qty = parseFloat(r.qty) || 0;
     const val = (parseFloat(r.valor_custo) || 0) * qty;
@@ -123,22 +147,19 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     }
   }
 
-  // Hybrid ABC score = value × log(frequency + 1)
-  // This ensures items need BOTH significant value AND recurring demand to be Class A
   for (const row of map.values()) {
     row.hybrid_score = row.total_value * Math.log2(row.event_count + 1);
   }
 
-  return [...map.values()].sort((a, b) => b.hybrid_score - a.hybrid_score);
+  const filtered = [...map.values()].filter(r => r.event_count >= 2);
+  return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
 }
 
 async function fetchTrendData(): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('inventory_consumption_events' as any)
-    .select('produto_id, qty, occurred_at')
-    .order('occurred_at', { ascending: true });
-  if (error) throw error;
-  return data as any[] || [];
+  return fetchAllRows(
+    'inventory_consumption_events',
+    'produto_id, qty, occurred_at',
+  );
 }
 
 async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo>> {

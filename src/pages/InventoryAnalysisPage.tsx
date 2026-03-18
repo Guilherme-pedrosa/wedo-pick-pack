@@ -724,11 +724,11 @@ export default function InventoryAnalysisPage() {
 
               <Card className="p-4">
                 <p className="text-sm">
-                  <strong>Lead time médio ponderado: {globalLeadTime} dias</strong>
+                  <strong>Lead time por fornecedor</strong> (fallback: {fallbackLeadTime}d para produtos sem vínculo)
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Usado no cálculo do ROP (ponto de reposição) para todos os produtos. 
-                  Fornecedores com lead time mais longo impactam proporcionalmente mais itens de Classe A.
+                  Cada produto usa o lead time do SEU fornecedor para calcular o ROP. Produtos sem fornecedor vinculado usam a mediana.
+                </p>
                 </p>
               </Card>
             </>

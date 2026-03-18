@@ -16,6 +16,7 @@ import HandoffLogsPage from "./pages/controle/HandoffLogsPage";
 import ToolboxLogsPage from "./pages/controle/ToolboxLogsPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
+import InventoryPolicyPage from "./pages/InventoryPolicyPage";
 import ComprasPage from "./pages/ComprasPage";
 import RastreadorPage from "./pages/RastreadorPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";

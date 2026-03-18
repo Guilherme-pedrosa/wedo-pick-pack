@@ -222,7 +222,31 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 String(p?.produto?.produto_id) === log.produto_id
             );
             if (!productInOrder) {
-              alerts.push({
+              // Item was removed from the OS/Venda → auto-reverse it back to the box
+              const { data: box } = await supabase
+                .from("boxes")
+                .select("id, name, technician_name, status, user_id")
+                .eq("id", log.box_id)
+                .maybeSingle();
+
+              let targetBoxId: string;
+              let targetBoxName: string;
+
+              if (box && box.status === "active") {
+                targetBoxId = box.id;
+                targetBoxName = box.name;
+              } else {
+                const userId = box?.user_id || log.operator_id;
+                const pendencias = await getOrCreatePendenciasBox(userId);
+                if (!pendencias) {
+                  console.error("Could not create Pendências box for item reversal");
+                  continue;
+                }
+                targetBoxId = pendencias.id;
+                targetBoxName = pendencias.name;
+              }
+
+              const itemAlert: BaixaAlert = {
                 logId: log.id,
                 boxId: log.box_id,
                 boxName: log.box_name,
@@ -233,15 +257,18 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 refTipo: tipo,
                 refNumero: numero,
                 reason: `Produto "${log.produto_nome}" foi removido da ${label} #${numero}`,
-                reverted: false,
-                revertedTo: "",
+                reverted: true,
+                revertedTo: targetBoxName,
                 operatorName: log.operator_name || "",
                 createdAt: log.created_at,
                 gcSituacao: gcAudit.situacao,
                 gcModificadoEm: gcAudit.modificadoEm,
                 gcUsuarioNome: gcAudit.usuarioNome,
                 gcObsInterna: gcAudit.obsInterna,
-              });
+              };
+
+              await reverseItem(itemAlert, targetBoxId, targetBoxName);
+              alerts.push(itemAlert);
             }
           }
         }

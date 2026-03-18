@@ -836,14 +836,14 @@ export default function RastreadorPage() {
                     <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-amber-600" />
-                        <span className="text-xs font-semibold text-amber-700">Sem equipamento detectado</span>
+                        <span className="text-xs font-semibold text-amber-700">Sem equipamento detectado (opcional)</span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Este orçamento não possui equipamento vinculado. Informe o equipamento para a OS:
+                        Este orçamento não possui equipamento vinculado. Você pode informar abaixo ou prosseguir sem:
                       </p>
                       <Input
                         type="text"
-                        placeholder="Ex: PASS THROUGH QUENTE"
+                        placeholder="Ex: PASS THROUGH QUENTE (opcional)"
                         value={manualEquipamento}
                         onChange={(e) => setManualEquipamento(e.target.value)}
                         className="h-8 text-sm"

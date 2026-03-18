@@ -4,7 +4,7 @@ const corsHeaders = {
 };
 
 const GC_API_URL = 'https://api.gestaoclick.com';
-const RATE_LIMIT_MS = 350; // ~3 req/s
+const RATE_LIMIT_MS = 350;
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -25,6 +25,9 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceKey);
 
   try {
+    const body = await req.json().catch(() => ({}));
+    const action = body.action || 'sync_page'; // 'start' | 'sync_page' | 'finish'
+
     // 1. Load active config
     const { data: configs, error: cfgErr } = await supabase
       .from('inventory_policy_config')
@@ -42,7 +45,7 @@ Deno.serve(async (req: Request) => {
     const osSituacaoIds: string[] = config.os_stockout_situacao_ids || [];
 
     if (vendasSituacaoIds.length === 0 && osSituacaoIds.length === 0) {
-      return jsonResp({ error: 'No situações selected for(stock out). Configure policies first.' }, 400);
+      return jsonResp({ error: 'Nenhuma situação selecionada para baixa. Configure a política primeiro.' }, 400);
     }
 
     const endDate = new Date();
@@ -51,71 +54,35 @@ Deno.serve(async (req: Request) => {
     const startStr = formatDate(startDate);
     const endStr = formatDate(endDate);
 
-    const stats = { docs_seen: 0, docs_debited: 0, items_created: 0, errors: 0 };
+    // Build the full task list: each (docType, situacaoId) pair
+    const tasks: Array<{ docType: 'venda' | 'os'; situacaoId: string }> = [];
+    for (const id of vendasSituacaoIds) tasks.push({ docType: 'venda', situacaoId: id });
+    for (const id of osSituacaoIds) tasks.push({ docType: 'os', situacaoId: id });
 
-    // 2. Process Vendas
-    for (const sitId of vendasSituacaoIds) {
-      await processDocType('venda', sitId, startStr, endStr, supabase, gcAccess, gcSecret, stats);
+    // Resume state from request body
+    const cursor = body.cursor || { taskIndex: 0, page: 1, stats: { docs_seen: 0, docs_debited: 0, items_created: 0, errors: 0 } };
+    const taskIndex = cursor.taskIndex;
+    const page = cursor.page;
+    const stats = cursor.stats;
+
+    if (taskIndex >= tasks.length) {
+      // All done — log and return final
+      await logCompletion(req, supabase, stats, startStr, endStr, lookbackDays);
+      return jsonResp({ done: true, stats, period: { start: startStr, end: endStr } });
     }
 
-    // 3. Process OS
-    for (const sitId of osSituacaoIds) {
-      await processDocType('os', sitId, startStr, endStr, supabase, gcAccess, gcSecret, stats);
-    }
+    const task = tasks[taskIndex];
+    const endpoint = task.docType === 'venda' ? '/api/vendas' : '/api/ordens_servicos';
 
-    // 4. Log to system_logs via service role
-    // Extract operator from auth header if available
-    let operatorId = 'system';
-    let operatorName = 'System Sync';
-    const authHeader = req.headers.get('authorization');
-    if (authHeader) {
-      const userClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (user) {
-        operatorId = user.id;
-        const { data: prof } = await supabase.from('profiles').select('name').eq('id', user.id).single();
-        operatorName = prof?.name || user.email || 'Unknown';
-      }
-    }
-
-    await supabase.from('system_logs').insert({
-      user_id: operatorId,
-      user_name: operatorName,
-      module: 'inventory',
-      action: 'Sincronização de consumo executada',
-      details: { ...stats, period: `${startStr} → ${endStr}`, lookback_days: lookbackDays },
-    });
-
-    return jsonResp({ success: true, stats, period: { start: startStr, end: endStr } });
-  } catch (err) {
-    console.error('inventory-consumption-sync error:', err);
-    return jsonResp({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
-  }
-});
-
-async function processDocType(
-  docType: 'venda' | 'os',
-  situacaoId: string,
-  startStr: string,
-  endStr: string,
-  supabase: any,
-  gcAccess: string,
-  gcSecret: string,
-  stats: { docs_seen: number; docs_debited: number; items_created: number; errors: number },
-) {
-  const endpoint = docType === 'venda' ? '/api/vendas' : '/api/ordens_servicos';
-  let page = 1;
-  let totalPages = 1;
-
-  while (page <= totalPages) {
     const params = new URLSearchParams({
-      situacao_id: situacaoId,
+      situacao_id: task.situacaoId,
       data_inicio: startStr,
       data_fim: endStr,
       pagina: String(page),
     });
+
+    let totalPages = 1;
+    let totalRegistros = 0;
 
     try {
       await sleep(RATE_LIMIT_MS);
@@ -123,27 +90,96 @@ async function processDocType(
       const docs = res?.data || [];
       const meta = res?.meta || {};
       totalPages = meta.total_paginas || 1;
+      totalRegistros = meta.total_registros || 0;
 
       for (const doc of docs) {
         stats.docs_seen++;
         try {
-          await processDocument(docType, doc, situacaoId, supabase, stats);
+          await processDocument(task.docType, doc, task.situacaoId, supabase, stats);
         } catch (e) {
-          console.error(`Error processing ${docType} ${doc.id}:`, e);
+          console.error(`Error processing ${task.docType} ${doc.id}:`, e);
           stats.errors++;
         }
       }
     } catch (e) {
       console.error(`Error fetching ${endpoint} page ${page}:`, e);
       stats.errors++;
-      // If rate limited, wait and retry
       if (e instanceof Error && e.message === 'RATE_LIMIT') {
-        await sleep(2000);
-        continue; // retry same page
+        // Return same cursor to retry
+        return jsonResp({
+          done: false,
+          cursor: { taskIndex, page, stats },
+          progress: buildProgress(taskIndex, tasks.length, page, totalPages, stats),
+          retry: true,
+        });
       }
     }
-    page++;
+
+    // Determine next cursor
+    let nextTaskIndex = taskIndex;
+    let nextPage = page + 1;
+
+    if (nextPage > totalPages) {
+      nextTaskIndex++;
+      nextPage = 1;
+    }
+
+    const done = nextTaskIndex >= tasks.length;
+
+    if (done) {
+      await logCompletion(req, supabase, stats, startStr, endStr, lookbackDays);
+    }
+
+    return jsonResp({
+      done,
+      cursor: done ? null : { taskIndex: nextTaskIndex, page: nextPage, stats },
+      progress: buildProgress(taskIndex, tasks.length, page, totalPages, stats, totalRegistros),
+      stats,
+    });
+  } catch (err) {
+    console.error('inventory-consumption-sync error:', err);
+    return jsonResp({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
   }
+});
+
+function buildProgress(taskIndex: number, totalTasks: number, page: number, totalPages: number, stats: any, totalRegistros?: number) {
+  return {
+    taskIndex,
+    totalTasks,
+    page,
+    totalPages,
+    totalRegistros: totalRegistros || 0,
+    docs_seen: stats.docs_seen,
+    docs_debited: stats.docs_debited,
+    items_created: stats.items_created,
+    errors: stats.errors,
+  };
+}
+
+async function logCompletion(req: Request, supabase: any, stats: any, startStr: string, endStr: string, lookbackDays: number) {
+  let operatorId = 'system';
+  let operatorName = 'System Sync';
+  const authHeader = req.headers.get('authorization');
+  if (authHeader) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const userClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await userClient.auth.getUser();
+    if (user) {
+      operatorId = user.id;
+      const { data: prof } = await supabase.from('profiles').select('name').eq('id', user.id).single();
+      operatorName = prof?.name || user.email || 'Unknown';
+    }
+  }
+
+  await supabase.from('system_logs').insert({
+    user_id: operatorId,
+    user_name: operatorName,
+    module: 'inventory',
+    action: 'Sincronização de consumo concluída',
+    details: { ...stats, period: `${startStr} → ${endStr}`, lookback_days: lookbackDays },
+  });
 }
 
 async function processDocument(
@@ -155,7 +191,6 @@ async function processDocument(
 ) {
   const docId = String(doc.id);
 
-  // Check if already processed (idempotency)
   const { data: existing } = await supabase
     .from('doc_stock_effect')
     .select('id, debited')
@@ -164,7 +199,6 @@ async function processDocument(
     .maybeSingle();
 
   if (existing?.debited) {
-    // Already debited — update last_seen_at only
     await supabase
       .from('doc_stock_effect')
       .update({ last_seen_at: new Date().toISOString() })
@@ -172,7 +206,6 @@ async function processDocument(
     return;
   }
 
-  // Extract items from document
   const produtos = doc.produtos || [];
   const items: Array<{ produto_id: string; variacao_id: string | null; qty: number; raw: any }> = [];
 
@@ -194,7 +227,6 @@ async function processDocument(
   const now = new Date().toISOString();
   const occurredAt = doc.data || now;
 
-  // Insert consumption events
   const events = items.map(item => ({
     occurred_at: occurredAt,
     source_type: docType,
@@ -215,7 +247,6 @@ async function processDocument(
 
   stats.items_created += items.length;
 
-  // Upsert doc_stock_effect
   if (existing) {
     await supabase
       .from('doc_stock_effect')
@@ -257,7 +288,7 @@ async function gcRequest(path: string, access: string, secret: string): Promise<
 }
 
 function formatDate(d: Date): string {
-  return d.toISOString().split('T')[0]; // YYYY-MM-DD
+  return d.toISOString().split('T')[0];
 }
 
 function sleep(ms: number): Promise<void> {

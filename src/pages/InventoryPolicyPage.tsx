@@ -40,6 +40,7 @@ export default function InventoryPolicyPage() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [syncProgress, setSyncProgress] = useState<any>(null);
 
   // Load config from DB
   const configQuery = useQuery({
@@ -116,20 +117,44 @@ export default function InventoryPolicyPage() {
   const handleSync = async () => {
     setSyncing(true);
     setSyncResult(null);
+    setSyncProgress(null);
+    let cursor: any = null;
+
     try {
-      const { data, error } = await supabase.functions.invoke('inventory-consumption-sync', {
-        body: {},
-      });
-      if (error) throw error;
-      setSyncResult(data);
-      if (data?.success) {
-        toast.success(`Sincronização concluída! ${data.stats.docs_debited} documentos processados, ${data.stats.items_created} itens registrados.`);
-      } else {
-        toast.error(data?.error || 'Erro na sincronização');
+      while (true) {
+        const { data, error } = await supabase.functions.invoke('inventory-consumption-sync', {
+          body: { action: 'sync_page', cursor },
+        });
+        if (error) throw error;
+
+        if (data?.error) {
+          setSyncResult({ success: false, error: data.error });
+          break;
+        }
+
+        setSyncProgress(data?.progress || null);
+
+        if (data?.retry) {
+          // Rate limited — wait and retry same cursor
+          await new Promise(r => setTimeout(r, 2000));
+          cursor = data.cursor;
+          continue;
+        }
+
+        if (data?.done) {
+          setSyncResult({ success: true, stats: data.stats, period: data.period || null });
+          toast.success(`Sincronização concluída! ${data.stats.docs_debited} docs processados, ${data.stats.items_created} itens.`);
+          break;
+        }
+
+        cursor = data.cursor;
+        // Small delay between calls
+        await new Promise(r => setTimeout(r, 300));
       }
     } catch (err) {
       console.error(err);
       toast.error('Erro ao executar sincronização');
+      setSyncResult({ success: false, error: err instanceof Error ? err.message : 'Erro desconhecido' });
     } finally {
       setSyncing(false);
     }
@@ -328,28 +353,58 @@ export default function InventoryPolicyPage() {
           {syncing ? 'Sincronizando...' : `Sincronizar consumo (${config.lookback_days}d)`}
         </Button>
 
-        {syncResult && (
-          <div className={`rounded-lg p-4 text-sm ${syncResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+        {/* Progress indicator */}
+        {syncing && syncProgress && (
+          <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm space-y-2">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="font-medium text-foreground">
+                Grupo {syncProgress.taskIndex + 1} / {syncProgress.totalTasks} — Página {syncProgress.page} / {syncProgress.totalPages}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground">
+              <div>Docs vistos: <span className="font-medium text-foreground">{syncProgress.docs_seen}</span></div>
+              <div>Debitados: <span className="font-medium text-foreground">{syncProgress.docs_debited}</span></div>
+              <div>Itens criados: <span className="font-medium text-foreground">{syncProgress.items_created}</span></div>
+              {syncProgress.errors > 0 && <div>Erros: <span className="font-medium text-destructive">{syncProgress.errors}</span></div>}
+            </div>
+            {syncProgress.totalPages > 0 && (
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-primary h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, ((syncProgress.taskIndex * syncProgress.totalPages + syncProgress.page) / (syncProgress.totalTasks * Math.max(syncProgress.totalPages, 1))) * 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {syncResult && !syncing && (
+          <div className={`rounded-lg p-4 text-sm ${syncResult.success ? 'bg-green-50 border border-green-200 dark:bg-green-950/20 dark:border-green-900' : 'bg-red-50 border border-red-200 dark:bg-red-950/20 dark:border-red-900'}`}>
             {syncResult.success ? (
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-green-800">Sincronização concluída</p>
-                  <p className="text-green-700 mt-1">
+                  <p className="font-medium text-green-800 dark:text-green-400">Sincronização concluída</p>
+                  <p className="text-green-700 dark:text-green-500 mt-1">
                     Documentos vistos: {syncResult.stats.docs_seen} · 
                     Debitados: {syncResult.stats.docs_debited} · 
                     Itens criados: {syncResult.stats.items_created}
                     {syncResult.stats.errors > 0 && ` · Erros: ${syncResult.stats.errors}`}
                   </p>
-                  <p className="text-green-600 text-xs mt-1">Período: {syncResult.period?.start} → {syncResult.period?.end}</p>
+                  {syncResult.period && (
+                    <p className="text-green-600 dark:text-green-500 text-xs mt-1">
+                      Período: {syncResult.period.start} → {syncResult.period.end}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="flex items-start gap-2">
                 <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-red-800">Erro na sincronização</p>
-                  <p className="text-red-700 mt-1">{syncResult.error}</p>
+                  <p className="font-medium text-red-800 dark:text-red-400">Erro na sincronização</p>
+                  <p className="text-red-700 dark:text-red-500 mt-1">{syncResult.error}</p>
                 </div>
               </div>
             )}

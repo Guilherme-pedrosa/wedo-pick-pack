@@ -678,6 +678,7 @@ export default function InventoryAnalysisPage() {
                     <TableRow className="bg-muted/50">
                       <TableHead className="w-12">ABC</TableHead>
                       <TableHead>Produto</TableHead>
+                      <TableHead className="text-right">Saída</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
                       <TableHead className="text-right">Méd/dia</TableHead>
                       <TableHead className="text-right">LT</TableHead>

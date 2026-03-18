@@ -21,6 +21,7 @@ interface ConsumptionRow {
   event_count: number;
   first_date: string;
   last_date: string;
+  hybrid_score: number;
 }
 
 interface ProductInfo {
@@ -45,6 +46,7 @@ interface AnalysisItem {
   total_qty: number;
   total_value: number;
   event_count: number;
+  hybrid_score: number;
   avg_daily: number;
   abc_class: 'A' | 'B' | 'C';
   cumulative_pct: number;
@@ -72,6 +74,7 @@ async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {
   const map = new Map<string, ConsumptionRow>();
   for (const r of rows) {
     const key = r.produto_id;
+    if (!key || key.trim() === '') continue; // skip empty IDs
     const existing = map.get(key);
     const qty = parseFloat(r.qty) || 0;
     const val = (parseFloat(r.valor_custo) || 0) * qty;
@@ -90,11 +93,20 @@ async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {
         event_count: 1,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
+        hybrid_score: 0,
       });
     }
   }
 
-  return [...map.values()].sort((a, b) => b.total_value - a.total_value);
+  // Hybrid ABC score = value × log(frequency + 1)
+  // This ensures items need BOTH significant value AND recurring demand to be Class A
+  for (const row of map.values()) {
+    row.hybrid_score = row.total_value * Math.log2(row.event_count + 1);
+  }
+
+  // Filter out items with only 1 event (one-off purchases/sales)
+  const filtered = [...map.values()].filter(r => r.event_count >= 2);
+  return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
 }
 
 async function fetchTrendData(): Promise<any[]> {
@@ -174,21 +186,20 @@ export default function InventoryAnalysisPage() {
     const names = namesQuery.data || new Map();
     if (rows.length === 0) return [];
 
-    const totalValue = rows.reduce((s, r) => s + r.total_value, 0);
+    // ABC is based on hybrid_score (value × frequency)
+    const totalScore = rows.reduce((s, r) => s + r.hybrid_score, 0);
     let cumulative = 0;
 
     return rows.map(r => {
-      cumulative += r.total_value;
-      const pct = totalValue > 0 ? cumulative / totalValue : 0;
+      cumulative += r.hybrid_score;
+      const pct = totalScore > 0 ? cumulative / totalScore : 0;
       const abcClass: 'A' | 'B' | 'C' = pct <= thresholds.A ? 'A' : pct <= thresholds.B ? 'B' : 'C';
       const info = names.get(r.produto_id);
       const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
       const estoque = stockMap.get(r.produto_id) ?? null;
       
-      // ROP = avg_daily × lead_time × safety_factor (ABC-differentiated)
-      // Coverage = lead time. Safety margin ensures stock lasts until delivery.
       const safetyFactor = ABC_SAFETY[abcClass];
-      const coverageTarget = globalLeadTime; // coverage = lead time
+      const coverageTarget = globalLeadTime;
       const rop = avgDaily * globalLeadTime * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
@@ -200,6 +211,7 @@ export default function InventoryAnalysisPage() {
         total_qty: r.total_qty,
         total_value: r.total_value,
         event_count: r.event_count,
+        hybrid_score: r.hybrid_score,
         avg_daily: avgDaily,
         abc_class: abcClass,
         cumulative_pct: pct,
@@ -246,7 +258,7 @@ export default function InventoryAnalysisPage() {
     const aCount = items.filter(i => i.abc_class === 'A').length;
     const bCount = items.filter(i => i.abc_class === 'B').length;
     const cCount = items.filter(i => i.abc_class === 'C').length;
-    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < (globalLeadTime + i.coverage_target)).length;
+    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < globalLeadTime).length;
     const totalConsumo = items.reduce((s, i) => s + i.total_qty, 0);
     const totalValor = items.reduce((s, i) => s + i.total_value, 0);
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
@@ -302,9 +314,9 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const header = 'Produto ID,Código,Nome,Classe ABC,Consumo Total,Valor Total (R$),Consumo Médio/Dia,Estoque Atual,Dias Cobertura,ROP,A Comprar,Cobertura Alvo (dias)\n';
+    const header = 'Produto ID,Código,Nome,Classe ABC,Eventos,Consumo Total,Valor Total (R$),Score Híbrido,Consumo Médio/Dia,Estoque Atual,Dias Cobertura,ROP,A Comprar\n';
     const rows = filteredItems.map(i =>
-      `${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.abc_class},${i.total_qty},${i.total_value.toFixed(2)},${i.avg_daily.toFixed(2)},${i.estoque_atual ?? ''},${i.dias_cobertura !== null ? i.dias_cobertura.toFixed(1) : ''},${i.rop?.toFixed(1) || ''},${i.qty_a_comprar ?? ''},${i.coverage_target}`
+      `${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.abc_class},${i.event_count},${i.total_qty},${i.total_value.toFixed(2)},${i.hybrid_score.toFixed(1)},${i.avg_daily.toFixed(2)},${i.estoque_atual ?? ''},${i.dias_cobertura !== null ? i.dias_cobertura.toFixed(1) : ''},${i.rop?.toFixed(1) || ''},${i.qty_a_comprar ?? ''}`
     ).join('\n');
 
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
@@ -381,7 +393,7 @@ export default function InventoryAnalysisPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Análise de Estoque & Suprimentos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs · {Math.round(kpis.totalConsumo)} un. consumidas · R$ {kpis.totalValor.toFixed(0)} valor total
+            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs (≥2 eventos) · {Math.round(kpis.totalConsumo)} un. consumidas · ABC híbrido (valor × frequência)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -576,6 +588,7 @@ export default function InventoryAnalysisPage() {
                     <TableHead className="w-10">#</TableHead>
                     <TableHead className="w-12">ABC</TableHead>
                     <TableHead>Produto</TableHead>
+                    <TableHead className="text-right">Eventos</TableHead>
                     <TableHead className="text-right">Consumo</TableHead>
                     <TableHead className="text-right">Valor (R$)</TableHead>
                     <TableHead className="text-right">Méd/dia</TableHead>
@@ -586,13 +599,14 @@ export default function InventoryAnalysisPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredItems.map((item, idx) => (
-                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < (globalLeadTime + item.coverage_target) ? 'bg-destructive/5' : ''}>
+                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < globalLeadTime ? 'bg-destructive/5' : ''}>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>{abcBadge(item.abc_class)}</TableCell>
                       <TableCell>
                         <p className="text-sm font-medium truncate max-w-[250px]">{item.nome}</p>
                         {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
                       </TableCell>
+                      <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
                       <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>
                       <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
@@ -601,7 +615,7 @@ export default function InventoryAnalysisPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {item.dias_cobertura !== null ? (
-                          <span className={item.dias_cobertura < (globalLeadTime + item.coverage_target) ? 'text-destructive font-bold' : 'text-xs'}>
+                          <span className={item.dias_cobertura < globalLeadTime ? 'text-destructive font-bold' : 'text-xs'}>
                             {item.dias_cobertura.toFixed(0)}d
                           </span>
                         ) : <span className="text-muted-foreground text-xs">—</span>}

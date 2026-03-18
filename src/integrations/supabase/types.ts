@@ -643,6 +643,42 @@ export type Database = {
         }
         Relationships: []
       }
+      supplier_lead_times: {
+        Row: {
+          avg_lead_time_days: number
+          fornecedor_id: string
+          fornecedor_nome: string
+          id: string
+          last_synced_at: string
+          max_lead_time_days: number
+          min_lead_time_days: number
+          sample_count: number
+          samples: Json
+        }
+        Insert: {
+          avg_lead_time_days?: number
+          fornecedor_id: string
+          fornecedor_nome: string
+          id?: string
+          last_synced_at?: string
+          max_lead_time_days?: number
+          min_lead_time_days?: number
+          sample_count?: number
+          samples?: Json
+        }
+        Update: {
+          avg_lead_time_days?: number
+          fornecedor_id?: string
+          fornecedor_nome?: string
+          id?: string
+          last_synced_at?: string
+          max_lead_time_days?: number
+          min_lead_time_days?: number
+          sample_count?: number
+          samples?: Json
+        }
+        Relationships: []
+      }
       sync_runs: {
         Row: {
           errors_count: number

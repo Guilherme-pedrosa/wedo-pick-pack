@@ -55,8 +55,9 @@ interface AnalysisItem {
   coverage_target: number;
 }
 
-// ABC-specific coverage targets (days)
-const ABC_COVERAGE = { A: 30, B: 15, C: 7 };
+// ABC-specific safety margins on top of lead time
+// A = critical items, 40% safety; B = 25%; C = 10%
+const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
 
 // --- Data fetchers ---
 async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {
@@ -184,9 +185,11 @@ export default function InventoryAnalysisPage() {
       const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
       const estoque = stockMap.get(r.produto_id) ?? null;
       
-      // Smart ROP: lead time + ABC coverage target + 20% safety
-      const coverageTarget = ABC_COVERAGE[abcClass];
-      const rop = avgDaily * (globalLeadTime + coverageTarget) * 1.2;
+      // ROP = avg_daily × lead_time × safety_factor (ABC-differentiated)
+      // Coverage = lead time. Safety margin ensures stock lasts until delivery.
+      const safetyFactor = ABC_SAFETY[abcClass];
+      const coverageTarget = globalLeadTime; // coverage = lead time
+      const rop = avgDaily * globalLeadTime * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
 
@@ -401,17 +404,17 @@ export default function InventoryAnalysisPage() {
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe A</p>
           <p className="text-xl font-bold text-destructive mt-0.5">{kpis.aCount}</p>
-          <p className="text-[10px] text-muted-foreground">{(thresholds.A * 100).toFixed(0)}% do valor · cob {ABC_COVERAGE.A}d</p>
+          <p className="text-[10px] text-muted-foreground">{(thresholds.A * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.A}</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe B</p>
           <p className="text-xl font-bold text-amber-600 mt-0.5">{kpis.bCount}</p>
-          <p className="text-[10px] text-muted-foreground">{((thresholds.B - thresholds.A) * 100).toFixed(0)}% do valor · cob {ABC_COVERAGE.B}d</p>
+          <p className="text-[10px] text-muted-foreground">{((thresholds.B - thresholds.A) * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.B}</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe C</p>
           <p className="text-xl font-bold text-primary mt-0.5">{kpis.cCount}</p>
-          <p className="text-[10px] text-muted-foreground">{((1 - thresholds.B) * 100).toFixed(0)}% do valor · cob {ABC_COVERAGE.C}d</p>
+          <p className="text-[10px] text-muted-foreground">{((1 - thresholds.B) * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.C}</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Time Médio</p>
@@ -463,7 +466,7 @@ export default function InventoryAnalysisPage() {
                 )}
               </div>
               <div className="mt-4 text-xs text-muted-foreground space-y-1">
-                <p>📊 Cobertura alvo: <strong>A={ABC_COVERAGE.A}d</strong>, B={ABC_COVERAGE.B}d, C={ABC_COVERAGE.C}d</p>
+                <p>📊 Cobertura = Lead Time ({globalLeadTime}d) · Segurança: <strong>A ×{ABC_SAFETY.A}</strong>, B ×{ABC_SAFETY.B}, C ×{ABC_SAFETY.C}</p>
                 <p>⏱ Lead time médio: <strong>{globalLeadTime} dias</strong> ({leadTimes.length > 0 ? 'calculado do histórico' : 'padrão — clique "Calcular Lead Times"'})</p>
                 <p>🛡 Margem de segurança: 20%</p>
               </div>
@@ -484,7 +487,7 @@ export default function InventoryAnalysisPage() {
                     🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × (lead time {globalLeadTime}d + cobertura alvo) × 1.2 segurança
+                    ROP = consumo médio × lead time ({globalLeadTime}d) × segurança (A ×{ABC_SAFETY.A} / B ×{ABC_SAFETY.B} / C ×{ABC_SAFETY.C})
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
@@ -502,7 +505,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right">Méd/dia</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
                       <TableHead className="text-right">Cobertura</TableHead>
-                      <TableHead className="text-right">Alvo</TableHead>
+                      <TableHead className="text-right">Segurança</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -525,7 +528,7 @@ export default function InventoryAnalysisPage() {
                             {item.dias_cobertura?.toFixed(0) || '0'}d
                           </span>
                         </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">{item.coverage_target}d</TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">×{ABC_SAFETY[item.abc_class]}</TableCell>
                         <TableCell className="text-right">
                           <Badge variant="destructive" className="font-bold text-sm">{item.qty_a_comprar}</Badge>
                         </TableCell>

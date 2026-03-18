@@ -422,10 +422,11 @@ export default function InventoryPolicyPage() {
                 {syncProgress.status || 'Processando...'}
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground">
-              <div>Docs vistos: <span className="font-medium text-foreground">{syncProgress.docs_seen}</span></div>
-              <div>Debitados: <span className="font-medium text-foreground">{syncProgress.docs_debited}</span></div>
-              <div>Itens criados: <span className="font-medium text-foreground">{syncProgress.items_created}</span></div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs text-muted-foreground">
+              <div>OSs: <span className="font-medium text-foreground">{syncProgress.os_seen || 0}</span>{(syncProgress.os_debited > 0) && <span className="text-green-600"> ({syncProgress.os_debited} novas)</span>}</div>
+              <div>Vendas: <span className="font-medium text-foreground">{syncProgress.vendas_seen || 0}</span>{(syncProgress.vendas_debited > 0) && <span className="text-green-600"> ({syncProgress.vendas_debited} novas)</span>}</div>
+              <div>Peças: <span className="font-medium text-foreground">{syncProgress.pecas_created || 0}</span></div>
+              <div>Já processados: <span className="font-medium text-muted-foreground">{syncProgress.skipped || 0}</span></div>
               {syncProgress.errors > 0 && <div>Erros: <span className="font-medium text-destructive">{syncProgress.errors}</span></div>}
             </div>
             {syncProgress.totalPages > 0 && (

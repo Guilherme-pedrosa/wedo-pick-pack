@@ -153,6 +153,7 @@ Deno.serve(async (req: Request) => {
       auvo_user_id,     // number - idUserFrom in Auvo
       gc_usuario_id,    // optional - GC user ID for attribution
       auvo_customer_id, // optional - Auvo customer ID (when no source task to clone from)
+      manual_equipamento, // optional - manual equipment text when not in orçamento
     } = body;
 
     if (!orcamento || !auvo_user_id) {

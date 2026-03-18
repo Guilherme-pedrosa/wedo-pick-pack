@@ -192,6 +192,7 @@ export default function InventoryAnalysisPage() {
 
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
   const lookbackDays = configQuery.data?.lookback_days || 180;
+  const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
 
   // Build supplier lead time lookup map (fornecedor_id → lead time data)
   const supplierLTMap = useMemo(() => {

@@ -253,21 +253,28 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 String(p?.produto?.produto_id) === log.produto_id
             );
             if (!productInOrder) {
-              // Item was removed from the OS/Venda → auto-reverse it back to the box
+              // Item was removed from the OS/Venda → auto-reverse it back to the ORIGINAL box
               const { data: box } = await supabase
                 .from("boxes")
-                .select("id, name, technician_name, status, user_id")
+                .select("id, name, technician_name, technician_gc_id, status, user_id")
                 .eq("id", log.box_id)
                 .maybeSingle();
 
+              // Always return to the original box (even if Stand By)
               let targetBoxId: string;
               let targetBoxName: string;
+              let relinkTechnician: { gc_id: string; name: string } | undefined;
 
-              if (box && box.status === "active") {
+              if (box) {
                 targetBoxId = box.id;
                 targetBoxName = box.name;
+
+                // If box is in Stand By and the log has technician info, re-link the technician
+                if (box.status === "active" && !box.technician_gc_id && log.technician_gc_id && log.technician_name) {
+                  relinkTechnician = { gc_id: log.technician_gc_id, name: log.technician_name };
+                }
               } else {
-                const userId = box?.user_id || log.operator_id;
+                const userId = log.operator_id;
                 const pendencias = await getOrCreatePendenciasBox(userId);
                 if (!pendencias) {
                   console.error("Could not create Pendências box for item reversal");
@@ -298,7 +305,7 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 gcObsInterna: gcAudit.obsInterna,
               };
 
-              await reverseItem(itemAlert, targetBoxId, targetBoxName);
+              await reverseItem(itemAlert, targetBoxId, targetBoxName, relinkTechnician);
               alerts.push(itemAlert);
             }
           }

@@ -82,10 +82,15 @@ interface AnalysisItem {
 const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
 
 // --- Data fetchers ---
-async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {
+async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow[]> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
+  const cutoffStr = cutoff.toISOString();
+
   const { data, error } = await supabase
     .from('inventory_consumption_events' as any)
     .select('produto_id, variacao_id, qty, valor_custo, occurred_at')
+    .gte('occurred_at', cutoffStr)
     .order('occurred_at', { ascending: true });
 
   if (error) throw error;

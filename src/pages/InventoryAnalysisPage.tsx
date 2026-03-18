@@ -74,6 +74,7 @@ async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {
   const map = new Map<string, ConsumptionRow>();
   for (const r of rows) {
     const key = r.produto_id;
+    if (!key || key.trim() === '') continue; // skip empty IDs
     const existing = map.get(key);
     const qty = parseFloat(r.qty) || 0;
     const val = (parseFloat(r.valor_custo) || 0) * qty;
@@ -92,11 +93,20 @@ async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {
         event_count: 1,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
+        hybrid_score: 0,
       });
     }
   }
 
-  return [...map.values()].sort((a, b) => b.total_value - a.total_value);
+  // Hybrid ABC score = value × log(frequency + 1)
+  // This ensures items need BOTH significant value AND recurring demand to be Class A
+  for (const row of map.values()) {
+    row.hybrid_score = row.total_value * Math.log2(row.event_count + 1);
+  }
+
+  // Filter out items with only 1 event (one-off purchases/sales)
+  const filtered = [...map.values()].filter(r => r.event_count >= 2);
+  return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
 }
 
 async function fetchTrendData(): Promise<any[]> {

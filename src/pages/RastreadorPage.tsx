@@ -324,6 +324,7 @@ export default function RastreadorPage() {
     const expanded = expandedId === entry.orcamento.id;
     const equip = getEquipamento(entry.orcamento);
     const isGenerating = generatingOS && confirmEntry?.orcamento.id === entry.orcamento.id;
+    const hasConflict = entry.temComprometido;
     return (
       <Card
         className={`p-3 border-l-4 cursor-pointer transition-colors hover:bg-muted/50 ${
@@ -354,6 +355,11 @@ export default function RastreadorPage() {
                 >
                   {entry.itensProntos}/{entry.totalItens}
                 </Badge>
+                {hasConflict && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 border-red-500 text-red-500">
+                    ⚠ Comprometido
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground truncate max-w-[250px]">
                 {entry.orcamento.nome_cliente}
@@ -365,7 +371,7 @@ export default function RastreadorPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-6 text-[10px] px-2 gap-1 border-green-500 text-green-600 hover:bg-green-50"
+                className={`h-6 text-[10px] px-2 gap-1 ${hasConflict ? 'border-amber-500 text-amber-600 hover:bg-amber-50' : 'border-green-500 text-green-600 hover:bg-green-50'}`}
                 onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoCustomerIdInput(''); setAuvoCustomerLookup({ loading: false }); }}
                 disabled={isGenerating}
               >
@@ -391,19 +397,24 @@ export default function RastreadorPage() {
                     {item.codigo_produto && <span className="font-mono text-muted-foreground">[{item.codigo_produto}]</span>}{' '}
                     {item.nome_produto}
                   </span>
+                  {item.comprometido && (
+                    <span className="text-[10px] text-red-500 font-medium shrink-0" title="Este item é disputado por outros orçamentos/OSs">⚠</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                   <span>Precisa: {item.qtd_necessaria}</span>
                   <span>|</span>
-                  <span className={item.pronto ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
+                  <span className={`font-medium ${item.pronto ? (item.comprometido ? 'text-amber-600' : 'text-green-600') : 'text-red-500'}`}>
                     Disp: {item.estoque_disponivel}
                   </span>
-                  {item.estoque_disponivel !== item.estoque_total && (
-                    <span className="text-muted-foreground">(total: {item.estoque_total})</span>
-                  )}
                 </div>
               </div>
             ))}
+            {hasConflict && (
+              <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700">
+                ⚠ Itens comprometidos: se esta OS for gerada, outros orçamentos/OSs que precisam das mesmas peças poderão ficar sem estoque.
+              </div>
+            )}
           </div>
         )}
       </Card>
@@ -783,6 +794,27 @@ export default function RastreadorPage() {
                   {confirmEntry.totalItens} produto(s) • R$ {Number(confirmEntry.orcamento.valor_total || 0).toFixed(2)}
                 </p>
               </div>
+
+              {/* Conflict warning */}
+              {confirmEntry.temComprometido && (
+                <div className="rounded-lg border border-red-500/50 bg-red-500/5 p-3 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <span className="text-xs font-semibold text-red-700">Estoque comprometido</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Um ou mais itens deste orçamento são disputados por outros orçamentos ou OSs pendentes.
+                    Se gerar esta OS, os demais pedidos que precisam das mesmas peças poderão ficar sem estoque.
+                  </p>
+                  <div className="text-xs space-y-0.5">
+                    {confirmEntry.itens.filter(i => i.comprometido).map((item, idx) => (
+                      <div key={idx} className="text-red-600">
+                        ⚠ {item.codigo_produto && `[${item.codigo_produto}] `}{item.nome_produto} — Precisa: {item.qtd_necessaria}, Estoque: {item.estoque_total}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Cliente Auvo: sempre permitir fallback manual + validação */}
               {(() => {

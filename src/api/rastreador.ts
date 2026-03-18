@@ -277,16 +277,18 @@ export async function rastrearOrcamentos(
   // Detect conflicts: products where total demand > available stock (after OS reserved subtraction)
   const conflitos: ConflictInfo[] = [];
   for (const [key, demand] of demandMap) {
-    const availableStock = availableStockMap.get(key) ?? 0;
+    const realStock = stockMapOriginal.get(key) ?? 0;
     const reserved = reservedDemand[key];
+    const totalDemand = demand.total + (reserved?.qty ?? 0);
 
-    if (demand.total > availableStock && (demand.orcamentos.length > 1 || reserved)) {
+    // Conflict = total demand (all budgets + OS reservations) exceeds real stock
+    if (totalDemand > realStock) {
       conflitos.push({
         produto_key: key,
         nome_produto: demand.nome,
         codigo_produto: demand.codigo || codeMap.get(key) || '',
-        estoque_total: stockMapOriginal.get(key) ?? 0,
-        demanda_total: demand.total + (reserved?.qty ?? 0),
+        estoque_total: realStock,
+        demanda_total: totalDemand,
         orcamentos_envolvidos: [
           ...demand.orcamentos,
           ...(reserved?.orcamentos.map(os => ({

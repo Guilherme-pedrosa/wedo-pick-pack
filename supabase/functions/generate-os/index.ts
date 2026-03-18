@@ -232,7 +232,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Equipment info — check atributos first (campo extra "Equipamento"), then equipamentos array
+    // Equipment info — check atributos first (campo extra "Equipamento"), then equipamentos array, then manual input
     let equipText = '';
     if (orcamento.atributos?.length) {
       const eqAttr = orcamento.atributos.find((a: any) =>
@@ -246,6 +246,10 @@ Deno.serve(async (req: Request) => {
         const parts = [equip.equipamento, equip.marca, equip.modelo].filter(Boolean);
         equipText = parts.join(' · ');
       }
+    }
+    if (!equipText && manual_equipamento) {
+      equipText = manual_equipamento;
+      console.log(`[generate-os] Using manual equipment: ${equipText}`);
     }
 
     const orientationParts = [

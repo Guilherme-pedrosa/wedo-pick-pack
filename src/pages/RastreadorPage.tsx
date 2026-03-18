@@ -713,7 +713,10 @@ export default function RastreadorPage() {
                   <div className="space-y-2">
                     {result.conflitos.map(c => (
                       <Card key={c.produto_key} className="p-3 border-l-4 border-l-red-500">
-                        <p className="font-medium text-sm">{c.nome_produto}</p>
+                        <p className="font-medium text-sm">
+                          {c.codigo_produto && <span className="font-mono text-muted-foreground">[{c.codigo_produto}]</span>}{' '}
+                          {c.nome_produto}
+                        </p>
                         <div className="flex gap-3 text-xs text-muted-foreground mt-1">
                           <span>Estoque: <strong className="text-foreground">{c.estoque_total}</strong></span>
                           <span>Demanda total: <strong className="text-red-500">{c.demanda_total}</strong></span>

@@ -244,7 +244,7 @@ async function processDocument(
     throw insertErr;
   }
 
-  stats.items_created += items.length;
+  stats.pecas_created += items.length;
 
   if (existing) {
     await supabase

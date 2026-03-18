@@ -729,7 +729,6 @@ export default function InventoryAnalysisPage() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Cada produto usa o lead time do SEU fornecedor para calcular o ROP. Produtos sem fornecedor vinculado usam a mediana.
                 </p>
-                </p>
               </Card>
             </>
           )}

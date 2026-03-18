@@ -557,7 +557,7 @@ export default function InventoryAnalysisPage() {
                         <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
                         <TableCell className="text-right text-xs">{item.rop?.toFixed(0)}</TableCell>
                         <TableCell className="text-right">
-                          <span className={`font-bold ${(item.dias_cobertura ?? 0) < globalLeadTime ? 'text-destructive' : 'text-amber-600'}`}>
+                          <span className={`font-bold ${(item.dias_cobertura ?? 0) < item.lead_time_days ? 'text-destructive' : 'text-amber-600'}`}>
                             {item.dias_cobertura?.toFixed(0) || '0'}d
                           </span>
                         </TableCell>

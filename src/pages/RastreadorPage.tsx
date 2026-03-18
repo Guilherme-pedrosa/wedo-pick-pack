@@ -124,13 +124,8 @@ export default function RastreadorPage() {
         return;
       }
 
-      // Block if no equipment info
+      // Equipment is optional (warning only, not blocking)
       const equipFromOrc = getEquipamento(entry.orcamento);
-      if (!equipFromOrc && !manualEquipamento.trim()) {
-        toast.error('Informe o equipamento antes de gerar a OS.');
-        setGeneratingOS(false);
-        return;
-      }
 
       const bodyPayload: Record<string, unknown> = {
         orcamento: entry.orcamento,

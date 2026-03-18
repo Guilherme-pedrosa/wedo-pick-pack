@@ -588,6 +588,7 @@ export default function InventoryAnalysisPage() {
                     <TableHead className="w-10">#</TableHead>
                     <TableHead className="w-12">ABC</TableHead>
                     <TableHead>Produto</TableHead>
+                    <TableHead className="text-right">Eventos</TableHead>
                     <TableHead className="text-right">Consumo</TableHead>
                     <TableHead className="text-right">Valor (R$)</TableHead>
                     <TableHead className="text-right">Méd/dia</TableHead>
@@ -598,13 +599,14 @@ export default function InventoryAnalysisPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredItems.map((item, idx) => (
-                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < (globalLeadTime + item.coverage_target) ? 'bg-destructive/5' : ''}>
+                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < globalLeadTime ? 'bg-destructive/5' : ''}>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>{abcBadge(item.abc_class)}</TableCell>
                       <TableCell>
                         <p className="text-sm font-medium truncate max-w-[250px]">{item.nome}</p>
                         {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
                       </TableCell>
+                      <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
                       <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>
                       <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
@@ -613,7 +615,7 @@ export default function InventoryAnalysisPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {item.dias_cobertura !== null ? (
-                          <span className={item.dias_cobertura < (globalLeadTime + item.coverage_target) ? 'text-destructive font-bold' : 'text-xs'}>
+                          <span className={item.dias_cobertura < globalLeadTime ? 'text-destructive font-bold' : 'text-xs'}>
                             {item.dias_cobertura.toFixed(0)}d
                           </span>
                         ) : <span className="text-muted-foreground text-xs">—</span>}

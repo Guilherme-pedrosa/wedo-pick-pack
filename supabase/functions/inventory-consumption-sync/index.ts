@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
     for (const id of osSituacaoIds) tasks.push({ docType: 'os', situacaoId: id });
 
     // Resume state from request body
-    const cursor = body.cursor || { taskIndex: 0, page: 1, stats: { docs_seen: 0, docs_debited: 0, items_created: 0, errors: 0 } };
+    const cursor = body.cursor || { taskIndex: 0, page: 1, stats: { os_seen: 0, vendas_seen: 0, os_debited: 0, vendas_debited: 0, pecas_created: 0, skipped: 0, errors: 0 } };
     const taskIndex = cursor.taskIndex;
     const page = cursor.page;
     const stats = cursor.stats;

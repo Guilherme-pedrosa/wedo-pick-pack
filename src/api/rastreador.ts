@@ -206,7 +206,7 @@ export async function rastrearOrcamentos(
   }
 
   // Phase 5: Compute total demand per product across all budgets (for conflict detection)
-  const demandMap = new Map<string, { total: number; nome: string; orcamentos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }> }>();
+  const demandMap = new Map<string, { total: number; nome: string; codigo: string; orcamentos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }> }>();
   for (const orc of uniqueOrcamentos) {
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
@@ -214,7 +214,7 @@ export async function rastrearOrcamentos(
       if (!pid) continue;
       const key = makeKey(pid, vid);
       const qtd = parseDecimal(p.produto.quantidade);
-      if (!demandMap.has(key)) demandMap.set(key, { total: 0, nome: p.produto.nome_produto, orcamentos: [] });
+      if (!demandMap.has(key)) demandMap.set(key, { total: 0, nome: p.produto.nome_produto, codigo: p.produto.codigo_produto || '', orcamentos: [] });
       const entry = demandMap.get(key)!;
       entry.total += qtd;
       entry.orcamentos.push({ id: orc.id, codigo: orc.codigo, nome_cliente: orc.nome_cliente, qtd });

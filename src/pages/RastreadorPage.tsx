@@ -110,16 +110,19 @@ export default function RastreadorPage() {
         return;
       }
 
-      // Check if source tarefa OS exists to clone customer data
-      const hasSourceTask = entry.orcamento.atributos?.some((a: any) => {
-        const attr = a?.atributo || a;
-        const attrId = String(attr?.atributo_id || attr?.id || '');
-        const content = String(attr?.conteudo ?? '').trim();
-        return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
-      });
+      // Cliente é sempre obrigatório: ou vem de uma tarefa OS válida, ou vem de ID informado e verificado
+      const sourceTaskId = getSourceTaskOsId(entry.orcamento);
+      const hasValidSourceTask = parsePositiveInt(sourceTaskId) !== null;
+      const typedCustomerId = parsePositiveInt(auvoCustomerIdInput);
 
-      if (!hasSourceTask && !auvoCustomerIdInput.trim()) {
-        toast.error('Informe o código do cliente Auvo antes de gerar a OS.');
+      if (!hasValidSourceTask && !typedCustomerId) {
+        toast.error('Informe um código de cliente Auvo válido antes de gerar a OS.');
+        setGeneratingOS(false);
+        return;
+      }
+
+      if (!hasValidSourceTask && !auvoCustomerLookup.name) {
+        toast.error('Clique em "Verificar" para validar o cliente Auvo antes de confirmar.');
         setGeneratingOS(false);
         return;
       }
@@ -133,9 +136,9 @@ export default function RastreadorPage() {
         gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
       };
 
-      // If no source task and user provided auvo_customer_id, include it
-      if (!hasSourceTask && auvoCustomerIdInput.trim()) {
-        bodyPayload.auvo_customer_id = Number(auvoCustomerIdInput.trim());
+      // Sempre manda fallback de cliente se digitado; backend usa só se necessário
+      if (typedCustomerId) {
+        bodyPayload.auvo_customer_id = typedCustomerId;
       }
 
       // If equipment was manually provided, include it

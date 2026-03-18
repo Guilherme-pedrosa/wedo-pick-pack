@@ -79,6 +79,7 @@ export default function RastreadorPage() {
   const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
   const [auvoCustomerIdInput, setAuvoCustomerIdInput] = useState('');
   const [auvoCustomerLookup, setAuvoCustomerLookup] = useState<{ loading: boolean; name?: string; error?: string }>({ loading: false });
+  const [manualEquipamento, setManualEquipamento] = useState('');
   const [generationResult, setGenerationResult] = useState<{
     success: boolean;
     auvoTaskId?: number | string;
@@ -123,6 +124,14 @@ export default function RastreadorPage() {
         return;
       }
 
+      // Block if no equipment info
+      const equipFromOrc = getEquipamento(entry.orcamento);
+      if (!equipFromOrc && !manualEquipamento.trim()) {
+        toast.error('Informe o equipamento antes de gerar a OS.');
+        setGeneratingOS(false);
+        return;
+      }
+
       const bodyPayload: Record<string, unknown> = {
         orcamento: entry.orcamento,
         auvo_user_id: auvoUserId,
@@ -132,6 +141,11 @@ export default function RastreadorPage() {
       // If no source task and user provided auvo_customer_id, include it
       if (!hasSourceTask && auvoCustomerIdInput.trim()) {
         bodyPayload.auvo_customer_id = Number(auvoCustomerIdInput.trim());
+      }
+
+      // If equipment was manually provided, include it
+      if (!equipFromOrc && manualEquipamento.trim()) {
+        bodyPayload.manual_equipamento = manualEquipamento.trim();
       }
 
       const { data, error } = await supabase.functions.invoke('generate-os', {
@@ -726,7 +740,7 @@ export default function RastreadorPage() {
       </div>
 
       {/* Confirmation Dialog */}
-      <Dialog open={!!confirmEntry} onOpenChange={(open) => { if (!open) { setConfirmEntry(null); setGenerationResult(null); } }}>
+      <Dialog open={!!confirmEntry} onOpenChange={(open) => { if (!open) { setConfirmEntry(null); setGenerationResult(null); setManualEquipamento(''); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Gerar OS + Tarefa Auvo</DialogTitle>
@@ -818,6 +832,33 @@ export default function RastreadorPage() {
                 return null;
               })()}
 
+              {/* Show equipment input when no equipment detected */}
+              {(() => {
+                if (!confirmEntry) return null;
+                const hasEquip = !!getEquipamento(confirmEntry.orcamento);
+                if (!hasEquip) {
+                  return (
+                    <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <span className="text-xs font-semibold text-amber-700">Sem equipamento detectado</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Este orçamento não possui equipamento vinculado. Informe o equipamento para a OS:
+                      </p>
+                      <Input
+                        type="text"
+                        placeholder="Ex: PASS THROUGH QUENTE"
+                        value={manualEquipamento}
+                        onChange={(e) => setManualEquipamento(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div className="text-xs text-muted-foreground space-y-1">
                 <p>O sistema irá:</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">
@@ -863,7 +904,18 @@ export default function RastreadorPage() {
                 </Button>
                 <Button
                   onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
-                  disabled={generatingOS}
+                  disabled={generatingOS || (() => {
+                    if (!confirmEntry) return true;
+                    const hasEquip = !!getEquipamento(confirmEntry.orcamento) || !!manualEquipamento.trim();
+                    const hasSourceTask = confirmEntry.orcamento.atributos?.some((a: any) => {
+                      const attr = a?.atributo || a;
+                      const attrId = String(attr?.atributo_id || attr?.id || '');
+                      const content = String(attr?.conteudo ?? '').trim();
+                      return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
+                    });
+                    const hasCustomer = hasSourceTask || !!auvoCustomerIdInput.trim();
+                    return !hasEquip || !hasCustomer;
+                  })()}
                   className="gap-2"
                 >
                   {generatingOS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}

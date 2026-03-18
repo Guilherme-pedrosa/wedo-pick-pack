@@ -529,7 +529,7 @@ export default function InventoryAnalysisPage() {
                             {item.dias_cobertura?.toFixed(0) || '0'}d
                           </span>
                         </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">{item.coverage_target}d</TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">×{ABC_SAFETY[item.abc_class]}</TableCell>
                         <TableCell className="text-right">
                           <Badge variant="destructive" className="font-bold text-sm">{item.qty_a_comprar}</Badge>
                         </TableCell>

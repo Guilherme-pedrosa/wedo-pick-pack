@@ -21,6 +21,7 @@ export interface OrcamentoReadiness {
 export interface ConflictInfo {
   produto_key: string;
   nome_produto: string;
+  codigo_produto: string;
   estoque_total: number;
   demanda_total: number;
   orcamentos_envolvidos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }>;

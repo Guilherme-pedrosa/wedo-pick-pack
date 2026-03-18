@@ -926,14 +926,10 @@ export default function RastreadorPage() {
                   onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
                   disabled={generatingOS || (() => {
                     if (!confirmEntry) return true;
-                    // Cliente é OBRIGATÓRIO - nunca permitir sem
-                    const hasSourceTask = confirmEntry.orcamento.atributos?.some((a: any) => {
-                      const attr = a?.atributo || a;
-                      const attrId = String(attr?.atributo_id || attr?.id || '');
-                      const content = String(attr?.conteudo ?? '').trim();
-                      return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
-                    });
-                    const hasCustomer = hasSourceTask || !!auvoCustomerIdInput.trim();
+                    const sourceTaskId = getSourceTaskOsId(confirmEntry.orcamento);
+                    const hasValidSourceTask = parsePositiveInt(sourceTaskId) !== null;
+                    const hasValidatedManualCustomer = !!parsePositiveInt(auvoCustomerIdInput) && !!auvoCustomerLookup.name;
+                    const hasCustomer = hasValidSourceTask || hasValidatedManualCustomer;
                     return !hasCustomer;
                   })()}
                   className="gap-2"

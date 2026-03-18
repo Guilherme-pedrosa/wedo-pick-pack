@@ -42,6 +42,18 @@ interface SupplierLeadTime {
   sample_count: number;
 }
 
+interface PCRef {
+  codigo: string;
+  qtd: number;
+  fornecedor: string;
+  situacao: string;
+}
+
+interface PCEntry {
+  qtd: number;
+  refs: PCRef[];
+}
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;
@@ -60,6 +72,9 @@ interface AnalysisItem {
   lead_time_days: number;
   rop: number | null;
   qty_a_comprar: number | null;
+  qty_liquida: number | null;
+  pc_qty: number;
+  pc_refs: PCRef[];
   coverage_target: number;
 }
 

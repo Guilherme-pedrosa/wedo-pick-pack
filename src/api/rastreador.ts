@@ -181,9 +181,13 @@ export async function rastrearOrcamentos(
         if (vid && detail.variacoes?.length) {
           const v = detail.variacoes.find(v => String(v.variacao.id) === vid);
           estoque = v ? parseDecimal(v.variacao.estoque) : parseDecimal(detail.estoque);
+          console.log(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}, vid=${vid}) → variação estoque raw=${v ? v.variacao.estoque : 'N/A (fallback parent)'}, parsed=${estoque}`);
         } else {
           estoque = parseDecimal(detail.estoque);
+          console.log(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}) → parent estoque raw=${detail.estoque}, parsed=${estoque}`);
         }
+      } else {
+        console.warn(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}) → NO DETAIL FOUND`);
       }
       stockMap.set(key, estoque);
     }

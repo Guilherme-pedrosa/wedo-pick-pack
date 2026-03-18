@@ -308,6 +308,43 @@ export default function InventoryPolicyPage() {
                 ))}
               </div>
             </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-sm font-medium mb-2">🔄 Cruzamento: Pedidos de Compra em Andamento</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Selecione os status que indicam <strong>compra em andamento</strong>. A análise de estoque descontará automaticamente as quantidades desses pedidos da necessidade de compra, evitando compras duplicadas.
+              </p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {(compraStatuses.data || []).map(s => (
+                  <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={config.purchase_crossref_situacao_ids.includes(s.id)}
+                      onCheckedChange={() =>
+                        setConfig(c => c ? { ...c, purchase_crossref_situacao_ids: toggleList(c.purchase_crossref_situacao_ids, s.id) } : c)
+                      }
+                    />
+                    <span className="text-sm">{s.nome}</span>
+                    {s.tipo_lancamento && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {s.tipo_lancamento === '1' ? 'Est+Fin' : s.tipo_lancamento === '2' ? 'Só Est' : s.tipo_lancamento === '3' ? 'Só Fin' : 'Não lança'}
+                      </Badge>
+                    )}
+                  </label>
+                ))}
+              </div>
+              {config.purchase_crossref_situacao_ids.length > 0 && (
+                <p className="text-xs text-primary mt-2 font-medium">
+                  ✅ {config.purchase_crossref_situacao_ids.length} situação(ões) selecionada(s)
+                </p>
+              )}
+              {config.purchase_crossref_situacao_ids.length === 0 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Nenhuma situação selecionada — o cruzamento com PCs não será feito na análise de estoque
+                </p>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </Card>

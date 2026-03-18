@@ -437,9 +437,9 @@ export default function InventoryAnalysisPage() {
   // Export shopping list CSV
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
-    const header = 'Classe ABC,Produto ID,Código,Nome,Estoque Atual,Consumo Méd/Dia,ROP,Cobertura Atual (dias),Quantidade a Comprar,Cobertura Alvo (dias)\n';
+    const header = 'Classe ABC,Produto ID,Código,Nome,Estoque Atual,Consumo Méd/Dia,Lead Time,ROP,Cobertura (dias),Necessidade Bruta,PC em Andamento,Qtd Líquida a Comprar,PCs\n';
     const rows = purchaseItems.map(i =>
-      `${i.abc_class},${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.estoque_atual},${i.avg_daily.toFixed(2)},${i.rop?.toFixed(0)},${i.dias_cobertura?.toFixed(0) || '0'},${i.qty_a_comprar},${i.coverage_target}`
+      `${i.abc_class},${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.estoque_atual},${i.avg_daily.toFixed(2)},${Math.round(i.lead_time_days)},${i.rop?.toFixed(0)},${i.dias_cobertura?.toFixed(0) || '0'},${i.qty_a_comprar},${i.pc_qty},${i.qty_liquida},${i.pc_refs.map(r => `PC${r.codigo}(${r.qtd})`).join(' ')}`
     ).join('\n');
 
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });

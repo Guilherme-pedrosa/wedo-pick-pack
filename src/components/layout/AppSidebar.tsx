@@ -13,6 +13,7 @@ import {
   Package,
   Boxes,
   Wrench,
+  BarChart3,
   ClipboardList,
   Briefcase,
 } from "lucide-react";

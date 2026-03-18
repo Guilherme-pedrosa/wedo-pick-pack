@@ -175,22 +175,30 @@ export default function InventoryAnalysisPage() {
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
   const lookbackDays = configQuery.data?.lookback_days || 180;
 
-  // Global avg lead time from supplier data
-  const globalLeadTime = useMemo(() => {
-    const lts = leadTimesQuery.data || [];
-    if (lts.length === 0) return 14; // default 14 days
-    const weighted = lts.reduce((s, lt) => s + lt.avg_lead_time_days * lt.sample_count, 0);
-    const totalSamples = lts.reduce((s, lt) => s + lt.sample_count, 0);
-    return totalSamples > 0 ? Math.round(weighted / totalSamples) : 14;
+  // Build supplier lead time lookup map (fornecedor_id → lead time data)
+  const supplierLTMap = useMemo(() => {
+    const map = new Map<string, SupplierLeadTime>();
+    for (const lt of (leadTimesQuery.data || [])) {
+      map.set(lt.fornecedor_id, lt);
+    }
+    return map;
   }, [leadTimesQuery.data]);
 
-  // Build analysis items with ABC + smart ROP
+  // Fallback lead time (median of all suppliers, not average — more robust)
+  const fallbackLeadTime = useMemo(() => {
+    const lts = leadTimesQuery.data || [];
+    if (lts.length === 0) return 14;
+    const sorted = [...lts].sort((a, b) => a.avg_lead_time_days - b.avg_lead_time_days);
+    const mid = Math.floor(sorted.length / 2);
+    return Math.round(sorted.length % 2 ? sorted[mid].avg_lead_time_days : (sorted[mid - 1].avg_lead_time_days + sorted[mid].avg_lead_time_days) / 2);
+  }, [leadTimesQuery.data]);
+
+  // Build analysis items with ABC + per-supplier ROP
   const analysisItems: AnalysisItem[] = useMemo(() => {
     const rows = consumptionQuery.data || [];
     const names = namesQuery.data || new Map();
     if (rows.length === 0) return [];
 
-    // ABC is based on hybrid_score (value × frequency)
     const totalScore = rows.reduce((s, r) => s + r.hybrid_score, 0);
     let cumulative = 0;
 
@@ -202,9 +210,15 @@ export default function InventoryAnalysisPage() {
       const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
       const estoque = stockMap.get(r.produto_id) ?? null;
       
+      // Use THIS product's supplier lead time, not global average
+      const fornecedorId = info?.fornecedor_id || null;
+      const supplierLT = fornecedorId ? supplierLTMap.get(fornecedorId) : null;
+      const leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : fallbackLeadTime;
+      const fornecedorNome = supplierLT?.fornecedor_nome || null;
+
       const safetyFactor = ABC_SAFETY[abcClass];
-      const coverageTarget = globalLeadTime;
-      const rop = avgDaily * globalLeadTime * safetyFactor;
+      const coverageTarget = leadTimeDays;
+      const rop = avgDaily * leadTimeDays * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
 
@@ -212,6 +226,8 @@ export default function InventoryAnalysisPage() {
         produto_id: r.produto_id,
         nome: info?.nome || `Produto ${r.produto_id}`,
         codigo_interno: info?.codigo_interno || null,
+        fornecedor_id: fornecedorId,
+        fornecedor_nome: fornecedorNome,
         total_qty: r.total_qty,
         total_value: r.total_value,
         event_count: r.event_count,
@@ -221,12 +237,13 @@ export default function InventoryAnalysisPage() {
         cumulative_pct: pct,
         estoque_atual: estoque,
         dias_cobertura: diasCobertura,
+        lead_time_days: leadTimeDays,
         rop,
         qty_a_comprar: qtyAComprar,
         coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, lookbackDays, thresholds, globalLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
 
   // Filtered items
   const filteredItems = useMemo(() => {

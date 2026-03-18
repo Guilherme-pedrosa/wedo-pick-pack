@@ -117,14 +117,21 @@ export default function InventoryPolicyPage() {
   const handleSync = async () => {
     setSyncing(true);
     setSyncResult(null);
-    setSyncProgress(null);
+    setSyncProgress({ taskIndex: 0, totalTasks: 0, page: 0, totalPages: 0, docs_seen: 0, docs_debited: 0, items_created: 0, errors: 0, status: 'Iniciando...' });
     let cursor: any = null;
+    let callCount = 0;
 
     try {
       while (true) {
+        callCount++;
+        setSyncProgress((prev: any) => ({ ...prev, status: `Chamada #${callCount} — aguardando resposta...` }));
+        
         const { data, error } = await supabase.functions.invoke('inventory-consumption-sync', {
           body: { action: 'sync_page', cursor },
         });
+        
+        console.log(`[Sync] Call #${callCount} response:`, data, error);
+        
         if (error) throw error;
 
         if (data?.error) {
@@ -132,27 +139,29 @@ export default function InventoryPolicyPage() {
           break;
         }
 
-        setSyncProgress(data?.progress || null);
+        if (data?.progress) {
+          setSyncProgress({ ...data.progress, status: `Grupo ${data.progress.taskIndex + 1}/${data.progress.totalTasks} · Página ${data.progress.page}/${data.progress.totalPages}` });
+        }
 
         if (data?.retry) {
-          // Rate limited — wait and retry same cursor
+          setSyncProgress((prev: any) => ({ ...prev, status: 'Rate limit — aguardando 2s...' }));
           await new Promise(r => setTimeout(r, 2000));
           cursor = data.cursor;
           continue;
         }
 
         if (data?.done) {
-          setSyncResult({ success: true, stats: data.stats, period: data.period || null });
-          toast.success(`Sincronização concluída! ${data.stats.docs_debited} docs processados, ${data.stats.items_created} itens.`);
+          const stats = data.stats || cursor?.stats || {};
+          setSyncResult({ success: true, stats, period: data.period || null });
+          toast.success(`Sincronização concluída! ${stats.docs_debited} docs processados, ${stats.items_created} itens.`);
           break;
         }
 
         cursor = data.cursor;
-        // Small delay between calls
         await new Promise(r => setTimeout(r, 300));
       }
     } catch (err) {
-      console.error(err);
+      console.error('[Sync] Error:', err);
       toast.error('Erro ao executar sincronização');
       setSyncResult({ success: false, error: err instanceof Error ? err.message : 'Erro desconhecido' });
     } finally {

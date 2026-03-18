@@ -279,11 +279,11 @@ export default function InventoryAnalysisPage() {
     const aCount = items.filter(i => i.abc_class === 'A').length;
     const bCount = items.filter(i => i.abc_class === 'B').length;
     const cCount = items.filter(i => i.abc_class === 'C').length;
-    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < globalLeadTime).length;
+    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days).length;
     const totalConsumo = items.reduce((s, i) => s + i.total_qty, 0);
     const totalValor = items.reduce((s, i) => s + i.total_value, 0);
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
-  }, [analysisItems, globalLeadTime]);
+  }, [analysisItems]);
 
   // Purchase items
   const purchaseItems = useMemo(() => 

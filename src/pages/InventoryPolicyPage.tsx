@@ -121,7 +121,7 @@ export default function InventoryPolicyPage() {
   const handleSync = async () => {
     setSyncing(true);
     setSyncResult(null);
-    setSyncProgress({ taskIndex: 0, totalTasks: 0, page: 0, totalPages: 0, docs_seen: 0, docs_debited: 0, items_created: 0, errors: 0, status: 'Iniciando...' });
+    setSyncProgress({ taskIndex: 0, totalTasks: 0, page: 0, totalPages: 0, os_seen: 0, vendas_seen: 0, os_debited: 0, vendas_debited: 0, pecas_created: 0, skipped: 0, errors: 0, status: 'Iniciando...' });
     let cursor: any = null;
     let callCount = 0;
 
@@ -157,7 +157,7 @@ export default function InventoryPolicyPage() {
         if (data?.done) {
           const stats = data.stats || cursor?.stats || {};
           setSyncResult({ success: true, stats, period: data.period || null });
-          toast.success(`Sincronização concluída! ${stats.docs_debited} docs processados, ${stats.items_created} itens.`);
+          toast.success(`Sincronização concluída! ${stats.os_debited || 0} OSs + ${stats.vendas_debited || 0} vendas processadas, ${stats.pecas_created || 0} peças.`);
           break;
         }
 
@@ -422,10 +422,11 @@ export default function InventoryPolicyPage() {
                 {syncProgress.status || 'Processando...'}
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground">
-              <div>Docs vistos: <span className="font-medium text-foreground">{syncProgress.docs_seen}</span></div>
-              <div>Debitados: <span className="font-medium text-foreground">{syncProgress.docs_debited}</span></div>
-              <div>Itens criados: <span className="font-medium text-foreground">{syncProgress.items_created}</span></div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs text-muted-foreground">
+              <div>OSs: <span className="font-medium text-foreground">{syncProgress.os_seen || 0}</span>{(syncProgress.os_debited > 0) && <span className="text-green-600"> ({syncProgress.os_debited} novas)</span>}</div>
+              <div>Vendas: <span className="font-medium text-foreground">{syncProgress.vendas_seen || 0}</span>{(syncProgress.vendas_debited > 0) && <span className="text-green-600"> ({syncProgress.vendas_debited} novas)</span>}</div>
+              <div>Peças: <span className="font-medium text-foreground">{syncProgress.pecas_created || 0}</span></div>
+              <div>Já processados: <span className="font-medium text-muted-foreground">{syncProgress.skipped || 0}</span></div>
               {syncProgress.errors > 0 && <div>Erros: <span className="font-medium text-destructive">{syncProgress.errors}</span></div>}
             </div>
             {syncProgress.totalPages > 0 && (
@@ -447,9 +448,9 @@ export default function InventoryPolicyPage() {
                 <div>
                   <p className="font-medium text-green-800 dark:text-green-400">Sincronização concluída</p>
                   <p className="text-green-700 dark:text-green-500 mt-1">
-                    Documentos vistos: {syncResult.stats.docs_seen} · 
-                    Debitados: {syncResult.stats.docs_debited} · 
-                    Itens criados: {syncResult.stats.items_created}
+                    OSs: {syncResult.stats.os_seen || 0} ({syncResult.stats.os_debited || 0} novas) · 
+                    Vendas: {syncResult.stats.vendas_seen || 0} ({syncResult.stats.vendas_debited || 0} novas) · 
+                    Peças registradas: {syncResult.stats.pecas_created || 0}
                     {syncResult.stats.errors > 0 && ` · Erros: ${syncResult.stats.errors}`}
                   </p>
                   {syncResult.period && (

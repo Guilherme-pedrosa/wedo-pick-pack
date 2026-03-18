@@ -60,7 +60,7 @@ Deno.serve(async (req: Request) => {
     for (const id of osSituacaoIds) tasks.push({ docType: 'os', situacaoId: id });
 
     // Resume state from request body
-    const cursor = body.cursor || { taskIndex: 0, page: 1, stats: { docs_seen: 0, docs_debited: 0, items_created: 0, errors: 0 } };
+    const cursor = body.cursor || { taskIndex: 0, page: 1, stats: { os_seen: 0, vendas_seen: 0, os_debited: 0, vendas_debited: 0, pecas_created: 0, skipped: 0, errors: 0 } };
     const taskIndex = cursor.taskIndex;
     const page = cursor.page;
     const stats = cursor.stats;
@@ -93,7 +93,8 @@ Deno.serve(async (req: Request) => {
       totalRegistros = meta.total_registros || 0;
 
       for (const doc of docs) {
-        stats.docs_seen++;
+        if (task.docType === 'os') stats.os_seen++;
+        else stats.vendas_seen++;
         try {
           await processDocument(task.docType, doc, task.situacaoId, supabase, stats);
         } catch (e) {
@@ -149,10 +150,7 @@ function buildProgress(taskIndex: number, totalTasks: number, page: number, tota
     page,
     totalPages,
     totalRegistros: totalRegistros || 0,
-    docs_seen: stats.docs_seen,
-    docs_debited: stats.docs_debited,
-    items_created: stats.items_created,
-    errors: stats.errors,
+    ...stats,
   };
 }
 
@@ -187,7 +185,7 @@ async function processDocument(
   doc: any,
   situacaoId: string,
   supabase: any,
-  stats: { docs_debited: number; items_created: number },
+  stats: any,
 ) {
   const docId = String(doc.id);
 
@@ -199,6 +197,7 @@ async function processDocument(
     .maybeSingle();
 
   if (existing?.debited) {
+    stats.skipped++;
     await supabase
       .from('doc_stock_effect')
       .update({ last_seen_at: new Date().toISOString() })
@@ -245,7 +244,7 @@ async function processDocument(
     throw insertErr;
   }
 
-  stats.items_created += items.length;
+  stats.pecas_created += items.length;
 
   if (existing) {
     await supabase
@@ -264,7 +263,8 @@ async function processDocument(
     });
   }
 
-  stats.docs_debited++;
+  if (docType === 'os') stats.os_debited++;
+  else stats.vendas_debited++;
 }
 
 async function gcRequest(path: string, access: string, secret: string): Promise<any> {

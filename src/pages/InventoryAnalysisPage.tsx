@@ -487,7 +487,8 @@ export default function InventoryAnalysisPage() {
                     🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × (lead time {globalLeadTime}d + cobertura alvo) × 1.2 segurança
+                    ROP = consumo médio × lead time ({globalLeadTime}d) × segurança (A ×{ABC_SAFETY.A} / B ×{ABC_SAFETY.B} / C ×{ABC_SAFETY.C})
+                  </p>
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">

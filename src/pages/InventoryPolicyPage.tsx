@@ -307,8 +307,18 @@ export default function InventoryPolicyPage() {
             <Label className="text-sm">Lookback (dias)</Label>
             <Input
               type="number"
+              min={1}
+              max={365}
               value={config.lookback_days}
-              onChange={e => setConfig(c => c ? { ...c, lookback_days: parseInt(e.target.value) || 180 } : c)}
+              onChange={e => {
+                const val = e.target.value;
+                setConfig(c => c ? { ...c, lookback_days: val === '' ? 0 : parseInt(val) } : c);
+              }}
+              onBlur={() => {
+                if (!config.lookback_days || config.lookback_days < 1) {
+                  setConfig(c => c ? { ...c, lookback_days: 180 } : c);
+                }
+              }}
               className="mt-1"
             />
           </div>

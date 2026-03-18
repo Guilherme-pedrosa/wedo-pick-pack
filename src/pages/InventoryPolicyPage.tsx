@@ -157,7 +157,7 @@ export default function InventoryPolicyPage() {
         if (data?.done) {
           const stats = data.stats || cursor?.stats || {};
           setSyncResult({ success: true, stats, period: data.period || null });
-          toast.success(`Sincronização concluída! ${stats.docs_debited} docs processados, ${stats.items_created} itens.`);
+          toast.success(`Sincronização concluída! ${stats.os_debited || 0} OSs + ${stats.vendas_debited || 0} vendas processadas, ${stats.pecas_created || 0} peças.`);
           break;
         }
 

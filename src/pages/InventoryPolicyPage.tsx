@@ -1,0 +1,361 @@
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { getStatusOS, getStatusVendas } from '@/api/gestaoclick';
+import { getStatusCompras } from '@/api/compras';
+import { logSystemAction } from '@/lib/systemLog';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, Save, Play, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface PolicyConfig {
+  id: string;
+  lookback_days: number;
+  abc_thresholds: { A: number; B: number };
+  vendas_stockout_situacao_ids: string[];
+  os_stockout_situacao_ids: string[];
+  purchase_lt_start_situacao_id: string;
+  purchase_arrived_situacao_ids: string[];
+}
+
+const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
+  lookback_days: 180,
+  abc_thresholds: { A: 0.80, B: 0.95 },
+  vendas_stockout_situacao_ids: ['7063585'],
+  os_stockout_situacao_ids: [],
+  purchase_lt_start_situacao_id: '1675083',
+  purchase_arrived_situacao_ids: [],
+};
+
+export default function InventoryPolicyPage() {
+  const [config, setConfig] = useState<PolicyConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<any>(null);
+
+  // Load config from DB
+  const configQuery = useQuery({
+    queryKey: ['inventory-policy-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventory_policy_config' as any)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return (data as any[])?.[0] || null;
+    },
+  });
+
+  useEffect(() => {
+    if (configQuery.data) {
+      const d = configQuery.data;
+      setConfig({
+        id: d.id,
+        lookback_days: d.lookback_days,
+        abc_thresholds: d.abc_thresholds || DEFAULT_CONFIG.abc_thresholds,
+        vendas_stockout_situacao_ids: d.vendas_stockout_situacao_ids || [],
+        os_stockout_situacao_ids: d.os_stockout_situacao_ids || [],
+        purchase_lt_start_situacao_id: d.purchase_lt_start_situacao_id || '1675083',
+        purchase_arrived_situacao_ids: d.purchase_arrived_situacao_ids || [],
+      });
+    }
+  }, [configQuery.data]);
+
+  // Load situações
+  const osStatuses = useQuery({ queryKey: ['statuses', 'os'], queryFn: getStatusOS });
+  const vendaStatuses = useQuery({ queryKey: ['statuses', 'venda'], queryFn: getStatusVendas });
+  const compraStatuses = useQuery({ queryKey: ['statuses', 'compra'], queryFn: getStatusCompras });
+
+  const toggleList = (list: string[], id: string): string[] =>
+    list.includes(id) ? list.filter(s => s !== id) : [...list, id];
+
+  const handleSave = async () => {
+    if (!config) return;
+    setSaving(true);
+    try {
+      const payload = {
+        lookback_days: config.lookback_days,
+        abc_thresholds: config.abc_thresholds,
+        vendas_stockout_situacao_ids: config.vendas_stockout_situacao_ids,
+        os_stockout_situacao_ids: config.os_stockout_situacao_ids,
+        purchase_lt_start_situacao_id: config.purchase_lt_start_situacao_id,
+        purchase_arrived_situacao_ids: config.purchase_arrived_situacao_ids,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('inventory_policy_config' as any)
+        .update(payload as never)
+        .eq('id', config.id);
+
+      if (error) throw error;
+
+      toast.success('Política de estoque salva!');
+      logSystemAction({
+        module: 'inventory',
+        action: 'Política de estoque atualizada',
+        details: payload as any,
+      });
+    } catch (err) {
+      toast.error('Erro ao salvar política');
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('inventory-consumption-sync', {
+        body: {},
+      });
+      if (error) throw error;
+      setSyncResult(data);
+      if (data?.success) {
+        toast.success(`Sincronização concluída! ${data.stats.docs_debited} documentos processados, ${data.stats.items_created} itens registrados.`);
+      } else {
+        toast.error(data?.error || 'Erro na sincronização');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro ao executar sincronização');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  if (configQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!config) {
+    return (
+      <div className="max-w-3xl mx-auto p-6">
+        <p className="text-muted-foreground">Nenhuma configuração encontrada.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Política de Estoque</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Configure quais situações representam saída efetiva de estoque
+          </p>
+        </div>
+      </div>
+
+      {/* Situações Tabs */}
+      <Card className="p-6">
+        <Tabs defaultValue="vendas">
+          <TabsList className="w-full">
+            <TabsTrigger value="vendas" className="flex-1">Vendas (OUT)</TabsTrigger>
+            <TabsTrigger value="os" className="flex-1">OS (OUT)</TabsTrigger>
+            <TabsTrigger value="compras" className="flex-1">Compras (Lead Time)</TabsTrigger>
+          </TabsList>
+
+          {/* VENDAS */}
+          <TabsContent value="vendas" className="space-y-4 mt-4">
+            <div>
+              <h3 className="text-sm font-medium mb-2">Situações de Venda que dão baixa no estoque</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Documentos nessas situações contam como saída efetiva (consumo)
+              </p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {vendaStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(vendaStatuses.data || []).map(s => (
+                  <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={config.vendas_stockout_situacao_ids.includes(s.id)}
+                      onCheckedChange={() =>
+                        setConfig(c => c ? { ...c, vendas_stockout_situacao_ids: toggleList(c.vendas_stockout_situacao_ids, s.id) } : c)
+                      }
+                    />
+                    <span className="text-sm">{s.nome}</span>
+                    <span className="text-xs text-muted-foreground">({s.id})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* OS */}
+          <TabsContent value="os" className="space-y-4 mt-4">
+            <div>
+              <h3 className="text-sm font-medium mb-2">Situações de OS que dão baixa no estoque</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Documentos nessas situações contam como saída efetiva (consumo)
+              </p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {osStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(osStatuses.data || []).map(s => (
+                  <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={config.os_stockout_situacao_ids.includes(s.id)}
+                      onCheckedChange={() =>
+                        setConfig(c => c ? { ...c, os_stockout_situacao_ids: toggleList(c.os_stockout_situacao_ids, s.id) } : c)
+                      }
+                    />
+                    <span className="text-sm">{s.nome}</span>
+                    <span className="text-xs text-muted-foreground">({s.id})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* COMPRAS */}
+          <TabsContent value="compras" className="space-y-6 mt-4">
+            <div>
+              <h3 className="text-sm font-medium mb-2">Situação START do Lead Time (quando o pedido foi feito)</h3>
+              <p className="text-xs text-muted-foreground mb-3">Default: COMPRADO - AG CHEGADA</p>
+              <RadioGroup
+                value={config.purchase_lt_start_situacao_id}
+                onValueChange={v => setConfig(c => c ? { ...c, purchase_lt_start_situacao_id: v } : c)}
+              >
+                {(compraStatuses.data || []).map(s => (
+                  <div key={s.id} className="flex items-center gap-2">
+                    <RadioGroupItem value={s.id} id={`lt-start-${s.id}`} />
+                    <Label htmlFor={`lt-start-${s.id}`} className="text-sm cursor-pointer flex items-center gap-2">
+                      {s.nome}
+                      {s.tipo_lancamento && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {s.tipo_lancamento === '1' ? 'Est+Fin' : s.tipo_lancamento === '2' ? 'Só Est' : s.tipo_lancamento === '3' ? 'Só Fin' : 'Não lança'}
+                        </Badge>
+                      )}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-sm font-medium mb-2">Situações END (mercadoria chegou / finalizado)</h3>
+              <p className="text-xs text-muted-foreground mb-3">Multi-select: quando considerar que a compra foi concluída</p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {(compraStatuses.data || []).map(s => (
+                  <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={config.purchase_arrived_situacao_ids.includes(s.id)}
+                      onCheckedChange={() =>
+                        setConfig(c => c ? { ...c, purchase_arrived_situacao_ids: toggleList(c.purchase_arrived_situacao_ids, s.id) } : c)
+                      }
+                    />
+                    <span className="text-sm">{s.nome}</span>
+                    {s.tipo_lancamento && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {s.tipo_lancamento === '1' ? 'Est+Fin' : s.tipo_lancamento === '2' ? 'Só Est' : s.tipo_lancamento === '3' ? 'Só Fin' : 'Não lança'}
+                      </Badge>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </Card>
+
+      {/* Parâmetros */}
+      <Card className="p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Parâmetros</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <Label className="text-sm">Lookback (dias)</Label>
+            <Input
+              type="number"
+              value={config.lookback_days}
+              onChange={e => setConfig(c => c ? { ...c, lookback_days: parseInt(e.target.value) || 180 } : c)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-sm">Limiar A (%)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={config.abc_thresholds.A}
+              onChange={e => setConfig(c => c ? { ...c, abc_thresholds: { ...c.abc_thresholds, A: parseFloat(e.target.value) || 0.8 } } : c)}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-sm">Limiar B (%)</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={config.abc_thresholds.B}
+              onChange={e => setConfig(c => c ? { ...c, abc_thresholds: { ...c.abc_thresholds, B: parseFloat(e.target.value) || 0.95 } } : c)}
+              className="mt-1"
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* Save */}
+      <Button onClick={handleSave} className="w-full gap-2" size="lg" disabled={saving}>
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        {saving ? 'Salvando...' : 'Salvar Política'}
+      </Button>
+
+      {/* Sync */}
+      <Card className="p-6 space-y-4">
+        <h2 className="text-lg font-semibold">Sincronização de Consumo</h2>
+        <p className="text-sm text-muted-foreground">
+          Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
+          O processo é idempotente — rodar múltiplas vezes não duplica dados.
+        </p>
+        <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
+          {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {syncing ? 'Sincronizando...' : `Sincronizar consumo (${config.lookback_days}d)`}
+        </Button>
+
+        {syncResult && (
+          <div className={`rounded-lg p-4 text-sm ${syncResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+            {syncResult.success ? (
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-green-800">Sincronização concluída</p>
+                  <p className="text-green-700 mt-1">
+                    Documentos vistos: {syncResult.stats.docs_seen} · 
+                    Debitados: {syncResult.stats.docs_debited} · 
+                    Itens criados: {syncResult.stats.items_created}
+                    {syncResult.stats.errors > 0 && ` · Erros: ${syncResult.stats.errors}`}
+                  </p>
+                  <p className="text-green-600 text-xs mt-1">Período: {syncResult.period?.start} → {syncResult.period?.end}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-800">Erro na sincronização</p>
+                  <p className="text-red-700 mt-1">{syncResult.error}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}

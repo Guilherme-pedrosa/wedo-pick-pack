@@ -307,6 +307,120 @@ export type Database = {
         }
         Relationships: []
       }
+      doc_stock_effect: {
+        Row: {
+          debit_situacao_id: string | null
+          debited: boolean
+          debited_at: string | null
+          doc_id: string
+          doc_type: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          payload_hash: string | null
+        }
+        Insert: {
+          debit_situacao_id?: string | null
+          debited?: boolean
+          debited_at?: string | null
+          doc_id: string
+          doc_type: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          payload_hash?: string | null
+        }
+        Update: {
+          debit_situacao_id?: string | null
+          debited?: boolean
+          debited_at?: string | null
+          doc_id?: string
+          doc_type?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          payload_hash?: string | null
+        }
+        Relationships: []
+      }
+      inventory_consumption_events: {
+        Row: {
+          id: string
+          occurred_at: string
+          produto_id: string
+          qty: number
+          raw: Json
+          situacao_id: string
+          source_id: string
+          source_type: string
+          valor_custo: number | null
+          variacao_id: string | null
+        }
+        Insert: {
+          id?: string
+          occurred_at: string
+          produto_id: string
+          qty: number
+          raw?: Json
+          situacao_id: string
+          source_id: string
+          source_type: string
+          valor_custo?: number | null
+          variacao_id?: string | null
+        }
+        Update: {
+          id?: string
+          occurred_at?: string
+          produto_id?: string
+          qty?: number
+          raw?: Json
+          situacao_id?: string
+          source_id?: string
+          source_type?: string
+          valor_custo?: number | null
+          variacao_id?: string | null
+        }
+        Relationships: []
+      }
+      inventory_policy_config: {
+        Row: {
+          abc_thresholds: Json
+          created_at: string
+          id: string
+          lookback_days: number
+          os_stockout_situacao_ids: Json
+          purchase_arrived_situacao_ids: Json
+          purchase_lt_start_situacao_id: string
+          updated_at: string
+          updated_by: string | null
+          vendas_stockout_situacao_ids: Json
+        }
+        Insert: {
+          abc_thresholds?: Json
+          created_at?: string
+          id?: string
+          lookback_days?: number
+          os_stockout_situacao_ids?: Json
+          purchase_arrived_situacao_ids?: Json
+          purchase_lt_start_situacao_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vendas_stockout_situacao_ids?: Json
+        }
+        Update: {
+          abc_thresholds?: Json
+          created_at?: string
+          id?: string
+          lookback_days?: number
+          os_stockout_situacao_ids?: Json
+          purchase_arrived_situacao_ids?: Json
+          purchase_lt_start_situacao_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          vendas_stockout_situacao_ids?: Json
+        }
+        Relationships: []
+      }
       os_generation_logs: {
         Row: {
           auvo_task_id: string | null

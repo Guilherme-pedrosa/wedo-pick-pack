@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.toolbox-stock-movement]
 verify_jwt = false
+
+[functions.inventory-consumption-sync]
+verify_jwt = false

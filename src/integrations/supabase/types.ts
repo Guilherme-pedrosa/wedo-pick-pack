@@ -505,6 +505,7 @@ export type Database = {
           codigo_barra: string | null
           codigo_interno: string | null
           fingerprint: string
+          fornecedor_id: string | null
           last_seen_at: string
           last_synced_at: string
           nome: string
@@ -517,6 +518,7 @@ export type Database = {
           codigo_barra?: string | null
           codigo_interno?: string | null
           fingerprint: string
+          fornecedor_id?: string | null
           last_seen_at?: string
           last_synced_at?: string
           nome: string
@@ -529,6 +531,7 @@ export type Database = {
           codigo_barra?: string | null
           codigo_interno?: string | null
           fingerprint?: string
+          fornecedor_id?: string | null
           last_seen_at?: string
           last_synced_at?: string
           nome?: string

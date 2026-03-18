@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getProductStock } from '@/api/gestaoclick';
-import { getStatusCompras, listOrdensCompra } from '@/api/compras';
+import { listOrdensCompra } from '@/api/compras';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

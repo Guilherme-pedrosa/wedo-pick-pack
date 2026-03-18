@@ -60,6 +60,7 @@ async function reverseItem(
   alert: BaixaAlert,
   targetBoxId: string,
   targetBoxName: string,
+  relinkTechnician?: { gc_id: string; name: string },
 ) {
   // Check if item already exists in target box
   const { data: existingItem } = await supabase

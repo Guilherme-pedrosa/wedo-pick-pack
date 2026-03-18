@@ -117,20 +117,44 @@ export default function InventoryPolicyPage() {
   const handleSync = async () => {
     setSyncing(true);
     setSyncResult(null);
+    setSyncProgress(null);
+    let cursor: any = null;
+
     try {
-      const { data, error } = await supabase.functions.invoke('inventory-consumption-sync', {
-        body: {},
-      });
-      if (error) throw error;
-      setSyncResult(data);
-      if (data?.success) {
-        toast.success(`Sincronização concluída! ${data.stats.docs_debited} documentos processados, ${data.stats.items_created} itens registrados.`);
-      } else {
-        toast.error(data?.error || 'Erro na sincronização');
+      while (true) {
+        const { data, error } = await supabase.functions.invoke('inventory-consumption-sync', {
+          body: { action: 'sync_page', cursor },
+        });
+        if (error) throw error;
+
+        if (data?.error) {
+          setSyncResult({ success: false, error: data.error });
+          break;
+        }
+
+        setSyncProgress(data?.progress || null);
+
+        if (data?.retry) {
+          // Rate limited — wait and retry same cursor
+          await new Promise(r => setTimeout(r, 2000));
+          cursor = data.cursor;
+          continue;
+        }
+
+        if (data?.done) {
+          setSyncResult({ success: true, stats: data.stats, period: data.period || null });
+          toast.success(`Sincronização concluída! ${data.stats.docs_debited} docs processados, ${data.stats.items_created} itens.`);
+          break;
+        }
+
+        cursor = data.cursor;
+        // Small delay between calls
+        await new Promise(r => setTimeout(r, 300));
       }
     } catch (err) {
       console.error(err);
       toast.error('Erro ao executar sincronização');
+      setSyncResult({ success: false, error: err instanceof Error ? err.message : 'Erro desconhecido' });
     } finally {
       setSyncing(false);
     }

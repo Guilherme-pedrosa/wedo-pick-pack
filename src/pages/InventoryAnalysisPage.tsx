@@ -186,21 +186,20 @@ export default function InventoryAnalysisPage() {
     const names = namesQuery.data || new Map();
     if (rows.length === 0) return [];
 
-    const totalValue = rows.reduce((s, r) => s + r.total_value, 0);
+    // ABC is based on hybrid_score (value × frequency)
+    const totalScore = rows.reduce((s, r) => s + r.hybrid_score, 0);
     let cumulative = 0;
 
     return rows.map(r => {
-      cumulative += r.total_value;
-      const pct = totalValue > 0 ? cumulative / totalValue : 0;
+      cumulative += r.hybrid_score;
+      const pct = totalScore > 0 ? cumulative / totalScore : 0;
       const abcClass: 'A' | 'B' | 'C' = pct <= thresholds.A ? 'A' : pct <= thresholds.B ? 'B' : 'C';
       const info = names.get(r.produto_id);
       const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
       const estoque = stockMap.get(r.produto_id) ?? null;
       
-      // ROP = avg_daily × lead_time × safety_factor (ABC-differentiated)
-      // Coverage = lead time. Safety margin ensures stock lasts until delivery.
       const safetyFactor = ABC_SAFETY[abcClass];
-      const coverageTarget = globalLeadTime; // coverage = lead time
+      const coverageTarget = globalLeadTime;
       const rop = avgDaily * globalLeadTime * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
@@ -212,6 +211,7 @@ export default function InventoryAnalysisPage() {
         total_qty: r.total_qty,
         total_value: r.total_value,
         event_count: r.event_count,
+        hybrid_score: r.hybrid_score,
         avg_daily: avgDaily,
         abc_class: abcClass,
         cumulative_pct: pct,

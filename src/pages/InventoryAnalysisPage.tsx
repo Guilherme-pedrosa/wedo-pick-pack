@@ -44,6 +44,8 @@ interface AnalysisItem {
   produto_id: string;
   nome: string;
   codigo_interno: string | null;
+  fornecedor_id: string | null;
+  fornecedor_nome: string | null;
   total_qty: number;
   total_value: number;
   event_count: number;
@@ -53,6 +55,7 @@ interface AnalysisItem {
   cumulative_pct: number;
   estoque_atual: number | null;
   dias_cobertura: number | null;
+  lead_time_days: number;
   rop: number | null;
   qty_a_comprar: number | null;
   coverage_target: number;

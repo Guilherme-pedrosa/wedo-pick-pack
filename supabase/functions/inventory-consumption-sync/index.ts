@@ -263,7 +263,8 @@ async function processDocument(
     });
   }
 
-  stats.docs_debited++;
+  if (docType === 'os') stats.os_debited++;
+  else stats.vendas_debited++;
 }
 
 async function gcRequest(path: string, access: string, secret: string): Promise<any> {

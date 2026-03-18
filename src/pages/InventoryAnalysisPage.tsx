@@ -146,11 +146,15 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     }
   }
 
+  // Hybrid score: total_value × daily_frequency
+  // This penalizes expensive one-off items (e.g. glass sold 2x in 180d)
+  // and rewards consistent movers (consumables sold 40x in 180d)
   for (const row of map.values()) {
-    row.hybrid_score = row.total_value * Math.log2(row.event_count + 1);
+    const dailyFrequency = row.event_count / lookbackDays;
+    row.hybrid_score = row.total_value * dailyFrequency;
   }
 
-  const filtered = [...map.values()].filter(r => r.event_count >= 2);
+  const filtered = [...map.values()].filter(r => r.event_count >= 3);
   return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
 }
 
@@ -547,7 +551,7 @@ export default function InventoryAnalysisPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Análise de Estoque & Suprimentos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs (≥2 eventos) · {Math.round(kpis.totalConsumo)} un. consumidas · ABC híbrido (valor × frequência)
+            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs (≥3 eventos) · {Math.round(kpis.totalConsumo)} un. consumidas · ABC híbrido (valor × freq. diária)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -393,7 +393,7 @@ export default function InventoryAnalysisPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Análise de Estoque & Suprimentos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs · {Math.round(kpis.totalConsumo)} un. consumidas · R$ {kpis.totalValor.toFixed(0)} valor total
+            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs (≥2 eventos) · {Math.round(kpis.totalConsumo)} un. consumidas · ABC híbrido (valor × frequência)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

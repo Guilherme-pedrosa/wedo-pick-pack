@@ -299,7 +299,7 @@ export default function RastreadorPage() {
       return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
     });
 
-    const attr = found?.atributo || found;
+    const attr: any = (found as any)?.atributo || found;
     return String(attr?.conteudo ?? '').trim();
   }
 

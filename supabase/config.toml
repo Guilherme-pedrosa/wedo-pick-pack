@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.inventory-consumption-sync]
 verify_jwt = false
+
+[functions.inventory-lead-time-sync]
+verify_jwt = false

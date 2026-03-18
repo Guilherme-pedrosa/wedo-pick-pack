@@ -60,6 +60,7 @@ async function reverseItem(
   alert: BaixaAlert,
   targetBoxId: string,
   targetBoxName: string,
+  relinkTechnician?: { gc_id: string; name: string },
 ) {
   // Check if item already exists in target box
   const { data: existingItem } = await supabase
@@ -97,6 +98,36 @@ async function reverseItem(
     refNumero: alert.refNumero,
     details: `Estorno automático: ${alert.reason} | ref:${alert.refTipo}:${alert.refNumero}:${alert.logId}`,
   });
+
+  // Re-link technician to the box if needed (forces check-in before release)
+  if (relinkTechnician) {
+    const { data: currentBox } = await supabase
+      .from("boxes")
+      .select("status, technician_gc_id")
+      .eq("id", targetBoxId)
+      .maybeSingle();
+
+    // Only re-link if box is in Stand By (no technician currently linked)
+    if (currentBox && currentBox.status === "active" && !currentBox.technician_gc_id) {
+      await supabase
+        .from("boxes")
+        .update({
+          technician_gc_id: relinkTechnician.gc_id,
+          technician_name: relinkTechnician.name,
+          status: "em_operacao",
+        })
+        .eq("id", targetBoxId);
+
+      await logBoxMovement({
+        boxId: targetBoxId,
+        boxName: targetBoxName,
+        action: "vinculacao",
+        details: `Revinculação automática: técnico ${relinkTechnician.name} revinculado por estorno de item removido da OS`,
+        technicianGcId: relinkTechnician.gc_id,
+        technicianName: relinkTechnician.name,
+      });
+    }
+  }
 }
 
 /**
@@ -222,21 +253,28 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 String(p?.produto?.produto_id) === log.produto_id
             );
             if (!productInOrder) {
-              // Item was removed from the OS/Venda → auto-reverse it back to the box
+              // Item was removed from the OS/Venda → auto-reverse it back to the ORIGINAL box
               const { data: box } = await supabase
                 .from("boxes")
-                .select("id, name, technician_name, status, user_id")
+                .select("id, name, technician_name, technician_gc_id, status, user_id")
                 .eq("id", log.box_id)
                 .maybeSingle();
 
+              // Always return to the original box (even if Stand By)
               let targetBoxId: string;
               let targetBoxName: string;
+              let relinkTechnician: { gc_id: string; name: string } | undefined;
 
-              if (box && box.status === "active") {
+              if (box) {
                 targetBoxId = box.id;
                 targetBoxName = box.name;
+
+                // If box is in Stand By and the log has technician info, re-link the technician
+                if (box.status === "active" && !box.technician_gc_id && log.technician_gc_id && log.technician_name) {
+                  relinkTechnician = { gc_id: log.technician_gc_id, name: log.technician_name };
+                }
               } else {
-                const userId = box?.user_id || log.operator_id;
+                const userId = log.operator_id;
                 const pendencias = await getOrCreatePendenciasBox(userId);
                 if (!pendencias) {
                   console.error("Could not create Pendências box for item reversal");
@@ -267,7 +305,7 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                 gcObsInterna: gcAudit.obsInterna,
               };
 
-              await reverseItem(itemAlert, targetBoxId, targetBoxName);
+              await reverseItem(itemAlert, targetBoxId, targetBoxName, relinkTechnician);
               alerts.push(itemAlert);
             }
           }

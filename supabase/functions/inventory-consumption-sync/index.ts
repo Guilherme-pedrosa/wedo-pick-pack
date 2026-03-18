@@ -197,6 +197,7 @@ async function processDocument(
     .maybeSingle();
 
   if (existing?.debited) {
+    stats.skipped++;
     await supabase
       .from('doc_stock_effect')
       .update({ last_seen_at: new Date().toISOString() })

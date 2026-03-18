@@ -156,12 +156,10 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
 }
 
 async function fetchTrendData(): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('inventory_consumption_events' as any)
-    .select('produto_id, qty, occurred_at')
-    .order('occurred_at', { ascending: true });
-  if (error) throw error;
-  return data as any[] || [];
+  return fetchAllRows(
+    'inventory_consumption_events',
+    'produto_id, qty, occurred_at',
+  );
 }
 
 async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo>> {

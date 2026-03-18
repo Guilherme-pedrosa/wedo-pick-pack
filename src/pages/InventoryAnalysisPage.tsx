@@ -185,9 +185,11 @@ export default function InventoryAnalysisPage() {
       const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
       const estoque = stockMap.get(r.produto_id) ?? null;
       
-      // Smart ROP: lead time + ABC coverage target + 20% safety
-      const coverageTarget = ABC_COVERAGE[abcClass];
-      const rop = avgDaily * (globalLeadTime + coverageTarget) * 1.2;
+      // ROP = avg_daily × lead_time × safety_factor (ABC-differentiated)
+      // Coverage = lead time. Safety margin ensures stock lasts until delivery.
+      const safetyFactor = ABC_SAFETY[abcClass];
+      const coverageTarget = globalLeadTime; // coverage = lead time
+      const rop = avgDaily * globalLeadTime * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
 

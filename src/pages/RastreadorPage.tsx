@@ -901,7 +901,7 @@ export default function RastreadorPage() {
                   onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
                   disabled={generatingOS || (() => {
                     if (!confirmEntry) return true;
-                    const hasEquip = !!getEquipamento(confirmEntry.orcamento) || !!manualEquipamento.trim();
+                    // Cliente é OBRIGATÓRIO - nunca permitir sem
                     const hasSourceTask = confirmEntry.orcamento.atributos?.some((a: any) => {
                       const attr = a?.atributo || a;
                       const attrId = String(attr?.atributo_id || attr?.id || '');
@@ -909,7 +909,7 @@ export default function RastreadorPage() {
                       return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
                     });
                     const hasCustomer = hasSourceTask || !!auvoCustomerIdInput.trim();
-                    return !hasEquip || !hasCustomer;
+                    return !hasCustomer;
                   })()}
                   className="gap-2"
                 >

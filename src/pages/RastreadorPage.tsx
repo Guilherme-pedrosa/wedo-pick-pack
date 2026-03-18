@@ -387,7 +387,10 @@ export default function RastreadorPage() {
                     ? <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
                     : <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
                   }
-                  <span className="truncate">{item.nome_produto}</span>
+                  <span className="truncate">
+                    {item.codigo_produto && <span className="font-mono text-muted-foreground">[{item.codigo_produto}]</span>}{' '}
+                    {item.nome_produto}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                   <span>Precisa: {item.qtd_necessaria}</span>

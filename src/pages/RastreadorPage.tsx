@@ -288,6 +288,24 @@ export default function RastreadorPage() {
 
   const formatDate = formatDateBR;
 
+  function getSourceTaskOsId(orc: GCOrcamento): string {
+    const found = orc.atributos?.find((a: any) => {
+      const attr = a?.atributo || a;
+      const attrId = String(attr?.atributo_id || attr?.id || '');
+      const content = String(attr?.conteudo ?? '').trim();
+      return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
+    });
+
+    const attr = found?.atributo || found;
+    return String(attr?.conteudo ?? '').trim();
+  }
+
+  function parsePositiveInt(value: string): number | null {
+    const parsed = Number(value.trim());
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return Math.trunc(parsed);
+  }
+
   function getEquipamento(orc: GCOrcamento): string {
     // Try atributos first (campo extra "Equipamento")
     const attr = orc.atributos?.find(a => a.atributo.descricao?.toLowerCase() === 'equipamento');

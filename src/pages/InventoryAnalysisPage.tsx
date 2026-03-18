@@ -314,9 +314,9 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const header = 'Produto ID,Código,Nome,Classe ABC,Consumo Total,Valor Total (R$),Consumo Médio/Dia,Estoque Atual,Dias Cobertura,ROP,A Comprar,Cobertura Alvo (dias)\n';
+    const header = 'Produto ID,Código,Nome,Classe ABC,Eventos,Consumo Total,Valor Total (R$),Score Híbrido,Consumo Médio/Dia,Estoque Atual,Dias Cobertura,ROP,A Comprar\n';
     const rows = filteredItems.map(i =>
-      `${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.abc_class},${i.total_qty},${i.total_value.toFixed(2)},${i.avg_daily.toFixed(2)},${i.estoque_atual ?? ''},${i.dias_cobertura !== null ? i.dias_cobertura.toFixed(1) : ''},${i.rop?.toFixed(1) || ''},${i.qty_a_comprar ?? ''},${i.coverage_target}`
+      `${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.abc_class},${i.event_count},${i.total_qty},${i.total_value.toFixed(2)},${i.hybrid_score.toFixed(1)},${i.avg_daily.toFixed(2)},${i.estoque_atual ?? ''},${i.dias_cobertura !== null ? i.dias_cobertura.toFixed(1) : ''},${i.rop?.toFixed(1) || ''},${i.qty_a_comprar ?? ''}`
     ).join('\n');
 
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });

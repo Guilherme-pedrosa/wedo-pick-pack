@@ -636,7 +636,7 @@ export default function InventoryAnalysisPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {item.dias_cobertura !== null ? (
-                          <span className={item.dias_cobertura < globalLeadTime ? 'text-destructive font-bold' : 'text-xs'}>
+                          <span className={item.dias_cobertura < item.lead_time_days ? 'text-destructive font-bold' : 'text-xs'}>
                             {item.dias_cobertura.toFixed(0)}d
                           </span>
                         ) : <span className="text-muted-foreground text-xs">—</span>}

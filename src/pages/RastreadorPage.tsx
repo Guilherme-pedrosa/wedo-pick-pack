@@ -832,6 +832,33 @@ export default function RastreadorPage() {
                 return null;
               })()}
 
+              {/* Show equipment input when no equipment detected */}
+              {(() => {
+                if (!confirmEntry) return null;
+                const hasEquip = !!getEquipamento(confirmEntry.orcamento);
+                if (!hasEquip) {
+                  return (
+                    <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <span className="text-xs font-semibold text-amber-700">Sem equipamento detectado</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Este orçamento não possui equipamento vinculado. Informe o equipamento para a OS:
+                      </p>
+                      <Input
+                        type="text"
+                        placeholder="Ex: PASS THROUGH QUENTE"
+                        value={manualEquipamento}
+                        onChange={(e) => setManualEquipamento(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
               <div className="text-xs text-muted-foreground space-y-1">
                 <p>O sistema irá:</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">

@@ -143,6 +143,11 @@ export default function RastreadorPage() {
         bodyPayload.auvo_customer_id = Number(auvoCustomerIdInput.trim());
       }
 
+      // If equipment was manually provided, include it
+      if (!equipFromOrc && manualEquipamento.trim()) {
+        bodyPayload.manual_equipamento = manualEquipamento.trim();
+      }
+
       const { data, error } = await supabase.functions.invoke('generate-os', {
         body: bodyPayload,
       });

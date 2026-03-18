@@ -437,7 +437,7 @@ export default function RastreadorPage() {
                 <tbody>
                   {e.itens.map((item, idx) => (
                     <tr key={idx} className="border-b border-gray-200">
-                      <td className="py-0.5 pr-2">{item.nome_produto}</td>
+                      <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
                       <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
                       <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
                       <td className="text-right py-0.5 px-2">{item.estoque_total}</td>

@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getProductStock } from '@/api/gestaoclick';
-import { getStatusCompras, listOrdensCompra } from '@/api/compras';
-import { useComprasStore } from '@/store/comprasStore';
+import { listOrdensCompra } from '@/api/compras';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -155,10 +154,10 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
 async function fetchConfig() {
   const { data } = await supabase
     .from('inventory_policy_config' as any)
-    .select('lookback_days, abc_thresholds')
+    .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids')
     .order('created_at', { ascending: false })
     .limit(1);
-  return (data as any[])?.[0] || { lookback_days: 180, abc_thresholds: { A: 0.8, B: 0.95 } };
+  return (data as any[])?.[0] || { lookback_days: 180, abc_thresholds: { A: 0.8, B: 0.95 }, purchase_crossref_situacao_ids: [] };
 }
 
 async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
@@ -178,7 +177,6 @@ export default function InventoryAnalysisPage() {
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [syncingLT, setSyncingLT] = useState(false);
-  const { config: comprasConfig } = useComprasStore();
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const consumptionQuery = useQuery({ queryKey: ['inv-consumption'], queryFn: fetchConsumptionAgg });
@@ -194,6 +192,7 @@ export default function InventoryAnalysisPage() {
 
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
   const lookbackDays = configQuery.data?.lookback_days || 180;
+  const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
 
   // Build supplier lead time lookup map (fornecedor_id → lead time data)
   const supplierLTMap = useMemo(() => {
@@ -324,13 +323,12 @@ export default function InventoryAnalysisPage() {
   const handleFetchPCs = useCallback(async () => {
     setLoadingPCs(true);
     try {
-      // Get configured "em andamento" statuses from compras store, or fetch all non-finalized
-      let statusIds = comprasConfig.situacoesCompraEmAndamento;
+      // Use crossref statuses from inventory policy config
+      const statusIds = crossrefSituacaoIds;
       if (!statusIds || statusIds.length === 0) {
-        // Fallback: fetch all statuses and use all of them (user should configure in Compras)
-        const allStatus = await getStatusCompras();
-        statusIds = allStatus.map(s => s.id);
-        toast.info('Dica: Configure os status de compra "em andamento" no módulo Compras para melhor precisão.');
+        toast.error('Configure as situações de cruzamento de PCs na Política de Estoque (aba Compras).');
+        setLoadingPCs(false);
+        return;
       }
 
       const newPcMap = new Map<string, PCEntry>();
@@ -369,7 +367,7 @@ export default function InventoryAnalysisPage() {
     } finally {
       setLoadingPCs(false);
     }
-  }, [comprasConfig.situacoesCompraEmAndamento]);
+  }, [crossrefSituacaoIds]);
 
   // Auto-fetch stock on mount when we have analysis data
   const handleFetchStock = useCallback(async () => {

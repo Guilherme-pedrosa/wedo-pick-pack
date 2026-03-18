@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getProductStock } from '@/api/gestaoclick';
+import { getStatusCompras, listOrdensCompra } from '@/api/compras';
+import { useComprasStore } from '@/store/comprasStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +42,18 @@ interface SupplierLeadTime {
   sample_count: number;
 }
 
+interface PCRef {
+  codigo: string;
+  qtd: number;
+  fornecedor: string;
+  situacao: string;
+}
+
+interface PCEntry {
+  qtd: number;
+  refs: PCRef[];
+}
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;
@@ -58,6 +72,9 @@ interface AnalysisItem {
   lead_time_days: number;
   rop: number | null;
   qty_a_comprar: number | null;
+  qty_liquida: number | null;
+  pc_qty: number;
+  pc_refs: PCRef[];
   coverage_target: number;
 }
 
@@ -155,10 +172,13 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 
 export default function InventoryAnalysisPage() {
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
+  const [pcMap, setPcMap] = useState<Map<string, PCEntry>>(new Map());
   const [loadingStock, setLoadingStock] = useState(false);
+  const [loadingPCs, setLoadingPCs] = useState(false);
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [syncingLT, setSyncingLT] = useState(false);
+  const { config: comprasConfig } = useComprasStore();
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const consumptionQuery = useQuery({ queryKey: ['inv-consumption'], queryFn: fetchConsumptionAgg });
@@ -222,6 +242,12 @@ export default function InventoryAnalysisPage() {
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
 
+      // Cross-reference with active purchase orders
+      const pcEntry = pcMap.get(r.produto_id);
+      const pcQty = pcEntry?.qtd || 0;
+      const pcRefs = pcEntry?.refs || [];
+      const qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
+
       return {
         produto_id: r.produto_id,
         nome: info?.nome || `Produto ${r.produto_id}`,
@@ -240,10 +266,13 @@ export default function InventoryAnalysisPage() {
         lead_time_days: leadTimeDays,
         rop,
         qty_a_comprar: qtyAComprar,
+        qty_liquida: qtyLiquida,
+        pc_qty: pcQty,
+        pc_refs: pcRefs,
         coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -285,11 +314,62 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase items
+  // Purchase items — use qty_liquida (after PC deduction) to filter
   const purchaseItems = useMemo(() => 
-    analysisItems.filter(i => i.qty_a_comprar !== null && i.qty_a_comprar > 0),
+    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0),
     [analysisItems]
   );
+
+  // Fetch active purchase orders from GC
+  const handleFetchPCs = useCallback(async () => {
+    setLoadingPCs(true);
+    try {
+      // Get configured "em andamento" statuses from compras store, or fetch all non-finalized
+      let statusIds = comprasConfig.situacoesCompraEmAndamento;
+      if (!statusIds || statusIds.length === 0) {
+        // Fallback: fetch all statuses and use all of them (user should configure in Compras)
+        const allStatus = await getStatusCompras();
+        statusIds = allStatus.map(s => s.id);
+        toast.info('Dica: Configure os status de compra "em andamento" no módulo Compras para melhor precisão.');
+      }
+
+      const newPcMap = new Map<string, PCEntry>();
+      for (const sid of statusIds) {
+        let page = 1;
+        while (true) {
+          const res = await listOrdensCompra(sid, page);
+          for (const ordem of res.data) {
+            for (const p of ordem.produtos || []) {
+              const pid = String(p.produto?.produto_id || '').trim();
+              if (!pid) continue;
+              const qty = parseFloat(String(p.produto?.quantidade || '0')) || 0;
+              if (qty <= 0) continue;
+
+              if (!newPcMap.has(pid)) newPcMap.set(pid, { qtd: 0, refs: [] });
+              const entry = newPcMap.get(pid)!;
+              entry.qtd += qty;
+              entry.refs.push({
+                codigo: ordem.codigo,
+                qtd: qty,
+                fornecedor: ordem.nome_fornecedor,
+                situacao: ordem.nome_situacao,
+              });
+            }
+          }
+          if (page >= res.meta.total_paginas) break;
+          page++;
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+
+      setPcMap(newPcMap);
+      toast.success(`${newPcMap.size} produtos com pedido de compra em andamento`);
+    } catch (err) {
+      toast.error('Erro ao buscar pedidos de compra: ' + (err instanceof Error ? err.message : 'Erro'));
+    } finally {
+      setLoadingPCs(false);
+    }
+  }, [comprasConfig.situacoesCompraEmAndamento]);
 
   // Auto-fetch stock on mount when we have analysis data
   const handleFetchStock = useCallback(async () => {
@@ -315,7 +395,12 @@ export default function InventoryAnalysisPage() {
     setStockMap(newMap);
     setLoadingStock(false);
     toast.success(`Estoque atualizado para ${topItems.length} produtos`);
-  }, [analysisItems, stockMap]);
+    
+    // Also fetch PCs if not loaded yet
+    if (pcMap.size === 0) {
+      handleFetchPCs();
+    }
+  }, [analysisItems, stockMap, pcMap, handleFetchPCs]);
 
   // Sync lead times
   const handleSyncLeadTimes = async () => {
@@ -352,9 +437,9 @@ export default function InventoryAnalysisPage() {
   // Export shopping list CSV
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
-    const header = 'Classe ABC,Produto ID,Código,Nome,Estoque Atual,Consumo Méd/Dia,ROP,Cobertura Atual (dias),Quantidade a Comprar,Cobertura Alvo (dias)\n';
+    const header = 'Classe ABC,Produto ID,Código,Nome,Estoque Atual,Consumo Méd/Dia,Lead Time,ROP,Cobertura (dias),Necessidade Bruta,PC em Andamento,Qtd Líquida a Comprar,PCs\n';
     const rows = purchaseItems.map(i =>
-      `${i.abc_class},${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.estoque_atual},${i.avg_daily.toFixed(2)},${i.rop?.toFixed(0)},${i.dias_cobertura?.toFixed(0) || '0'},${i.qty_a_comprar},${i.coverage_target}`
+      `${i.abc_class},${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.estoque_atual},${i.avg_daily.toFixed(2)},${Math.round(i.lead_time_days)},${i.rop?.toFixed(0)},${i.dias_cobertura?.toFixed(0) || '0'},${i.qty_a_comprar},${i.pc_qty},${i.qty_liquida},${i.pc_refs.map(r => `PC${r.codigo}(${r.qtd})`).join(' ')}`
     ).join('\n');
 
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
@@ -514,18 +599,25 @@ export default function InventoryAnalysisPage() {
             </Card>
           ) : (
             <>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <p className="text-sm font-medium">
                     🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
+                    {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × lead time (por fornecedor) × segurança (A ×{ABC_SAFETY.A} / B ×{ABC_SAFETY.B} / C ×{ABC_SAFETY.C})
+                    ROP = consumo médio × lead time (por fornecedor) × segurança · Qtd líquida = necessidade − PC em andamento
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
-                  <Download className="h-3 w-3" /> Exportar Lista
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleFetchPCs} disabled={loadingPCs} className="gap-1">
+                    {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
+                    <Download className="h-3 w-3" /> Exportar Lista
+                  </Button>
+                </div>
               </div>
 
               <div className="rounded-lg border overflow-auto max-h-[600px]">
@@ -539,6 +631,8 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right">LT</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
                       <TableHead className="text-right">Cobertura</TableHead>
+                      <TableHead className="text-right">Necessidade</TableHead>
+                      <TableHead className="text-right text-blue-600">PC Andamento</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -565,8 +659,23 @@ export default function InventoryAnalysisPage() {
                             {item.dias_cobertura?.toFixed(0) || '0'}d
                           </span>
                         </TableCell>
+                        <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant="destructive" className="font-bold text-sm">{item.qty_a_comprar}</Badge>
+                          {item.pc_qty > 0 ? (
+                            <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>
+                              {item.pc_qty}un
+                              <span className="text-[10px] text-muted-foreground block">
+                                {item.pc_refs.map(r => `PC${r.codigo}`).join(', ')}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={item.qty_liquida && item.qty_liquida > 0 ? "destructive" : "secondary"} className="font-bold text-sm">
+                            {item.qty_liquida ?? item.qty_a_comprar}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -578,12 +687,15 @@ export default function InventoryAnalysisPage() {
               <div className="grid grid-cols-3 gap-3">
                 {(['A', 'B', 'C'] as const).map(cls => {
                   const items = purchaseItems.filter(i => i.abc_class === cls);
-                  const totalQty = items.reduce((s, i) => s + (i.qty_a_comprar || 0), 0);
+                  const totalQtyBruta = items.reduce((s, i) => s + (i.qty_a_comprar || 0), 0);
+                  const totalQtyLiquida = items.reduce((s, i) => s + (i.qty_liquida || 0), 0);
+                  const totalPC = items.reduce((s, i) => s + i.pc_qty, 0);
                   return (
                     <Card key={cls} className="p-3 text-center">
                       {abcBadge(cls)}
                       <p className="text-lg font-bold mt-1">{items.length} itens</p>
-                      <p className="text-xs text-muted-foreground">{totalQty} un. a comprar</p>
+                      <p className="text-xs text-muted-foreground">{totalQtyLiquida} un. a comprar</p>
+                      {totalPC > 0 && <p className="text-[10px] text-blue-600">{totalPC} un. já em PC</p>}
                     </Card>
                   );
                 })}

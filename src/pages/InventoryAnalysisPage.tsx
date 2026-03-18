@@ -242,6 +242,12 @@ export default function InventoryAnalysisPage() {
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
       const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
 
+      // Cross-reference with active purchase orders
+      const pcEntry = pcMap.get(r.produto_id);
+      const pcQty = pcEntry?.qtd || 0;
+      const pcRefs = pcEntry?.refs || [];
+      const qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
+
       return {
         produto_id: r.produto_id,
         nome: info?.nome || `Produto ${r.produto_id}`,
@@ -260,10 +266,13 @@ export default function InventoryAnalysisPage() {
         lead_time_days: leadTimeDays,
         rop,
         qty_a_comprar: qtyAComprar,
+        qty_liquida: qtyLiquida,
+        pc_qty: pcQty,
+        pc_refs: pcRefs,
         coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
 
   // Filtered items
   const filteredItems = useMemo(() => {

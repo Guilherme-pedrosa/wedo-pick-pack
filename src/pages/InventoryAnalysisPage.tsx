@@ -703,6 +703,7 @@ export default function InventoryAnalysisPage() {
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
                         </TableCell>
+                        <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>
                         <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
                         <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>

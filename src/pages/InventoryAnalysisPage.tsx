@@ -129,9 +129,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     row.hybrid_score = row.total_value * Math.log2(row.event_count + 1);
   }
 
-  // Filter out items with only 1 event (one-off purchases/sales)
-  const filtered = [...map.values()].filter(r => r.event_count >= 2);
-  return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
+  return [...map.values()].sort((a, b) => b.hybrid_score - a.hybrid_score);
 }
 
 async function fetchTrendData(): Promise<any[]> {

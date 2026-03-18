@@ -177,7 +177,6 @@ export default function InventoryAnalysisPage() {
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [syncingLT, setSyncingLT] = useState(false);
-  const { config: comprasConfig } = useComprasStore();
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const consumptionQuery = useQuery({ queryKey: ['inv-consumption'], queryFn: fetchConsumptionAgg });

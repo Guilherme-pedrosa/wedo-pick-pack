@@ -172,10 +172,13 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 
 export default function InventoryAnalysisPage() {
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
+  const [pcMap, setPcMap] = useState<Map<string, PCEntry>>(new Map());
   const [loadingStock, setLoadingStock] = useState(false);
+  const [loadingPCs, setLoadingPCs] = useState(false);
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [syncingLT, setSyncingLT] = useState(false);
+  const { config: comprasConfig } = useComprasStore();
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const consumptionQuery = useQuery({ queryKey: ['inv-consumption'], queryFn: fetchConsumptionAgg });

@@ -599,18 +599,25 @@ export default function InventoryAnalysisPage() {
             </Card>
           ) : (
             <>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
                   <p className="text-sm font-medium">
                     🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
+                    {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × lead time (por fornecedor) × segurança (A ×{ABC_SAFETY.A} / B ×{ABC_SAFETY.B} / C ×{ABC_SAFETY.C})
+                    ROP = consumo médio × lead time (por fornecedor) × segurança · Qtd líquida = necessidade − PC em andamento
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
-                  <Download className="h-3 w-3" /> Exportar Lista
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleFetchPCs} disabled={loadingPCs} className="gap-1">
+                    {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
+                    <Download className="h-3 w-3" /> Exportar Lista
+                  </Button>
+                </div>
               </div>
 
               <div className="rounded-lg border overflow-auto max-h-[600px]">
@@ -624,6 +631,8 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right">LT</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
                       <TableHead className="text-right">Cobertura</TableHead>
+                      <TableHead className="text-right">Necessidade</TableHead>
+                      <TableHead className="text-right text-blue-600">PC Andamento</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -650,8 +659,23 @@ export default function InventoryAnalysisPage() {
                             {item.dias_cobertura?.toFixed(0) || '0'}d
                           </span>
                         </TableCell>
+                        <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant="destructive" className="font-bold text-sm">{item.qty_a_comprar}</Badge>
+                          {item.pc_qty > 0 ? (
+                            <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>
+                              {item.pc_qty}un
+                              <span className="text-[10px] text-muted-foreground block">
+                                {item.pc_refs.map(r => `PC${r.codigo}`).join(', ')}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={item.qty_liquida && item.qty_liquida > 0 ? "destructive" : "secondary"} className="font-bold text-sm">
+                            {item.qty_liquida ?? item.qty_a_comprar}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))}

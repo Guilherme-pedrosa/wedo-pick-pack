@@ -244,6 +244,7 @@ export async function rastrearOrcamentos(
       conflitos.push({
         produto_key: key,
         nome_produto: demand.nome,
+        codigo_produto: demand.codigo,
         estoque_total: stock + (reserved?.qty ?? 0), // show original stock
         demanda_total: demand.total + (reserved?.qty ?? 0), // include OS reserved demand
         orcamentos_envolvidos: [

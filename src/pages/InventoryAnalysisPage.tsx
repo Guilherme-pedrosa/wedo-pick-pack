@@ -82,10 +82,15 @@ interface AnalysisItem {
 const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
 
 // --- Data fetchers ---
-async function fetchConsumptionAgg(): Promise<ConsumptionRow[]> {
+async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow[]> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
+  const cutoffStr = cutoff.toISOString();
+
   const { data, error } = await supabase
     .from('inventory_consumption_events' as any)
     .select('produto_id, variacao_id, qty, valor_custo, occurred_at')
+    .gte('occurred_at', cutoffStr)
     .order('occurred_at', { ascending: true });
 
   if (error) throw error;
@@ -179,7 +184,15 @@ export default function InventoryAnalysisPage() {
   const [syncingLT, setSyncingLT] = useState(false);
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
-  const consumptionQuery = useQuery({ queryKey: ['inv-consumption'], queryFn: fetchConsumptionAgg });
+  const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
+  const lookbackDays = configQuery.data?.lookback_days || 180;
+  const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
+
+  const consumptionQuery = useQuery({
+    queryKey: ['inv-consumption', lookbackDays],
+    queryFn: () => fetchConsumptionAgg(lookbackDays),
+    enabled: !!configQuery.data,
+  });
   const trendQuery = useQuery({ queryKey: ['inv-trend'], queryFn: fetchTrendData });
   const leadTimesQuery = useQuery({ queryKey: ['supplier-lead-times'], queryFn: fetchSupplierLeadTimes });
   
@@ -189,10 +202,6 @@ export default function InventoryAnalysisPage() {
     queryFn: () => fetchProductNames(productIds),
     enabled: productIds.length > 0,
   });
-
-  const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
-  const lookbackDays = configQuery.data?.lookback_days || 180;
-  const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
 
   // Build supplier lead time lookup map (fornecedor_id → lead time data)
   const supplierLTMap = useMemo(() => {

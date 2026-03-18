@@ -107,6 +107,7 @@ function AuthenticatedApp() {
         <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
         <Route path="/config" element={<ConfigPage />} />
+        <Route path="/config/estoque" element={<InventoryPolicyPage />} />
         <Route
           path="/admin/users"
           element={isAdmin ? <AdminUsersPage /> : <Navigate to="/dashboard" replace />}

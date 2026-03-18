@@ -82,6 +82,7 @@ const menuGroups: MenuGroup[] = [
     label: "Sistema",
     items: [
       { title: "Configurações", icon: Settings, href: "/config" },
+      { title: "Política Estoque", icon: BarChart3, href: "/config/estoque" },
       { title: "Usuários", icon: Users, href: "/admin/users", adminOnly: true },
       { title: "Logs do Sistema", icon: ClipboardList, href: "/admin/logs", adminOnly: true },
     ],

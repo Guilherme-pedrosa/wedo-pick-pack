@@ -28,6 +28,7 @@ interface ProductInfo {
   produto_id: string;
   nome: string;
   codigo_interno: string | null;
+  fornecedor_id: string | null;
 }
 
 interface SupplierLeadTime {

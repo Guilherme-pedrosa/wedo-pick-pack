@@ -687,12 +687,15 @@ export default function InventoryAnalysisPage() {
               <div className="grid grid-cols-3 gap-3">
                 {(['A', 'B', 'C'] as const).map(cls => {
                   const items = purchaseItems.filter(i => i.abc_class === cls);
-                  const totalQty = items.reduce((s, i) => s + (i.qty_a_comprar || 0), 0);
+                  const totalQtyBruta = items.reduce((s, i) => s + (i.qty_a_comprar || 0), 0);
+                  const totalQtyLiquida = items.reduce((s, i) => s + (i.qty_liquida || 0), 0);
+                  const totalPC = items.reduce((s, i) => s + i.pc_qty, 0);
                   return (
                     <Card key={cls} className="p-3 text-center">
                       {abcBadge(cls)}
                       <p className="text-lg font-bold mt-1">{items.length} itens</p>
-                      <p className="text-xs text-muted-foreground">{totalQty} un. a comprar</p>
+                      <p className="text-xs text-muted-foreground">{totalQtyLiquida} un. a comprar</p>
+                      {totalPC > 0 && <p className="text-[10px] text-blue-600">{totalPC} un. já em PC</p>}
                     </Card>
                   );
                 })}

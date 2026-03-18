@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { getProductStock } from '@/api/gestaoclick';
 import { listOrdensCompra } from '@/api/compras';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -397,36 +396,59 @@ export default function InventoryAnalysisPage() {
     }
   }, [crossrefSituacaoIds]);
 
-  // Auto-fetch stock on mount when we have analysis data
+  // Bulk fetch stock for ALL products via paginated edge function
   const handleFetchStock = useCallback(async () => {
-    const topItems = analysisItems.slice(0, 80);
-    if (topItems.length === 0) return;
-
     setLoadingStock(true);
-    setStockProgress({ done: 0, total: topItems.length });
-    const newMap = new Map(stockMap);
+    setStockProgress({ done: 0, total: 0 });
+    let cursor: any = null;
+    let callCount = 0;
 
-    for (let i = 0; i < topItems.length; i += 3) {
-      const batch = topItems.slice(i, i + 3);
-      const results = await Promise.all(batch.map(item => getProductStock(item.produto_id)));
-      for (const r of results) {
-        if (r) newMap.set(r.produto_id, r.estoque);
+    try {
+      while (true) {
+        callCount++;
+        const { data, error } = await supabase.functions.invoke('bulk-stock-fetch', {
+          body: { cursor },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        if (data?.progress) {
+          setStockProgress({ done: data.progress.productsLoaded, total: data.progress.totalRegistros || data.progress.productsLoaded });
+        }
+
+        if (data?.retry) {
+          await new Promise(r => setTimeout(r, 2000));
+          cursor = data.cursor;
+          continue;
+        }
+
+        if (data?.done) {
+          const sm = data.stockMap || {};
+          const newMap = new Map<string, number>();
+          for (const [id, qty] of Object.entries(sm)) {
+            newMap.set(id, qty as number);
+          }
+          setStockMap(newMap);
+          toast.success(`Estoque atualizado: ${newMap.size} produtos`);
+          break;
+        }
+
+        cursor = data.cursor;
+        await new Promise(r => setTimeout(r, 100));
       }
-      setStockProgress({ done: Math.min(i + 3, topItems.length), total: topItems.length });
-      if (i + 3 < topItems.length) {
-        await new Promise(r => setTimeout(r, 1100));
-      }
+    } catch (err) {
+      console.error('Bulk stock fetch error:', err);
+      toast.error('Erro ao buscar estoques: ' + (err instanceof Error ? err.message : 'Erro'));
+    } finally {
+      setLoadingStock(false);
     }
 
-    setStockMap(newMap);
-    setLoadingStock(false);
-    toast.success(`Estoque atualizado para ${topItems.length} produtos`);
-    
     // Also fetch PCs if not loaded yet
     if (pcMap.size === 0) {
       handleFetchPCs();
     }
-  }, [analysisItems, stockMap, pcMap, handleFetchPCs]);
+  }, [pcMap, handleFetchPCs]);
 
   // Sync lead times
   const handleSyncLeadTimes = async () => {

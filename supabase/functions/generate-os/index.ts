@@ -330,14 +330,24 @@ Deno.serve(async (req: Request) => {
     };
 
     // Priority: clone from source tarefa OS -> frontend-provided -> orçamento explicit mapping
+    let resolvedCustomerId: number | null = null;
     if (clonedCustomerId) {
-      auvoPayload.customerId = clonedCustomerId;
+      resolvedCustomerId = Number(clonedCustomerId);
     } else if (auvo_customer_id && Number.isFinite(Number(auvo_customer_id)) && Number(auvo_customer_id) > 0) {
-      auvoPayload.customerId = Number(auvo_customer_id);
+      resolvedCustomerId = Number(auvo_customer_id);
       console.log(`[generate-os] Using frontend-provided auvo_customer_id: ${auvo_customer_id}`);
-    } else if (orcamento.auvo_customer_id) {
-      auvoPayload.customerId = Number(orcamento.auvo_customer_id);
+    } else if (orcamento.auvo_customer_id && Number.isFinite(Number(orcamento.auvo_customer_id)) && Number(orcamento.auvo_customer_id) > 0) {
+      resolvedCustomerId = Number(orcamento.auvo_customer_id);
     }
+
+    if (!resolvedCustomerId) {
+      return new Response(
+        JSON.stringify({ error: 'Cliente Auvo obrigatório: não foi possível identificar um cliente válido para esta OS.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    auvoPayload.customerId = resolvedCustomerId;
 
     const equipmentsToSend = equipmentIdsFromOrcamento.length > 0
       ? equipmentIdsFromOrcamento

@@ -506,7 +506,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right">Méd/dia</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
                       <TableHead className="text-right">Cobertura</TableHead>
-                      <TableHead className="text-right">Alvo</TableHead>
+                      <TableHead className="text-right">Segurança</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
                     </TableRow>
                   </TableHeader>

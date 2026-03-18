@@ -465,7 +465,7 @@ export default function RastreadorPage() {
             <h2 className="text-base font-bold mb-2 border-b pb-1">⚠️ Conflitos de Estoque ({result.conflitos.length})</h2>
             {result.conflitos.map(c => (
               <div key={c.produto_key} className="mb-2 text-xs">
-                <span className="font-medium">{c.nome_produto}</span> — Estoque: {c.estoque_total}, Demanda: {c.demanda_total}
+                        <span className="font-medium">{c.codigo_produto && `[${c.codigo_produto}] `}{c.nome_produto}</span> — Estoque: {c.estoque_total}, Demanda: {c.demanda_total}
                 <div className="ml-4">
                   {c.orcamentos_envolvidos.map(o => {
                     const isOS = o.id.startsWith('os-');

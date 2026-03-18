@@ -76,6 +76,7 @@ const menuGroups: MenuGroup[] = [
       { title: "Compras", icon: ShoppingCart, href: "/compras" },
       { title: "Rastreador", icon: Search, href: "/rastreador" },
       { title: "Log OS Geradas", icon: ClipboardList, href: "/rastreador/logs" },
+      { title: "Política Estoque", icon: BarChart3, href: "/config/estoque" },
     ],
   },
   {

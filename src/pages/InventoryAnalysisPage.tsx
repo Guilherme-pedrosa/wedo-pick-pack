@@ -184,7 +184,11 @@ export default function InventoryAnalysisPage() {
   const [syncingLT, setSyncingLT] = useState(false);
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
-  const consumptionQuery = useQuery({ queryKey: ['inv-consumption'], queryFn: fetchConsumptionAgg });
+  const consumptionQuery = useQuery({
+    queryKey: ['inv-consumption', lookbackDays],
+    queryFn: () => fetchConsumptionAgg(lookbackDays),
+    enabled: !!configQuery.data,
+  });
   const trendQuery = useQuery({ queryKey: ['inv-trend'], queryFn: fetchTrendData });
   const leadTimesQuery = useQuery({ queryKey: ['supplier-lead-times'], queryFn: fetchSupplierLeadTimes });
   

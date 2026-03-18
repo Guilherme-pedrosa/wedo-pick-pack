@@ -448,9 +448,9 @@ export default function InventoryPolicyPage() {
                 <div>
                   <p className="font-medium text-green-800 dark:text-green-400">Sincronização concluída</p>
                   <p className="text-green-700 dark:text-green-500 mt-1">
-                    Documentos vistos: {syncResult.stats.docs_seen} · 
-                    Debitados: {syncResult.stats.docs_debited} · 
-                    Itens criados: {syncResult.stats.items_created}
+                    OSs: {syncResult.stats.os_seen || 0} ({syncResult.stats.os_debited || 0} novas) · 
+                    Vendas: {syncResult.stats.vendas_seen || 0} ({syncResult.stats.vendas_debited || 0} novas) · 
+                    Peças registradas: {syncResult.stats.pecas_created || 0}
                     {syncResult.stats.errors > 0 && ` · Erros: ${syncResult.stats.errors}`}
                   </p>
                   {syncResult.period && (

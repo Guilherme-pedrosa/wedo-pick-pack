@@ -225,17 +225,13 @@ export async function rastrearOrcamentos(
     }
   }
 
-  // Preserve original stock (API) and create "available" stock after OS reservations
+  // Available stock = real stock from API (reservations are alerts only, never reduce stock)
   const stockMapOriginal = new Map(stockMap);
   const availableStockMap = new Map(stockMap);
 
-  // Phase 4b: Subtract OS reserved stock (OSs in non-stock-moving statuses)
+  // Phase 4b: Collect OS reservations as ALERTS ONLY (do NOT subtract from available stock)
   const osReservadas: OSReservedInfo[] = [];
   for (const [key, reserved] of Object.entries(reservedDemand)) {
-    const currentStock = availableStockMap.get(key);
-    if (currentStock !== undefined) {
-      availableStockMap.set(key, Math.max(0, currentStock - reserved.qty));
-    }
     osReservadas.push({
       produto_key: key,
       nome_produto: '',

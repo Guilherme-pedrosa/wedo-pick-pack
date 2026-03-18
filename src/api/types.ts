@@ -187,6 +187,7 @@ export interface GCProdutoDetalhe {
     variacao: {
       id: string;
       nome: string;
+      codigo?: string;
       estoque: string | number;
     };
   }>;

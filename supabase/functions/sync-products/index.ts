@@ -175,6 +175,12 @@ async function syncFull(
           const codigoInterno = product.codigo_interno ? String(product.codigo_interno).trim() : null;
           const codigoBarra = product.codigo_barra ? String(product.codigo_barra).trim() : null;
 
+          // Extract first fornecedor_id from product data
+          const fornecedores = product.fornecedores as { fornecedor_id?: string }[] | undefined;
+          const fornecedorId = fornecedores?.[0]?.fornecedor_id 
+            ? String(fornecedores[0].fornecedor_id) 
+            : (product.fornecedor_id ? String(product.fornecedor_id) : null);
+
           rows.push({
             produto_id: produtoId,
             nome: String(product.nome || ''),
@@ -183,6 +189,7 @@ async function syncFull(
             possui_variacao: hasVariacao,
             ativo: isAtivo,
             fingerprint: fp,
+            fornecedor_id: fornecedorId,
             last_synced_at: new Date().toISOString(),
             last_seen_at: new Date().toISOString(),
             payload_min_json: {

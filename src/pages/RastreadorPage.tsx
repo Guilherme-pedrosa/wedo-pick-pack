@@ -795,6 +795,27 @@ export default function RastreadorPage() {
                 </p>
               </div>
 
+              {/* Conflict warning */}
+              {confirmEntry.temComprometido && (
+                <div className="rounded-lg border border-red-500/50 bg-red-500/5 p-3 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <span className="text-xs font-semibold text-red-700">Estoque comprometido</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Um ou mais itens deste orçamento são disputados por outros orçamentos ou OSs pendentes.
+                    Se gerar esta OS, os demais pedidos que precisam das mesmas peças poderão ficar sem estoque.
+                  </p>
+                  <div className="text-xs space-y-0.5">
+                    {confirmEntry.itens.filter(i => i.comprometido).map((item, idx) => (
+                      <div key={idx} className="text-red-600">
+                        ⚠ {item.codigo_produto && `[${item.codigo_produto}] `}{item.nome_produto} — Precisa: {item.qtd_necessaria}, Estoque: {item.estoque_total}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Cliente Auvo: sempre permitir fallback manual + validação */}
               {(() => {
                 const sourceTaskId = getSourceTaskOsId(confirmEntry.orcamento);

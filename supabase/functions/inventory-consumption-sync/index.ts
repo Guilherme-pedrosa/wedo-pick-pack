@@ -93,7 +93,8 @@ Deno.serve(async (req: Request) => {
       totalRegistros = meta.total_registros || 0;
 
       for (const doc of docs) {
-        stats.docs_seen++;
+        if (task.docType === 'os') stats.os_seen++;
+        else stats.vendas_seen++;
         try {
           await processDocument(task.docType, doc, task.situacaoId, supabase, stats);
         } catch (e) {

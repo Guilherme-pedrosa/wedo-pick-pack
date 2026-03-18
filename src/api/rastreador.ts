@@ -9,13 +9,15 @@ export interface OrcamentoReadiness {
     nome_produto: string;
     codigo_produto: string;
     qtd_necessaria: number;
-    estoque_total: number;      // stock total (real)
-    estoque_disponivel: number;  // stock remaining after prior budgets consumed it
-    pronto: boolean;
+    estoque_total: number;      // real stock from ERP (never reduced)
+    estoque_disponivel: number;  // same as estoque_total (real stock)
+    pronto: boolean;             // real stock >= needed
+    comprometido: boolean;       // true if this item is disputed by other budgets/OSs
   }>;
   totalItens: number;
   itensProntos: number;
   pronto: boolean;
+  temComprometido: boolean;      // true if any item is in a conflict
 }
 
 export interface ConflictInfo {

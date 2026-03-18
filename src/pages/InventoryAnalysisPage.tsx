@@ -489,7 +489,6 @@ export default function InventoryAnalysisPage() {
                   <p className="text-xs text-muted-foreground mt-0.5">
                     ROP = consumo médio × lead time ({globalLeadTime}d) × segurança (A ×{ABC_SAFETY.A} / B ×{ABC_SAFETY.B} / C ×{ABC_SAFETY.C})
                   </p>
-                  </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
                   <Download className="h-3 w-3" /> Exportar Lista

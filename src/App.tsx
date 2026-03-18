@@ -17,6 +17,7 @@ import ToolboxLogsPage from "./pages/controle/ToolboxLogsPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import InventoryPolicyPage from "./pages/InventoryPolicyPage";
+import InventoryAnalysisPage from "./pages/InventoryAnalysisPage";
 import ComprasPage from "./pages/ComprasPage";
 import RastreadorPage from "./pages/RastreadorPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
@@ -108,6 +109,7 @@ function AuthenticatedApp() {
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route path="/config/estoque" element={<InventoryPolicyPage />} />
+        <Route path="/analise-estoque" element={<InventoryAnalysisPage />} />
         <Route
           path="/admin/users"
           element={isAdmin ? <AdminUsersPage /> : <Navigate to="/dashboard" replace />}

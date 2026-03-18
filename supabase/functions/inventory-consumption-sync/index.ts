@@ -185,7 +185,7 @@ async function processDocument(
   doc: any,
   situacaoId: string,
   supabase: any,
-  stats: { docs_debited: number; items_created: number },
+  stats: any,
 ) {
   const docId = String(doc.id);
 

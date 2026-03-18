@@ -127,10 +127,10 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
   if (ids.length === 0) return map;
   const { data } = await supabase
     .from('products_index')
-    .select('produto_id, nome, codigo_interno')
+    .select('produto_id, nome, codigo_interno, fornecedor_id')
     .in('produto_id', ids);
   for (const p of (data || [])) {
-    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno });
+    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null });
   }
   return map;
 }

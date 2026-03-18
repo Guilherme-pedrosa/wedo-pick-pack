@@ -98,6 +98,36 @@ async function reverseItem(
     refNumero: alert.refNumero,
     details: `Estorno automático: ${alert.reason} | ref:${alert.refTipo}:${alert.refNumero}:${alert.logId}`,
   });
+
+  // Re-link technician to the box if needed (forces check-in before release)
+  if (relinkTechnician) {
+    const { data: currentBox } = await supabase
+      .from("boxes")
+      .select("status, technician_gc_id")
+      .eq("id", targetBoxId)
+      .maybeSingle();
+
+    // Only re-link if box is in Stand By (no technician currently linked)
+    if (currentBox && currentBox.status === "active" && !currentBox.technician_gc_id) {
+      await supabase
+        .from("boxes")
+        .update({
+          technician_gc_id: relinkTechnician.gc_id,
+          technician_name: relinkTechnician.name,
+          status: "em_operacao",
+        })
+        .eq("id", targetBoxId);
+
+      await logBoxMovement({
+        boxId: targetBoxId,
+        boxName: targetBoxName,
+        action: "vinculacao",
+        details: `Revinculação automática: técnico ${relinkTechnician.name} revinculado por estorno de item removido da OS`,
+        technicianGcId: relinkTechnician.gc_id,
+        technicianName: relinkTechnician.name,
+      });
+    }
+  }
 }
 
 /**

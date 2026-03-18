@@ -387,7 +387,10 @@ export default function RastreadorPage() {
                     ? <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
                     : <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
                   }
-                  <span className="truncate">{item.nome_produto}</span>
+                  <span className="truncate">
+                    {item.codigo_produto && <span className="font-mono text-muted-foreground">[{item.codigo_produto}]</span>}{' '}
+                    {item.nome_produto}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
                   <span>Precisa: {item.qtd_necessaria}</span>
@@ -434,7 +437,7 @@ export default function RastreadorPage() {
                 <tbody>
                   {e.itens.map((item, idx) => (
                     <tr key={idx} className="border-b border-gray-200">
-                      <td className="py-0.5 pr-2">{item.nome_produto}</td>
+                      <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
                       <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
                       <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
                       <td className="text-right py-0.5 px-2">{item.estoque_total}</td>
@@ -462,7 +465,7 @@ export default function RastreadorPage() {
             <h2 className="text-base font-bold mb-2 border-b pb-1">⚠️ Conflitos de Estoque ({result.conflitos.length})</h2>
             {result.conflitos.map(c => (
               <div key={c.produto_key} className="mb-2 text-xs">
-                <span className="font-medium">{c.nome_produto}</span> — Estoque: {c.estoque_total}, Demanda: {c.demanda_total}
+                        <span className="font-medium">{c.codigo_produto && `[${c.codigo_produto}] `}{c.nome_produto}</span> — Estoque: {c.estoque_total}, Demanda: {c.demanda_total}
                 <div className="ml-4">
                   {c.orcamentos_envolvidos.map(o => {
                     const isOS = o.id.startsWith('os-');
@@ -710,7 +713,10 @@ export default function RastreadorPage() {
                   <div className="space-y-2">
                     {result.conflitos.map(c => (
                       <Card key={c.produto_key} className="p-3 border-l-4 border-l-red-500">
-                        <p className="font-medium text-sm">{c.nome_produto}</p>
+                        <p className="font-medium text-sm">
+                          {c.codigo_produto && <span className="font-mono text-muted-foreground">[{c.codigo_produto}]</span>}{' '}
+                          {c.nome_produto}
+                        </p>
                         <div className="flex gap-3 text-xs text-muted-foreground mt-1">
                           <span>Estoque: <strong className="text-foreground">{c.estoque_total}</strong></span>
                           <span>Demanda total: <strong className="text-red-500">{c.demanda_total}</strong></span>

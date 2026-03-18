@@ -21,6 +21,7 @@ export interface OrcamentoReadiness {
 export interface ConflictInfo {
   produto_key: string;
   nome_produto: string;
+  codigo_produto: string;
   estoque_total: number;
   demanda_total: number;
   orcamentos_envolvidos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }>;
@@ -180,9 +181,13 @@ export async function rastrearOrcamentos(
         if (vid && detail.variacoes?.length) {
           const v = detail.variacoes.find(v => String(v.variacao.id) === vid);
           estoque = v ? parseDecimal(v.variacao.estoque) : parseDecimal(detail.estoque);
+          console.log(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}, vid=${vid}) → variação estoque raw=${v ? v.variacao.estoque : 'N/A (fallback parent)'}, parsed=${estoque}`);
         } else {
           estoque = parseDecimal(detail.estoque);
+          console.log(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}) → parent estoque raw=${detail.estoque}, parsed=${estoque}`);
         }
+      } else {
+        console.warn(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}) → NO DETAIL FOUND`);
       }
       stockMap.set(key, estoque);
     }
@@ -205,7 +210,7 @@ export async function rastrearOrcamentos(
   }
 
   // Phase 5: Compute total demand per product across all budgets (for conflict detection)
-  const demandMap = new Map<string, { total: number; nome: string; orcamentos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }> }>();
+  const demandMap = new Map<string, { total: number; nome: string; codigo: string; orcamentos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }> }>();
   for (const orc of uniqueOrcamentos) {
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
@@ -213,7 +218,7 @@ export async function rastrearOrcamentos(
       if (!pid) continue;
       const key = makeKey(pid, vid);
       const qtd = parseDecimal(p.produto.quantidade);
-      if (!demandMap.has(key)) demandMap.set(key, { total: 0, nome: p.produto.nome_produto, orcamentos: [] });
+      if (!demandMap.has(key)) demandMap.set(key, { total: 0, nome: p.produto.nome_produto, codigo: p.produto.codigo_produto || '', orcamentos: [] });
       const entry = demandMap.get(key)!;
       entry.total += qtd;
       entry.orcamentos.push({ id: orc.id, codigo: orc.codigo, nome_cliente: orc.nome_cliente, qtd });
@@ -243,6 +248,7 @@ export async function rastrearOrcamentos(
       conflitos.push({
         produto_key: key,
         nome_produto: demand.nome,
+        codigo_produto: demand.codigo,
         estoque_total: stock + (reserved?.qty ?? 0), // show original stock
         demanda_total: demand.total + (reserved?.qty ?? 0), // include OS reserved demand
         orcamentos_envolvidos: [

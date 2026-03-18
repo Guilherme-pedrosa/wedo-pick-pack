@@ -6,7 +6,8 @@ export type MovementAction =
   | "baixa"          // item write-off via OS/Venda
   | "adicao"         // item added to box
   | "remocao"        // item removed from box
-  | "desvincular";   // technician unlinked
+  | "desvincular"    // technician unlinked
+  | "vinculacao";    // technician linked/re-linked
 
 interface LogMovementParams {
   boxId: string;

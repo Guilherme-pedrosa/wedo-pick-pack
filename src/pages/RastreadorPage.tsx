@@ -740,7 +740,7 @@ export default function RastreadorPage() {
       </div>
 
       {/* Confirmation Dialog */}
-      <Dialog open={!!confirmEntry} onOpenChange={(open) => { if (!open) { setConfirmEntry(null); setGenerationResult(null); } }}>
+      <Dialog open={!!confirmEntry} onOpenChange={(open) => { if (!open) { setConfirmEntry(null); setGenerationResult(null); setManualEquipamento(''); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Gerar OS + Tarefa Auvo</DialogTitle>

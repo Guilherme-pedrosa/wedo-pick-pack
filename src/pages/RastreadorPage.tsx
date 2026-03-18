@@ -904,7 +904,18 @@ export default function RastreadorPage() {
                 </Button>
                 <Button
                   onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
-                  disabled={generatingOS}
+                  disabled={generatingOS || (() => {
+                    if (!confirmEntry) return true;
+                    const hasEquip = !!getEquipamento(confirmEntry.orcamento) || !!manualEquipamento.trim();
+                    const hasSourceTask = confirmEntry.orcamento.atributos?.some((a: any) => {
+                      const attr = a?.atributo || a;
+                      const attrId = String(attr?.atributo_id || attr?.id || '');
+                      const content = String(attr?.conteudo ?? '').trim();
+                      return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
+                    });
+                    const hasCustomer = hasSourceTask || !!auvoCustomerIdInput.trim();
+                    return !hasEquip || !hasCustomer;
+                  })()}
                   className="gap-2"
                 >
                   {generatingOS ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}

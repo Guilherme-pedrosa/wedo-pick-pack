@@ -450,9 +450,9 @@ export default function InventoryAnalysisPage() {
           <p className="text-[10px] text-muted-foreground">{((1 - thresholds.B) * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.C}</p>
         </Card>
         <Card className="p-3">
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Time Médio</p>
-          <p className="text-xl font-bold text-foreground mt-0.5">{globalLeadTime}d</p>
-          <p className="text-[10px] text-muted-foreground">{leadTimes.length} fornecedores</p>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Time (fallback)</p>
+          <p className="text-xl font-bold text-foreground mt-0.5">{fallbackLeadTime}d</p>
+          <p className="text-[10px] text-muted-foreground">{leadTimes.length} fornecedores · por produto</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Precisam Reposição</p>

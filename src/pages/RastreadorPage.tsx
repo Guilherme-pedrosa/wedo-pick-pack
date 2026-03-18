@@ -124,13 +124,8 @@ export default function RastreadorPage() {
         return;
       }
 
-      // Block if no equipment info
+      // Equipment is optional (warning only, not blocking)
       const equipFromOrc = getEquipamento(entry.orcamento);
-      if (!equipFromOrc && !manualEquipamento.trim()) {
-        toast.error('Informe o equipamento antes de gerar a OS.');
-        setGeneratingOS(false);
-        return;
-      }
 
       const bodyPayload: Record<string, unknown> = {
         orcamento: entry.orcamento,
@@ -841,14 +836,14 @@ export default function RastreadorPage() {
                     <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-3 space-y-2">
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="h-4 w-4 text-amber-600" />
-                        <span className="text-xs font-semibold text-amber-700">Sem equipamento detectado</span>
+                        <span className="text-xs font-semibold text-amber-700">Sem equipamento detectado (opcional)</span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Este orçamento não possui equipamento vinculado. Informe o equipamento para a OS:
+                        Este orçamento não possui equipamento vinculado. Você pode informar abaixo ou prosseguir sem:
                       </p>
                       <Input
                         type="text"
-                        placeholder="Ex: PASS THROUGH QUENTE"
+                        placeholder="Ex: PASS THROUGH QUENTE (opcional)"
                         value={manualEquipamento}
                         onChange={(e) => setManualEquipamento(e.target.value)}
                         className="h-8 text-sm"
@@ -906,7 +901,7 @@ export default function RastreadorPage() {
                   onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
                   disabled={generatingOS || (() => {
                     if (!confirmEntry) return true;
-                    const hasEquip = !!getEquipamento(confirmEntry.orcamento) || !!manualEquipamento.trim();
+                    // Cliente é OBRIGATÓRIO - nunca permitir sem
                     const hasSourceTask = confirmEntry.orcamento.atributos?.some((a: any) => {
                       const attr = a?.atributo || a;
                       const attrId = String(attr?.atributo_id || attr?.id || '');
@@ -914,7 +909,7 @@ export default function RastreadorPage() {
                       return (attrId === '73341' || (attr?.descricao || '').toLowerCase().includes('tarefa os')) && content !== '';
                     });
                     const hasCustomer = hasSourceTask || !!auvoCustomerIdInput.trim();
-                    return !hasEquip || !hasCustomer;
+                    return !hasCustomer;
                   })()}
                   className="gap-2"
                 >

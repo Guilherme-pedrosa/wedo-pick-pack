@@ -378,7 +378,7 @@ export default function InventoryPolicyPage() {
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <span className="font-medium text-foreground">
-                Grupo {syncProgress.taskIndex + 1} / {syncProgress.totalTasks} — Página {syncProgress.page} / {syncProgress.totalPages}
+                {syncProgress.status || 'Processando...'}
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-muted-foreground">

@@ -17,6 +17,7 @@ import ToolboxLogsPage from "./pages/controle/ToolboxLogsPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import InventoryPolicyPage from "./pages/InventoryPolicyPage";
+import InventoryAnalysisPage from "./pages/InventoryAnalysisPage";
 import ComprasPage from "./pages/ComprasPage";
 import RastreadorPage from "./pages/RastreadorPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";

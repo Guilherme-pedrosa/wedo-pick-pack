@@ -146,11 +146,15 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     }
   }
 
+  // Hybrid score: total_value × daily_frequency
+  // This penalizes expensive one-off items (e.g. glass sold 2x in 180d)
+  // and rewards consistent movers (consumables sold 40x in 180d)
   for (const row of map.values()) {
-    row.hybrid_score = row.total_value * Math.log2(row.event_count + 1);
+    const dailyFrequency = row.event_count / lookbackDays;
+    row.hybrid_score = row.total_value * dailyFrequency;
   }
 
-  const filtered = [...map.values()].filter(r => r.event_count >= 2);
+  const filtered = [...map.values()].filter(r => r.event_count >= 3);
   return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
 }
 

@@ -323,13 +323,12 @@ export default function InventoryAnalysisPage() {
   const handleFetchPCs = useCallback(async () => {
     setLoadingPCs(true);
     try {
-      // Get configured "em andamento" statuses from compras store, or fetch all non-finalized
-      let statusIds = comprasConfig.situacoesCompraEmAndamento;
+      // Use crossref statuses from inventory policy config
+      const statusIds = crossrefSituacaoIds;
       if (!statusIds || statusIds.length === 0) {
-        // Fallback: fetch all statuses and use all of them (user should configure in Compras)
-        const allStatus = await getStatusCompras();
-        statusIds = allStatus.map(s => s.id);
-        toast.info('Dica: Configure os status de compra "em andamento" no módulo Compras para melhor precisão.');
+        toast.error('Configure as situações de cruzamento de PCs na Política de Estoque (aba Compras).');
+        setLoadingPCs(false);
+        return;
       }
 
       const newPcMap = new Map<string, PCEntry>();

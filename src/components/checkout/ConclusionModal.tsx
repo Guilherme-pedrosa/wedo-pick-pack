@@ -145,6 +145,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
           concluded_at: concludedAt,
           duration: `${durationMins}min ${durationSecs}s`,
           target_status: targetStatusName,
+          observations: observations.trim() || null,
         },
       });
 

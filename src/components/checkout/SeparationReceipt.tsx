@@ -28,6 +28,7 @@ export default function SeparationReceipt({
   items,
   startedAt,
   concludedAt,
+  observations,
 }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
 

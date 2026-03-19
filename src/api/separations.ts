@@ -38,6 +38,7 @@ export interface CreateSeparationInput {
   items_confirmed: number;
   operator_name: string;
   started_at: string;
+  observations?: string;
 }
 
 export async function createSeparation(input: CreateSeparationInput): Promise<SeparationRecord> {

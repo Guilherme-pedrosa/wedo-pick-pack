@@ -102,6 +102,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         items_confirmed: session.items.filter(i => i.conferido).length,
         operator_name: config.operatorName,
         started_at: session.startedAt,
+        observations: observations.trim() || undefined,
       });
 
       // Capture data for receipt before concluding session

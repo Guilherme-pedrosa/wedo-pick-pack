@@ -173,6 +173,12 @@ export default function SeparationReceipt({
             </>
           )}
 
+          {observations && (
+            <div style={{ marginTop: 16, padding: 10, background: '#f9f9f9', border: '1px solid #ccc', fontSize: 11, lineHeight: 1.5 }}>
+              <strong>Observações:</strong> {observations}
+            </div>
+          )}
+
           <div style={{ marginTop: 20, padding: 12, border: '2px solid #111', fontSize: 11, lineHeight: 1.6 }}>
             <h3 style={{ fontSize: 12, fontWeight: 'bold', marginBottom: 6, textTransform: 'uppercase' }}>
               Termo de Responsabilidade

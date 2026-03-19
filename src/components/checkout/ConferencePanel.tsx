@@ -27,6 +27,7 @@ export default function ConferencePanel() {
   const [conclusionOpen, setConclusionOpen] = useState(false);
   const [forced, setForced] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
   // Timer - only update the elapsed string, not the whole component

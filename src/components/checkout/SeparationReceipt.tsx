@@ -15,6 +15,7 @@ interface Props {
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;
+  observations?: string;
 }
 
 export default function SeparationReceipt({

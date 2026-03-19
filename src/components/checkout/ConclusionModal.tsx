@@ -119,6 +119,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         items: [...session.items],
         startedAt: session.startedAt,
         concludedAt,
+        observations: observations.trim(),
       });
 
       // Log with full detail

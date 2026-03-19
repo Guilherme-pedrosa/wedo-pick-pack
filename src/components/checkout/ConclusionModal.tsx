@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import SeparationReceipt from './SeparationReceipt';
 
 interface Props {
   open: boolean;
@@ -31,8 +32,17 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   const hasDefault = !!defaultStatus;
   const [selectedStatus, setSelectedStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<{
+    orderType: 'os' | 'venda';
+    orderCode: string;
+    clientName: string;
+    operatorName: string;
+    items: typeof session extends null ? never : NonNullable<typeof session>['items'];
+    startedAt: string;
+    concludedAt: string;
+  } | null>(null);
 
-  // Sync selectedStatus with config default
   const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
 
   const statusQuery = useQuery({
@@ -43,13 +53,14 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
 
   const configuredStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome || (hasDefault ? `Status #${defaultStatus}` : '');
 
-  if (!session) return null;
+  if (!session && !showReceipt) return null;
 
-  const confirmedCount = session.items.filter(i => i.conferido).length;
-  const totalCount = session.items.length;
+  const confirmedCount = session?.items.filter(i => i.conferido).length ?? 0;
+  const totalCount = session?.items.length ?? 0;
   const unconfirmed = totalCount - confirmedCount;
 
   const elapsed = () => {
+    if (!session) return '';
     const start = new Date(session.startedAt).getTime();
     const now = Date.now();
     const diff = Math.floor((now - start) / 1000);
@@ -59,7 +70,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   };
 
   const handleConfirm = async () => {
-    if (!effectiveStatus) {
+    if (!session || !effectiveStatus) {
       toast.error('Selecione um status');
       return;
     }
@@ -71,10 +82,9 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         await updateVendaStatus(session.refId, session.rawOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
       }
 
-      // Find target status name
       const targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
+      const concludedAt = new Date().toISOString();
 
-      // Save separation record to DB
       await createSeparation({
         order_type: session.tipo,
         order_id: session.refId,
@@ -91,18 +101,54 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         started_at: session.startedAt,
       });
 
-      concludeSession();
-      queryClient.invalidateQueries({ queryKey: ['today-separations'] });
+      // Capture data for receipt before concluding session
+      const startMs = new Date(session.startedAt).getTime();
+      const endMs = new Date(concludedAt).getTime();
+      const diffMs = endMs - startMs;
+      const durationMins = Math.floor(diffMs / 60000);
+      const durationSecs = Math.floor((diffMs % 60000) / 1000);
+
+      setReceiptData({
+        orderType: session.tipo,
+        orderCode: session.codigo,
+        clientName: session.nomeCliente,
+        operatorName: config.operatorName,
+        items: [...session.items],
+        startedAt: session.startedAt,
+        concludedAt,
+      });
+
+      // Log with full detail
       logSystemAction({
         module: "checkout",
         action: "Separação concluída",
         entityType: session.tipo === 'os' ? 'OS' : 'Venda',
         entityId: session.refId,
         entityName: `#${session.codigo} - ${session.nomeCliente}`,
-        details: { items_total: session.items.length, items_confirmed: session.items.filter(i => i.conferido).length },
+        details: {
+          items_total: session.items.length,
+          items_confirmed: session.items.filter(i => i.conferido).length,
+          items: session.items.map(i => ({
+            codigo: i.codigo_produto,
+            nome: i.nome_produto,
+            qtd_esperada: i.qtd_total,
+            qtd_conferida: i.qtd_conferida,
+            conferido: i.conferido,
+          })),
+          operator: config.operatorName,
+          started_at: session.startedAt,
+          concluded_at: concludedAt,
+          duration: `${durationMins}min ${durationSecs}s`,
+          target_status: targetStatusName,
+        },
       });
+
+      concludeSession();
+      queryClient.invalidateQueries({ queryKey: ['today-separations'] });
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
-      onClose();
+      
+      // Show receipt instead of closing
+      setShowReceipt(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       if (msg === 'RATE_LIMIT') {
@@ -122,6 +168,25 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
       setSubmitting(false);
     }
   };
+
+  const handleCloseReceipt = () => {
+    setShowReceipt(false);
+    setReceiptData(null);
+    onClose();
+  };
+
+  // Show receipt after conclusion
+  if (showReceipt && receiptData) {
+    return (
+      <SeparationReceipt
+        open={true}
+        onClose={handleCloseReceipt}
+        {...receiptData}
+      />
+    );
+  }
+
+  if (!session) return null;
 
   return (
     <Dialog open={open} onOpenChange={() => !submitting && onClose()}>

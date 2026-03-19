@@ -661,7 +661,7 @@ export default function InventoryAnalysisPage() {
                     {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × lead time (por fornecedor) × segurança · Qtd líquida = necessidade − PC em andamento
+                    ROP = consumo médio × lead time (por fornecedor) × segurança · Saída = peças consumidas · OS = documentos únicos · Qtd líquida = necessidade − PC em andamento
                   </p>
                 </div>
                 <div className="flex gap-2">

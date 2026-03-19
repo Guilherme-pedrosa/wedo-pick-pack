@@ -492,9 +492,9 @@ export default function InventoryAnalysisPage() {
   // Export shopping list CSV
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
-    const header = 'Classe ABC,Produto ID,Código,Nome,Saída Total,Estoque Atual,Consumo Méd/Dia,Lead Time,ROP,Cobertura (dias),Necessidade Bruta,PC em Andamento,Qtd Líquida a Comprar,PCs\n';
+    const header = 'Classe ABC,Produto ID,Código,Nome,Saída (peças),OS Únicas,Estoque Atual,Consumo Méd/Dia,Lead Time,ROP,Cobertura (dias),Necessidade Bruta,PC em Andamento (peças),Qtd Líquida a Comprar,PCs\n';
     const rows = purchaseItems.map(i =>
-      `${i.abc_class},${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${Math.round(i.total_qty)},${i.estoque_atual},${i.avg_daily.toFixed(2)},${Math.round(i.lead_time_days)},${i.rop?.toFixed(0)},${i.dias_cobertura?.toFixed(0) || '0'},${i.qty_a_comprar},${i.pc_qty},${i.qty_liquida},${i.pc_refs.map(r => `PC${r.codigo}(${r.qtd})`).join(' ')}`
+      `${i.abc_class},${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${Math.round(i.total_qty)},${i.event_count},${i.estoque_atual},${i.avg_daily.toFixed(2)},${Math.round(i.lead_time_days)},${i.rop?.toFixed(0)},${i.dias_cobertura?.toFixed(0) || '0'},${i.qty_a_comprar},${i.pc_qty},${i.qty_liquida},${i.pc_refs.map(r => `PC${r.codigo}(${r.qtd})`).join(' ')}`
     ).join('\n');
 
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
@@ -554,7 +554,7 @@ export default function InventoryAnalysisPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Análise de Estoque & Suprimentos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs (≥3 eventos) · {Math.round(kpis.totalConsumo)} un. consumidas · ABC híbrido (valor × freq. diária)
+            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs com saída registrada · {Math.round(kpis.totalConsumo)} un. consumidas · ABC híbrido (valor × freq. diária)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -661,7 +661,7 @@ export default function InventoryAnalysisPage() {
                     {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × lead time (por fornecedor) × segurança · Qtd líquida = necessidade − PC em andamento
+                    ROP = consumo médio × lead time (por fornecedor) × segurança · Saída = peças consumidas · OS = documentos únicos · Qtd líquida = necessidade − PC em andamento
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -681,7 +681,8 @@ export default function InventoryAnalysisPage() {
                     <TableRow className="bg-muted/50">
                       <TableHead className="w-12">ABC</TableHead>
                       <TableHead>Produto</TableHead>
-                      <TableHead className="text-right">Saída</TableHead>
+                      <TableHead className="text-right">Saída (peças)</TableHead>
+                      <TableHead className="text-right">OS</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
                       <TableHead className="text-right">Méd/dia</TableHead>
                       <TableHead className="text-right">LT</TableHead>
@@ -707,6 +708,7 @@ export default function InventoryAnalysisPage() {
                           </p>
                         </TableCell>
                         <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
+                        <TableCell className="text-right text-xs">{item.event_count}</TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>
                         <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
                         <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>

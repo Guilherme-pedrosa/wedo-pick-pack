@@ -33,6 +33,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   const hasDefault = !!defaultStatus;
   const [selectedStatus, setSelectedStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [observations, setObservations] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<{
     orderType: 'os' | 'venda';

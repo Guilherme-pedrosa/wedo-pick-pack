@@ -8,7 +8,8 @@ import { Progress } from '@/components/ui/progress';
 import { PackageCheck, Scan, Clock, X, Printer, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import ItemsTable from './ItemsTable';
-import ConclusionModal from './ConclusionModal';
+import ConclusionModal, { ReceiptData } from './ConclusionModal';
+import SeparationReceipt from './SeparationReceipt';
 
 // Lazy load the heavy barcode scanner (html5-qrcode)
 const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'));

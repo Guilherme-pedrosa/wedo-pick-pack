@@ -3,7 +3,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
-import { GCOrdemServico, GCVenda } from '@/api/types';
+import { GCOrdemServico, GCVenda, PickingItem } from '@/api/types';
 import { createSeparation } from '@/api/separations';
 import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -12,15 +12,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import SeparationReceipt from './SeparationReceipt';
+
+export interface ReceiptData {
+  orderType: 'os' | 'venda';
+  orderCode: string;
+  clientName: string;
+  operatorName: string;
+  items: PickingItem[];
+  startedAt: string;
+  concludedAt: string;
+  observations: string;
+}
 
 interface Props {
   open: boolean;
   onClose: () => void;
   forced?: boolean;
+  onConcluded?: (data: ReceiptData) => void;
 }
 
-export default function ConclusionModal({ open, onClose, forced }: Props) {
+export default function ConclusionModal({ open, onClose, forced, onConcluded }: Props) {
   const session = useCheckoutStore(s => s.session);
   const config = useCheckoutStore(s => s.config);
   const concludeSession = useCheckoutStore(s => s.concludeSession);
@@ -34,17 +45,6 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [observations, setObservations] = useState('');
-  const [showReceipt, setShowReceipt] = useState(false);
-  const [receiptData, setReceiptData] = useState<{
-    orderType: 'os' | 'venda';
-    orderCode: string;
-    clientName: string;
-    operatorName: string;
-    items: typeof session extends null ? never : NonNullable<typeof session>['items'];
-    startedAt: string;
-    concludedAt: string;
-    observations: string;
-  } | null>(null);
 
   const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
 
@@ -56,14 +56,13 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
 
   const configuredStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome || (hasDefault ? `Status #${defaultStatus}` : '');
 
-  if (!session && !showReceipt) return null;
+  if (!session) return null;
 
-  const confirmedCount = session?.items.filter(i => i.conferido).length ?? 0;
-  const totalCount = session?.items.length ?? 0;
+  const confirmedCount = session.items.filter(i => i.conferido).length;
+  const totalCount = session.items.length;
   const unconfirmed = totalCount - confirmedCount;
 
   const elapsed = () => {
-    if (!session) return '';
     const start = new Date(session.startedAt).getTime();
     const now = Date.now();
     const diff = Math.floor((now - start) / 1000);
@@ -73,7 +72,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   };
 
   const handleConfirm = async () => {
-    if (!session || !effectiveStatus) {
+    if (!effectiveStatus) {
       toast.error('Selecione um status');
       return;
     }
@@ -105,14 +104,13 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         observations: observations.trim() || undefined,
       });
 
-      // Capture data for receipt before concluding session
       const startMs = new Date(session.startedAt).getTime();
       const endMs = new Date(concludedAt).getTime();
       const diffMs = endMs - startMs;
       const durationMins = Math.floor(diffMs / 60000);
       const durationSecs = Math.floor((diffMs % 60000) / 1000);
 
-      setReceiptData({
+      const receiptData: ReceiptData = {
         orderType: session.tipo,
         orderCode: session.codigo,
         clientName: session.nomeCliente,
@@ -121,9 +119,8 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         startedAt: session.startedAt,
         concludedAt,
         observations: observations.trim(),
-      });
+      };
 
-      // Log with full detail
       logSystemAction({
         module: "checkout",
         action: "Separação concluída",
@@ -152,9 +149,10 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
       concludeSession();
       queryClient.invalidateQueries({ queryKey: ['today-separations'] });
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
-      
-      // Show receipt instead of closing
-      setShowReceipt(true);
+
+      // Notify parent to show receipt
+      onConcluded?.(receiptData);
+      onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
       if (msg === 'RATE_LIMIT') {
@@ -174,25 +172,6 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
       setSubmitting(false);
     }
   };
-
-  const handleCloseReceipt = () => {
-    setShowReceipt(false);
-    setReceiptData(null);
-    onClose();
-  };
-
-  // Show receipt after conclusion
-  if (showReceipt && receiptData) {
-    return (
-      <SeparationReceipt
-        open={true}
-        onClose={handleCloseReceipt}
-        {...receiptData}
-      />
-    );
-  }
-
-  if (!session) return null;
 
   return (
     <Dialog open={open} onOpenChange={() => !submitting && onClose()}>

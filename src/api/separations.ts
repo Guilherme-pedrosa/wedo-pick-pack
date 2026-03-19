@@ -17,6 +17,7 @@ export interface SeparationRecord {
   operator_name: string;
   started_at: string;
   concluded_at: string;
+  observations: string | null;
   invalidated: boolean;
   invalidated_at: string | null;
   invalidated_reason: string | null;
@@ -37,6 +38,7 @@ export interface CreateSeparationInput {
   items_confirmed: number;
   operator_name: string;
   started_at: string;
+  observations?: string;
 }
 
 export async function createSeparation(input: CreateSeparationInput): Promise<SeparationRecord> {

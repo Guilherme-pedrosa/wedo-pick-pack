@@ -1,0 +1,1 @@
+ALTER TABLE public.separations ADD COLUMN observations text DEFAULT null;

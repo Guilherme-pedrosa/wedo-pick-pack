@@ -297,6 +297,12 @@ function SeparationCard({
           {sep.invalidated_reason}
         </div>
       )}
+
+      {sep.observations && (
+        <div className="mt-2 bg-muted rounded p-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Obs:</span> {sep.observations}
+        </div>
+      )}
     </Card>
   );
 }

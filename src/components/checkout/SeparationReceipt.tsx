@@ -15,6 +15,7 @@ interface Props {
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;
+  observations?: string;
 }
 
 export default function SeparationReceipt({
@@ -27,6 +28,7 @@ export default function SeparationReceipt({
   items,
   startedAt,
   concludedAt,
+  observations,
 }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -169,6 +171,12 @@ export default function SeparationReceipt({
                 </tbody>
               </table>
             </>
+          )}
+
+          {observations && (
+            <div style={{ marginTop: 16, padding: 10, background: '#f9f9f9', border: '1px solid #ccc', fontSize: 11, lineHeight: 1.5 }}>
+              <strong>Observações:</strong> {observations}
+            </div>
           )}
 
           <div style={{ marginTop: 20, padding: 12, border: '2px solid #111', fontSize: 11, lineHeight: 1.6 }}>

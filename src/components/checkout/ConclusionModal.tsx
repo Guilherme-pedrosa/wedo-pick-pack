@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Textarea } from '@/components/ui/textarea';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
@@ -32,6 +33,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
   const hasDefault = !!defaultStatus;
   const [selectedStatus, setSelectedStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [observations, setObservations] = useState('');
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<{
     orderType: 'os' | 'venda';
@@ -41,6 +43,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
     items: typeof session extends null ? never : NonNullable<typeof session>['items'];
     startedAt: string;
     concludedAt: string;
+    observations: string;
   } | null>(null);
 
   const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
@@ -99,6 +102,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         items_confirmed: session.items.filter(i => i.conferido).length,
         operator_name: config.operatorName,
         started_at: session.startedAt,
+        observations: observations.trim() || undefined,
       });
 
       // Capture data for receipt before concluding session
@@ -116,6 +120,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
         items: [...session.items],
         startedAt: session.startedAt,
         concludedAt,
+        observations: observations.trim(),
       });
 
       // Log with full detail
@@ -140,6 +145,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
           concluded_at: concludedAt,
           duration: `${durationMins}min ${durationSecs}s`,
           target_status: targetStatusName,
+          observations: observations.trim() || null,
         },
       });
 
@@ -236,6 +242,17 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
             </Select>
           </div>
         )}
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Observações da separação (opcional):</label>
+          <Textarea
+            value={observations}
+            onChange={e => setObservations(e.target.value)}
+            placeholder="Ex: peça X substituída por Y, cliente retirou pessoalmente..."
+            rows={2}
+            className="resize-none text-sm"
+          />
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>

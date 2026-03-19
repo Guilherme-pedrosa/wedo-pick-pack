@@ -8,7 +8,8 @@ import { Progress } from '@/components/ui/progress';
 import { PackageCheck, Scan, Clock, X, Printer, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import ItemsTable from './ItemsTable';
-import ConclusionModal from './ConclusionModal';
+import ConclusionModal, { ReceiptData } from './ConclusionModal';
+import SeparationReceipt from './SeparationReceipt';
 
 // Lazy load the heavy barcode scanner (html5-qrcode)
 const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'));
@@ -26,6 +27,7 @@ export default function ConferencePanel() {
   const [conclusionOpen, setConclusionOpen] = useState(false);
   const [forced, setForced] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
   // Timer - only update the elapsed string, not the whole component
@@ -209,7 +211,8 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             + Nova Separação
           </Button>
         </div>
-        <ConclusionModal open={conclusionOpen} onClose={() => setConclusionOpen(false)} forced={forced} />
+        <ConclusionModal open={conclusionOpen} onClose={() => setConclusionOpen(false)} forced={forced} onConcluded={setReceiptData} />
+        {receiptData && <SeparationReceipt open={true} onClose={() => setReceiptData(null)} {...receiptData} />}
       </div>
     );
   }
@@ -356,7 +359,8 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         </div>
       </div>
 
-      <ConclusionModal open={conclusionOpen} onClose={() => setConclusionOpen(false)} forced={forced} />
+      <ConclusionModal open={conclusionOpen} onClose={() => setConclusionOpen(false)} forced={forced} onConcluded={setReceiptData} />
+      {receiptData && <SeparationReceipt open={true} onClose={() => setReceiptData(null)} {...receiptData} />}
     </div>
   );
 }

@@ -591,6 +591,7 @@ export type Database = {
           invalidated_reason: string | null
           items_confirmed: number
           items_total: number
+          observations: string | null
           operator_name: string
           order_code: string
           order_id: string
@@ -613,6 +614,7 @@ export type Database = {
           invalidated_reason?: string | null
           items_confirmed?: number
           items_total?: number
+          observations?: string | null
           operator_name?: string
           order_code: string
           order_id: string
@@ -635,6 +637,7 @@ export type Database = {
           invalidated_reason?: string | null
           items_confirmed?: number
           items_total?: number
+          observations?: string | null
           operator_name?: string
           order_code?: string
           order_id?: string

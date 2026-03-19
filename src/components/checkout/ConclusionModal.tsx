@@ -241,6 +241,17 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
           </div>
         )}
 
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Observações da separação (opcional):</label>
+          <Textarea
+            value={observations}
+            onChange={e => setObservations(e.target.value)}
+            placeholder="Ex: peça X substituída por Y, cliente retirou pessoalmente..."
+            rows={2}
+            className="resize-none text-sm"
+          />
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>
           <Button

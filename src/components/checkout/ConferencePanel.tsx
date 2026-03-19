@@ -359,7 +359,8 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         </div>
       </div>
 
-      <ConclusionModal open={conclusionOpen} onClose={() => setConclusionOpen(false)} forced={forced} />
+      <ConclusionModal open={conclusionOpen} onClose={() => setConclusionOpen(false)} forced={forced} onConcluded={setReceiptData} />
+      {receiptData && <SeparationReceipt open={true} onClose={() => setReceiptData(null)} {...receiptData} />}
     </div>
   );
 }

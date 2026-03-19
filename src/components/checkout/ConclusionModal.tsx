@@ -43,6 +43,7 @@ export default function ConclusionModal({ open, onClose, forced }: Props) {
     items: typeof session extends null ? never : NonNullable<typeof session>['items'];
     startedAt: string;
     concludedAt: string;
+    observations: string;
   } | null>(null);
 
   const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;

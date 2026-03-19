@@ -347,9 +347,9 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase items — use qty_liquida (after PC deduction) to filter
-  const purchaseItems = useMemo(() => 
-    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0),
+  // Purchase suggestions only for recurring demand (>= 2 unique documents)
+  const purchaseItems = useMemo(() =>
+    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0 && i.event_count >= 2),
     [analysisItems]
   );
 

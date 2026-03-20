@@ -307,7 +307,7 @@ Deno.serve(async (req: Request) => {
         if (Array.isArray(sourceEquipments)) {
           clonedEquipmentIds = sourceEquipments
             .map((v: unknown) => Number(v))
-            .filter((n: number) => Number.isFinite(n) && n > 0);
+            .filter((n: number) => Number.isFinite(n) && n > 0 && n <= INT32_MAX);
         }
 
         console.log(`[generate-os] Cloned source tarefa OS ${sourceTaskOsId}: customerId=${clonedCustomerId ?? 0}, equipments=${clonedEquipmentIds.length}`);

@@ -20,6 +20,8 @@ import BoxDetailDialog, {
 import TechnicianLinkDialog from "@/components/controle/TechnicianLinkDialog";
 import CheckinDialog from "@/components/controle/CheckinDialog";
 import QuickWriteOffDialog from "@/components/controle/QuickWriteOffDialog";
+import ProductSearchInput, { type ProductResult } from "@/components/controle/ProductSearchInput";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { runBaixaValidationWithAlerts, type BaixaAlert } from "@/lib/baixaValidator";
 import { logSystemAction } from "@/lib/systemLog";
 

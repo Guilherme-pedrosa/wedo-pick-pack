@@ -375,6 +375,11 @@ Deno.serve(async (req: Request) => {
     console.log(`[generate-os] Auvo task created: ID=${auvoTaskId}`);
 
     const warnings: string[] = [];
+    if (oversizedEquipIds.length > 0) {
+      const warnMsg = `ID(s) de equipamento ignorado(s) por exceder limite Int32 do Auvo: ${oversizedEquipIds.join(', ')}. Vincule manualmente no Auvo.`;
+      warnings.push(warnMsg);
+      console.warn(`[generate-os] ⚠️ ${warnMsg}`);
+    }
     if (equipmentsToSend.length === 0) {
       const warnMsg = sourceTaskOsId
         ? `Tarefa OS de origem (${sourceTaskOsId}) não possui equipamento vinculado no Auvo. Tarefa criada SEM equipamento.`

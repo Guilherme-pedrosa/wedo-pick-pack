@@ -164,6 +164,7 @@ export default function OrderQueue() {
     }
 
     return new Set(orderDeficits.keys());
+  }, [stockConflicts, filteredByConfig, separatedIds]);
 
   const handleStockScan = useCallback(async () => {
     if (filteredByConfig.length === 0) {

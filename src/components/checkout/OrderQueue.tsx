@@ -99,14 +99,17 @@ export default function OrderQueue() {
     result.sort((a, b) => {
       switch (sortField) {
         case 'cliente':
-          return a.nome_cliente.localeCompare(b.nome_cliente);
-        case 'data':
-          return b.data.localeCompare(a.data);
+          return (a.nome_cliente || '').localeCompare(b.nome_cliente || '');
+        case 'data': {
+          const da = (a as any).data_entrada || (a as any).data || '';
+          const db = (b as any).data_entrada || (b as any).data || '';
+          return db.localeCompare(da);
+        }
         case 'valor':
-          return parseFloat(b.valor_total) - parseFloat(a.valor_total);
+          return parseFloat(b.valor_total || '0') - parseFloat(a.valor_total || '0');
         case 'codigo':
         default:
-          return a.codigo.localeCompare(b.codigo, undefined, { numeric: true });
+          return (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true });
       }
     });
 

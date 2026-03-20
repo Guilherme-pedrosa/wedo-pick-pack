@@ -147,6 +147,25 @@ export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string)
   return apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(`/api/ordens_servicos?${params.toString()}`);
 }
 
+/** Fetch OS for multiple situacao_ids in parallel, merging & deduplicating results */
+export async function listOSMultiStatus(situacaoIds: string[], pesquisa?: string): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
+  if (situacaoIds.length === 0) return listOS(undefined, 1, pesquisa);
+  if (situacaoIds.length === 1) return listOS(situacaoIds[0], 1, pesquisa);
+
+  const results = await Promise.all(
+    situacaoIds.map(sid => listOS(sid, 1, pesquisa).catch(() => ({ data: [] as GCOrdemServico[], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } })))
+  );
+
+  const seen = new Set<string>();
+  const merged: GCOrdemServico[] = [];
+  for (const r of results) {
+    for (const o of r.data) {
+      if (!seen.has(o.id)) { seen.add(o.id); merged.push(o); }
+    }
+  }
+  return { data: merged, meta: { pagina_atual: 1, total_paginas: 1, total_registros: merged.length } };
+}
+
 export async function listVendas(situacaoId?: string, pagina = 1, pesquisa?: string): Promise<{ data: GCVenda[]; meta: GCMeta }> {
   const term = pesquisa?.trim();
 
@@ -167,7 +186,6 @@ export async function listVendas(situacaoId?: string, pagina = 1, pesquisa?: str
   const params = new URLSearchParams({ pagina: String(pagina) });
   if (situacaoId) params.set('situacao_id', situacaoId);
 
-  // Mantém os documentos mais novos no topo por código
   params.set('ordenacao', 'codigo');
   params.set('direcao', 'desc');
 
@@ -181,6 +199,25 @@ export async function listVendas(situacaoId?: string, pagina = 1, pesquisa?: str
   }
 
   return apiRequest<{ data: GCVenda[]; meta: GCMeta }>(`/api/vendas?${params.toString()}`);
+}
+
+/** Fetch Vendas for multiple situacao_ids in parallel, merging & deduplicating results */
+export async function listVendasMultiStatus(situacaoIds: string[], pesquisa?: string): Promise<{ data: GCVenda[]; meta: GCMeta }> {
+  if (situacaoIds.length === 0) return listVendas(undefined, 1, pesquisa);
+  if (situacaoIds.length === 1) return listVendas(situacaoIds[0], 1, pesquisa);
+
+  const results = await Promise.all(
+    situacaoIds.map(sid => listVendas(sid, 1, pesquisa).catch(() => ({ data: [] as GCVenda[], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } })))
+  );
+
+  const seen = new Set<string>();
+  const merged: GCVenda[] = [];
+  for (const r of results) {
+    for (const o of r.data) {
+      if (!seen.has(o.id)) { seen.add(o.id); merged.push(o); }
+    }
+  }
+  return { data: merged, meta: { pagina_atual: 1, total_paginas: 1, total_registros: merged.length } };
 }
 
 // --- GET SINGLE ---

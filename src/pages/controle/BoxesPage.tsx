@@ -61,39 +61,87 @@ const BoxesPage = () => {
 
   // Part locator state
   const [locatorOpen, setLocatorOpen] = useState(false);
-  const [locatorResults, setLocatorResults] = useState<{ box_id: string; box_name: string; technician_name: string | null; quantidade: number; produto_nome: string }[]>([]);
+  const [locatorQuery, setLocatorQuery] = useState("");
+  const [locatorResults, setLocatorResults] = useState<{ box_id: string; box_name: string; technician_name: string | null; quantidade: number; produto_nome: string; codigo_interno: string | null }[]>([]);
   const [locatorSearched, setLocatorSearched] = useState(false);
+  const [locatorLoading, setLocatorLoading] = useState(false);
+  const locatorDebounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const handleLocatorSelect = async (product: ProductResult) => {
+  const searchBoxItems = async (q: string) => {
+    const trimmed = q.trim().toLowerCase();
+    if (!trimmed) {
+      setLocatorResults([]);
+      setLocatorSearched(false);
+      return;
+    }
+    setLocatorLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("box_items")
-        .select("box_id, quantidade, nome_produto")
-        .eq("produto_id", product.produto_id);
-      if (error) throw error;
-      if (!data || data.length === 0) {
+      // Get all active box ids
+      const activeBoxIds = boxes.map(b => b.id);
+      if (activeBoxIds.length === 0) {
         setLocatorResults([]);
         setLocatorSearched(true);
         return;
       }
-      const boxIds = [...new Set(data.map(d => d.box_id))];
-      const { data: boxesData } = await supabase
-        .from("boxes")
-        .select("id, name, technician_name, status")
-        .in("id", boxIds)
-        .eq("status", "active");
-      const boxMap = new Map((boxesData || []).map(b => [b.id, b]));
-      const results = data
+
+      // Get all box_items for active boxes
+      const { data: allItems, error } = await supabase
+        .from("box_items")
+        .select("box_id, produto_id, nome_produto, quantidade")
+        .in("box_id", activeBoxIds);
+      if (error) throw error;
+      if (!allItems || allItems.length === 0) {
+        setLocatorResults([]);
+        setLocatorSearched(true);
+        return;
+      }
+
+      // Get codigo_interno from products_index for all produto_ids
+      const produtoIds = [...new Set(allItems.map(i => i.produto_id))];
+      const { data: productsData } = await supabase
+        .from("products_index")
+        .select("produto_id, codigo_interno")
+        .in("produto_id", produtoIds);
+      const codeMap = new Map<string, string | null>();
+      productsData?.forEach(p => codeMap.set(p.produto_id, p.codigo_interno));
+
+      // Filter locally by query matching nome_produto, produto_id, or codigo_interno
+      const matched = allItems.filter(item => {
+        const codigo = codeMap.get(item.produto_id) || "";
+        return (
+          item.nome_produto.toLowerCase().includes(trimmed) ||
+          item.produto_id.toLowerCase().includes(trimmed) ||
+          codigo.toLowerCase().includes(trimmed)
+        );
+      });
+
+      const boxMap = new Map(boxes.map(b => [b.id, b]));
+      const results = matched
         .filter(d => boxMap.has(d.box_id))
         .map(d => {
           const box = boxMap.get(d.box_id)!;
-          return { box_id: d.box_id, box_name: box.name, technician_name: box.technician_name, quantidade: d.quantidade, produto_nome: d.nome_produto };
+          return {
+            box_id: d.box_id,
+            box_name: box.name,
+            technician_name: box.technician_name || null,
+            quantidade: d.quantidade,
+            produto_nome: d.nome_produto,
+            codigo_interno: codeMap.get(d.produto_id) || null,
+          };
         });
       setLocatorResults(results);
       setLocatorSearched(true);
     } catch {
       toast.error("Erro ao localizar peça");
+    } finally {
+      setLocatorLoading(false);
     }
+  };
+
+  const handleLocatorChange = (value: string) => {
+    setLocatorQuery(value);
+    if (locatorDebounceRef.current) clearTimeout(locatorDebounceRef.current);
+    locatorDebounceRef.current = setTimeout(() => searchBoxItems(value), 300);
   };
 
   const checkBaixas = async () => {

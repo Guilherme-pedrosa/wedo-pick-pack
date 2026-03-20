@@ -198,6 +198,7 @@ export default function RastreadorPage() {
         auvoTaskId: data.auvo_task_id,
         osCodigo: data.os_codigo,
       });
+      setGeneratedOrcIds(prev => new Set(prev).add(entry.orcamento.id));
 
       // Log successful generation
       await (supabase.from("os_generation_logs") as any).insert({

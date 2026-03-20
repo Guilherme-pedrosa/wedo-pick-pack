@@ -80,6 +80,7 @@ export default function RastreadorPage() {
   const [auvoCustomerIdInput, setAuvoCustomerIdInput] = useState('');
   const [auvoCustomerLookup, setAuvoCustomerLookup] = useState<{ loading: boolean; name?: string; error?: string }>({ loading: false });
   const [manualEquipamento, setManualEquipamento] = useState('');
+  const [generatedOrcIds, setGeneratedOrcIds] = useState<Set<string>>(new Set());
   const [generationResult, setGenerationResult] = useState<{
     success: boolean;
     auvoTaskId?: number | string;

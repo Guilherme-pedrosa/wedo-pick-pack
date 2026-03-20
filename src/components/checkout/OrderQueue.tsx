@@ -55,24 +55,33 @@ export default function OrderQueue() {
 
   const filterStatusId = statusFilter === 'all' ? undefined : statusFilter;
   const searchTerm = debouncedSearch.trim();
+  const configStatuses = activeType === 'os' ? config.osStatusToShow : config.vendaStatusToShow;
+
+  // When no manual status filter and config statuses exist, use multi-status fetch
+  // This sends situacao_id directly to the API so pagination works correctly
+  const useMultiStatus = !filterStatusId && configStatuses.length > 0;
 
   const ordersQuery = useQuery({
-    queryKey: ['orders', activeType, filterStatusId, page, searchTerm],
-    queryFn: () => activeType === 'os'
-      ? listOS(filterStatusId, page, searchTerm || undefined)
-      : listVendas(filterStatusId, page, searchTerm || undefined),
-    staleTime: 30000, // consider fresh for 30s — prevents refetch on focus
+    queryKey: ['orders', activeType, filterStatusId, page, searchTerm, useMultiStatus ? configStatuses.join(',') : ''],
+    queryFn: () => {
+      if (useMultiStatus) {
+        return activeType === 'os'
+          ? listOSMultiStatus(configStatuses, searchTerm || undefined)
+          : listVendasMultiStatus(configStatuses, searchTerm || undefined);
+      }
+      return activeType === 'os'
+        ? listOS(filterStatusId, page, searchTerm || undefined)
+        : listVendas(filterStatusId, page, searchTerm || undefined);
+    },
+    staleTime: 30000,
     refetchOnWindowFocus: false,
   });
 
   const orders = ordersQuery.data?.data || [];
   const meta = ordersQuery.data?.meta;
 
-  // Filter by config status
-  const configStatuses = activeType === 'os' ? config.osStatusToShow : config.vendaStatusToShow;
-  const filteredByConfig = configStatuses.length > 0
-    ? orders.filter(o => configStatuses.includes(o.situacao_id))
-    : orders;
+  // No more client-side config filtering needed — it's done server-side now
+  const filteredByConfig = orders;
 
   // Stock filter
   const filteredByStock = stockFilter

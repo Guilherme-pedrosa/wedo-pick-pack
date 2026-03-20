@@ -9,41 +9,78 @@ export function isUsingMock(): boolean {
   return !SUPABASE_PROJECT_ID;
 }
 
+const GC_PROXY_TIMEOUT_MS = 20000;
+const GC_GET_MAX_ATTEMPTS = 3;
+
 async function apiRequest<T>(path: string, options?: { method?: string; body?: string }): Promise<T> {
   const method = options?.method || 'GET';
-  
-  const { data, error } = await supabase.functions.invoke('gc-proxy', {
-    body: {
-      path,
-      method,
-      payload: options?.body ? JSON.parse(options.body) : undefined,
-    },
-  });
+  const isGet = method === 'GET';
+  const maxAttempts = isGet ? GC_GET_MAX_ATTEMPTS : 1;
+  const payload = options?.body ? JSON.parse(options.body) : undefined;
 
-  if (error) {
-    throw new Error(error.message || 'Erro de conexão com o servidor');
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), GC_PROXY_TIMEOUT_MS);
+      });
+
+      const invokePromise = supabase.functions.invoke('gc-proxy', {
+        body: { path, method, payload },
+      });
+
+      const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
+
+      if (error) {
+        const msg = error.message || 'Erro de conexão com o servidor';
+        if (msg.includes('Failed to fetch')) throw new Error('NETWORK_ERROR');
+        throw new Error(msg);
+      }
+
+      const response = data as any;
+
+      // Check proxy metadata for GC API errors
+      const proxyMeta = response?._proxy;
+      const gcOk = proxyMeta?.ok;
+      const gcHttpStatus = proxyMeta?.gc_http_status;
+
+      // Also check GC's own status field in body
+      const gcBodyStatus = response?.status; // "success" or "error"
+      const gcBodyCode = response?.code; // numeric status from GC
+
+      if (gcOk === false || gcBodyStatus === 'error' || (gcBodyCode && gcBodyCode >= 400)) {
+        const gcMsg = response?.data?.mensagem || response?.data?.erro || response?.error || '';
+        const statusCode = gcHttpStatus || gcBodyCode || 0;
+
+        if (statusCode === 429) {
+          if (attempt < maxAttempts - 1) {
+            const waitMs = 900 * (attempt + 1) + Math.floor(Math.random() * 200);
+            await new Promise(r => setTimeout(r, waitMs));
+            continue;
+          }
+          throw new Error('RATE_LIMIT');
+        }
+
+        if (statusCode === 401 || statusCode === 403) throw new Error('AUTH_ERROR');
+        throw new Error(gcMsg || `Erro ${statusCode} no GestãoClick`);
+      }
+
+      return response as T;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'UNKNOWN_ERROR';
+      const retryable = isGet && (message === 'REQUEST_TIMEOUT' || message === 'NETWORK_ERROR' || message === 'RATE_LIMIT');
+
+      if (retryable && attempt < maxAttempts - 1) {
+        const waitMs = 900 * (attempt + 1) + Math.floor(Math.random() * 200);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+      if (message === 'REQUEST_TIMEOUT') throw new Error('TIMEOUT');
+      throw err instanceof Error ? err : new Error('Erro de conexão com o servidor');
+    }
   }
 
-  const response = data as any;
-
-  // Check proxy metadata for GC API errors
-  const proxyMeta = response?._proxy;
-  const gcOk = proxyMeta?.ok;
-  const gcHttpStatus = proxyMeta?.gc_http_status;
-
-  // Also check GC's own status field in body
-  const gcBodyStatus = response?.status; // "success" or "error"
-  const gcBodyCode = response?.code; // numeric status from GC
-
-  if (gcOk === false || gcBodyStatus === 'error' || (gcBodyCode && gcBodyCode >= 400)) {
-    const gcMsg = response?.data?.mensagem || response?.data?.erro || response?.error || '';
-    const statusCode = gcHttpStatus || gcBodyCode || 0;
-    if (statusCode === 429) throw new Error('RATE_LIMIT');
-    if (statusCode === 401 || statusCode === 403) throw new Error('AUTH_ERROR');
-    throw new Error(gcMsg || `Erro ${statusCode} no GestãoClick`);
-  }
-
-  return response as T;
+  throw new Error('Erro de conexão com o servidor');
 }
 
 const mockDelay = () => new Promise(r => setTimeout(r, 300));

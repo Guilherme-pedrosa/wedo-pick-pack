@@ -455,7 +455,7 @@ export default function BoxDetailDialog({
                           {item.nome_produto}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          ID: {item.produto_id} · Qtd: {item.quantidade}
+                          Cód: {internalCodeMap[item.produto_id] || "não informado"} · Qtd: {item.quantidade}
                           {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
                         {isPendenciasBox && reversalLogs[item.produto_id] && (

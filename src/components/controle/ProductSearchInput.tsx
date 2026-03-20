@@ -18,9 +18,10 @@ interface Props {
   onScanRequest?: () => void;
   placeholder?: string;
   autoFocus?: boolean;
+  showProductId?: boolean;
 }
 
-export default function ProductSearchInput({ onSelect, onScanRequest, placeholder, autoFocus }: Props) {
+export default function ProductSearchInput({ onSelect, onScanRequest, placeholder, autoFocus, showProductId = false }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductResult[]>([]);
   const [loading, setLoading] = useState(false);

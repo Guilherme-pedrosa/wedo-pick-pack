@@ -80,6 +80,7 @@ export default function RastreadorPage() {
   const [auvoCustomerIdInput, setAuvoCustomerIdInput] = useState('');
   const [auvoCustomerLookup, setAuvoCustomerLookup] = useState<{ loading: boolean; name?: string; error?: string }>({ loading: false });
   const [manualEquipamento, setManualEquipamento] = useState('');
+  const [generatedOrcIds, setGeneratedOrcIds] = useState<Set<string>>(new Set());
   const [generationResult, setGenerationResult] = useState<{
     success: boolean;
     auvoTaskId?: number | string;
@@ -197,6 +198,7 @@ export default function RastreadorPage() {
         auvoTaskId: data.auvo_task_id,
         osCodigo: data.os_codigo,
       });
+      setGeneratedOrcIds(prev => new Set(prev).add(entry.orcamento.id));
 
       // Log successful generation
       await (supabase.from("os_generation_logs") as any).insert({
@@ -324,6 +326,7 @@ export default function RastreadorPage() {
     const expanded = expandedId === entry.orcamento.id;
     const equip = getEquipamento(entry.orcamento);
     const isGenerating = generatingOS && confirmEntry?.orcamento.id === entry.orcamento.id;
+    const alreadyGenerated = generatedOrcIds.has(entry.orcamento.id);
     const hasConflict = entry.temComprometido;
     return (
       <Card
@@ -367,7 +370,12 @@ export default function RastreadorPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {ready && (
+            {ready && alreadyGenerated && (
+              <Badge variant="outline" className="text-[10px] px-1.5 border-green-500 text-green-600">
+                <CheckCircle2 className="h-3 w-3 mr-1" /> OS Gerada
+              </Badge>
+            )}
+            {ready && !alreadyGenerated && (
               <Button
                 variant="outline"
                 size="sm"

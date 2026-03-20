@@ -326,6 +326,7 @@ export default function RastreadorPage() {
     const expanded = expandedId === entry.orcamento.id;
     const equip = getEquipamento(entry.orcamento);
     const isGenerating = generatingOS && confirmEntry?.orcamento.id === entry.orcamento.id;
+    const alreadyGenerated = generatedOrcIds.has(entry.orcamento.id);
     const hasConflict = entry.temComprometido;
     return (
       <Card

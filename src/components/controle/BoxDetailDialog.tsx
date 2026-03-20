@@ -176,6 +176,33 @@ export default function BoxDetailDialog({
       });
   }, [box?.id, isPendenciasBox]);
 
+  useEffect(() => {
+    const produtoIds = [...new Set(items.map((item) => item.produto_id).filter(Boolean))];
+    if (produtoIds.length === 0) {
+      setInternalCodeMap({});
+      return;
+    }
+
+    supabase
+      .from("products_index")
+      .select("produto_id, codigo_interno")
+      .in("produto_id", produtoIds)
+      .then(({ data, error }) => {
+        if (error || !data) {
+          setInternalCodeMap({});
+          return;
+        }
+
+        const map: Record<string, string> = {};
+        data.forEach((product) => {
+          if (product.codigo_interno) {
+            map[product.produto_id] = product.codigo_interno;
+          }
+        });
+        setInternalCodeMap(map);
+      });
+  }, [items]);
+
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
 

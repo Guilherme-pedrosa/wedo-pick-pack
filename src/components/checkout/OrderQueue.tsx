@@ -128,6 +128,43 @@ export default function OrderQueue() {
     return result;
   }, [filteredByStock, debouncedSearch, sortField]);
 
+  // Compute which orders can't be fulfilled because stock ran out (allocated to earlier orders by code)
+  const outOfStockOrderIds = useMemo(() => {
+    if (stockConflicts.length === 0) return new Set<string>();
+
+    // For each conflicted product, allocate stock to orders sorted by code (ascending)
+    // Orders that already got separated consume stock first
+    const orderDeficits = new Map<string, boolean>(); // orderId -> has deficit
+
+    for (const conflict of stockConflicts) {
+      let remaining = conflict.estoque;
+
+      // Sort pedidos by codigo ascending (earlier orders get priority)
+      const sorted = [...conflict.pedidos].sort((a, b) =>
+        a.codigo.localeCompare(b.codigo, undefined, { numeric: true })
+      );
+
+      for (const p of sorted) {
+        // Find the order id from filtered list
+        const order = filteredByConfig.find(o => o.codigo === p.codigo);
+        if (!order) continue;
+
+        // If already separated, this order consumed stock
+        if (separatedIds.has(order.id)) {
+          remaining -= p.qtd;
+          continue;
+        }
+
+        // Check if this order can be fulfilled
+        if (remaining < p.qtd) {
+          orderDeficits.set(order.id, true);
+        }
+        remaining -= p.qtd;
+      }
+    }
+
+    return new Set(orderDeficits.keys());
+
   const handleStockScan = useCallback(async () => {
     if (filteredByConfig.length === 0) {
       toast.warning('Nenhum pedido para varrer');

@@ -608,7 +608,8 @@ const BoxesPage = () => {
             <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
               <div className="px-4 py-2 bg-muted/50">
                 <p className="text-xs font-semibold text-foreground">
-                  "{locatorResults[0].produto_nome}" encontrado em {locatorResults.length} caixa{locatorResults.length > 1 ? "s" : ""}
+                  {locatorResults[0].codigo_interno ? `[${locatorResults[0].codigo_interno}] ` : ""}
+                  {locatorResults[0].produto_nome} — encontrado em {locatorResults.length} caixa{locatorResults.length > 1 ? "s" : ""}
                 </p>
               </div>
               {locatorResults.map((r, i) => (

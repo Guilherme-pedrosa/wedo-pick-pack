@@ -130,12 +130,13 @@ export default function OrderQueue() {
       setStockFilter(scanResult.fullStockOrders);
       setStockConflicts(scanResult.conflicts);
       const removed = filteredByConfig.length - scanResult.fullStockOrders.size;
-      let msg = `Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo.`;
       if (scanResult.conflicts.length > 0) {
-        msg += ` ⚠️ ${scanResult.conflicts.length} conflito(s) de estoque encontrado(s)!`;
+        const msg = `Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo. ⚠️ ${scanResult.conflicts.length} conflito(s) de estoque encontrado(s)!`;
         toast.warning(msg, { duration: 8000 });
+      } else if (removed === 0) {
+        toast.success('✅ Todos os pedidos possuem estoque completo e sem conflitos de quantidade!', { duration: 6000 });
       } else {
-        toast.success(msg);
+        toast.success(`Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo.`);
       }
     } catch (err) {
       toast.error('Erro durante varredura de estoque');

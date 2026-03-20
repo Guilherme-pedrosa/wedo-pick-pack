@@ -267,6 +267,37 @@ export default function BoxDetailDialog({
     }
   };
 
+  const handleUpdateItemQty = async (item: BoxItemData, delta: number) => {
+    if (!box) return;
+    const newQty = item.quantidade + delta;
+    if (newQty < 1) {
+      handleRemoveItem(item);
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("box_items")
+        .update({ quantidade: newQty })
+        .eq("id", item.id);
+      if (error) throw error;
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: delta > 0 ? "adicao" : "remocao",
+        produtoId: item.produto_id,
+        produtoNome: item.nome_produto,
+        quantidade: Math.abs(delta),
+        precoUnitario: item.preco_unitario,
+        technicianName: box.technician_name || undefined,
+        technicianGcId: box.technician_gc_id || undefined,
+        details: `Quantidade ajustada de ${item.quantidade} para ${newQty}`,
+      });
+      onItemsChanged();
+    } catch {
+      toast.error("Erro ao atualizar quantidade");
+    }
+  };
+
   const handleRemoveItem = async (itemToRemove: BoxItemData) => {
     if (!box) return;
     try {

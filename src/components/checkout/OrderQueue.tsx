@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle, ChevronDown, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 
 type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
@@ -29,6 +30,8 @@ export default function OrderQueue() {
   const [stockFilter, setStockFilter] = useState<Set<string> | null>(null);
   const [stockConflicts, setStockConflicts] = useState<StockConflict[]>([]);
   const [sortField, setSortField] = useState<SortField>('codigo');
+  const [conflictsOpen, setConflictsOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   const queryClient = useQueryClient();
   const session = useCheckoutStore(s => s.session);
@@ -124,6 +127,44 @@ export default function OrderQueue() {
 
     return result;
   }, [filteredByStock, debouncedSearch, sortField]);
+
+  // Compute which orders can't be fulfilled because stock ran out (allocated to earlier orders by code)
+  const outOfStockOrderIds = useMemo(() => {
+    if (stockConflicts.length === 0) return new Set<string>();
+
+    // For each conflicted product, allocate stock to orders sorted by code (ascending)
+    // Orders that already got separated consume stock first
+    const orderDeficits = new Map<string, boolean>(); // orderId -> has deficit
+
+    for (const conflict of stockConflicts) {
+      let remaining = conflict.estoque;
+
+      // Sort pedidos by codigo ascending (earlier orders get priority)
+      const sorted = [...conflict.pedidos].sort((a, b) =>
+        a.codigo.localeCompare(b.codigo, undefined, { numeric: true })
+      );
+
+      for (const p of sorted) {
+        // Find the order id from filtered list
+        const order = filteredByConfig.find(o => o.codigo === p.codigo);
+        if (!order) continue;
+
+        // If already separated, this order consumed stock
+        if (separatedIds.has(order.id)) {
+          remaining -= p.qtd;
+          continue;
+        }
+
+        // Check if this order can be fulfilled
+        if (remaining < p.qtd) {
+          orderDeficits.set(order.id, true);
+        }
+        remaining -= p.qtd;
+      }
+    }
+
+    return new Set(orderDeficits.keys());
+  }, [stockConflicts, filteredByConfig, separatedIds]);
 
   const handleStockScan = useCallback(async () => {
     if (filteredByConfig.length === 0) {
@@ -223,27 +264,56 @@ export default function OrderQueue() {
           </Button>
         </div>
 
-        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-full text-sm">
-            <SelectValue placeholder="Todas as situações" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas as situações</SelectItem>
-            {(statusQuery.data || []).map(s => (
-              <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Collapsible filters */}
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full flex items-center justify-between text-xs h-7 px-2">
+              <span className="flex items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5" /> Filtros
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2 pt-1">
+            <Select value={statusFilter} onValueChange={v => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-full text-sm">
+                <SelectValue placeholder="Todas as situações" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as situações</SelectItem>
+                {(statusQuery.data || []).map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <Input
-          placeholder="Buscar por código ou cliente…"
-          value={search}
-          onChange={e => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          className="text-sm"
-        />
+            <Input
+              placeholder="Buscar por código ou cliente…"
+              value={search}
+              onChange={e => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="text-sm"
+            />
+
+            {/* Sort selector */}
+            <div className="flex items-center gap-1.5">
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+                <SelectTrigger className="h-7 text-xs flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="codigo">Código (mais antigo)</SelectItem>
+                  <SelectItem value="cliente">Cliente (A-Z)</SelectItem>
+                  <SelectItem value="data">Data (mais recente)</SelectItem>
+                  <SelectItem value="valor">Valor (maior)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         <div className="flex gap-2">
           <Button
@@ -293,57 +363,51 @@ export default function OrderQueue() {
           </div>
         )}
 
-        {/* Stock conflicts */}
+        {/* Collapsible stock conflicts */}
         {stockConflicts.length > 0 && !stockScanning && (
-          <div className="bg-amber-50 border border-amber-200 rounded-md p-2 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-              <span className="text-xs font-semibold text-amber-800">
-                {stockConflicts.length} conflito(s) de estoque
-              </span>
-            </div>
-            {stockConflicts.map(c => (
-              <div key={c.produto_id} className="text-[10px] text-amber-900 bg-amber-100/50 rounded px-1.5 py-1">
-                <p className="font-medium">{c.nome_produto}</p>
-                <p>Estoque: {c.estoque} · Demanda: {c.demanda_total}</p>
-                <div className="mt-0.5 space-y-0.5">
-                  {c.pedidos.map((p, i) => (
-                    <p key={i}>#{p.codigo} — {p.nome_cliente} — precisa {p.qtd}</p>
-                  ))}
-                </div>
-                {c.pedidos_compra.length > 0 ? (
-                  <div className="mt-1 pt-1 border-t border-amber-300/50">
-                    <p className="font-semibold text-green-800">✅ Coberto por pedido de compra:</p>
-                    {c.pedidos_compra.map((po, i) => (
-                      <p key={i} className="text-green-800">
-                        PC #{po.codigo} — {po.nome_fornecedor} — qtd {po.qtd} ({po.situacao})
-                      </p>
-                    ))}
+          <Collapsible open={conflictsOpen} onOpenChange={setConflictsOpen}>
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-2">
+              <CollapsibleTrigger asChild>
+                <button className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <span className="text-xs font-semibold text-amber-800">
+                      {stockConflicts.length} conflito(s) de estoque
+                    </span>
                   </div>
-                ) : (
-                  <p className="mt-1 pt-1 border-t border-amber-300/50 font-semibold text-red-700">
-                    ❌ Sem pedido de compra
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
+                  <ChevronDown className={`h-3.5 w-3.5 text-amber-600 transition-transform ${conflictsOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-1.5 mt-1.5">
+                {stockConflicts.map(c => (
+                  <div key={c.produto_id} className="text-[10px] text-amber-900 bg-amber-100/50 rounded px-1.5 py-1">
+                    <p className="font-medium">{c.nome_produto}</p>
+                    <p>Estoque: {c.estoque} · Demanda: {c.demanda_total}</p>
+                    <div className="mt-0.5 space-y-0.5">
+                      {c.pedidos.map((p, i) => (
+                        <p key={i}>#{p.codigo} — {p.nome_cliente} — precisa {p.qtd}</p>
+                      ))}
+                    </div>
+                    {c.pedidos_compra.length > 0 ? (
+                      <div className="mt-1 pt-1 border-t border-amber-300/50">
+                        <p className="font-semibold text-green-800">✅ Coberto por pedido de compra:</p>
+                        {c.pedidos_compra.map((po, i) => (
+                          <p key={i} className="text-green-800">
+                            PC #{po.codigo} — {po.nome_fornecedor} — qtd {po.qtd} ({po.situacao})
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-1 pt-1 border-t border-amber-300/50 font-semibold text-red-700">
+                        ❌ Sem pedido de compra
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
         )}
-        {/* Sort selector */}
-        <div className="flex items-center gap-1.5">
-          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
-            <SelectTrigger className="h-7 text-xs flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="codigo">Código (mais antigo)</SelectItem>
-              <SelectItem value="cliente">Cliente (A-Z)</SelectItem>
-              <SelectItem value="data">Data (mais recente)</SelectItem>
-              <SelectItem value="valor">Valor (maior)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       {/* Order list */}
@@ -356,13 +420,16 @@ export default function OrderQueue() {
         )}
         {filtered.map(order => {
           const isActive = session && session.refId === order.id && session.tipo === activeType && !session.concludedAt;
+          const isOutOfStock = outOfStockOrderIds.has(order.id);
           return (
             <Card
               key={order.id}
               className={`p-3 cursor-pointer transition-all hover:shadow-md ${
                 isActive
                   ? 'border-l-4 border-l-secondary bg-blue-50'
-                  : 'border-l-4 border-l-transparent'
+                  : isOutOfStock
+                    ? 'border-l-4 border-l-destructive bg-red-50'
+                    : 'border-l-4 border-l-transparent'
               } ${loading ? 'pointer-events-none opacity-50' : ''}`}
               onClick={() => handleOrderClick(activeType, order.id)}
             >
@@ -375,7 +442,12 @@ export default function OrderQueue() {
                   </Badge>
                   <span className="font-semibold text-sm">#{order.codigo}</span>
                 </div>
-                {getOrderBadge(order)}
+                <div className="flex items-center gap-1.5">
+                  {isOutOfStock && (
+                    <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-[10px]">Sem estoque</Badge>
+                  )}
+                  {getOrderBadge(order)}
+                </div>
               </div>
               <p className="text-sm font-medium text-foreground truncate">{order.nome_cliente}</p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">

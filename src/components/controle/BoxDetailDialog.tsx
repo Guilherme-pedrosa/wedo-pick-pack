@@ -395,8 +395,7 @@ export default function BoxDetailDialog({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
                       <p className="text-xs text-muted-foreground">
-                        ID: {selectedProduct.produto_id}
-                        {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
+                        Cód: {selectedProduct.codigo_interno || "não informado"}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">

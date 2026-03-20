@@ -590,10 +590,13 @@ const BoxesPage = () => {
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-3 space-y-3">
-          <div className="max-w-md">
-            <ProductSearchInput
-              onSelect={handleLocatorSelect}
-              placeholder="Buscar peça por nome, código ou barcode..."
+          <div className="max-w-md relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={locatorQuery}
+              onChange={(e) => handleLocatorChange(e.target.value)}
+              placeholder="Buscar peça por nome ou código (apenas peças nas caixas)..."
+              className="pl-9"
             />
           </div>
           {locatorSearched && locatorResults.length === 0 && (

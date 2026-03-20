@@ -59,6 +59,43 @@ const BoxesPage = () => {
   const [baixaAlerts, setBaixaAlerts] = useState<BaixaAlert[]>([]);
   const [validatingBaixas, setValidatingBaixas] = useState(false);
 
+  // Part locator state
+  const [locatorOpen, setLocatorOpen] = useState(false);
+  const [locatorResults, setLocatorResults] = useState<{ box_id: string; box_name: string; technician_name: string | null; quantidade: number; produto_nome: string }[]>([]);
+  const [locatorSearched, setLocatorSearched] = useState(false);
+
+  const handleLocatorSelect = async (product: ProductResult) => {
+    try {
+      const { data, error } = await supabase
+        .from("box_items")
+        .select("box_id, quantidade, nome_produto")
+        .eq("produto_id", product.produto_id);
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        setLocatorResults([]);
+        setLocatorSearched(true);
+        return;
+      }
+      const boxIds = [...new Set(data.map(d => d.box_id))];
+      const { data: boxesData } = await supabase
+        .from("boxes")
+        .select("id, name, technician_name, status")
+        .in("id", boxIds)
+        .eq("status", "active");
+      const boxMap = new Map((boxesData || []).map(b => [b.id, b]));
+      const results = data
+        .filter(d => boxMap.has(d.box_id))
+        .map(d => {
+          const box = boxMap.get(d.box_id)!;
+          return { box_id: d.box_id, box_name: box.name, technician_name: box.technician_name, quantidade: d.quantidade, produto_nome: d.nome_produto };
+        });
+      setLocatorResults(results);
+      setLocatorSearched(true);
+    } catch {
+      toast.error("Erro ao localizar peça");
+    }
+  };
+
   const checkBaixas = async () => {
     setValidatingBaixas(true);
     try {

@@ -278,7 +278,8 @@ Deno.serve(async (req: Request) => {
     const sourceTaskOsId = readOrcAttrByIdOrName('73341', 'tarefa os');
     const idEquipamentoRaw = readOrcAttrByIdOrName('88695', 'id equipamento');
 
-    const equipmentIdsFromOrcamento = Array.from(
+    const INT32_MAX = 2147483647;
+    const allEquipIds = Array.from(
       new Set(
         String(idEquipamentoRaw || '')
           .split(/[^0-9]+/)
@@ -286,6 +287,8 @@ Deno.serve(async (req: Request) => {
           .filter((n) => Number.isFinite(n) && n > 0)
       )
     );
+    const oversizedEquipIds = allEquipIds.filter((n) => n > INT32_MAX);
+    const equipmentIdsFromOrcamento = allEquipIds.filter((n) => n <= INT32_MAX);
 
     let clonedCustomerId: number | null = null;
     let clonedEquipmentIds: number[] = [];
@@ -304,7 +307,7 @@ Deno.serve(async (req: Request) => {
         if (Array.isArray(sourceEquipments)) {
           clonedEquipmentIds = sourceEquipments
             .map((v: unknown) => Number(v))
-            .filter((n: number) => Number.isFinite(n) && n > 0);
+            .filter((n: number) => Number.isFinite(n) && n > 0 && n <= INT32_MAX);
         }
 
         console.log(`[generate-os] Cloned source tarefa OS ${sourceTaskOsId}: customerId=${clonedCustomerId ?? 0}, equipments=${clonedEquipmentIds.length}`);
@@ -372,6 +375,11 @@ Deno.serve(async (req: Request) => {
     console.log(`[generate-os] Auvo task created: ID=${auvoTaskId}`);
 
     const warnings: string[] = [];
+    if (oversizedEquipIds.length > 0) {
+      const warnMsg = `ID(s) de equipamento ignorado(s) por exceder limite Int32 do Auvo: ${oversizedEquipIds.join(', ')}. Vincule manualmente no Auvo.`;
+      warnings.push(warnMsg);
+      console.warn(`[generate-os] ⚠️ ${warnMsg}`);
+    }
     if (equipmentsToSend.length === 0) {
       const warnMsg = sourceTaskOsId
         ? `Tarefa OS de origem (${sourceTaskOsId}) não possui equipamento vinculado no Auvo. Tarefa criada SEM equipamento.`

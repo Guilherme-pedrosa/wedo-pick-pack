@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
@@ -45,6 +46,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const [selectedStatus, setSelectedStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [observations, setObservations] = useState('');
+  const [acceptedTerm, setAcceptedTerm] = useState(false);
 
   const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
 
@@ -233,11 +235,28 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           />
         </div>
 
+        <div className="border rounded-md p-3 space-y-2 bg-amber-50/50 border-amber-200">
+          <p className="text-xs font-semibold text-foreground">TERMO DE RESPONSABILIDADE</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Declaro que realizei a separação das peças desta ordem após conferência do código e da quantidade de cada item. Estou ciente de que divergências decorrentes de falta de atenção (peça incorreta, código divergente, quantidade errada ou ausência de item) serão de minha responsabilidade, sujeitando-me às medidas internas cabíveis.
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <Checkbox
+              id="accept-term"
+              checked={acceptedTerm}
+              onCheckedChange={(v) => setAcceptedTerm(v === true)}
+            />
+            <label htmlFor="accept-term" className="text-xs font-medium cursor-pointer select-none">
+              Estou ciente e de acordo
+            </label>
+          </div>
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>
           <Button
             onClick={handleConfirm}
-            disabled={submitting || !effectiveStatus}
+            disabled={submitting || !effectiveStatus || !acceptedTerm}
             className="bg-success text-success-foreground hover:bg-success/90"
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

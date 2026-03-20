@@ -532,6 +532,63 @@ const BoxesPage = () => {
         </div>
       )}
 
+      {/* Part Locator */}
+      <Collapsible open={locatorOpen} onOpenChange={setLocatorOpen}>
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
+            <MapPin className="h-4 w-4" />
+            <span>Localizar Peça nas Caixas</span>
+            <span className="text-xs text-muted-foreground/50 ml-1">{locatorOpen ? "▾" : "▸"}</span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 space-y-3">
+          <div className="max-w-md">
+            <ProductSearchInput
+              onSelect={handleLocatorSelect}
+              placeholder="Buscar peça por nome, código ou barcode..."
+            />
+          </div>
+          {locatorSearched && locatorResults.length === 0 && (
+            <div className="bg-card border border-border rounded-lg p-4 text-center">
+              <p className="text-sm text-muted-foreground">Peça não encontrada em nenhuma caixa ativa</p>
+            </div>
+          )}
+          {locatorResults.length > 0 && (
+            <div className="bg-card border border-border rounded-lg overflow-hidden divide-y divide-border">
+              <div className="px-4 py-2 bg-muted/50">
+                <p className="text-xs font-semibold text-foreground">
+                  "{locatorResults[0].produto_nome}" encontrado em {locatorResults.length} caixa{locatorResults.length > 1 ? "s" : ""}
+                </p>
+              </div>
+              {locatorResults.map((r, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/30 transition-colors cursor-pointer"
+                  onClick={() => {
+                    const box = boxes.find(b => b.id === r.box_id);
+                    if (box) loadBoxItems(box);
+                  }}
+                >
+                  <Box className={`h-4 w-4 shrink-0 ${r.technician_name ? "text-primary" : "text-warning"}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground">{r.box_name}</span>
+                    {r.technician_name && (
+                      <span className="text-xs text-primary ml-2">
+                        <UserCheck className="h-3 w-3 inline mr-0.5" />
+                        {r.technician_name}
+                      </span>
+                    )}
+                  </div>
+                  <Badge variant="secondary" className="text-xs shrink-0">
+                    {r.quantidade}x
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+
       {/* Em Operação */}
       <div>
         <div className="flex items-center gap-2 mb-3">

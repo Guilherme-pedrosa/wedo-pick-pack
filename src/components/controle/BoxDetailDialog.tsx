@@ -93,6 +93,7 @@ export default function BoxDetailDialog({
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [stockDisponivel, setStockDisponivel] = useState<number | null>(null);
   const [loadingStock, setLoadingStock] = useState(false);
+  const [internalCodeMap, setInternalCodeMap] = useState<Record<string, string>>({});
 
   // Fetch GC stock when product is selected
   const fetchStock = useCallback(async (produto: ProductResult) => {
@@ -174,6 +175,33 @@ export default function BoxDetailDialog({
         setReversalLogs(map);
       });
   }, [box?.id, isPendenciasBox]);
+
+  useEffect(() => {
+    const produtoIds = [...new Set(items.map((item) => item.produto_id).filter(Boolean))];
+    if (produtoIds.length === 0) {
+      setInternalCodeMap({});
+      return;
+    }
+
+    supabase
+      .from("products_index")
+      .select("produto_id, codigo_interno")
+      .in("produto_id", produtoIds)
+      .then(({ data, error }) => {
+        if (error || !data) {
+          setInternalCodeMap({});
+          return;
+        }
+
+        const map: Record<string, string> = {};
+        data.forEach((product) => {
+          if (product.codigo_interno) {
+            map[product.produto_id] = product.codigo_interno;
+          }
+        });
+        setInternalCodeMap(map);
+      });
+  }, [items]);
 
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
@@ -367,8 +395,7 @@ export default function BoxDetailDialog({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{selectedProduct.nome}</p>
                       <p className="text-xs text-muted-foreground">
-                        ID: {selectedProduct.produto_id}
-                        {selectedProduct.codigo_interno && ` · Cód: ${selectedProduct.codigo_interno}`}
+                        Cód: {selectedProduct.codigo_interno || "não informado"}
                       </p>
                     </div>
                     <div className="flex items-center gap-1">
@@ -428,7 +455,7 @@ export default function BoxDetailDialog({
                           {item.nome_produto}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          ID: {item.produto_id} · Qtd: {item.quantidade}
+                          Cód: {internalCodeMap[item.produto_id] || "não informado"} · Qtd: {item.quantidade}
                           {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
                         {isPendenciasBox && reversalLogs[item.produto_id] && (

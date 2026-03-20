@@ -18,9 +18,10 @@ interface Props {
   onScanRequest?: () => void;
   placeholder?: string;
   autoFocus?: boolean;
+  showProductId?: boolean;
 }
 
-export default function ProductSearchInput({ onSelect, onScanRequest, placeholder, autoFocus }: Props) {
+export default function ProductSearchInput({ onSelect, onScanRequest, placeholder, autoFocus, showProductId = false }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -128,7 +129,9 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
               className="w-full text-left px-3 py-2 hover:bg-accent/50 transition-colors border-b border-border/50 last:border-0"
               onClick={() => handleSelect(item)}
             >
-              <p className="text-sm font-medium text-foreground truncate">{item.nome}</p>
+              <p className="text-sm font-medium text-foreground truncate">
+                {item.codigo_interno ? `[${item.codigo_interno}] ${item.nome}` : item.nome}
+              </p>
               <div className="flex gap-3 text-xs text-muted-foreground mt-0.5">
                 {item.codigo_interno && <span>Cód: {item.codigo_interno}</span>}
                 {item.codigo_barra && (
@@ -137,7 +140,7 @@ export default function ProductSearchInput({ onSelect, onScanRequest, placeholde
                     {item.codigo_barra}
                   </span>
                 )}
-                <span className="text-muted-foreground/60">ID: {item.produto_id}</span>
+                {showProductId && <span className="text-muted-foreground/60">ID: {item.produto_id}</span>}
               </div>
             </button>
           ))}

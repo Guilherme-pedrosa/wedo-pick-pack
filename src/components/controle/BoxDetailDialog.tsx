@@ -93,6 +93,7 @@ export default function BoxDetailDialog({
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [stockDisponivel, setStockDisponivel] = useState<number | null>(null);
   const [loadingStock, setLoadingStock] = useState(false);
+  const [internalCodeMap, setInternalCodeMap] = useState<Record<string, string>>({});
 
   // Fetch GC stock when product is selected
   const fetchStock = useCallback(async (produto: ProductResult) => {

@@ -515,6 +515,54 @@ const TechniciansPage = () => {
                         </div>
                       );
                     })}
+                    {tech.separations.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-foreground">
+                          📋 Separações Vinculadas ({tech.separations.length})
+                        </p>
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="text-xs">
+                                <TableHead className="py-1.5 text-xs">Tipo</TableHead>
+                                <TableHead className="py-1.5 text-xs">Código</TableHead>
+                                <TableHead className="py-1.5 text-xs">Cliente</TableHead>
+                                <TableHead className="py-1.5 text-xs text-center w-16">Itens</TableHead>
+                                <TableHead className="py-1.5 text-xs text-right w-24">Valor</TableHead>
+                                <TableHead className="py-1.5 text-xs text-right w-28">Data</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {tech.separations.map((sep) => (
+                                <TableRow key={sep.id} className="text-xs">
+                                  <TableCell className="py-1.5 text-xs font-medium">
+                                    {sep.order_type === 'os' ? 'OS' : 'VD'}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs font-bold">
+                                    #{sep.order_code}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs max-w-[200px] truncate">
+                                    {sep.client_name}
+                                    {sep.equipment_name && (
+                                      <span className="text-muted-foreground ml-1">🔧 {sep.equipment_name}</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs text-center">
+                                    {sep.items_confirmed}/{sep.items_total}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs text-right">
+                                    R$ {sep.total_value}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs text-right">
+                                    {new Date(sep.concluded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

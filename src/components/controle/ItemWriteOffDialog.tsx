@@ -167,9 +167,11 @@ export default function ItemWriteOffDialog({ open, item, box, onClose, onComplet
         const referenceDate = lastHandoff?.handed_at ? new Date(lastHandoff.handed_at) : new Date(box.created_at);
         const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
         const refDay = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+        const clientName = (orderData?.nome_cliente || orderData?.cliente?.nome || "").toLowerCase();
+        const isEcolab = clientName.includes("ecolab");
         if (isNaN(orderDay.getTime())) {
           console.warn("Could not parse order date:", orderDateStr);
-        } else if (orderDay < refDay) {
+        } else if (orderDay < refDay && !isEcolab) {
           toast.error(
             `${label} #${ref} é de ${orderDay.toLocaleDateString("pt-BR")}, anterior à vinculação da caixa (${refDay.toLocaleDateString("pt-BR")}). Não é permitido.`
           );

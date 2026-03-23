@@ -1,10 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getTodaySeparations, invalidateSeparation, SeparationRecord } from '@/api/separations';
+import { getSeparations, invalidateSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
 import { getOS, getVenda } from '@/api/gestaoclick';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText } from 'lucide-react';
 import { toast } from 'sonner';
@@ -15,12 +16,33 @@ export default function SeparationsPage() {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ checked: 0, total: 0 });
+  const [search, setSearch] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [orderType, setOrderType] = useState<'all' | 'os' | 'venda'>('all');
+  const [status, setStatus] = useState<'all' | 'valid' | 'invalid'>('all');
+
+  const filters = useMemo<SeparationFilters>(() => ({
+    search: search.trim() || undefined,
+    fromDate: fromDate ? toStartOfDayIso(fromDate) : undefined,
+    toDate: toDate ? toNextDayStartIso(toDate) : undefined,
+    orderType,
+    status,
+  }), [search, fromDate, toDate, orderType, status]);
 
   const { data: separations = [], isLoading, refetch } = useQuery({
-    queryKey: ['today-separations'],
-    queryFn: getTodaySeparations,
+    queryKey: ['separations', filters],
+    queryFn: () => getSeparations(filters),
     refetchInterval: 30000,
   });
+
+  const clearFilters = () => {
+    setSearch('');
+    setFromDate('');
+    setToDate('');
+    setOrderType('all');
+    setStatus('all');
+  };
 
   const validSeparations = separations.filter(s => !s.invalidated);
   const validCount = validSeparations.length;
@@ -94,12 +116,7 @@ export default function SeparationsPage() {
     }
   };
 
-  const todayFormatted = new Date().toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+  const reportGeneratedAt = new Date().toLocaleString('pt-BR');
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
@@ -108,10 +125,10 @@ export default function SeparationsPage() {
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <PackageCheck className="h-6 w-6 text-primary" />
-            Separações do Dia
+            Histórico de Separações
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {separations.length} separação(ões) hoje — {validCount} válida(s), {invalidCount} invalidada(s)
+            {separations.length} resultado(s) — {validCount} válida(s), {invalidCount} invalidada(s)
           </p>
         </div>
         <div className="flex gap-2">
@@ -145,11 +162,65 @@ export default function SeparationsPage() {
         </div>
       </div>
 
+      <Card className="p-3 print:hidden">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Buscar</p>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Código ou cliente"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Data inicial</p>
+            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Data final</p>
+            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Tipo</p>
+            <select
+              value={orderType}
+              onChange={(e) => setOrderType(e.target.value as 'all' | 'os' | 'venda')}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="all">Todos</option>
+              <option value="os">OS</option>
+              <option value="venda">Venda</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Situação</p>
+            <div className="flex gap-2">
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as 'all' | 'valid' | 'invalid')}
+                className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="all">Todas</option>
+                <option value="valid">Válidas</option>
+                <option value="invalid">Invalidadas</option>
+              </select>
+              <Button variant="outline" onClick={clearFilters}>
+                Limpar
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* Print header - only visible when printing */}
       <div className="hidden print:block print:mb-6">
         <div className="text-center border-b-2 border-foreground pb-3 mb-4">
           <h1 className="text-2xl font-bold">📦 Relatório de Separações</h1>
-          <p className="text-sm mt-1">{todayFormatted}</p>
+          <p className="text-sm mt-1">Gerado em {reportGeneratedAt}</p>
           <p className="text-sm">
             {validCount} separação(ões) válida(s) • {invalidCount} invalidada(s)
           </p>
@@ -175,7 +246,7 @@ export default function SeparationsPage() {
       {!isLoading && separations.length === 0 && (
         <Card className="p-8 text-center print:hidden">
           <PackageCheck className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-          <p className="text-muted-foreground">Nenhuma separação realizada hoje</p>
+          <p className="text-muted-foreground">Nenhuma separação encontrada com os filtros atuais</p>
         </Card>
       )}
 
@@ -233,6 +304,16 @@ export default function SeparationsPage() {
       </div>
     </div>
   );
+}
+
+function toStartOfDayIso(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0).toISOString();
+}
+
+function toNextDayStartIso(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day + 1, 0, 0, 0, 0).toISOString();
 }
 
 function parseGCQuantity(val: string | number): number {

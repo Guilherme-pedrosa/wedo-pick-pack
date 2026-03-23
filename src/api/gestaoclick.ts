@@ -289,6 +289,7 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     vendedor_id: rawOrder.vendedor_id,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
+    valor_total: rawOrder.valor_total,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
     produtos: rawOrder.produtos,
@@ -296,6 +297,9 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     atributos: rawOrder.atributos || [],
     equipamentos: rawOrder.equipamentos || [],
   };
+
+  // Preserve pagamentos to avoid total vs parcelas mismatch (e.g. when discounts are applied)
+  if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
@@ -347,11 +351,15 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     vendedor_id: rawOrder.vendedor_id,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
+    valor_total: rawOrder.valor_total,
     valor_frete: rawOrder.valor_frete || '0.00',
     condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
     produtos: rawOrder.produtos,
     servicos: rawOrder.servicos || [],
   };
+
+  // Preserve pagamentos to avoid total vs parcelas mismatch (e.g. when discounts are applied)
+  if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 

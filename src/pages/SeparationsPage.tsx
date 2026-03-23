@@ -363,6 +363,7 @@ function SeparationCard({
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
+  const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
 
   const handleReprint = async () => {
     setLoadingReceipt(true);

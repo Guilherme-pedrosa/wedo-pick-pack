@@ -472,6 +472,7 @@ function SeparationCard({
           orderCode={sep.order_code}
           clientName={sep.client_name}
           operatorName={sep.operator_name}
+          equipmentName={sep.equipment_name || undefined}
           items={receiptItems}
           startedAt={sep.started_at}
           concludedAt={sep.concluded_at}

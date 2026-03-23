@@ -12,6 +12,7 @@ interface Props {
   orderCode: string;
   clientName: string;
   operatorName: string;
+  equipmentName?: string;
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;

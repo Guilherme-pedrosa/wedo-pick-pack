@@ -333,7 +333,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             onScan={(code) => {
               const hasFrac = session?.items.some(i => i.qtd_total % 1 !== 0);
               const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-              processScan(code, (hasLargeQty || hasFrac) ? (Number(scanQty) || 1) : 1);
+              processScan(code, (hasLargeQty || hasFrac) ? parseScanQty(scanQty) : 1);
               scanRef.current?.focus();
             }}
           />

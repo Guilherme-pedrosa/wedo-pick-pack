@@ -723,7 +723,7 @@ function SeparationCard({
       </Dialog>
 
       <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-sm">
               <Undo2 className="h-4 w-4 text-destructive" />

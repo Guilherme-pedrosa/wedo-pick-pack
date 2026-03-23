@@ -263,43 +263,65 @@ export async function getStatusVendas(): Promise<GCSituacao[]> {
 }
 
 // --- UPDATE STATUS ---
+async function fetchLatestForStatusUpdate<T>(path: string, fallback: T): Promise<T> {
+  try {
+    const res = await apiRequest<{ data?: T }>(path);
+    if (res?.data) return res.data;
+  } catch (error) {
+    console.warn(
+      `[GC] Failed to fetch latest doc before status update (${path}):`,
+      error instanceof Error ? error.message : error
+    );
+  }
+  return fallback;
+}
+
 export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
     return;
   }
-  const obsInterna = rawOrder.observacoes_interna || '';
+
+  const latestOrder = await fetchLatestForStatusUpdate<GCOrdemServico & Record<string, any>>(
+    `/api/ordens_servicos/${id}`,
+    rawOrder as GCOrdemServico & Record<string, any>
+  );
+
+  const obsInterna = latestOrder.observacoes_interna || rawOrder.observacoes_interna || '';
   const separator = obsInterna.trim() ? '\n' : '';
   const now = new Date().toLocaleString('pt-BR');
   const operatorNote = operatorName
     ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
     : '';
 
-  const obs = rawOrder.observacoes || '';
+  const obs = latestOrder.observacoes || rawOrder.observacoes || '';
   const obsSeparator = obs.trim() ? '\n' : '';
   const obsNote = operatorName
     ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
     : '';
 
   const payload: Record<string, any> = {
-    cliente_id: rawOrder.cliente_id,
-    codigo: rawOrder.codigo,
-    data: rawOrder.data_entrada || rawOrder.data,
+    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
+    codigo: latestOrder.codigo ?? rawOrder.codigo,
+    data: latestOrder.data_entrada || latestOrder.data || rawOrder.data_entrada || rawOrder.data,
     situacao_id: newStatusId,
-    vendedor_id: rawOrder.vendedor_id,
+    vendedor_id: latestOrder.vendedor_id ?? rawOrder.vendedor_id,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
-    valor_total: rawOrder.valor_total,
-    valor_frete: rawOrder.valor_frete || '0.00',
-    condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
-    produtos: rawOrder.produtos,
-    servicos: rawOrder.servicos || [],
-    atributos: rawOrder.atributos || [],
-    equipamentos: rawOrder.equipamentos || [],
+    valor_total: latestOrder.valor_total ?? rawOrder.valor_total,
+    valor_frete: latestOrder.valor_frete || rawOrder.valor_frete || '0.00',
+    condicao_pagamento: latestOrder.condicao_pagamento || rawOrder.condicao_pagamento || 'a_vista',
+    produtos: latestOrder.produtos || rawOrder.produtos,
+    servicos: latestOrder.servicos || rawOrder.servicos || [],
+    atributos: latestOrder.atributos || rawOrder.atributos || [],
+    equipamentos: latestOrder.equipamentos || rawOrder.equipamentos || [],
   };
 
-  // Preserve pagamentos to avoid total vs parcelas mismatch (e.g. when discounts are applied)
-  if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
+  // Preserve pagamentos + desconto to avoid total vs parcelas mismatch
+  if (latestOrder.pagamentos?.length) payload.pagamentos = latestOrder.pagamentos;
+  else if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
+  if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
+  if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
@@ -329,37 +351,46 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
     await mockDelay();
     return;
   }
-  const obsInterna = (rawOrder as any).observacoes_interna || '';
+
+  const latestOrder = await fetchLatestForStatusUpdate<GCVenda & Record<string, any>>(
+    `/api/vendas/${id}`,
+    rawOrder as GCVenda & Record<string, any>
+  );
+
+  const obsInterna = latestOrder.observacoes_interna || (rawOrder as any).observacoes_interna || '';
   const separator = obsInterna.trim() ? '\n' : '';
   const now = new Date().toLocaleString('pt-BR');
   const operatorNote = operatorName
     ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
     : '';
 
-  const obs = (rawOrder as any).observacoes || '';
+  const obs = latestOrder.observacoes || (rawOrder as any).observacoes || '';
   const obsSeparator = obs.trim() ? '\n' : '';
   const obsNote = operatorName
     ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
     : '';
 
   const payload: Record<string, any> = {
-    tipo: (rawOrder as any).tipo || 'produto',
-    cliente_id: rawOrder.cliente_id,
-    codigo: rawOrder.codigo,
-    data: rawOrder.data,
+    tipo: latestOrder.tipo || (rawOrder as any).tipo || 'produto',
+    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
+    codigo: latestOrder.codigo ?? rawOrder.codigo,
+    data: latestOrder.data || rawOrder.data,
     situacao_id: newStatusId,
-    vendedor_id: rawOrder.vendedor_id,
+    vendedor_id: latestOrder.vendedor_id ?? rawOrder.vendedor_id,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
-    valor_total: rawOrder.valor_total,
-    valor_frete: rawOrder.valor_frete || '0.00',
-    condicao_pagamento: rawOrder.condicao_pagamento || 'a_vista',
-    produtos: rawOrder.produtos,
-    servicos: rawOrder.servicos || [],
+    valor_total: latestOrder.valor_total ?? rawOrder.valor_total,
+    valor_frete: latestOrder.valor_frete || rawOrder.valor_frete || '0.00',
+    condicao_pagamento: latestOrder.condicao_pagamento || rawOrder.condicao_pagamento || 'a_vista',
+    produtos: latestOrder.produtos || rawOrder.produtos,
+    servicos: latestOrder.servicos || rawOrder.servicos || [],
   };
 
-  // Preserve pagamentos to avoid total vs parcelas mismatch (e.g. when discounts are applied)
-  if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
+  // Preserve pagamentos + desconto to avoid total vs parcelas mismatch
+  if (latestOrder.pagamentos?.length) payload.pagamentos = latestOrder.pagamentos;
+  else if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
+  if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
+  if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 

@@ -281,8 +281,11 @@ export default function SeparationsPage() {
             </tr>
           </thead>
           <tbody>
-            {separations.map((sep, i) => (
-              <tr key={sep.id} className={`border-b ${sep.invalidated ? 'line-through opacity-50' : ''}`}>
+            {separations.map((sep, i) => {
+              const isReturnRow = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
+              const isInvalidRow = sep.invalidated && !isReturnRow;
+              return (
+              <tr key={sep.id} className={`border-b ${isInvalidRow ? 'line-through opacity-50' : isReturnRow ? 'opacity-70' : ''}`}>
                 <td className="py-1.5 px-1 font-medium">{sep.order_type === 'os' ? 'OS' : 'VD'}</td>
                 <td className="py-1.5 px-1 font-bold">#{sep.order_code}</td>
                 <td className="py-1.5 px-1 max-w-[200px] truncate">{sep.client_name}</td>
@@ -291,9 +294,10 @@ export default function SeparationsPage() {
                 <td className="py-1.5 px-1 text-xs">{sep.status_name} → {sep.target_status_name}</td>
                 <td className="py-1.5 px-1">{sep.operator_name || '—'}</td>
                 <td className="py-1.5 px-1 text-center">{formatTime(sep.concluded_at)}</td>
-                <td className="py-1.5 px-1 text-center">{sep.invalidated ? '❌' : '✅'}</td>
+                <td className="py-1.5 px-1 text-center">{isInvalidRow ? '❌' : isReturnRow ? '↩️' : '✅'}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
 

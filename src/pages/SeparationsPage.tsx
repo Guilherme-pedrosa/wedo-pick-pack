@@ -100,6 +100,15 @@ export default function SeparationsPage() {
   const formatTime = (iso: string) => {
     try {
       return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch  {
+      return iso;
+    }
+  };
+
+  const formatDateTime = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     } catch {
       return iso;
     }
@@ -299,7 +308,7 @@ export default function SeparationsPage() {
       {/* Screen cards */}
       <div className="space-y-3 print:hidden">
         {separations.map(sep => (
-          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDuration={formatDuration} />
+          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} />
         ))}
       </div>
     </div>
@@ -342,10 +351,12 @@ function buildPickingItemsFromOrder(orderId: string, produtos: Array<{ produto: 
 function SeparationCard({
   sep,
   formatTime,
+  formatDateTime,
   formatDuration,
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
+  formatDateTime: (iso: string) => string;
   formatDuration: (start: string, end: string) => string;
 }) {
   const isInvalid = sep.invalidated;
@@ -408,7 +419,7 @@ function SeparationCard({
               </Button>
             )}
             <span className="text-xs text-muted-foreground">
-              {formatTime(sep.concluded_at)}
+              {formatDateTime(sep.concluded_at)}
             </span>
           </div>
         </div>

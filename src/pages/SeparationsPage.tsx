@@ -377,6 +377,7 @@ function SeparationCard({
   const [techSearch, setTechSearch] = useState('');
   const [loadingTechs, setLoadingTechs] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [selectedTech, setSelectedTech] = useState<{ gc_id: string; name: string } | null>(null);
 
   const loadTechnicians = async () => {
     setLoadingTechs(true);

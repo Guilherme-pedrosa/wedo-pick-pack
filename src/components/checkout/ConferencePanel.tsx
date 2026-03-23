@@ -111,8 +111,9 @@ export default function ConferencePanel() {
   }, [session, confirmItem]);
 
   const handleScan = useCallback(() => {
+    const hasFractional = session?.items.some(i => i.qtd_total % 1 !== 0);
     const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-    const effectiveQty = hasLargeQty ? (Number(scanQty) || 1) : 1;
+    const effectiveQty = (hasLargeQty || hasFractional) ? (Number(scanQty) || 1) : 1;
     processScan(scanCode, effectiveQty);
     setScanCode('');
     setScanQty(1);

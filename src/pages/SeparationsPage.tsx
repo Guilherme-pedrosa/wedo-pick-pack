@@ -420,8 +420,6 @@ function SeparationCard({
               {formatTime(sep.concluded_at)}
             </span>
           </div>
-            </span>
-          </div>
         </div>
 
         <p className="text-sm font-medium text-foreground mb-1">{sep.client_name}</p>

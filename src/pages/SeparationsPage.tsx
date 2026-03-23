@@ -373,6 +373,14 @@ function SeparationCard({
         : await getVenda(sep.order_id);
       const items = buildPickingItemsFromOrder(sep.order_id, order.produtos);
       setReceiptItems(items);
+      // Extract equipment from live GC data if not stored in separation record
+      if (!sep.equipment_name && 'equipamentos' in order && Array.isArray(order.equipamentos) && order.equipamentos.length > 0) {
+        const eqName = order.equipamentos
+          .map((e: any) => e.equipamento?.equipamento || '')
+          .filter(Boolean)
+          .join(', ');
+        if (eqName) setReceiptEquipment(eqName);
+      }
       setReceiptOpen(true);
     } catch (err) {
       console.error('Error fetching order for reprint:', err);

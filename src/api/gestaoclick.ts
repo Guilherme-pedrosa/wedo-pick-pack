@@ -192,10 +192,9 @@ export async function listVendas(situacaoId?: string, pagina = 1, pesquisa?: str
   if (term) {
     if (/^\d+$/.test(term)) {
       params.set('codigo', term);
-    } else {
-      params.set('nome', term);
+      params.set('limite', '100');
     }
-    params.set('limite', '100');
+    // Text search (client name) is handled client-side
   }
 
   return apiRequest<{ data: GCVenda[]; meta: GCMeta }>(`/api/vendas?${params.toString()}`);

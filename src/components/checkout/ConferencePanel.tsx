@@ -177,7 +177,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
       allConfirmed: items.every(i => i.conferido),
       confirmedCount: confirmed,
       totalCount: total,
-      showQtyField: items.some(i => i.qtd_total >= 5),
+      showQtyField: items.some(i => i.qtd_total >= 5 || i.qtd_total % 1 !== 0),
       progress: total > 0 ? Math.round((confirmed / total) * 100) : 0,
       hasAnyConfirmed: items.some(i => i.qtd_conferida > 0),
     };

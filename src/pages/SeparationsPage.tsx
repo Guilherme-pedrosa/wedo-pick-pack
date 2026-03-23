@@ -66,8 +66,10 @@ export default function SeparationsPage() {
           ? await getOS(sep.order_id)
           : await getVenda(sep.order_id);
 
-        if (order.situacao_id !== sep.target_status_id) {
-          const reason = `Status alterado no GC: "${order.nome_situacao}" (era "${sep.target_status_name}")`;
+        // Only invalidate if order reverted to its ORIGINAL status (before separation)
+        // Don't invalidate if order progressed forward (e.g., to "executado")
+        if (order.situacao_id === sep.status_id) {
+          const reason = `Status revertido no GC: "${order.nome_situacao}" (voltou ao status anterior à separação)`;
           await invalidateSeparation(sep.id, reason);
           invalidated++;
         }

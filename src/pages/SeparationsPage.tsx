@@ -558,6 +558,17 @@ function SeparationCard({
                 {sep.technician_name ? 'Alterar' : 'Vincular'} Técnico
               </Button>
             )}
+            {!isInvalid && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setReturnDialogOpen(true); setReturnReason(''); }}
+                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+              >
+                <Undo2 className="h-3.5 w-3.5 mr-1" />
+                Devolução
+              </Button>
+            )}
             <span className="text-xs text-muted-foreground">
               {formatDateTime(sep.concluded_at)}
             </span>

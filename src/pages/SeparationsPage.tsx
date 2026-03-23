@@ -357,17 +357,60 @@ function SeparationCard({
   formatTime,
   formatDateTime,
   formatDuration,
+  onUpdated,
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
   formatDateTime: (iso: string) => string;
   formatDuration: (start: string, end: string) => string;
+  onUpdated: () => void;
 }) {
   const isInvalid = sep.invalidated;
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
   const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
+
+  // Technician link state
+  const [techDialogOpen, setTechDialogOpen] = useState(false);
+  const [technicians, setTechnicians] = useState<{ id: string; gc_id: string; name: string }[]>([]);
+  const [techSearch, setTechSearch] = useState('');
+  const [loadingTechs, setLoadingTechs] = useState(false);
+  const [linking, setLinking] = useState(false);
+
+  const loadTechnicians = async () => {
+    setLoadingTechs(true);
+    const { data } = await supabase.from('technicians').select('id, gc_id, name').eq('active', true).order('name');
+    setTechnicians(data || []);
+    setLoadingTechs(false);
+  };
+
+  const openTechDialog = () => {
+    setTechDialogOpen(true);
+    setTechSearch('');
+    loadTechnicians();
+  };
+
+  const handleLinkTechnician = async (tech: { gc_id: string; name: string } | null) => {
+    setLinking(true);
+    const ok = await linkTechnicianToSeparation(
+      sep.id,
+      tech?.gc_id || null,
+      tech?.name || null
+    );
+    setLinking(false);
+    if (ok) {
+      toast.success(tech ? `Técnico "${tech.name}" vinculado` : 'Técnico desvinculado');
+      setTechDialogOpen(false);
+      onUpdated();
+    } else {
+      toast.error('Erro ao vincular técnico');
+    }
+  };
+
+  const filteredTechs = technicians.filter(t =>
+    t.name.toLowerCase().includes(techSearch.toLowerCase())
+  );
 
   const handleReprint = async () => {
     setLoadingReceipt(true);

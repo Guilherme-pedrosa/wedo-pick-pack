@@ -389,6 +389,7 @@ function SeparationCard({
   const openTechDialog = () => {
     setTechDialogOpen(true);
     setTechSearch('');
+    setSelectedTech(null);
     loadTechnicians();
   };
 

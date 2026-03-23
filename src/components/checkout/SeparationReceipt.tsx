@@ -26,6 +26,7 @@ export default function SeparationReceipt({
   orderCode,
   clientName,
   operatorName,
+  equipmentName,
   items,
   startedAt,
   concludedAt,

@@ -111,8 +111,9 @@ export default function ConferencePanel() {
   }, [session, confirmItem]);
 
   const handleScan = useCallback(() => {
+    const hasFractional = session?.items.some(i => i.qtd_total % 1 !== 0);
     const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-    const effectiveQty = hasLargeQty ? (Number(scanQty) || 1) : 1;
+    const effectiveQty = (hasLargeQty || hasFractional) ? (Number(scanQty) || 1) : 1;
     processScan(scanCode, effectiveQty);
     setScanCode('');
     setScanQty(1);
@@ -177,7 +178,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
       allConfirmed: items.every(i => i.conferido),
       confirmedCount: confirmed,
       totalCount: total,
-      showQtyField: items.some(i => i.qtd_total >= 5),
+      showQtyField: items.some(i => i.qtd_total >= 5 || i.qtd_total % 1 !== 0),
       progress: total > 0 ? Math.round((confirmed / total) * 100) : 0,
       hasAnyConfirmed: items.some(i => i.qtd_conferida > 0),
     };
@@ -281,12 +282,13 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             <div className="flex gap-2">
               <div className="w-20">
                 <label className="text-xs font-medium text-muted-foreground">Qtd</label>
-                <Input
+              <Input
                   type="number"
                   value={scanQty}
-                  onChange={e => setScanQty(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
-                  onBlur={() => { if (scanQty === '' || Number(scanQty) < 1) setScanQty(1); }}
-                  min={1}
+                  onChange={e => setScanQty(e.target.value === '' ? '' : Math.max(0.001, parseFloat(e.target.value) || 1))}
+                  onBlur={() => { if (scanQty === '' || Number(scanQty) < 0.001) setScanQty(1); }}
+                  min={0.001}
+                  step="any"
                   className="text-base py-3 text-center"
                 />
               </div>
@@ -310,8 +312,9 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             open={cameraOpen}
             onClose={() => setCameraOpen(false)}
             onScan={(code) => {
+              const hasFrac = session?.items.some(i => i.qtd_total % 1 !== 0);
               const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-              processScan(code, hasLargeQty ? (Number(scanQty) || 1) : 1);
+              processScan(code, (hasLargeQty || hasFrac) ? (Number(scanQty) || 1) : 1);
               scanRef.current?.focus();
             }}
           />

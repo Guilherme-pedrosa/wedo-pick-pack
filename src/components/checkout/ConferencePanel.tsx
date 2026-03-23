@@ -110,15 +110,22 @@ export default function ConferencePanel() {
     }
   }, [session, confirmItem]);
 
+  const parseScanQty = useCallback((value: number | string) => {
+    const normalized = String(value ?? '').trim().replace(',', '.');
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+    return parsed;
+  }, []);
+
   const handleScan = useCallback(() => {
     const hasFractional = session?.items.some(i => i.qtd_total % 1 !== 0);
     const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-    const effectiveQty = (hasLargeQty || hasFractional) ? (Number(scanQty) || 1) : 1;
+    const effectiveQty = (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
     processScan(scanCode, effectiveQty);
     setScanCode('');
     setScanQty(1);
     scanRef.current?.focus();
-  }, [scanCode, scanQty, processScan, session?.items]);
+  }, [scanCode, scanQty, processScan, session?.items, parseScanQty]);
 
   const handlePrint = useCallback(() => {
     if (!session) return;

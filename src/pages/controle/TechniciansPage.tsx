@@ -164,6 +164,18 @@ const TechniciansPage = () => {
         });
       }
 
+      // Group toolboxes by technician gc_id
+      const toolboxesByTech = new Map<string, ToolboxWithItems[]>();
+      for (const tb of toolboxes) {
+        const gcId = tb.technician_gc_id!;
+        if (!toolboxesByTech.has(gcId)) toolboxesByTech.set(gcId, []);
+        const tItems = itemsByToolbox.get(tb.id) || [];
+        toolboxesByTech.get(gcId)!.push({
+          ...tb,
+          items: tItems.map((i: any) => ({ id: i.id, nome_produto: i.nome_produto, quantidade: i.quantidade, preco_unitario: i.preco_unitario })),
+        });
+      }
+
       // Group separations by technician gc_id
       const sepsByTech = new Map<string, TechSeparation[]>();
       for (const sep of separationsRes.data || []) {

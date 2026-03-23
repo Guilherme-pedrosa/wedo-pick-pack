@@ -146,6 +146,7 @@ h1{font-size:18px;margin:0}h2{font-size:14px;color:#666;margin:4px 0 16px}
   </div>
 </div>
 <div class="meta"><strong>Cliente:</strong> ${session.nomeCliente}</div>
+${session.equipmentName ? `<div class="meta"><strong>Equipamento:</strong> ${session.equipmentName}</div>` : ''}
 <div class="meta"><strong>Situação:</strong> ${session.nomeSituacao} · <strong>Valor:</strong> R$ ${session.valorTotal}</div>
 <div class="meta"><strong>Operador:</strong> ${config.operatorName || '—'}</div>
 <div class="meta"><strong>Início:</strong> ${new Date(session.startedAt).toLocaleString('pt-BR')} · <strong>Conclusão:</strong> ${session.concludedAt ? new Date(session.concludedAt).toLocaleString('pt-BR') : '—'}</div>

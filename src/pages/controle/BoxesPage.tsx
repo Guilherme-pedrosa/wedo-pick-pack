@@ -647,6 +647,11 @@ const BoxesPage = () => {
           <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">
             Em Operação ({inOperationBoxes.length})
           </h3>
+          {inOperationBoxes.length > 0 && (
+            <span className="text-sm font-bold text-primary ml-2">
+              {formatCurrency(inOperationBoxes.reduce((sum, b) => sum + (b.total_value || 0), 0))}
+            </span>
+          )}
         </div>
         {loading ? (
           <div className="space-y-2">

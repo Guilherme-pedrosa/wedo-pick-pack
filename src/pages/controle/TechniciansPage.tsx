@@ -315,7 +315,8 @@ const TechniciansPage = () => {
             const isExpanded = expandedTech.has(tech.id);
             const hasBoxes = tech.boxes.length > 0;
             const hasToolboxes = tech.toolboxes.length > 0;
-            const hasContent = hasBoxes || hasToolboxes;
+            const hasSeparations = tech.separations.length > 0;
+            const hasContent = hasBoxes || hasToolboxes || hasSeparations;
 
             return (
               <div

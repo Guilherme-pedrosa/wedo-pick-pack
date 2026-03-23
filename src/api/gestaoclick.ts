@@ -138,10 +138,10 @@ export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string)
   if (term) {
     if (/^\d+$/.test(term)) {
       params.set('codigo', term);
-    } else {
-      params.set('nome', term);
+      params.set('limite', '100');
     }
-    params.set('limite', '100');
+    // Text search (client name) is handled client-side — GC 'nome' param
+    // searches OS title, not client name, so we skip it here.
   }
 
   return apiRequest<{ data: GCOrdemServico[]; meta: GCMeta }>(`/api/ordens_servicos?${params.toString()}`);

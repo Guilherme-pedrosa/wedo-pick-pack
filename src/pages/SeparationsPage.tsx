@@ -771,7 +771,7 @@ function SeparationCard({
               variant="destructive"
               size="sm"
               onClick={handleReturn}
-              disabled={returning || !returnReason.trim()}
+              disabled={returning || !returnReason.trim() || !returnTermAccepted}
             >
               {returning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />

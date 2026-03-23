@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { UserPlus, Search, Trash2, Users, Loader2, Package, ChevronDown, ChevronRight, Wrench, Briefcase } from "lucide-react";
+import { UserPlus, Search, Trash2, Users, Loader2, Package, ChevronDown, ChevronRight, Wrench, Briefcase, PackageCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -55,9 +55,23 @@ interface ToolboxWithItems {
   items: { id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
 }
 
+interface TechSeparation {
+  id: string;
+  order_type: string;
+  order_code: string;
+  client_name: string;
+  equipment_name: string | null;
+  total_value: string;
+  items_total: number;
+  items_confirmed: number;
+  concluded_at: string;
+  invalidated: boolean;
+}
+
 interface TechnicianWithBoxes extends Technician {
   boxes: BoxWithItems[];
   toolboxes: ToolboxWithItems[];
+  separations: TechSeparation[];
   totalItems: number;
   totalValue: number;
   toolboxTotalItems: number;
@@ -91,7 +105,7 @@ const TechniciansPage = () => {
 
       // Load active boxes with items for each technician
       const gcIds = (techs || []).map((t) => t.gc_id);
-      const [boxesRes, toolboxesRes] = await Promise.all([
+      const [boxesRes, toolboxesRes, separationsRes] = await Promise.all([
         supabase
           .from("boxes")
           .select("id, name, status, created_at, technician_gc_id")
@@ -101,6 +115,12 @@ const TechniciansPage = () => {
           .select("id, name, status, created_at, technician_gc_id")
           .in("technician_gc_id", gcIds)
           .eq("status", "active"),
+        supabase
+          .from("separations")
+          .select("id, order_type, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, concluded_at, invalidated, technician_gc_id")
+          .in("technician_gc_id", gcIds)
+          .eq("invalidated", false)
+          .order("concluded_at", { ascending: false }),
       ]);
 
       const boxes = boxesRes.data || [];
@@ -156,14 +176,23 @@ const TechniciansPage = () => {
         });
       }
 
+      // Group separations by technician gc_id
+      const sepsByTech = new Map<string, TechSeparation[]>();
+      for (const sep of separationsRes.data || []) {
+        const gcId = (sep as any).technician_gc_id!;
+        if (!sepsByTech.has(gcId)) sepsByTech.set(gcId, []);
+        sepsByTech.get(gcId)!.push(sep as any);
+      }
+
       const result: TechnicianWithBoxes[] = (techs || []).map((t) => {
         const techBoxes = boxesByTech.get(t.gc_id) || [];
         const techToolboxes = toolboxesByTech.get(t.gc_id) || [];
+        const techSeparations = sepsByTech.get(t.gc_id) || [];
         const totalItems = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade, 0), 0);
         const totalValue = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
         const toolboxTotalItems = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade, 0), 0);
         const toolboxTotalValue = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
-        return { ...t, boxes: techBoxes, toolboxes: techToolboxes, totalItems, totalValue, toolboxTotalItems, toolboxTotalValue };
+        return { ...t, boxes: techBoxes, toolboxes: techToolboxes, separations: techSeparations, totalItems, totalValue, toolboxTotalItems, toolboxTotalValue };
       });
 
       setTechnicians(result);
@@ -286,7 +315,8 @@ const TechniciansPage = () => {
             const isExpanded = expandedTech.has(tech.id);
             const hasBoxes = tech.boxes.length > 0;
             const hasToolboxes = tech.toolboxes.length > 0;
-            const hasContent = hasBoxes || hasToolboxes;
+            const hasSeparations = tech.separations.length > 0;
+            const hasContent = hasBoxes || hasToolboxes || hasSeparations;
 
             return (
               <div
@@ -348,6 +378,22 @@ const TechniciansPage = () => {
                         <Badge variant="outline" className="text-xs bg-accent/50">
                           <Briefcase className="h-3 w-3 mr-1" />
                           Maleta
+                        </Badge>
+                      </div>
+                    )}
+                    {hasSeparations && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {tech.separations.length} separaç{tech.separations.length > 1 ? "ões" : "ão"}
+                          </p>
+                          <p className="text-xs font-medium text-foreground">
+                            {formatCurrency(tech.separations.reduce((s, sep) => s + parseFloat(sep.total_value || '0'), 0))}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs bg-primary/10">
+                          <PackageCheck className="h-3 w-3 mr-1" />
+                          OS
                         </Badge>
                       </div>
                     )}
@@ -469,6 +515,54 @@ const TechniciansPage = () => {
                         </div>
                       );
                     })}
+                    {tech.separations.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-foreground">
+                          📋 Separações Vinculadas ({tech.separations.length})
+                        </p>
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="text-xs">
+                                <TableHead className="py-1.5 text-xs">Tipo</TableHead>
+                                <TableHead className="py-1.5 text-xs">Código</TableHead>
+                                <TableHead className="py-1.5 text-xs">Cliente</TableHead>
+                                <TableHead className="py-1.5 text-xs text-center w-16">Itens</TableHead>
+                                <TableHead className="py-1.5 text-xs text-right w-24">Valor</TableHead>
+                                <TableHead className="py-1.5 text-xs text-right w-28">Data</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {tech.separations.map((sep) => (
+                                <TableRow key={sep.id} className="text-xs">
+                                  <TableCell className="py-1.5 text-xs font-medium">
+                                    {sep.order_type === 'os' ? 'OS' : 'VD'}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs font-bold">
+                                    #{sep.order_code}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs max-w-[200px] truncate">
+                                    {sep.client_name}
+                                    {sep.equipment_name && (
+                                      <span className="text-muted-foreground ml-1">🔧 {sep.equipment_name}</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs text-center">
+                                    {sep.items_confirmed}/{sep.items_total}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs text-right">
+                                    R$ {sep.total_value}
+                                  </TableCell>
+                                  <TableCell className="py-1.5 text-xs text-right">
+                                    {new Date(sep.concluded_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

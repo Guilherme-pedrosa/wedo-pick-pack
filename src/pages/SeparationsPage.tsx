@@ -1,16 +1,18 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSeparations, invalidateSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
+import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
 import { getOS, getVenda } from '@/api/gestaoclick';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt from '@/components/checkout/SeparationReceipt';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function SeparationsPage() {
   const queryClient = useQueryClient();
@@ -310,7 +312,7 @@ export default function SeparationsPage() {
       {/* Screen cards */}
       <div className="space-y-3 print:hidden">
         {separations.map(sep => (
-          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} />
+          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} onUpdated={() => refetch()} />
         ))}
       </div>
     </div>
@@ -355,17 +357,60 @@ function SeparationCard({
   formatTime,
   formatDateTime,
   formatDuration,
+  onUpdated,
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
   formatDateTime: (iso: string) => string;
   formatDuration: (start: string, end: string) => string;
+  onUpdated: () => void;
 }) {
   const isInvalid = sep.invalidated;
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
   const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
+
+  // Technician link state
+  const [techDialogOpen, setTechDialogOpen] = useState(false);
+  const [technicians, setTechnicians] = useState<{ id: string; gc_id: string; name: string }[]>([]);
+  const [techSearch, setTechSearch] = useState('');
+  const [loadingTechs, setLoadingTechs] = useState(false);
+  const [linking, setLinking] = useState(false);
+
+  const loadTechnicians = async () => {
+    setLoadingTechs(true);
+    const { data } = await supabase.from('technicians').select('id, gc_id, name').eq('active', true).order('name');
+    setTechnicians(data || []);
+    setLoadingTechs(false);
+  };
+
+  const openTechDialog = () => {
+    setTechDialogOpen(true);
+    setTechSearch('');
+    loadTechnicians();
+  };
+
+  const handleLinkTechnician = async (tech: { gc_id: string; name: string } | null) => {
+    setLinking(true);
+    const ok = await linkTechnicianToSeparation(
+      sep.id,
+      tech?.gc_id || null,
+      tech?.name || null
+    );
+    setLinking(false);
+    if (ok) {
+      toast.success(tech ? `Técnico "${tech.name}" vinculado` : 'Técnico desvinculado');
+      setTechDialogOpen(false);
+      onUpdated();
+    } else {
+      toast.error('Erro ao vincular técnico');
+    }
+  };
+
+  const filteredTechs = technicians.filter(t =>
+    t.name.toLowerCase().includes(techSearch.toLowerCase())
+  );
 
   const handleReprint = async () => {
     setLoadingReceipt(true);
@@ -429,6 +474,17 @@ function SeparationCard({
                 Reimprimir
               </Button>
             )}
+            {!isInvalid && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openTechDialog}
+                className="h-7 px-2 text-xs"
+              >
+                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                {sep.technician_name ? 'Alterar' : 'Vincular'} Técnico
+              </Button>
+            )}
             <span className="text-xs text-muted-foreground">
               {formatDateTime(sep.concluded_at)}
             </span>
@@ -439,7 +495,11 @@ function SeparationCard({
         {sep.equipment_name && (
           <p className="text-xs text-muted-foreground mb-1">🔧 {sep.equipment_name}</p>
         )}
-
+        {sep.technician_name && (
+          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+            <User className="h-3 w-3" /> {sep.technician_name}
+          </p>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
           <div>
             <span className="font-medium text-foreground">Itens:</span> {sep.items_confirmed}/{sep.items_total}
@@ -490,6 +550,65 @@ function SeparationCard({
           observations={sep.observations || undefined}
         />
       )}
+
+      <Dialog open={techDialogOpen} onOpenChange={setTechDialogOpen}>
+        <DialogContent className="max-w-sm max-h-[70vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <UserPlus className="h-4 w-4" />
+              Vincular Técnico — #{sep.order_code}
+            </DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Buscar técnico..."
+            value={techSearch}
+            onChange={(e) => setTechSearch(e.target.value)}
+            autoFocus
+          />
+          <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+            {loadingTechs && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!loadingTechs && filteredTechs.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">Nenhum técnico encontrado</p>
+            )}
+            {filteredTechs.map(tech => (
+              <div
+                key={tech.id}
+                className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent/50 transition-colors cursor-pointer ${sep.technician_gc_id === tech.gc_id ? 'bg-primary/10 border-primary' : ''}`}
+                onClick={() => handleLinkTechnician(tech)}
+              >
+                <div>
+                  <p className="text-sm font-medium">{tech.name}</p>
+                  <p className="text-xs text-muted-foreground font-mono">ID: {tech.gc_id}</p>
+                </div>
+                {sep.technician_gc_id === tech.gc_id && (
+                  <Badge variant="default" className="text-xs">Atual</Badge>
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            {sep.technician_gc_id && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleLinkTechnician(null)}
+                disabled={linking}
+                className="text-destructive"
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Desvincular
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setTechDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

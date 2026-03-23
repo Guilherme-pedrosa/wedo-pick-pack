@@ -380,6 +380,52 @@ function SeparationCard({
   const [linking, setLinking] = useState(false);
   const [selectedTech, setSelectedTech] = useState<{ gc_id: string; name: string } | null>(null);
 
+  // Return (devolução) state
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [returning, setReturning] = useState(false);
+
+  const DEVOLUCAO_STATUS_ID = '8928768';
+
+  const handleReturn = async () => {
+    if (!returnReason.trim()) {
+      toast.error('Informe o motivo da devolução');
+      return;
+    }
+    setReturning(true);
+    try {
+      // Update GC status to "Devolução"
+      if (sep.order_type === 'os') {
+        const order = await getOS(sep.order_id);
+        if (order) {
+          await updateOSStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+        }
+      } else {
+        const order = await getVenda(sep.order_id);
+        if (order) {
+          await updateVendaStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+        }
+      }
+
+      // Invalidate the separation with the return reason
+      const reason = `DEVOLUÇÃO: ${returnReason.trim()}`;
+      const ok = await invalidateSeparation(sep.id, reason);
+      if (ok) {
+        toast.success('Devolução registrada e status alterado no GC');
+        setReturnDialogOpen(false);
+        setReturnReason('');
+        onUpdated();
+      } else {
+        toast.error('Status alterado no GC, mas erro ao registrar devolução localmente');
+      }
+    } catch (err) {
+      console.error('Error processing return:', err);
+      toast.error(`Erro ao processar devolução: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+    } finally {
+      setReturning(false);
+    }
+  };
+
   const loadTechnicians = async () => {
     setLoadingTechs(true);
     const { data } = await supabase.from('technicians').select('id, gc_id, name').eq('active', true).order('name');

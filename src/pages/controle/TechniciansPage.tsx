@@ -105,7 +105,7 @@ const TechniciansPage = () => {
 
       // Load active boxes with items for each technician
       const gcIds = (techs || []).map((t) => t.gc_id);
-      const [boxesRes, toolboxesRes] = await Promise.all([
+      const [boxesRes, toolboxesRes, separationsRes] = await Promise.all([
         supabase
           .from("boxes")
           .select("id, name, status, created_at, technician_gc_id")
@@ -115,6 +115,12 @@ const TechniciansPage = () => {
           .select("id, name, status, created_at, technician_gc_id")
           .in("technician_gc_id", gcIds)
           .eq("status", "active"),
+        supabase
+          .from("separations")
+          .select("id, order_type, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, concluded_at, invalidated, technician_gc_id")
+          .in("technician_gc_id", gcIds)
+          .eq("invalidated", false)
+          .order("concluded_at", { ascending: false }),
       ]);
 
       const boxes = boxesRes.data || [];

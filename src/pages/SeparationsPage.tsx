@@ -6,9 +6,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt from '@/components/checkout/SeparationReceipt';
@@ -379,6 +380,52 @@ function SeparationCard({
   const [linking, setLinking] = useState(false);
   const [selectedTech, setSelectedTech] = useState<{ gc_id: string; name: string } | null>(null);
 
+  // Return (devolução) state
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [returning, setReturning] = useState(false);
+
+  const DEVOLUCAO_STATUS_ID = '8928768';
+
+  const handleReturn = async () => {
+    if (!returnReason.trim()) {
+      toast.error('Informe o motivo da devolução');
+      return;
+    }
+    setReturning(true);
+    try {
+      // Update GC status to "Devolução"
+      if (sep.order_type === 'os') {
+        const order = await getOS(sep.order_id);
+        if (order) {
+          await updateOSStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+        }
+      } else {
+        const order = await getVenda(sep.order_id);
+        if (order) {
+          await updateVendaStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+        }
+      }
+
+      // Invalidate the separation with the return reason
+      const reason = `DEVOLUÇÃO: ${returnReason.trim()}`;
+      const ok = await invalidateSeparation(sep.id, reason);
+      if (ok) {
+        toast.success('Devolução registrada e status alterado no GC');
+        setReturnDialogOpen(false);
+        setReturnReason('');
+        onUpdated();
+      } else {
+        toast.error('Status alterado no GC, mas erro ao registrar devolução localmente');
+      }
+    } catch (err) {
+      console.error('Error processing return:', err);
+      toast.error(`Erro ao processar devolução: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+    } finally {
+      setReturning(false);
+    }
+  };
+
   const loadTechnicians = async () => {
     setLoadingTechs(true);
     const { data } = await supabase.from('technicians').select('id, gc_id, name').eq('active', true).order('name');
@@ -509,6 +556,17 @@ function SeparationCard({
               >
                 <UserPlus className="h-3.5 w-3.5 mr-1" />
                 {sep.technician_name ? 'Alterar' : 'Vincular'} Técnico
+              </Button>
+            )}
+            {!isInvalid && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setReturnDialogOpen(true); setReturnReason(''); }}
+                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+              >
+                <Undo2 className="h-3.5 w-3.5 mr-1" />
+                Devolução
               </Button>
             )}
             <span className="text-xs text-muted-foreground">
@@ -659,6 +717,47 @@ function SeparationCard({
                 Fechar
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Undo2 className="h-4 w-4 text-destructive" />
+              Devolução — #{sep.order_code}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Informe o motivo da devolução. O status será alterado no GestãoClick e a separação será invalidada.
+            </p>
+            <Textarea
+              placeholder="Motivo da devolução..."
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              rows={3}
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setReturnDialogOpen(false)} disabled={returning}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleReturn}
+              disabled={returning || !returnReason.trim()}
+            >
+              {returning ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+              ) : (
+                <Undo2 className="h-3.5 w-3.5 mr-1" />
+              )}
+              Confirmar Devolução
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

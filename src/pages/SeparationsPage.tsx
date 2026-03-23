@@ -621,6 +621,13 @@ function SeparationCard({
           </div>
         )}
 
+        {isReturn && sep.invalidated_reason && (
+          <div className="mt-2 bg-amber-50 text-amber-800 border border-amber-200 rounded p-2 text-xs">
+            <Undo2 className="h-3 w-3 inline mr-1" />
+            {sep.invalidated_reason.replace(/^DEVOLUÇÃO:\s*/, 'Motivo: ')}
+          </div>
+        )}
+
         {sep.observations && (
           <div className="mt-2 bg-muted rounded p-2 text-xs text-muted-foreground">
             <span className="font-medium text-foreground">Obs:</span> {sep.observations}

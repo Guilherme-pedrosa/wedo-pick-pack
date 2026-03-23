@@ -275,6 +275,91 @@ async function fetchLatestForStatusUpdate<T>(path: string, fallback: T): Promise
   return fallback;
 }
 
+type GCUpdateResponse = {
+  data?: { situacao_id?: string | number };
+  situacao_id?: string | number;
+};
+
+function roundTo(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+function parseCurrency(value: unknown): number {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 0;
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrency(value: number, decimals = 2): string {
+  return roundTo(value, decimals).toFixed(decimals);
+}
+
+function hasLineDiscount(item: Record<string, any>): boolean {
+  return parseCurrency(item.desconto_valor) > 0 || parseCurrency(item.desconto_porcentagem) > 0;
+}
+
+function normalizeLineUnitPrice<T extends Record<string, any>>(
+  items: T[] | undefined,
+  key: 'produto' | 'servico'
+): T[] | undefined {
+  if (!Array.isArray(items)) return items;
+
+  return items.map((entry) => {
+    const line = entry?.[key];
+    if (!line || typeof line !== 'object') return entry;
+
+    const qty = parseCurrency(line.quantidade);
+    if (qty <= 0 || hasLineDiscount(line)) return entry;
+
+    const lineTotal = parseCurrency(line.valor_total);
+    const normalizedUnit = formatCurrency(lineTotal / qty, 4);
+    if (String(line.valor_venda ?? '') === normalizedUnit) return entry;
+
+    return {
+      ...entry,
+      [key]: {
+        ...line,
+        valor_venda: normalizedUnit,
+      },
+    };
+  });
+}
+
+function isInstallmentMismatchError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  return message.includes('valor do pedido') && message.includes('valor das parcelas');
+}
+
+function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<string, any> {
+  return {
+    ...payload,
+    produtos: normalizeLineUnitPrice(payload.produtos, 'produto') || payload.produtos,
+    servicos: normalizeLineUnitPrice(payload.servicos, 'servico') || payload.servicos,
+  };
+}
+
+async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
+  try {
+    return await apiRequest<GCUpdateResponse>(path, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    if (!isInstallmentMismatchError(error)) throw error;
+
+    console.warn('[GC] Installment mismatch detected. Retrying with normalized line unit prices.');
+    return apiRequest<GCUpdateResponse>(path, {
+      method: 'PUT',
+      body: JSON.stringify(withInstallmentPrecisionFallback(payload)),
+    });
+  }
+}
+
 export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
@@ -324,13 +409,7 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
-  const putResponse = await apiRequest<{ data?: { situacao_id?: string | number }; situacao_id?: string | number }>(
-    `/api/ordens_servicos/${id}`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    }
-  );
+  const putResponse = await putStatusWithRetry(`/api/ordens_servicos/${id}`, payload);
 
   const expectedStatus = normalizeStatusId(newStatusId);
   const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
@@ -393,13 +472,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
-  const putResponse = await apiRequest<{ data?: { situacao_id?: string | number }; situacao_id?: string | number }>(
-    `/api/vendas/${id}`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    }
-  );
+  const putResponse = await putStatusWithRetry(`/api/vendas/${id}`, payload);
 
   const expectedStatus = normalizeStatusId(newStatusId);
   const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);

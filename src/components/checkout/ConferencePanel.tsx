@@ -21,7 +21,7 @@ export default function ConferencePanel() {
   const config = useCheckoutStore(s => s.config);
 
   const [scanCode, setScanCode] = useState('');
-  const [scanQty, setScanQty] = useState<number | string>(1);
+  const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
   const [conclusionOpen, setConclusionOpen] = useState(false);

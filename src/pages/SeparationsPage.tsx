@@ -474,6 +474,17 @@ function SeparationCard({
                 Reimprimir
               </Button>
             )}
+            {!isInvalid && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openTechDialog}
+                className="h-7 px-2 text-xs"
+              >
+                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                {sep.technician_name ? 'Alterar' : 'Vincular'} Técnico
+              </Button>
+            )}
             <span className="text-xs text-muted-foreground">
               {formatDateTime(sep.concluded_at)}
             </span>

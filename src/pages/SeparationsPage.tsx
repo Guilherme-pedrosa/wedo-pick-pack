@@ -384,6 +384,7 @@ function SeparationCard({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [returning, setReturning] = useState(false);
+  const [returnTermAccepted, setReturnTermAccepted] = useState(false);
 
   const DEVOLUCAO_STATUS_ID = '8928768';
 

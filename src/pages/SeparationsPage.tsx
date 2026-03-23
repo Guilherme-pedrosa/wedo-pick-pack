@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
-import { getOS, getVenda } from '@/api/gestaoclick';
+import { getOS, getVenda, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

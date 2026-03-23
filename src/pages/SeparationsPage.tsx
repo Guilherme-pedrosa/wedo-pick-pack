@@ -6,8 +6,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { PickingItem, GCProdutoItem } from '@/api/types';
+import SeparationReceipt from '@/components/checkout/SeparationReceipt';
 
 export default function SeparationsPage() {
   const queryClient = useQueryClient();

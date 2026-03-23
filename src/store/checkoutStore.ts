@@ -59,6 +59,15 @@ export const useCheckoutStore = create<CheckoutStore>()(
         gcUsuarioId: '',
       },
       startSession: (tipo, order) => {
+        // Extract equipment name from OS equipamentos array
+        let equipmentName: string | undefined;
+        if ('equipamentos' in order && Array.isArray(order.equipamentos) && order.equipamentos.length > 0) {
+          equipmentName = order.equipamentos
+            .map(e => e.equipamento?.equipamento || '')
+            .filter(Boolean)
+            .join(', ');
+        }
+
         const session: PickingSession = {
           tipo,
           refId: order.id,
@@ -67,6 +76,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
           nomeSituacao: order.nome_situacao,
           situacaoId: order.situacao_id,
           valorTotal: order.valor_total,
+          equipmentName: equipmentName || undefined,
           rawOrder: order,
           items: buildItems(order),
           startedAt: new Date().toISOString(),

@@ -98,6 +98,7 @@ export interface PickingSession {
   nomeSituacao: string;
   situacaoId: string;
   valorTotal: string;
+  equipmentName?: string;
   rawOrder: Order;
   items: PickingItem[];
   startedAt: string;

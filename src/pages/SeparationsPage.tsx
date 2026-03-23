@@ -417,7 +417,7 @@ function SeparationCard({
               </Button>
             )}
             <span className="text-xs text-muted-foreground">
-              {formatTime(sep.concluded_at)}
+              {formatDateTime(sep.concluded_at)}
             </span>
           </div>
         </div>

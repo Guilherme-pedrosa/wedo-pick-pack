@@ -15,6 +15,7 @@ export interface SeparationRecord {
   items_total: number;
   items_confirmed: number;
   operator_name: string;
+  equipment_name: string | null;
   started_at: string;
   concluded_at: string;
   observations: string | null;

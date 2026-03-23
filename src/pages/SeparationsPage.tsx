@@ -100,6 +100,15 @@ export default function SeparationsPage() {
   const formatTime = (iso: string) => {
     try {
       return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch  {
+      return iso;
+    }
+  };
+
+  const formatDateTime = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     } catch {
       return iso;
     }
@@ -409,6 +418,8 @@ function SeparationCard({
             )}
             <span className="text-xs text-muted-foreground">
               {formatTime(sep.concluded_at)}
+            </span>
+          </div>
             </span>
           </div>
         </div>

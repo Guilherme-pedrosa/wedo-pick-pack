@@ -308,7 +308,7 @@ export default function SeparationsPage() {
       {/* Screen cards */}
       <div className="space-y-3 print:hidden">
         {separations.map(sep => (
-          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDuration={formatDuration} />
+          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} />
         ))}
       </div>
     </div>
@@ -355,6 +355,7 @@ function SeparationCard({
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
+  formatDateTime: (iso: string) => string;
   formatDuration: (start: string, end: string) => string;
 }) {
   const isInvalid = sep.invalidated;

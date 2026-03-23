@@ -741,6 +741,27 @@ function SeparationCard({
               rows={3}
               autoFocus
             />
+            <div className="border border-border rounded-lg p-3 bg-muted/50 text-xs leading-relaxed space-y-2">
+              <p className="font-bold text-foreground uppercase text-[11px]">Termo de Recebimento de Devolução</p>
+              <p>
+                Declaro que conferi todas as peças devolvidas referentes à {sep.order_type === 'os' ? 'Ordem de Serviço' : 'Venda'} <strong>#{sep.order_code}</strong> do
+                cliente <strong>{sep.client_name}</strong> e que todos os itens estão totalmente conforme foram enviados, sem avarias, faltas ou divergências.
+              </p>
+              <p>
+                Estou ciente de que devo informar imediatamente aos responsáveis sobre esta devolução para a devida tratativa do item, incluindo reposição ao estoque e eventuais providências necessárias.
+              </p>
+            </div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={returnTermAccepted}
+                onChange={(e) => setReturnTermAccepted(e.target.checked)}
+                className="mt-0.5 accent-primary"
+              />
+              <span className="text-xs text-muted-foreground">
+                Li e aceito o Termo de Recebimento de Devolução acima.
+              </span>
+            </label>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" size="sm" onClick={() => setReturnDialogOpen(false)} disabled={returning}>

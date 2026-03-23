@@ -499,7 +499,7 @@ function SeparationCard({
           <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
             <User className="h-3 w-3" /> {sep.technician_name}
           </p>
-
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
           <div>
             <span className="font-medium text-foreground">Itens:</span> {sep.items_confirmed}/{sep.items_total}

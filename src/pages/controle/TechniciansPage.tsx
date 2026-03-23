@@ -164,26 +164,23 @@ const TechniciansPage = () => {
         });
       }
 
-      // Group toolboxes by technician gc_id
-      const toolboxesByTech = new Map<string, ToolboxWithItems[]>();
-      for (const tb of toolboxes) {
-        const gcId = tb.technician_gc_id!;
-        if (!toolboxesByTech.has(gcId)) toolboxesByTech.set(gcId, []);
-        const tItems = itemsByToolbox.get(tb.id) || [];
-        toolboxesByTech.get(gcId)!.push({
-          ...tb,
-          items: tItems.map((i: any) => ({ id: i.id, nome_produto: i.nome_produto, quantidade: i.quantidade, preco_unitario: i.preco_unitario })),
-        });
+      // Group separations by technician gc_id
+      const sepsByTech = new Map<string, TechSeparation[]>();
+      for (const sep of separationsRes.data || []) {
+        const gcId = (sep as any).technician_gc_id!;
+        if (!sepsByTech.has(gcId)) sepsByTech.set(gcId, []);
+        sepsByTech.get(gcId)!.push(sep as any);
       }
 
       const result: TechnicianWithBoxes[] = (techs || []).map((t) => {
         const techBoxes = boxesByTech.get(t.gc_id) || [];
         const techToolboxes = toolboxesByTech.get(t.gc_id) || [];
+        const techSeparations = sepsByTech.get(t.gc_id) || [];
         const totalItems = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade, 0), 0);
         const totalValue = techBoxes.reduce((sum, b) => sum + b.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
         const toolboxTotalItems = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade, 0), 0);
         const toolboxTotalValue = techToolboxes.reduce((sum, tb) => sum + tb.items.reduce((s, i) => s + i.quantidade * (i.preco_unitario || 0), 0), 0);
-        return { ...t, boxes: techBoxes, toolboxes: techToolboxes, totalItems, totalValue, toolboxTotalItems, toolboxTotalValue };
+        return { ...t, boxes: techBoxes, toolboxes: techToolboxes, separations: techSeparations, totalItems, totalValue, toolboxTotalItems, toolboxTotalValue };
       });
 
       setTechnicians(result);

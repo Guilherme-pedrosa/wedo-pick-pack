@@ -41,6 +41,14 @@ export interface CreateSeparationInput {
   observations?: string;
 }
 
+export interface SeparationFilters {
+  fromDate?: string;
+  toDate?: string;
+  orderType?: 'os' | 'venda' | 'all';
+  status?: 'all' | 'valid' | 'invalid';
+  search?: string;
+}
+
 export async function createSeparation(input: CreateSeparationInput): Promise<SeparationRecord> {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -66,6 +74,62 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
 }
 
 export async function getTodaySeparations(): Promise<SeparationRecord[]> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  return getSeparations({
+    fromDate: today.toISOString(),
+    toDate: tomorrow.toISOString(),
+  });
+}
+
+export async function getSeparations(filters: SeparationFilters = {}): Promise<SeparationRecord[]> {
+  const { fromDate, toDate, orderType = 'all', status = 'all', search } = filters;
+
+  let query = supabase
+    .from('separations')
+    .select('*')
+    .order('concluded_at', { ascending: false });
+
+  if (fromDate) {
+    query = query.gte('concluded_at', fromDate);
+  }
+
+  if (toDate) {
+    query = query.lt('concluded_at', toDate);
+  }
+
+  if (orderType !== 'all') {
+    query = query.eq('order_type', orderType);
+  }
+
+  if (status === 'valid') {
+    query = query.eq('invalidated', false);
+  }
+
+  if (status === 'invalid') {
+    query = query.eq('invalidated', true);
+  }
+
+  if (search && search.trim().length > 0) {
+    const term = search.trim();
+    query = query.or(`order_code.ilike.%${term}%,client_name.ilike.%${term}%`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching separations:', error);
+    return [];
+  }
+
+  return (data || []) as unknown as SeparationRecord[];
+}
+
+export async function getTodaySeparationsLegacy(): Promise<SeparationRecord[]> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayISO = today.toISOString();

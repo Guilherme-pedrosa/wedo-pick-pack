@@ -28,6 +28,7 @@ export default function SeparationReceipt({
   clientName,
   operatorName,
   equipmentName,
+  technicianName,
   items,
   startedAt,
   concludedAt,

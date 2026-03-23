@@ -110,15 +110,22 @@ export default function ConferencePanel() {
     }
   }, [session, confirmItem]);
 
+  const parseScanQty = useCallback((value: number | string) => {
+    const normalized = String(value ?? '').trim().replace(',', '.');
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+    return parsed;
+  }, []);
+
   const handleScan = useCallback(() => {
     const hasFractional = session?.items.some(i => i.qtd_total % 1 !== 0);
     const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-    const effectiveQty = (hasLargeQty || hasFractional) ? (Number(scanQty) || 1) : 1;
+    const effectiveQty = (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
     processScan(scanCode, effectiveQty);
     setScanCode('');
     setScanQty(1);
     scanRef.current?.focus();
-  }, [scanCode, scanQty, processScan, session?.items]);
+  }, [scanCode, scanQty, processScan, session?.items, parseScanQty]);
 
   const handlePrint = useCallback(() => {
     if (!session) return;
@@ -282,13 +289,25 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             <div className="flex gap-2">
               <div className="w-20">
                 <label className="text-xs font-medium text-muted-foreground">Qtd</label>
-              <Input
-                  type="number"
+                <Input
+                  type="text"
+                  inputMode="decimal"
                   value={scanQty}
-                  onChange={e => setScanQty(e.target.value === '' ? '' : Math.max(0.001, parseFloat(e.target.value) || 1))}
-                  onBlur={() => { if (scanQty === '' || Number(scanQty) < 0.001) setScanQty(1); }}
-                  min={0.001}
-                  step="any"
+                  onChange={e => {
+                    const raw = e.target.value.trim();
+                    if (raw === '') {
+                      setScanQty('');
+                      return;
+                    }
+                    const parsed = Number(raw.replace(',', '.'));
+                    if (Number.isFinite(parsed)) {
+                      setScanQty(Math.max(0.001, parsed));
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = parseScanQty(scanQty);
+                    setScanQty(Math.max(0.001, parsed));
+                  }}
                   className="text-base py-3 text-center"
                 />
               </div>
@@ -314,7 +333,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             onScan={(code) => {
               const hasFrac = session?.items.some(i => i.qtd_total % 1 !== 0);
               const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-              processScan(code, (hasLargeQty || hasFrac) ? (Number(scanQty) || 1) : 1);
+              processScan(code, (hasLargeQty || hasFrac) ? parseScanQty(scanQty) : 1);
               scanRef.current?.focus();
             }}
           />

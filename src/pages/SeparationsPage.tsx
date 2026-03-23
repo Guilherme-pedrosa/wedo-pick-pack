@@ -235,6 +235,29 @@ export default function SeparationsPage() {
   );
 }
 
+function parseGCQuantity(val: string | number): number {
+  if (typeof val === 'number') return val;
+  const num = parseFloat(val);
+  return isNaN(num) ? 0 : num;
+}
+
+function buildPickingItemsFromOrder(orderId: string, produtos: Array<{ produto: GCProdutoItem }>): PickingItem[] {
+  return (produtos || []).map((p, i) => ({
+    id: `${orderId}-${i}`,
+    produto_id: p.produto.produto_id,
+    variacao_id: p.produto.variacao_id,
+    nome_produto: p.produto.nome_produto,
+    codigo_produto: p.produto.codigo_produto,
+    codigo_barras: p.produto.codigo_barras,
+    sigla_unidade: p.produto.sigla_unidade,
+    qtd_total: parseGCQuantity(p.produto.quantidade),
+    qtd_conferida: parseGCQuantity(p.produto.quantidade),
+    conferido: true,
+    localizacao_fisica: p.produto.localizacao_fisica,
+    localizacao_rational: p.produto.localizacao_rational,
+  }));
+}
+
 function SeparationCard({
   sep,
   formatTime,
@@ -245,66 +268,121 @@ function SeparationCard({
   formatDuration: (start: string, end: string) => string;
 }) {
   const isInvalid = sep.invalidated;
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+  const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
+
+  const handleReprint = async () => {
+    setLoadingReceipt(true);
+    try {
+      const order = sep.order_type === 'os'
+        ? await getOS(sep.order_id)
+        : await getVenda(sep.order_id);
+      const items = buildPickingItemsFromOrder(sep.order_id, order.produtos);
+      setReceiptItems(items);
+      setReceiptOpen(true);
+    } catch (err) {
+      console.error('Error fetching order for reprint:', err);
+      toast.error('Erro ao buscar dados do pedido para reimprimir');
+    } finally {
+      setLoadingReceipt(false);
+    }
+  };
 
   return (
-    <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : 'border-l-4 border-l-green-500'}`}>
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          {isInvalid ? (
-            <XCircle className="h-5 w-5 text-destructive" />
-          ) : (
-            <CheckCircle2 className="h-5 w-5 text-green-600" />
-          )}
-          <Badge className={sep.order_type === 'os' ? 'bg-primary text-primary-foreground' : 'bg-purple-700 text-primary-foreground'}>
-            {sep.order_type === 'os' ? 'OS' : 'VENDA'}
-          </Badge>
-          <span className="font-bold text-sm">#{sep.order_code}</span>
-          {isInvalid && (
-            <Badge variant="destructive" className="text-xs">
-              Invalidada
+    <>
+      <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : 'border-l-4 border-l-green-500'}`}>
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2">
+            {isInvalid ? (
+              <XCircle className="h-5 w-5 text-destructive" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+            )}
+            <Badge className={sep.order_type === 'os' ? 'bg-primary text-primary-foreground' : 'bg-purple-700 text-primary-foreground'}>
+              {sep.order_type === 'os' ? 'OS' : 'VENDA'}
             </Badge>
-          )}
+            <span className="font-bold text-sm">#{sep.order_code}</span>
+            {isInvalid && (
+              <Badge variant="destructive" className="text-xs">
+                Invalidada
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {!isInvalid && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReprint}
+                disabled={loadingReceipt}
+                className="h-7 px-2 text-xs"
+              >
+                {loadingReceipt ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                ) : (
+                  <FileText className="h-3.5 w-3.5 mr-1" />
+                )}
+                Reimprimir
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {formatTime(sep.concluded_at)}
+            </span>
+          </div>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {formatTime(sep.concluded_at)}
-        </span>
-      </div>
 
-      <p className="text-sm font-medium text-foreground mb-1">{sep.client_name}</p>
+        <p className="text-sm font-medium text-foreground mb-1">{sep.client_name}</p>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
-        <div>
-          <span className="font-medium text-foreground">Itens:</span> {sep.items_confirmed}/{sep.items_total}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
+          <div>
+            <span className="font-medium text-foreground">Itens:</span> {sep.items_confirmed}/{sep.items_total}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Valor:</span> R$ {sep.total_value}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Operador:</span> {sep.operator_name || '—'}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Duração:</span> {formatDuration(sep.started_at, sep.concluded_at)}
+          </div>
         </div>
-        <div>
-          <span className="font-medium text-foreground">Valor:</span> R$ {sep.total_value}
-        </div>
-        <div>
-          <span className="font-medium text-foreground">Operador:</span> {sep.operator_name || '—'}
-        </div>
-        <div>
-          <span className="font-medium text-foreground">Duração:</span> {formatDuration(sep.started_at, sep.concluded_at)}
-        </div>
-      </div>
 
-      <div className="flex items-center gap-2 mt-2 text-xs">
-        <span className="text-muted-foreground">{sep.status_name}</span>
-        <span className="text-muted-foreground">→</span>
-        <span className="font-medium text-foreground">{sep.target_status_name}</span>
-      </div>
-
-      {isInvalid && sep.invalidated_reason && (
-        <div className="mt-2 bg-destructive/10 text-destructive rounded p-2 text-xs">
-          <AlertTriangle className="h-3 w-3 inline mr-1" />
-          {sep.invalidated_reason}
+        <div className="flex items-center gap-2 mt-2 text-xs">
+          <span className="text-muted-foreground">{sep.status_name}</span>
+          <span className="text-muted-foreground">→</span>
+          <span className="font-medium text-foreground">{sep.target_status_name}</span>
         </div>
+
+        {isInvalid && sep.invalidated_reason && (
+          <div className="mt-2 bg-destructive/10 text-destructive rounded p-2 text-xs">
+            <AlertTriangle className="h-3 w-3 inline mr-1" />
+            {sep.invalidated_reason}
+          </div>
+        )}
+
+        {sep.observations && (
+          <div className="mt-2 bg-muted rounded p-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Obs:</span> {sep.observations}
+          </div>
+        )}
+      </Card>
+
+      {receiptOpen && (
+        <SeparationReceipt
+          open={receiptOpen}
+          onClose={() => setReceiptOpen(false)}
+          orderType={sep.order_type}
+          orderCode={sep.order_code}
+          clientName={sep.client_name}
+          operatorName={sep.operator_name}
+          items={receiptItems}
+          startedAt={sep.started_at}
+          concludedAt={sep.concluded_at}
+          observations={sep.observations || undefined}
+        />
       )}
-
-      {sep.observations && (
-        <div className="mt-2 bg-muted rounded p-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Obs:</span> {sep.observations}
-        </div>
-      )}
-    </Card>
+    </>
   );
 }

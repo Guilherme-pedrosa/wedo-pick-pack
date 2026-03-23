@@ -351,6 +351,7 @@ function buildPickingItemsFromOrder(orderId: string, produtos: Array<{ produto: 
 function SeparationCard({
   sep,
   formatTime,
+  formatDateTime,
   formatDuration,
 }: {
   sep: SeparationRecord;

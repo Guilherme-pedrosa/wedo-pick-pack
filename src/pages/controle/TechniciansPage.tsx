@@ -55,9 +55,23 @@ interface ToolboxWithItems {
   items: { id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
 }
 
+interface TechSeparation {
+  id: string;
+  order_type: string;
+  order_code: string;
+  client_name: string;
+  equipment_name: string | null;
+  total_value: string;
+  items_total: number;
+  items_confirmed: number;
+  concluded_at: string;
+  invalidated: boolean;
+}
+
 interface TechnicianWithBoxes extends Technician {
   boxes: BoxWithItems[];
   toolboxes: ToolboxWithItems[];
+  separations: TechSeparation[];
   totalItems: number;
   totalValue: number;
   toolboxTotalItems: number;

@@ -228,6 +228,11 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             </Badge>
             <span className="font-bold text-base md:text-lg">#{session.codigo}</span>
             <span className="text-sm text-muted-foreground truncate max-w-[160px] md:max-w-none">{session.nomeCliente}</span>
+            {session.equipmentName && (
+              <span className="text-xs text-muted-foreground truncate max-w-[200px] md:max-w-none" title={session.equipmentName}>
+                🔧 {session.equipmentName}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 justify-between md:justify-end">
             <span className="text-success font-bold text-base md:text-lg">R$ {session.valorTotal}</span>

@@ -115,6 +115,9 @@ export default function SeparationReceipt({
             <div><strong>Código:</strong> #{orderCode}</div>
             <div><strong>Cliente:</strong> {clientName}</div>
             <div><strong>Operador:</strong> {operatorName}</div>
+            {equipmentName && (
+              <div style={{ gridColumn: '1 / -1' }}><strong>Equipamento:</strong> {equipmentName}</div>
+            )}
             <div><strong>Início:</strong> {formatDateTime(startDate)}</div>
             <div><strong>Conclusão:</strong> {formatDateTime(endDate)}</div>
             <div><strong>Duração:</strong> {duration}</div>

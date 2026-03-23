@@ -381,6 +381,22 @@ const TechniciansPage = () => {
                         </Badge>
                       </div>
                     )}
+                    {hasSeparations && (
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">
+                            {tech.separations.length} separaç{tech.separations.length > 1 ? "ões" : "ão"}
+                          </p>
+                          <p className="text-xs font-medium text-foreground">
+                            {formatCurrency(tech.separations.reduce((s, sep) => s + parseFloat(sep.total_value || '0'), 0))}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs bg-primary/10">
+                          <PackageCheck className="h-3 w-3 mr-1" />
+                          OS
+                        </Badge>
+                      </div>
+                    )}
                     {!hasContent && (
                       <Badge variant="secondary" className="text-xs">
                         Sem vínculos

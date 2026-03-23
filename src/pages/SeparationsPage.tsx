@@ -377,6 +377,7 @@ function SeparationCard({
   const [techSearch, setTechSearch] = useState('');
   const [loadingTechs, setLoadingTechs] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [selectedTech, setSelectedTech] = useState<{ gc_id: string; name: string } | null>(null);
 
   const loadTechnicians = async () => {
     setLoadingTechs(true);
@@ -388,6 +389,7 @@ function SeparationCard({
   const openTechDialog = () => {
     setTechDialogOpen(true);
     setTechSearch('');
+    setSelectedTech(null);
     loadTechnicians();
   };
 
@@ -601,35 +603,61 @@ function SeparationCard({
             {filteredTechs.map(tech => (
               <div
                 key={tech.id}
-                className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent/50 transition-colors cursor-pointer ${sep.technician_gc_id === tech.gc_id ? 'bg-primary/10 border-primary' : ''}`}
-                onClick={() => handleLinkTechnician(tech)}
+                className={`flex items-center justify-between p-2 rounded-lg border transition-colors cursor-pointer ${
+                  selectedTech?.gc_id === tech.gc_id
+                    ? 'bg-primary/10 border-primary ring-2 ring-primary/30'
+                    : sep.technician_gc_id === tech.gc_id
+                    ? 'bg-accent/30 border-accent'
+                    : 'border-border hover:bg-accent/50'
+                }`}
+                onClick={() => setSelectedTech(tech)}
               >
                 <div>
                   <p className="text-sm font-medium">{tech.name}</p>
                   <p className="text-xs text-muted-foreground font-mono">ID: {tech.gc_id}</p>
                 </div>
-                {sep.technician_gc_id === tech.gc_id && (
+                {sep.technician_gc_id === tech.gc_id && !selectedTech && (
                   <Badge variant="default" className="text-xs">Atual</Badge>
+                )}
+                {selectedTech?.gc_id === tech.gc_id && (
+                  <Badge variant="default" className="text-xs">Selecionado</Badge>
                 )}
               </div>
             ))}
           </div>
-          <DialogFooter className="flex-row gap-2">
-            {sep.technician_gc_id && (
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            {selectedTech && (
               <Button
-                variant="outline"
                 size="sm"
-                onClick={() => handleLinkTechnician(null)}
+                onClick={() => handleLinkTechnician(selectedTech)}
                 disabled={linking}
-                className="text-destructive"
+                className="w-full"
               >
-                <X className="h-3.5 w-3.5 mr-1" />
-                Desvincular
+                {linking ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                )}
+                Confirmar — {selectedTech.name}
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={() => setTechDialogOpen(false)}>
-              Fechar
-            </Button>
+            <div className="flex gap-2 w-full">
+              {sep.technician_gc_id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleLinkTechnician(null)}
+                  disabled={linking}
+                  className="text-destructive flex-1"
+                >
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Desvincular
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setTechDialogOpen(false)} className="flex-1">
+                Fechar
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

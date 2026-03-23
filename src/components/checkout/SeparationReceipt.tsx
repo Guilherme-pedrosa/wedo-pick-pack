@@ -13,6 +13,7 @@ interface Props {
   clientName: string;
   operatorName: string;
   equipmentName?: string;
+  technicianName?: string;
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;
@@ -27,6 +28,7 @@ export default function SeparationReceipt({
   clientName,
   operatorName,
   equipmentName,
+  technicianName,
   items,
   startedAt,
   concludedAt,
@@ -117,6 +119,9 @@ export default function SeparationReceipt({
             <div><strong>Operador:</strong> {operatorName}</div>
             {equipmentName && (
               <div style={{ gridColumn: '1 / -1' }}><strong>Equipamento:</strong> {equipmentName}</div>
+            )}
+            {technicianName && (
+              <div style={{ gridColumn: '1 / -1' }}><strong>Técnico:</strong> {technicianName}</div>
             )}
             <div><strong>Início:</strong> {formatDateTime(startDate)}</div>
             <div><strong>Conclusão:</strong> {formatDateTime(endDate)}</div>

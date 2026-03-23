@@ -462,19 +462,25 @@ function SeparationCard({
         return;
       }
 
-      // When linking (not unlinking) a technician to an OS, update GC status to "Retirada pelo técnico"
-      if (tech && sep.order_type === 'os') {
+      if (sep.order_type === 'os') {
         try {
           const order = await getOS(sep.order_id);
           if (order) {
-            await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID);
-            toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
+            if (tech) {
+              // Linking: move to "Retirada pelo técnico"
+              await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID);
+              toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
+            } else {
+              // Unlinking: revert to "Pedido Conferido" (target_status_id from the separation)
+              await updateOSStatus(sep.order_id, order, sep.target_status_id);
+              toast.success(`Técnico desvinculado e status revertido para "${sep.target_status_name}"`);
+            }
           } else {
-            toast.success(`Técnico "${tech.name}" vinculado (OS não encontrada no GC para alterar status)`);
+            toast.success(tech ? `Técnico "${tech.name}" vinculado (OS não encontrada no GC)` : 'Técnico desvinculado (OS não encontrada no GC)');
           }
         } catch (err) {
-          console.error('Error updating OS status to Retirada pelo técnico:', err);
-          toast.warning(`Técnico vinculado, mas erro ao alterar status no GC: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+          console.error('Error updating OS status:', err);
+          toast.warning(`${tech ? 'Técnico vinculado' : 'Técnico desvinculado'}, mas erro ao alterar status no GC: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
         }
       } else {
         toast.success(tech ? `Técnico "${tech.name}" vinculado` : 'Técnico desvinculado');

@@ -307,19 +307,13 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                   inputMode="decimal"
                   value={scanQty}
                   onChange={e => {
-                    const raw = e.target.value.trim();
-                    if (raw === '') {
-                      setScanQty('');
-                      return;
-                    }
-                    const parsed = Number(raw.replace(',', '.'));
-                    if (Number.isFinite(parsed)) {
-                      setScanQty(Math.max(0.001, parsed));
-                    }
+                    const raw = e.target.value;
+                    const sanitized = raw.replace(/[^\d,\.]/g, '');
+                    setScanQty(sanitized);
                   }}
                   onBlur={() => {
                     const parsed = parseScanQty(scanQty);
-                    setScanQty(Math.max(0.001, parsed));
+                    setScanQty(formatScanQty(parsed));
                   }}
                   className="text-base py-3 text-center"
                 />

@@ -495,6 +495,10 @@ function SeparationCard({
         {sep.equipment_name && (
           <p className="text-xs text-muted-foreground mb-1">🔧 {sep.equipment_name}</p>
         )}
+        {sep.technician_name && (
+          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+            <User className="h-3 w-3" /> {sep.technician_name}
+          </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
           <div>

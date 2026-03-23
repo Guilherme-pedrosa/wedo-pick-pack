@@ -149,7 +149,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
       });
 
       concludeSession();
-      queryClient.invalidateQueries({ queryKey: ['today-separations'] });
+      queryClient.invalidateQueries({ queryKey: ['separations'] });
       toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
 
       // Notify parent to show receipt

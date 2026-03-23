@@ -540,7 +540,7 @@ function SeparationCard({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {!isInvalid && (
+            {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -556,7 +556,7 @@ function SeparationCard({
                 Reimprimir
               </Button>
             )}
-            {!isInvalid && (
+            {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -567,7 +567,7 @@ function SeparationCard({
                 {sep.technician_name ? 'Alterar' : 'Vincular'} Técnico
               </Button>
             )}
-            {!isInvalid && (
+            {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"
                 size="sm"

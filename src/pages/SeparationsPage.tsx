@@ -550,6 +550,65 @@ function SeparationCard({
           observations={sep.observations || undefined}
         />
       )}
+
+      <Dialog open={techDialogOpen} onOpenChange={setTechDialogOpen}>
+        <DialogContent className="max-w-sm max-h-[70vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <UserPlus className="h-4 w-4" />
+              Vincular Técnico — #{sep.order_code}
+            </DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder="Buscar técnico..."
+            value={techSearch}
+            onChange={(e) => setTechSearch(e.target.value)}
+            autoFocus
+          />
+          <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+            {loadingTechs && (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            {!loadingTechs && filteredTechs.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">Nenhum técnico encontrado</p>
+            )}
+            {filteredTechs.map(tech => (
+              <div
+                key={tech.id}
+                className={`flex items-center justify-between p-2 rounded-lg border border-border hover:bg-accent/50 transition-colors cursor-pointer ${sep.technician_gc_id === tech.gc_id ? 'bg-primary/10 border-primary' : ''}`}
+                onClick={() => handleLinkTechnician(tech)}
+              >
+                <div>
+                  <p className="text-sm font-medium">{tech.name}</p>
+                  <p className="text-xs text-muted-foreground font-mono">ID: {tech.gc_id}</p>
+                </div>
+                {sep.technician_gc_id === tech.gc_id && (
+                  <Badge variant="default" className="text-xs">Atual</Badge>
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="flex-row gap-2">
+            {sep.technician_gc_id && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleLinkTechnician(null)}
+                disabled={linking}
+                className="text-destructive"
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Desvincular
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setTechDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

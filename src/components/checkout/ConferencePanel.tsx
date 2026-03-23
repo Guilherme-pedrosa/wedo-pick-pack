@@ -110,11 +110,24 @@ export default function ConferencePanel() {
     }
   }, [session, confirmItem]);
 
-  const parseScanQty = useCallback((value: number | string) => {
-    const normalized = String(value ?? '').trim().replace(',', '.');
+  const parseScanQty = useCallback((value: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 1;
+
+    const normalized = raw.includes(',')
+      ? raw.replace(/\./g, '').replace(',', '.')
+      : raw;
+
     const parsed = Number(normalized);
     if (!Number.isFinite(parsed) || parsed <= 0) return 1;
     return parsed;
+  }, []);
+
+  const formatScanQty = useCallback((value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return '1';
+    return Number.isInteger(value)
+      ? String(value)
+      : String(value).replace('.', ',');
   }, []);
 
   const handleScan = useCallback(() => {
@@ -123,7 +136,7 @@ export default function ConferencePanel() {
     const effectiveQty = (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
     processScan(scanCode, effectiveQty);
     setScanCode('');
-    setScanQty(1);
+    setScanQty('1');
     scanRef.current?.focus();
   }, [scanCode, scanQty, processScan, session?.items, parseScanQty]);
 

@@ -720,6 +720,47 @@ function SeparationCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Undo2 className="h-4 w-4 text-destructive" />
+              Devolução — #{sep.order_code}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Informe o motivo da devolução. O status será alterado no GestãoClick e a separação será invalidada.
+            </p>
+            <Textarea
+              placeholder="Motivo da devolução..."
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              rows={3}
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setReturnDialogOpen(false)} disabled={returning}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleReturn}
+              disabled={returning || !returnReason.trim()}
+            >
+              {returning ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+              ) : (
+                <Undo2 className="h-3.5 w-3.5 mr-1" />
+              )}
+              Confirmar Devolução
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

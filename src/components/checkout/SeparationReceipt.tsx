@@ -184,18 +184,24 @@ export default function SeparationReceipt({
               Termo de Responsabilidade
             </h3>
             <p>
-              Eu, <strong>{operatorName}</strong>, declaro que realizei a conferência de todos os itens
-              acima listados referentes à {orderType === 'os' ? 'Ordem de Serviço' : 'Venda'} <strong>#{orderCode}</strong> do
+              Ao retirar estas peças, o técnico assume total responsabilidade patrimonial sobre todos os itens
+              listados acima, referentes à {orderType === 'os' ? 'Ordem de Serviço' : 'Venda'} <strong>#{orderCode}</strong> do
               cliente <strong>{clientName}</strong>.
             </p>
             <p style={{ marginTop: 6 }}>
-              Confirmo que verifiquei cada item por código e descrição, conferindo as quantidades indicadas.
-              Qualquer divergência, falta ou erro na separação dos materiais acima descritos será de
-              <strong> minha total responsabilidade</strong>, incluindo eventuais prejuízos financeiros
-              decorrentes de itens faltantes, excedentes ou incorretamente separados.
+              Em caso de perda, extravio, dano, desaparecimento ou uso/montagem sem autorização e em equipamento
+              que não é o indicado, deverá ressarcir integralmente o valor da peça constante neste recibo.
             </p>
             <p style={{ marginTop: 6 }}>
-              Data e hora da conferência: <strong>{formatDateTime(endDate)}</strong> | Duração: <strong>{duration}</strong>
+              Caso empreste, transfira ou permita o uso delas por outro técnico ou terceiro, sem autorização
+              expressa da direção, continuará sendo o responsável por qualquer perda, dano, extravio,
+              desaparecimento ou uso indevido.
+            </p>
+            <p style={{ marginTop: 6 }}>
+              Não é necessária assinatura, pois o técnico foi verbalmente avisado e manteve uma cópia deste recibo.
+            </p>
+            <p style={{ marginTop: 8, fontSize: 10, color: '#666' }}>
+              Separação realizada por: <strong>{operatorName}</strong> | Data: <strong>{formatDateTime(endDate)}</strong> | Duração: <strong>{duration}</strong>
             </p>
           </div>
 

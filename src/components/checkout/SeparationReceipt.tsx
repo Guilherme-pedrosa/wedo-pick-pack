@@ -13,6 +13,7 @@ interface Props {
   clientName: string;
   operatorName: string;
   equipmentName?: string;
+  technicianName?: string;
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;

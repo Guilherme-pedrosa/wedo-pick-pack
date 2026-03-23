@@ -21,7 +21,7 @@ export default function ConferencePanel() {
   const config = useCheckoutStore(s => s.config);
 
   const [scanCode, setScanCode] = useState('');
-  const [scanQty, setScanQty] = useState<number | string>(1);
+  const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
   const [conclusionOpen, setConclusionOpen] = useState(false);
@@ -110,11 +110,24 @@ export default function ConferencePanel() {
     }
   }, [session, confirmItem]);
 
-  const parseScanQty = useCallback((value: number | string) => {
-    const normalized = String(value ?? '').trim().replace(',', '.');
+  const parseScanQty = useCallback((value: string) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 1;
+
+    const normalized = raw.includes(',')
+      ? raw.replace(/\./g, '').replace(',', '.')
+      : raw;
+
     const parsed = Number(normalized);
     if (!Number.isFinite(parsed) || parsed <= 0) return 1;
     return parsed;
+  }, []);
+
+  const formatScanQty = useCallback((value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return '1';
+    return Number.isInteger(value)
+      ? String(value)
+      : String(value).replace('.', ',');
   }, []);
 
   const handleScan = useCallback(() => {
@@ -123,7 +136,7 @@ export default function ConferencePanel() {
     const effectiveQty = (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
     processScan(scanCode, effectiveQty);
     setScanCode('');
-    setScanQty(1);
+    setScanQty('1');
     scanRef.current?.focus();
   }, [scanCode, scanQty, processScan, session?.items, parseScanQty]);
 
@@ -294,19 +307,13 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                   inputMode="decimal"
                   value={scanQty}
                   onChange={e => {
-                    const raw = e.target.value.trim();
-                    if (raw === '') {
-                      setScanQty('');
-                      return;
-                    }
-                    const parsed = Number(raw.replace(',', '.'));
-                    if (Number.isFinite(parsed)) {
-                      setScanQty(Math.max(0.001, parsed));
-                    }
+                    const raw = e.target.value;
+                    const sanitized = raw.replace(/[^\d,\.]/g, '');
+                    setScanQty(sanitized);
                   }}
                   onBlur={() => {
                     const parsed = parseScanQty(scanQty);
-                    setScanQty(Math.max(0.001, parsed));
+                    setScanQty(formatScanQty(parsed));
                   }}
                   className="text-base py-3 text-center"
                 />

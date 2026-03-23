@@ -289,13 +289,25 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             <div className="flex gap-2">
               <div className="w-20">
                 <label className="text-xs font-medium text-muted-foreground">Qtd</label>
-              <Input
-                  type="number"
+                <Input
+                  type="text"
+                  inputMode="decimal"
                   value={scanQty}
-                  onChange={e => setScanQty(e.target.value === '' ? '' : Math.max(0.001, parseFloat(e.target.value) || 1))}
-                  onBlur={() => { if (scanQty === '' || Number(scanQty) < 0.001) setScanQty(1); }}
-                  min={0.001}
-                  step="any"
+                  onChange={e => {
+                    const raw = e.target.value.trim();
+                    if (raw === '') {
+                      setScanQty('');
+                      return;
+                    }
+                    const parsed = Number(raw.replace(',', '.'));
+                    if (Number.isFinite(parsed)) {
+                      setScanQty(Math.max(0.001, parsed));
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = parseScanQty(scanQty);
+                    setScanQty(Math.max(0.001, parsed));
+                  }}
                   className="text-base py-3 text-center"
                 />
               </div>

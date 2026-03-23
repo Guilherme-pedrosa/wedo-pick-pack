@@ -602,6 +602,8 @@ export type Database = {
           status_name: string
           target_status_id: string
           target_status_name: string
+          technician_gc_id: string | null
+          technician_name: string | null
           total_value: string
           user_id: string
         }
@@ -626,6 +628,8 @@ export type Database = {
           status_name: string
           target_status_id: string
           target_status_name?: string
+          technician_gc_id?: string | null
+          technician_name?: string | null
           total_value?: string
           user_id: string
         }
@@ -650,6 +654,8 @@ export type Database = {
           status_name?: string
           target_status_id?: string
           target_status_name?: string
+          technician_gc_id?: string | null
+          technician_name?: string | null
           total_value?: string
           user_id?: string
         }

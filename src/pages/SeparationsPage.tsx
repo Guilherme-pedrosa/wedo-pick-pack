@@ -391,20 +391,44 @@ function SeparationCard({
     loadTechnicians();
   };
 
+  const RETIRADA_TECNICO_STATUS_ID = '7684665';
+
   const handleLinkTechnician = async (tech: { gc_id: string; name: string } | null) => {
     setLinking(true);
-    const ok = await linkTechnicianToSeparation(
-      sep.id,
-      tech?.gc_id || null,
-      tech?.name || null
-    );
-    setLinking(false);
-    if (ok) {
-      toast.success(tech ? `Técnico "${tech.name}" vinculado` : 'Técnico desvinculado');
+    try {
+      const ok = await linkTechnicianToSeparation(
+        sep.id,
+        tech?.gc_id || null,
+        tech?.name || null
+      );
+      if (!ok) {
+        toast.error('Erro ao vincular técnico');
+        setLinking(false);
+        return;
+      }
+
+      // When linking (not unlinking) a technician to an OS, update GC status to "Retirada pelo técnico"
+      if (tech && sep.order_type === 'os') {
+        try {
+          const order = await getOS(sep.order_id);
+          if (order) {
+            await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID);
+            toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
+          } else {
+            toast.success(`Técnico "${tech.name}" vinculado (OS não encontrada no GC para alterar status)`);
+          }
+        } catch (err) {
+          console.error('Error updating OS status to Retirada pelo técnico:', err);
+          toast.warning(`Técnico vinculado, mas erro ao alterar status no GC: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+        }
+      } else {
+        toast.success(tech ? `Técnico "${tech.name}" vinculado` : 'Técnico desvinculado');
+      }
+
       setTechDialogOpen(false);
       onUpdated();
-    } else {
-      toast.error('Erro ao vincular técnico');
+    } finally {
+      setLinking(false);
     }
   };
 

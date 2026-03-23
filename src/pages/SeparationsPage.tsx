@@ -514,11 +514,13 @@ function SeparationCard({
 
   return (
     <>
-      <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : 'border-l-4 border-l-green-500'}`}>
+      <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : isReturn ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-green-500'}`}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             {isInvalid ? (
               <XCircle className="h-5 w-5 text-destructive" />
+            ) : isReturn ? (
+              <Undo2 className="h-5 w-5 text-amber-600" />
             ) : (
               <CheckCircle2 className="h-5 w-5 text-green-600" />
             )}
@@ -529,6 +531,11 @@ function SeparationCard({
             {isInvalid && (
               <Badge variant="destructive" className="text-xs">
                 Invalidada
+              </Badge>
+            )}
+            {isReturn && (
+              <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-300">
+                Devolvido
               </Badge>
             )}
           </div>

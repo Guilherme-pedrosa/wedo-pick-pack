@@ -119,6 +119,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         orderCode: session.codigo,
         clientName: session.nomeCliente,
         operatorName: config.operatorName,
+        equipmentName: session.equipmentName,
         items: [...session.items],
         startedAt: session.startedAt,
         concludedAt,

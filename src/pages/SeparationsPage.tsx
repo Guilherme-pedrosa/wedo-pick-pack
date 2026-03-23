@@ -384,6 +384,7 @@ function SeparationCard({
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
   const [returning, setReturning] = useState(false);
+  const [returnTermAccepted, setReturnTermAccepted] = useState(false);
 
   const DEVOLUCAO_STATUS_ID = '8928768';
 
@@ -562,7 +563,7 @@ function SeparationCard({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { setReturnDialogOpen(true); setReturnReason(''); }}
+                onClick={() => { setReturnDialogOpen(true); setReturnReason(''); setReturnTermAccepted(false); }}
                 className="h-7 px-2 text-xs text-destructive hover:text-destructive"
               >
                 <Undo2 className="h-3.5 w-3.5 mr-1" />
@@ -722,7 +723,7 @@ function SeparationCard({
       </Dialog>
 
       <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-sm">
               <Undo2 className="h-4 w-4 text-destructive" />
@@ -740,6 +741,27 @@ function SeparationCard({
               rows={3}
               autoFocus
             />
+            <div className="border border-border rounded-lg p-3 bg-muted/50 text-xs leading-relaxed space-y-2">
+              <p className="font-bold text-foreground uppercase text-[11px]">Termo de Recebimento de Devolução</p>
+              <p>
+                Declaro que conferi todas as peças devolvidas referentes à {sep.order_type === 'os' ? 'Ordem de Serviço' : 'Venda'} <strong>#{sep.order_code}</strong> do
+                cliente <strong>{sep.client_name}</strong> e que todos os itens estão totalmente conforme foram enviados, sem avarias, faltas ou divergências.
+              </p>
+              <p>
+                Estou ciente de que devo informar imediatamente aos responsáveis sobre esta devolução para a devida tratativa do item, incluindo reposição ao estoque e eventuais providências necessárias.
+              </p>
+            </div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={returnTermAccepted}
+                onChange={(e) => setReturnTermAccepted(e.target.checked)}
+                className="mt-0.5 accent-primary"
+              />
+              <span className="text-xs text-muted-foreground">
+                Li e aceito o Termo de Recebimento de Devolução acima.
+              </span>
+            </label>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" size="sm" onClick={() => setReturnDialogOpen(false)} disabled={returning}>
@@ -749,7 +771,7 @@ function SeparationCard({
               variant="destructive"
               size="sm"
               onClick={handleReturn}
-              disabled={returning || !returnReason.trim()}
+              disabled={returning || !returnReason.trim() || !returnTermAccepted}
             >
               {returning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />

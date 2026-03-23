@@ -363,6 +363,7 @@ function SeparationCard({
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
+  const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
 
   const handleReprint = async () => {
     setLoadingReceipt(true);
@@ -372,6 +373,14 @@ function SeparationCard({
         : await getVenda(sep.order_id);
       const items = buildPickingItemsFromOrder(sep.order_id, order.produtos);
       setReceiptItems(items);
+      // Extract equipment from live GC data if not stored in separation record
+      if (!sep.equipment_name && 'equipamentos' in order && Array.isArray(order.equipamentos) && order.equipamentos.length > 0) {
+        const eqName = order.equipamentos
+          .map((e: any) => e.equipamento?.equipamento || '')
+          .filter(Boolean)
+          .join(', ');
+        if (eqName) setReceiptEquipment(eqName);
+      }
       setReceiptOpen(true);
     } catch (err) {
       console.error('Error fetching order for reprint:', err);
@@ -472,7 +481,7 @@ function SeparationCard({
           orderCode={sep.order_code}
           clientName={sep.client_name}
           operatorName={sep.operator_name}
-          equipmentName={sep.equipment_name || undefined}
+          equipmentName={receiptEquipment}
           items={receiptItems}
           startedAt={sep.started_at}
           concludedAt={sep.concluded_at}

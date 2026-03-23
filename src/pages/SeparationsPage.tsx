@@ -1,16 +1,18 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSeparations, invalidateSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
+import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
 import { getOS, getVenda } from '@/api/gestaoclick';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt from '@/components/checkout/SeparationReceipt';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function SeparationsPage() {
   const queryClient = useQueryClient();

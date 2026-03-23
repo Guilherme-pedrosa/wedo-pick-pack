@@ -168,3 +168,23 @@ export async function invalidateSeparation(id: string, reason: string): Promise<
   }
   return true;
 }
+
+export async function linkTechnicianToSeparation(
+  id: string,
+  technicianGcId: string | null,
+  technicianName: string | null
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('separations')
+    .update({
+      technician_gc_id: technicianGcId,
+      technician_name: technicianName,
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error linking technician to separation:', error);
+    return false;
+  }
+  return true;
+}

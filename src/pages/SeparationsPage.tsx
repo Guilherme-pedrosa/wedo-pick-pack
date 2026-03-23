@@ -366,7 +366,8 @@ function SeparationCard({
   formatDuration: (start: string, end: string) => string;
   onUpdated: () => void;
 }) {
-  const isInvalid = sep.invalidated;
+  const isReturn = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
+  const isInvalid = sep.invalidated && !isReturn;
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);

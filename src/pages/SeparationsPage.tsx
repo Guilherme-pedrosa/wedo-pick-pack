@@ -281,8 +281,11 @@ export default function SeparationsPage() {
             </tr>
           </thead>
           <tbody>
-            {separations.map((sep, i) => (
-              <tr key={sep.id} className={`border-b ${sep.invalidated ? 'line-through opacity-50' : ''}`}>
+            {separations.map((sep, i) => {
+              const isReturnRow = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
+              const isInvalidRow = sep.invalidated && !isReturnRow;
+              return (
+              <tr key={sep.id} className={`border-b ${isInvalidRow ? 'line-through opacity-50' : isReturnRow ? 'opacity-70' : ''}`}>
                 <td className="py-1.5 px-1 font-medium">{sep.order_type === 'os' ? 'OS' : 'VD'}</td>
                 <td className="py-1.5 px-1 font-bold">#{sep.order_code}</td>
                 <td className="py-1.5 px-1 max-w-[200px] truncate">{sep.client_name}</td>
@@ -291,9 +294,10 @@ export default function SeparationsPage() {
                 <td className="py-1.5 px-1 text-xs">{sep.status_name} → {sep.target_status_name}</td>
                 <td className="py-1.5 px-1">{sep.operator_name || '—'}</td>
                 <td className="py-1.5 px-1 text-center">{formatTime(sep.concluded_at)}</td>
-                <td className="py-1.5 px-1 text-center">{sep.invalidated ? '❌' : '✅'}</td>
+                <td className="py-1.5 px-1 text-center">{isInvalidRow ? '❌' : isReturnRow ? '↩️' : '✅'}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
 
@@ -366,7 +370,8 @@ function SeparationCard({
   formatDuration: (start: string, end: string) => string;
   onUpdated: () => void;
 }) {
-  const isInvalid = sep.invalidated;
+  const isReturn = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
+  const isInvalid = sep.invalidated && !isReturn;
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
@@ -513,11 +518,13 @@ function SeparationCard({
 
   return (
     <>
-      <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : 'border-l-4 border-l-green-500'}`}>
+      <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : isReturn ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-green-500'}`}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             {isInvalid ? (
               <XCircle className="h-5 w-5 text-destructive" />
+            ) : isReturn ? (
+              <Undo2 className="h-5 w-5 text-amber-600" />
             ) : (
               <CheckCircle2 className="h-5 w-5 text-green-600" />
             )}
@@ -530,9 +537,14 @@ function SeparationCard({
                 Invalidada
               </Badge>
             )}
+            {isReturn && (
+              <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-300">
+                Devolvido
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            {!isInvalid && (
+            {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -548,7 +560,7 @@ function SeparationCard({
                 Reimprimir
               </Button>
             )}
-            {!isInvalid && (
+            {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -559,7 +571,7 @@ function SeparationCard({
                 {sep.technician_name ? 'Alterar' : 'Vincular'} Técnico
               </Button>
             )}
-            {!isInvalid && (
+            {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -610,6 +622,13 @@ function SeparationCard({
           <div className="mt-2 bg-destructive/10 text-destructive rounded p-2 text-xs">
             <AlertTriangle className="h-3 w-3 inline mr-1" />
             {sep.invalidated_reason}
+          </div>
+        )}
+
+        {isReturn && sep.invalidated_reason && (
+          <div className="mt-2 bg-amber-50 text-amber-800 border border-amber-200 rounded p-2 text-xs">
+            <Undo2 className="h-3 w-3 inline mr-1" />
+            {sep.invalidated_reason.replace(/^DEVOLUÇÃO:\s*/, 'Motivo: ')}
           </div>
         )}
 

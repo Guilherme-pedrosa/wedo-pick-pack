@@ -1,0 +1,1 @@
+ALTER TABLE public.separations ADD COLUMN equipment_name text DEFAULT null;

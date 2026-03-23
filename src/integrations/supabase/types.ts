@@ -585,6 +585,7 @@ export type Database = {
           client_name: string
           concluded_at: string
           created_at: string
+          equipment_name: string | null
           id: string
           invalidated: boolean
           invalidated_at: string | null
@@ -608,6 +609,7 @@ export type Database = {
           client_name: string
           concluded_at?: string
           created_at?: string
+          equipment_name?: string | null
           id?: string
           invalidated?: boolean
           invalidated_at?: string | null
@@ -631,6 +633,7 @@ export type Database = {
           client_name?: string
           concluded_at?: string
           created_at?: string
+          equipment_name?: string | null
           id?: string
           invalidated?: boolean
           invalidated_at?: string | null

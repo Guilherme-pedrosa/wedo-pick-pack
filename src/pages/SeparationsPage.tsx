@@ -425,6 +425,9 @@ function SeparationCard({
         </div>
 
         <p className="text-sm font-medium text-foreground mb-1">{sep.client_name}</p>
+        {sep.equipment_name && (
+          <p className="text-xs text-muted-foreground mb-1">🔧 {sep.equipment_name}</p>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-muted-foreground">
           <div>
@@ -469,6 +472,7 @@ function SeparationCard({
           orderCode={sep.order_code}
           clientName={sep.client_name}
           operatorName={sep.operator_name}
+          equipmentName={sep.equipment_name || undefined}
           items={receiptItems}
           startedAt={sep.started_at}
           concludedAt={sep.concluded_at}

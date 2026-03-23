@@ -146,6 +146,7 @@ h1{font-size:18px;margin:0}h2{font-size:14px;color:#666;margin:4px 0 16px}
   </div>
 </div>
 <div class="meta"><strong>Cliente:</strong> ${session.nomeCliente}</div>
+${session.equipmentName ? `<div class="meta"><strong>Equipamento:</strong> ${session.equipmentName}</div>` : ''}
 <div class="meta"><strong>Situação:</strong> ${session.nomeSituacao} · <strong>Valor:</strong> R$ ${session.valorTotal}</div>
 <div class="meta"><strong>Operador:</strong> ${config.operatorName || '—'}</div>
 <div class="meta"><strong>Início:</strong> ${new Date(session.startedAt).toLocaleString('pt-BR')} · <strong>Conclusão:</strong> ${session.concludedAt ? new Date(session.concludedAt).toLocaleString('pt-BR') : '—'}</div>
@@ -228,6 +229,11 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             </Badge>
             <span className="font-bold text-base md:text-lg">#{session.codigo}</span>
             <span className="text-sm text-muted-foreground truncate max-w-[160px] md:max-w-none">{session.nomeCliente}</span>
+            {session.equipmentName && (
+              <span className="text-xs text-muted-foreground truncate max-w-[200px] md:max-w-none" title={session.equipmentName}>
+                🔧 {session.equipmentName}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 justify-between md:justify-end">
             <span className="text-success font-bold text-base md:text-lg">R$ {session.valorTotal}</span>

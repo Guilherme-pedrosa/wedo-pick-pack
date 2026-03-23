@@ -19,6 +19,7 @@ export interface ReceiptData {
   orderCode: string;
   clientName: string;
   operatorName: string;
+  equipmentName?: string;
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;
@@ -102,6 +103,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         items_total: session.items.length,
         items_confirmed: session.items.filter(i => i.conferido).length,
         operator_name: config.operatorName,
+        equipment_name: session.equipmentName || undefined,
         started_at: session.startedAt,
         observations: observations.trim() || undefined,
       });
@@ -117,6 +119,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         orderCode: session.codigo,
         clientName: session.nomeCliente,
         operatorName: config.operatorName,
+        equipmentName: session.equipmentName,
         items: [...session.items],
         startedAt: session.startedAt,
         concludedAt,

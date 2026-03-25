@@ -14,6 +14,7 @@ interface BoxItem {
   nome_produto: string;
   quantidade: number;
   preco_unitario: number | null;
+  codigo_interno?: string;
 }
 
 interface Props {
@@ -195,7 +196,7 @@ export default function BoxHandoffReceipt({
                 {items.map((item, idx) => (
                   <tr key={idx} style={{ background: idx % 2 === 0 ? "white" : "#fafafa" }}>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
-                      {item.produto_id}
+                      {item.codigo_interno || item.produto_id}
                     </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "11px" }}>
                       {item.nome_produto}

@@ -184,7 +184,7 @@ export default function ToolboxHandoffReceipt({
                 {items.map((item, idx) => (
                   <tr key={idx} style={{ background: idx % 2 === 0 ? "white" : "#fafafa" }}>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
-                      {item.produto_id}
+                      {item.codigo_interno || item.produto_id}
                     </td>
                     <td style={{ padding: "5px 8px", borderBottom: "1px solid #e0e0e0", fontSize: "10px", fontFamily: "monospace", color: "#555" }}>
                       {item.codigo_interno || "—"}

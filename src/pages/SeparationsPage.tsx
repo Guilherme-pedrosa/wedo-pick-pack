@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils'; // util
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt from '@/components/checkout/SeparationReceipt';

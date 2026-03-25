@@ -614,6 +614,7 @@ export default function BoxDetailDialog({
             nome_produto: i.nome_produto,
             quantidade: i.quantidade,
             preco_unitario: i.preco_unitario,
+            codigo_interno: internalCodeMap[i.produto_id] || "",
           }))}
           date={new Date().toISOString()}
         />

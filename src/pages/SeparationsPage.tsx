@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt from '@/components/checkout/SeparationReceipt';
@@ -388,38 +389,43 @@ function SeparationCard({
   // Return (devolução) state
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [returnMotivo, setReturnMotivo] = useState<'agenda' | 'peca' | ''>('');
   const [returning, setReturning] = useState(false);
   const [returnTermAccepted, setReturnTermAccepted] = useState(false);
 
-  const DEVOLUCAO_STATUS_ID = '8928768';
+  const DEVOLUCAO_AGENDA_STATUS_ID = '7063705'; // Pedido conferido aguardando execução
+  const DEVOLUCAO_PECA_STATUS_ID = '8928768';   // Ag correção
 
   const handleReturn = async () => {
-    if (!returnReason.trim()) {
-      toast.error('Informe o motivo da devolução');
+    if (!returnMotivo) {
+      toast.error('Selecione o motivo da devolução');
       return;
     }
+    const statusId = returnMotivo === 'agenda' ? DEVOLUCAO_AGENDA_STATUS_ID : DEVOLUCAO_PECA_STATUS_ID;
+    const motivoLabel = returnMotivo === 'agenda' ? 'Agenda (não deu tempo)' : 'Peça incorreta';
+    const fullReason = returnReason.trim() ? `${motivoLabel} — ${returnReason.trim()}` : motivoLabel;
+
     setReturning(true);
     try {
-      // Update GC status to "Devolução"
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
         if (order) {
-          await updateOSStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+          await updateOSStatus(sep.order_id, order, statusId);
         }
       } else {
         const order = await getVenda(sep.order_id);
         if (order) {
-          await updateVendaStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+          await updateVendaStatus(sep.order_id, order, statusId);
         }
       }
 
-      // Invalidate the separation with the return reason
-      const reason = `DEVOLUÇÃO: ${returnReason.trim()}`;
+      const reason = `DEVOLUÇÃO: ${fullReason}`;
       const ok = await invalidateSeparation(sep.id, reason);
       if (ok) {
         toast.success('Devolução registrada e status alterado no GC');
         setReturnDialogOpen(false);
         setReturnReason('');
+        setReturnMotivo('');
         onUpdated();
       } else {
         toast.error('Status alterado no GC, mas erro ao registrar devolução localmente');
@@ -757,14 +763,53 @@ function SeparationCard({
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Informe o motivo da devolução. O status será alterado no GestãoClick e a separação será invalidada.
+              Selecione o motivo da devolução. O status será alterado no GestãoClick conforme o motivo escolhido.
             </p>
+
+            {/* Motivo selection */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Motivo</label>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReturnMotivo('agenda')}
+                  className={cn(
+                    'flex items-start gap-2 p-3 rounded-lg border text-left text-xs transition-colors',
+                    returnMotivo === 'agenda'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border hover:border-muted-foreground/30'
+                  )}
+                >
+                  <Calendar className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground">Agenda (não deu tempo)</p>
+                    <p className="text-muted-foreground">Volta para "Pedido conferido aguardando execução"</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReturnMotivo('peca')}
+                  className={cn(
+                    'flex items-start gap-2 p-3 rounded-lg border text-left text-xs transition-colors',
+                    returnMotivo === 'peca'
+                      ? 'border-destructive bg-destructive/5 ring-1 ring-destructive'
+                      : 'border-border hover:border-muted-foreground/30'
+                  )}
+                >
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground">Peça incorreta</p>
+                    <p className="text-muted-foreground">Volta para "Ag. correção"</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <Textarea
-              placeholder="Motivo da devolução..."
+              placeholder="Observações adicionais (opcional)..."
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
-              rows={3}
-              autoFocus
+              rows={2}
             />
             <div className="border border-border rounded-lg p-3 bg-muted/50 text-xs leading-relaxed space-y-2">
               <p className="font-bold text-foreground uppercase text-[11px]">Termo de Recebimento de Devolução</p>
@@ -796,7 +841,7 @@ function SeparationCard({
               variant="destructive"
               size="sm"
               onClick={handleReturn}
-              disabled={returning || !returnReason.trim() || !returnTermAccepted}
+              disabled={returning || !returnMotivo || !returnTermAccepted}
             >
               {returning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />

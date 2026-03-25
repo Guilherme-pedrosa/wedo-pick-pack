@@ -388,10 +388,12 @@ function SeparationCard({
   // Return (devolução) state
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnReason, setReturnReason] = useState('');
+  const [returnMotivo, setReturnMotivo] = useState<'agenda' | 'peca' | ''>('');
   const [returning, setReturning] = useState(false);
   const [returnTermAccepted, setReturnTermAccepted] = useState(false);
 
-  const DEVOLUCAO_STATUS_ID = '8928768';
+  const DEVOLUCAO_AGENDA_STATUS_ID = '7063705'; // Pedido conferido aguardando execução
+  const DEVOLUCAO_PECA_STATUS_ID = '8928768';   // Ag correção
 
   const handleReturn = async () => {
     if (!returnReason.trim()) {

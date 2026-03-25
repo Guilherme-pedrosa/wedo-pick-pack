@@ -427,16 +427,39 @@ function SeparationCard({
         }
       }
 
-      const reason = `DEVOLUÇÃO: ${fullReason}`;
-      const ok = await invalidateSeparation(sep.id, reason);
-      if (ok) {
-        toast.success('Devolução registrada e status alterado no GC');
+      if (returnMotivo === 'agenda') {
+        // Agenda: separation stays valid, just log the status change
+        await logSystemAction({
+          module: 'separations',
+          action: 'devolucao_agenda',
+          entityType: sep.order_type,
+          entityId: sep.order_id,
+          entityName: `${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`,
+          details: {
+            motivo: fullReason,
+            novo_status_id: statusId,
+            client_name: sep.client_name,
+            separation_id: sep.id,
+          },
+        });
+        toast.success('Status alterado no GC — separação mantida');
         setReturnDialogOpen(false);
         setReturnReason('');
         setReturnMotivo('');
         onUpdated();
       } else {
-        toast.error('Status alterado no GC, mas erro ao registrar devolução localmente');
+        // Peça incorreta: invalidate the separation
+        const reason = `DEVOLUÇÃO: ${fullReason}`;
+        const ok = await invalidateSeparation(sep.id, reason);
+        if (ok) {
+          toast.success('Devolução registrada e status alterado no GC');
+          setReturnDialogOpen(false);
+          setReturnReason('');
+          setReturnMotivo('');
+          onUpdated();
+        } else {
+          toast.error('Status alterado no GC, mas erro ao registrar devolução localmente');
+        }
       }
     } catch (err) {
       console.error('Error processing return:', err);

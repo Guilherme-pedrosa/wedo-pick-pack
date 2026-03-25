@@ -762,14 +762,53 @@ function SeparationCard({
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Informe o motivo da devolução. O status será alterado no GestãoClick e a separação será invalidada.
+              Selecione o motivo da devolução. O status será alterado no GestãoClick conforme o motivo escolhido.
             </p>
+
+            {/* Motivo selection */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-foreground">Motivo</label>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReturnMotivo('agenda')}
+                  className={cn(
+                    'flex items-start gap-2 p-3 rounded-lg border text-left text-xs transition-colors',
+                    returnMotivo === 'agenda'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border hover:border-muted-foreground/30'
+                  )}
+                >
+                  <Calendar className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground">Agenda (não deu tempo)</p>
+                    <p className="text-muted-foreground">Volta para "Pedido conferido aguardando execução"</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReturnMotivo('peca')}
+                  className={cn(
+                    'flex items-start gap-2 p-3 rounded-lg border text-left text-xs transition-colors',
+                    returnMotivo === 'peca'
+                      ? 'border-destructive bg-destructive/5 ring-1 ring-destructive'
+                      : 'border-border hover:border-muted-foreground/30'
+                  )}
+                >
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground">Peça incorreta</p>
+                    <p className="text-muted-foreground">Volta para "Ag. correção"</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <Textarea
-              placeholder="Motivo da devolução..."
+              placeholder="Observações adicionais (opcional)..."
               value={returnReason}
               onChange={(e) => setReturnReason(e.target.value)}
-              rows={3}
-              autoFocus
+              rows={2}
             />
             <div className="border border-border rounded-lg p-3 bg-muted/50 text-xs leading-relaxed space-y-2">
               <p className="font-bold text-foreground uppercase text-[11px]">Termo de Recebimento de Devolução</p>
@@ -801,7 +840,7 @@ function SeparationCard({
               variant="destructive"
               size="sm"
               onClick={handleReturn}
-              disabled={returning || !returnReason.trim() || !returnTermAccepted}
+              disabled={returning || !returnMotivo || !returnTermAccepted}
             >
               {returning ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />

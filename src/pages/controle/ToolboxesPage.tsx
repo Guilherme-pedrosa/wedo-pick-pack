@@ -128,7 +128,21 @@ const ToolboxesPage = () => {
         .eq("toolbox_id", toolbox.id)
         .order("added_at", { ascending: false });
       if (error) throw error;
-      setToolboxItems(data || []);
+
+      // Enrich with codigo_interno
+      const produtoIds = (data || []).map((i: any) => i.produto_id);
+      let codeMap: Record<string, string> = {};
+      if (produtoIds.length > 0) {
+        const { data: products } = await supabase
+          .from("products_index")
+          .select("produto_id, codigo_interno")
+          .in("produto_id", produtoIds);
+        products?.forEach((p) => {
+          if (p.codigo_interno) codeMap[p.produto_id] = p.codigo_interno;
+        });
+      }
+
+      setToolboxItems((data || []).map((i: any) => ({ ...i, codigo_interno: codeMap[i.produto_id] || "" })));
     } catch {
       toast.error("Erro ao carregar ferramentas");
     } finally {

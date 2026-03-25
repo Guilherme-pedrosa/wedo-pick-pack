@@ -23,6 +23,7 @@ import RastreadorPage from "./pages/RastreadorPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
+import ReturnLogsPage from "./pages/ReturnLogsPage";
 import LoginPage from "./pages/LoginPage";
 import SystemLogsPage from "./pages/SystemLogsPage";
 import SetupPage from "./pages/SetupPage";
@@ -99,6 +100,7 @@ function AuthenticatedApp() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/separations" element={<SeparationsPage />} />
+        <Route path="/devolucoes" element={<ReturnLogsPage />} />
         <Route path="/compras" element={<ComprasPage />} />
         <Route path="/controle/caixas" element={<BoxesPage />} />
         <Route path="/controle/maletas" element={<ToolboxesPage />} />

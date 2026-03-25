@@ -16,6 +16,7 @@ import {
   BarChart3,
   ClipboardList,
   Briefcase,
+  Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: "Checkout", icon: Package, href: "/checkout" },
       { title: "Separações", icon: PackageCheck, href: "/separations" },
+      { title: "Devoluções", icon: Undo2, href: "/devolucoes" },
     ],
   },
   {

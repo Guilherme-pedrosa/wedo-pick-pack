@@ -515,6 +515,7 @@ export default function ToolboxDetailDialog({
             nome_produto: i.nome_produto,
             quantidade: i.quantidade,
             preco_unitario: i.preco_unitario,
+            codigo_interno: (i as any).codigo_interno || "",
           }))}
           date={new Date().toISOString()}
         />

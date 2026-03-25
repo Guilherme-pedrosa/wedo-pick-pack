@@ -26,7 +26,7 @@ interface ReceiptData {
   boxName: string;
   technicianName: string;
   technicianGcId: string;
-  items: { produto_id: string; nome_produto: string; quantidade: number; preco_unitario: number | null }[];
+  items: { produto_id: string; nome_produto: string; quantidade: number; preco_unitario: number | null; codigo_interno?: string }[];
   date: string;
 }
 
@@ -205,11 +205,25 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
           .eq("box_id", box.id)
           .order("nome_produto");
 
+        // Fetch codigo_interno from products_index
+        const produtoIds = (items || []).map((i) => i.produto_id);
+        let codeMap: Record<string, string> = {};
+        if (produtoIds.length > 0) {
+          const { data: products } = await supabase
+            .from("products_index")
+            .select("produto_id, codigo_interno")
+            .in("produto_id", produtoIds);
+          products?.forEach((p) => {
+            if (p.codigo_interno) codeMap[p.produto_id] = p.codigo_interno;
+          });
+        }
+
         receiptItems = (items || []).map((i) => ({
           produto_id: i.produto_id,
           nome_produto: i.nome_produto,
           quantidade: i.quantidade,
           preco_unitario: i.preco_unitario,
+          codigo_interno: codeMap[i.produto_id] || "",
         }));
 
         const totalItems = receiptItems.reduce((s, i) => s + i.quantidade, 0);

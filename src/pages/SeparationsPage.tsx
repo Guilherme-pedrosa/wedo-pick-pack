@@ -396,32 +396,35 @@ function SeparationCard({
   const DEVOLUCAO_PECA_STATUS_ID = '8928768';   // Ag correção
 
   const handleReturn = async () => {
-    if (!returnReason.trim()) {
-      toast.error('Informe o motivo da devolução');
+    if (!returnMotivo) {
+      toast.error('Selecione o motivo da devolução');
       return;
     }
+    const statusId = returnMotivo === 'agenda' ? DEVOLUCAO_AGENDA_STATUS_ID : DEVOLUCAO_PECA_STATUS_ID;
+    const motivoLabel = returnMotivo === 'agenda' ? 'Agenda (não deu tempo)' : 'Peça incorreta';
+    const fullReason = returnReason.trim() ? `${motivoLabel} — ${returnReason.trim()}` : motivoLabel;
+
     setReturning(true);
     try {
-      // Update GC status to "Devolução"
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
         if (order) {
-          await updateOSStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+          await updateOSStatus(sep.order_id, order, statusId);
         }
       } else {
         const order = await getVenda(sep.order_id);
         if (order) {
-          await updateVendaStatus(sep.order_id, order, DEVOLUCAO_STATUS_ID);
+          await updateVendaStatus(sep.order_id, order, statusId);
         }
       }
 
-      // Invalidate the separation with the return reason
-      const reason = `DEVOLUÇÃO: ${returnReason.trim()}`;
+      const reason = `DEVOLUÇÃO: ${fullReason}`;
       const ok = await invalidateSeparation(sep.id, reason);
       if (ok) {
         toast.success('Devolução registrada e status alterado no GC');
         setReturnDialogOpen(false);
         setReturnReason('');
+        setReturnMotivo('');
         onUpdated();
       } else {
         toast.error('Status alterado no GC, mas erro ao registrar devolução localmente');

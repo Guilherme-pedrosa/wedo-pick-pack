@@ -407,15 +407,23 @@ function SeparationCard({
 
     setReturning(true);
     try {
+      // Get current user's GC usuario_id
+      const { data: { user } } = await supabase.auth.getUser();
+      let gcUsuarioId: string | undefined;
+      if (user) {
+        const { data: prof } = await supabase.from('profiles').select('gc_usuario_id').eq('id', user.id).single();
+        gcUsuarioId = prof?.gc_usuario_id || undefined;
+      }
+
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
         if (order) {
-          await updateOSStatus(sep.order_id, order, statusId);
+          await updateOSStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
         }
       } else {
         const order = await getVenda(sep.order_id);
         if (order) {
-          await updateVendaStatus(sep.order_id, order, statusId);
+          await updateVendaStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
         }
       }
 

@@ -667,7 +667,11 @@ function SeparationCard({
         <div className="flex items-center gap-2 mt-2 text-xs">
           <span className="text-muted-foreground">{sep.status_name}</span>
           <span className="text-muted-foreground">→</span>
-          <span className="font-medium text-foreground">{sep.target_status_name}</span>
+          {sep.technician_name && sep.order_type === 'os' ? (
+            <span className="font-medium text-primary">RETIRADA PELO TÉCNICO</span>
+          ) : (
+            <span className="font-medium text-foreground">{sep.target_status_name}</span>
+          )}
         </div>
 
         {isInvalid && sep.invalidated_reason && (

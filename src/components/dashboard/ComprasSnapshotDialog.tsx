@@ -78,34 +78,65 @@ export default function ComprasSnapshotDialog({ open, onOpenChange }: Props) {
 
   const sortedGroups = Object.keys(grouped).sort();
 
-  const exportCSV = () => {
+  const exportXLSX = () => {
     if (!snapshot) return;
-    const header = "Grupo,Produto,Código,Estoque Atual,Reserv. OS,Disponível,Em PC,Qtd a Comprar,Unidade,Preço Unit.,Estimativa,Orçamentos";
-    const rows = snapshot.itens_list.map(item => {
-      const orcs = item.orcamentos.map(o => `#${o.codigo}(${o.qtd}x ${o.nome_cliente})`).join(" | ");
-      return [
-        `"${item.grupo || ""}"`,
-        `"${item.nome_produto}"`,
-        `"${item.codigo_produto}"`,
+    const wb = XLSX.utils.book_new();
+
+    // Summary sheet
+    const summaryData = [
+      ["Relatório de Compras"],
+      ["Data:", new Date(snapshot.created_at).toLocaleString("pt-BR")],
+      ["Orçamentos analisados:", snapshot.total_orcamentos],
+      [],
+      ["Itens p/ comprar", snapshot.total_produtos_sem_estoque],
+      ["Cobertos por Pedido de Compra", snapshot.total_itens_cobertos_pedido],
+      ["Com estoque", snapshot.total_produtos_ok],
+      ["Estimativa total (R$)", snapshot.estimativa_total],
+    ];
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    wsSummary["!cols"] = [{ wch: 30 }, { wch: 25 }];
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Resumo");
+
+    // Items sheet
+    const headers = [
+      "Grupo", "Produto", "Código", "Unidade",
+      "Estoque Atual", "Reserv. OS", "Disponível", "Em Pedido Compra",
+      "Qtd Necessária", "Qtd a Comprar", "Preço Unit. (R$)", "Estimativa (R$)",
+      "Orçamentos (Nº)", "Orçamentos (Detalhe)"
+    ];
+
+    const rows = sortedGroups.flatMap(group =>
+      grouped[group].map(item => [
+        item.grupo || "",
+        item.nome_produto,
+        item.codigo_produto,
+        item.sigla_unidade,
         item.estoque_atual,
         item.estoque_reservado_os,
         item.estoque_disponivel,
         item.qtd_ja_em_compra,
+        item.qtd_necessaria,
         item.qtd_efetiva_a_comprar,
-        item.sigla_unidade,
-        item.ultimo_preco.toFixed(2).replace(".", ","),
-        item.estimativa.toFixed(2).replace(".", ","),
-        `"${orcs}"`,
-      ].join(";");
-    });
-    const csv = "\uFEFF" + [header, ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `compras_${new Date(snapshot.created_at).toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+        item.ultimo_preco,
+        item.estimativa,
+        item.orcamentos.map(o => `#${o.codigo}`).join(", "),
+        item.orcamentos.map(o => `#${o.codigo} (${o.qtd}×) — ${o.nome_cliente}`).join("\n"),
+      ])
+    );
+
+    const wsItems = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+    // Column widths
+    wsItems["!cols"] = [
+      { wch: 28 }, { wch: 45 }, { wch: 18 }, { wch: 6 },
+      { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
+      { wch: 18 }, { wch: 55 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsItems, "Itens a Comprar");
+
+    const dateSlug = new Date(snapshot.created_at).toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `compras_${dateSlug}.xlsx`);
   };
 
   const exportPrintPDF = () => {

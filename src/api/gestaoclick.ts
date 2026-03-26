@@ -514,6 +514,7 @@ export interface BelowCostWarning {
   produto_id: string;
   nome_produto: string;
   valor_custo: number;
+  custo_com_imposto: number;
   valor_venda: number;
   pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
 }
@@ -650,7 +651,8 @@ export async function checkStockForOrders(
     }
   }
 
-  // Detect below-cost warnings: items where valor_venda < valor_custo
+  // Detect below-cost warnings: items where valor_venda < valor_custo + 16% tax
+  const TAX_RATE = 0.16;
   const belowCostWarnings: BelowCostWarning[] = [];
   const belowCostMap = new Map<string, BelowCostWarning>();
 
@@ -658,7 +660,7 @@ export async function checkStockForOrders(
     for (const p of order.produtos || []) {
       const pid = p.produto.produto_id;
       const custo = costMap.get(pid) ?? 0;
-      if (custo <= 0) continue; // skip if no cost data
+      if (custo <= 0) continue;
 
       const valorVendaRaw = String(p.produto.valor_venda ?? '');
       let valorVenda = 0;
@@ -670,9 +672,10 @@ export async function checkStockForOrders(
         valorVenda = parseFloat(valorVendaRaw) || 0;
       }
 
+      const custoComImposto = custo * (1 + TAX_RATE);
       const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
 
-      if (valorVenda > 0 && valorVenda < custo) {
+      if (valorVenda > 0 && valorVenda < custoComImposto) {
         const existing = belowCostMap.get(pid);
         if (existing) {
           if (!existing.pedidos.some(pe => pe.codigo === order.codigo)) {
@@ -683,6 +686,7 @@ export async function checkStockForOrders(
             produto_id: pid,
             nome_produto: p.produto.nome_produto,
             valor_custo: custo,
+            custo_com_imposto: custoComImposto,
             valor_venda: valorVenda,
             pedidos: [{ codigo: order.codigo, nome_cliente: order.nome_cliente, qtd: qty }],
           };

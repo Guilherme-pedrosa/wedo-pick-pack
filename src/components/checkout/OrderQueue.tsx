@@ -443,15 +443,17 @@ export default function OrderQueue() {
                   <div key={w.produto_id} className="text-[10px] text-red-900 bg-red-100/50 rounded px-1.5 py-1">
                     <p className="font-medium">{w.nome_produto}</p>
                     <p>
-                      Custo/un: <span className="font-semibold">R$ {w.valor_custo.toFixed(2)}</span>
+                      Custo: <span className="font-semibold">R$ {w.valor_custo.toFixed(2)}</span>
+                      {' + 16% = '}
+                      <span className="font-semibold">R$ {w.custo_com_imposto.toFixed(2)}</span>
                       {' · '}
-                      Venda/un: <span className="font-semibold text-red-700">R$ {w.valor_venda.toFixed(2)}</span>
+                      Venda: <span className="font-semibold text-red-700">R$ {w.valor_venda.toFixed(2)}</span>
                       {' · '}
-                      Diferença: <span className="font-bold text-red-700">-R$ {(w.valor_custo - w.valor_venda).toFixed(2)}/un</span>
+                      Déficit: <span className="font-bold text-red-700">-R$ {(w.custo_com_imposto - w.valor_venda).toFixed(2)}/un</span>
                     </p>
                     <div className="mt-0.5 space-y-0.5">
                       {w.pedidos.map((p, i) => {
-                        const prejuizoLinha = (w.valor_custo - w.valor_venda) * p.qtd;
+                        const prejuizoLinha = (w.custo_com_imposto - w.valor_venda) * p.qtd;
                         return (
                           <p key={i}>
                             #{p.codigo} — {p.nome_cliente} — {p.qtd} un

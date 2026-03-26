@@ -43,7 +43,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-  const [stockIssues, setStockIssues] = useState<Array<{ nome: string; naBox: number; estoqueGC: number }>>([]);
+  const [stockIssues, setStockIssues] = useState<Array<{ nome: string; codigo: string; naBox: number; estoqueGC: number }>>([]);
   const [stockChecked, setStockChecked] = useState(false);
   const [checkingStock, setCheckingStock] = useState(false);
 
@@ -92,7 +92,16 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         return;
       }
 
-      const issues: Array<{ nome: string; naBox: number; estoqueGC: number }> = [];
+      const issues: Array<{ nome: string; codigo: string; naBox: number; estoqueGC: number }> = [];
+
+      // Fetch código interno for all items
+      const prodIds = boxItems.map(i => i.produto_id);
+      const { data: prodIndex } = await supabase
+        .from("products_index")
+        .select("produto_id, codigo_interno")
+        .in("produto_id", prodIds);
+      const codigoMap: Record<string, string> = {};
+      prodIndex?.forEach(p => { if (p.codigo_interno) codigoMap[p.produto_id] = p.codigo_interno; });
 
       // Check stock in batches of 3 to respect rate limits
       for (let i = 0; i < boxItems.length; i += 3) {
@@ -117,7 +126,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
               .eq("produto_id", item.produto_id);
 
             if (item.quantidade > estoque) {
-              issues.push({ nome: item.nome_produto, naBox: item.quantidade, estoqueGC: estoque });
+              issues.push({ nome: item.nome_produto, codigo: codigoMap[item.produto_id] || item.produto_id, naBox: item.quantidade, estoqueGC: estoque });
             }
           }
         }
@@ -157,7 +166,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
     if (stockIssues.length > 0) {
       const confirmed = window.confirm(
         `Existem ${stockIssues.length} item(ns) com estoque insuficiente no GC.\n\n` +
-        stockIssues.map(i => `• ${i.nome}: ${i.naBox} na caixa, ${i.estoqueGC} no GC`).join("\n") +
+        stockIssues.map(i => `• [${i.codigo}] ${i.nome}: ${i.naBox} na caixa, ${i.estoqueGC} no GC`).join("\n") +
         "\n\nDeseja vincular mesmo assim?"
       );
       if (!confirmed) return;
@@ -383,7 +392,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
               </p>
               {stockIssues.map((issue, idx) => (
                 <p key={idx} className="text-xs text-destructive/80 pl-5">
-                  • {issue.nome}: <strong>{issue.naBox}</strong> na caixa, <strong>{issue.estoqueGC}</strong> disponível
+                  • <span className="font-mono">[{issue.codigo}]</span> {issue.nome}: <strong>{issue.naBox}</strong> na caixa, <strong>{issue.estoqueGC}</strong> disponível
                 </p>
               ))}
             </div>

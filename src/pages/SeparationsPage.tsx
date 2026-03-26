@@ -370,7 +370,7 @@ export default function SeparationsPage() {
       {/* Screen cards */}
       <div className="space-y-3 print:hidden">
         {separations.map(sep => (
-          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} onUpdated={() => refetch()} />
+          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} onUpdated={() => refetch()} liveStatus={liveStatuses[sep.id] || undefined} />
         ))}
       </div>
     </div>

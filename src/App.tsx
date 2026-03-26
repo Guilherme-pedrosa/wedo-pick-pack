@@ -16,6 +16,7 @@ import HandoffLogsPage from "./pages/controle/HandoffLogsPage";
 import ToolboxLogsPage from "./pages/controle/ToolboxLogsPage";
 import CheckinLogsPage from "./pages/controle/CheckinLogsPage";
 import BaixaLogsPage from "./pages/controle/BaixaLogsPage";
+import HandoffHistoryPage from "./pages/controle/HandoffHistoryPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ConfigPage from "./pages/ConfigPage";
 import InventoryPolicyPage from "./pages/InventoryPolicyPage";
@@ -111,6 +112,7 @@ function AuthenticatedApp() {
         <Route path="/controle/logs-maletas" element={<ToolboxLogsPage />} />
         <Route path="/controle/checkins" element={<CheckinLogsPage />} />
         <Route path="/controle/baixas" element={<BaixaLogsPage />} />
+        <Route path="/controle/vinculacoes" element={<HandoffHistoryPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
         <Route path="/config" element={<ConfigPage />} />

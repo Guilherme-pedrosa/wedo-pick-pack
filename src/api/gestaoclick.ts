@@ -652,11 +652,17 @@ export async function checkStockForOrders(
   }
 
   // Detect below-cost warnings: items where valor_venda < valor_custo + 16% tax
+  // Exclude consignment clients (e.g. Ecolab) — their pricing follows different rules
+  const CONSIGNMENT_CLIENT_PATTERNS = ['ecolab'];
   const TAX_RATE = 0.16;
   const belowCostWarnings: BelowCostWarning[] = [];
   const belowCostMap = new Map<string, BelowCostWarning>();
 
   for (const order of orders) {
+    // Skip consignment clients
+    const clientLower = order.nome_cliente.toLowerCase();
+    if (CONSIGNMENT_CLIENT_PATTERNS.some(p => clientLower.includes(p))) continue;
+
     for (const p of order.produtos || []) {
       const pid = p.produto.produto_id;
       const custo = costMap.get(pid) ?? 0;

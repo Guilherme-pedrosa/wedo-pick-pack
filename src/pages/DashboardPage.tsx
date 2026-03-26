@@ -23,7 +23,8 @@ interface KpiData {
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
-  href: string;
+  href?: string;
+  onClick?: () => void;
 }
 
 interface RecentSeparation {

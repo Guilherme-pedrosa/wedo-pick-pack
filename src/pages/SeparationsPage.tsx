@@ -141,7 +141,20 @@ export default function SeparationsPage() {
 
   const syncWithGC = useCallback(() => fetchLiveStatusesAndSync({ showToast: true }), [fetchLiveStatusesAndSync]);
 
-  const handlePrint = () => {
+  // Auto-fetch live statuses on mount and every 30 min
+  useEffect(() => {
+    if (separations.length > 0 && !fetchingLive && !syncing) {
+      fetchLiveStatusesAndSync();
+    }
+    liveStatusIntervalRef.current = setInterval(() => {
+      fetchLiveStatusesAndSync();
+    }, 30 * 60 * 1000);
+    return () => {
+      if (liveStatusIntervalRef.current) clearInterval(liveStatusIntervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [separations.length]);
+
     window.print();
   };
 

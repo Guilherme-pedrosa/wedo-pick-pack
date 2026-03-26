@@ -307,6 +307,7 @@ const DashboardPage = () => {
           </div>
         )}
       </div>
+      <ComprasSnapshotDialog open={comprasDialogOpen} onOpenChange={setComprasDialogOpen} />
     </div>
   );
 };

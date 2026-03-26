@@ -515,14 +515,9 @@ function SeparationCard({
             if (tech) {
               // Linking: move to "Retirada pelo técnico"
               await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID, undefined, gcUsuarioId);
-              // Update status in local DB to reflect the new GC status
-              await supabase.from('separations').update({
-                target_status_id: RETIRADA_TECNICO_STATUS_ID,
-                target_status_name: 'RETIRADA PELO TÉCNICO',
-              }).eq('id', sep.id);
               toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
             } else {
-              // Unlinking: revert to original conclusion status
+              // Unlinking: revert to original conclusion status (target_status_id preserved)
               await updateOSStatus(sep.order_id, order, sep.target_status_id, undefined, gcUsuarioId);
               toast.success(`Técnico desvinculado e status revertido para "${sep.target_status_name}"`);
             }

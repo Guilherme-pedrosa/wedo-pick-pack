@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
 import { getOS, getVenda, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar, Radio } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils'; // util
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
@@ -26,6 +27,11 @@ export default function SeparationsPage() {
   const [toDate, setToDate] = useState('');
   const [orderType, setOrderType] = useState<'all' | 'os' | 'venda'>('all');
   const [status, setStatus] = useState<'all' | 'valid' | 'invalid'>('all');
+
+  // Live GC status tracking
+  const [liveStatuses, setLiveStatuses] = useState<Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null>>({});
+  const [fetchingLive, setFetchingLive] = useState(false);
+  const liveStatusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const filters = useMemo<SeparationFilters>(() => ({
     search: search.trim() || undefined,
@@ -52,6 +58,51 @@ export default function SeparationsPage() {
   const validSeparations = separations.filter(s => !s.invalidated);
   const validCount = validSeparations.length;
   const invalidCount = separations.filter(s => s.invalidated).length;
+
+  const fetchLiveStatuses = useCallback(async (seps?: SeparationRecord[]) => {
+    const active = (seps || separations).filter(s => !s.invalidated);
+    if (active.length === 0) return;
+
+    setFetchingLive(true);
+    const results: Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null> = {};
+
+    for (let i = 0; i < active.length; i++) {
+      const sep = active[i];
+      try {
+        const order = sep.order_type === 'os'
+          ? await getOS(sep.order_id)
+          : await getVenda(sep.order_id);
+        results[sep.id] = {
+          nome_situacao: order.nome_situacao || '—',
+          situacao_id: String(order.situacao_id || ''),
+          fetchedAt: new Date().toISOString(),
+        };
+      } catch {
+        results[sep.id] = null;
+      }
+      // Rate limit: 1.1s between calls
+      if (i < active.length - 1) {
+        await new Promise(r => setTimeout(r, 1100));
+      }
+    }
+
+    setLiveStatuses(prev => ({ ...prev, ...results }));
+    setFetchingLive(false);
+  }, [separations]);
+
+  // Auto-fetch live statuses on mount and every 30 min
+  useEffect(() => {
+    if (separations.length > 0) {
+      fetchLiveStatuses(separations);
+    }
+    liveStatusIntervalRef.current = setInterval(() => {
+      fetchLiveStatuses();
+    }, 30 * 60 * 1000); // 30 min
+    return () => {
+      if (liveStatusIntervalRef.current) clearInterval(liveStatusIntervalRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [separations.length]);
 
   const syncWithGC = useCallback(async () => {
     const active = separations.filter(s => !s.invalidated);
@@ -156,6 +207,15 @@ export default function SeparationsPage() {
           >
             <RefreshCw className={`h-4 w-4 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
             Atualizar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchLiveStatuses()}
+            disabled={fetchingLive || isLoading}
+          >
+            {fetchingLive ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Radio className="h-4 w-4 mr-1.5" />}
+            Status GC
           </Button>
           <Button
             variant="default"
@@ -319,7 +379,7 @@ export default function SeparationsPage() {
       {/* Screen cards */}
       <div className="space-y-3 print:hidden">
         {separations.map(sep => (
-          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} onUpdated={() => refetch()} />
+          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} onUpdated={() => refetch()} liveStatus={liveStatuses[sep.id] || undefined} />
         ))}
       </div>
     </div>
@@ -365,12 +425,14 @@ function SeparationCard({
   formatDateTime,
   formatDuration,
   onUpdated,
+  liveStatus,
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
   formatDateTime: (iso: string) => string;
   formatDuration: (start: string, end: string) => string;
   onUpdated: () => void;
+  liveStatus?: { nome_situacao: string; situacao_id: string; fetchedAt: string };
 }) {
   const isReturn = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
   const isInvalid = sep.invalidated && !isReturn;
@@ -678,6 +740,26 @@ function SeparationCard({
             <span className="font-medium text-foreground">{sep.target_status_name}</span>
           )}
         </div>
+
+        {/* Live GC status - informational */}
+        {liveStatus && !isInvalid && !isReturn && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs">
+                  <Radio className="h-3 w-3 text-green-500 animate-pulse" />
+                  <span className="text-muted-foreground">Status atual GC:</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
+                    {liveStatus.nome_situacao}
+                  </Badge>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Atualizado em {new Date(liveStatus.fetchedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         {isInvalid && sep.invalidated_reason && (
           <div className="mt-2 bg-destructive/10 text-destructive rounded p-2 text-xs">

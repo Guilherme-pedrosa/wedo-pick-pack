@@ -491,6 +491,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
 export interface ProductStockInfo {
   produto_id: string;
   estoque: number;
+  valor_custo: number;
 }
 
 export interface StockConflictPO {
@@ -509,18 +510,28 @@ export interface StockConflict {
   pedidos_compra: StockConflictPO[];
 }
 
+export interface BelowCostWarning {
+  produto_id: string;
+  nome_produto: string;
+  valor_custo: number;
+  valor_venda: number;
+  pedidos: Array<{ codigo: string; nome_cliente: string }>;
+}
+
 export interface StockScanResult {
   fullStockOrders: Set<string>;
   conflicts: StockConflict[];
+  belowCostWarnings: BelowCostWarning[];
 }
 
 export async function getProductStock(produtoId: string): Promise<ProductStockInfo | null> {
   try {
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 15000));
-    const request = apiRequest<{ data: { id: string; estoque: string | number } }>(`/api/produtos/${produtoId}`);
+    const request = apiRequest<{ data: { id: string; estoque: string | number; valor_custo?: string | number } }>(`/api/produtos/${produtoId}`);
     const res = await Promise.race([request, timeout]);
     const estoque = typeof res.data.estoque === 'number' ? res.data.estoque : parseFloat(res.data.estoque || '0');
-    return { produto_id: res.data.id, estoque: isNaN(estoque) ? 0 : estoque };
+    const valorCusto = typeof res.data.valor_custo === 'number' ? res.data.valor_custo : parseFloat(String(res.data.valor_custo || '0'));
+    return { produto_id: res.data.id, estoque: isNaN(estoque) ? 0 : estoque, valor_custo: isNaN(valorCusto) ? 0 : valorCusto };
   } catch (err) {
     console.warn(`[STOCK] Failed to fetch stock for product ${produtoId}:`, err instanceof Error ? err.message : err);
     return null;
@@ -552,6 +563,7 @@ export async function checkStockForOrders(
 
   const uniqueIds = [...productOrderMap.keys()];
   const stockMap = new Map<string, number>();
+  const costMap = new Map<string, number>();
   const total = uniqueIds.length;
   let checked = 0;
 
@@ -560,7 +572,10 @@ export async function checkStockForOrders(
     const batch = uniqueIds.slice(i, i + 3);
     const results = await Promise.all(batch.map(id => getProductStock(id)));
     for (const r of results) {
-      if (r) stockMap.set(r.produto_id, r.estoque);
+      if (r) {
+        stockMap.set(r.produto_id, r.estoque);
+        costMap.set(r.produto_id, r.valor_custo);
+      }
     }
     checked += batch.length;
     onProgress?.(checked, total);
@@ -635,7 +650,48 @@ export async function checkStockForOrders(
     }
   }
 
-  return { fullStockOrders, conflicts };
+  // Detect below-cost warnings: items where valor_venda < valor_custo
+  const belowCostWarnings: BelowCostWarning[] = [];
+  const belowCostMap = new Map<string, BelowCostWarning>();
+
+  for (const order of orders) {
+    for (const p of order.produtos || []) {
+      const pid = p.produto.produto_id;
+      const custo = costMap.get(pid) ?? 0;
+      if (custo <= 0) continue; // skip if no cost data
+
+      const valorVendaRaw = String(p.produto.valor_venda ?? '');
+      let valorVenda = 0;
+      if (valorVendaRaw.includes(',') && valorVendaRaw.includes('.')) {
+        valorVenda = parseFloat(valorVendaRaw.replace(/\./g, '').replace(',', '.')) || 0;
+      } else if (valorVendaRaw.includes(',')) {
+        valorVenda = parseFloat(valorVendaRaw.replace(',', '.')) || 0;
+      } else {
+        valorVenda = parseFloat(valorVendaRaw) || 0;
+      }
+
+      if (valorVenda > 0 && valorVenda < custo) {
+        const existing = belowCostMap.get(pid);
+        if (existing) {
+          if (!existing.pedidos.some(pe => pe.codigo === order.codigo)) {
+            existing.pedidos.push({ codigo: order.codigo, nome_cliente: order.nome_cliente });
+          }
+        } else {
+          const warning: BelowCostWarning = {
+            produto_id: pid,
+            nome_produto: p.produto.nome_produto,
+            valor_custo: custo,
+            valor_venda: valorVenda,
+            pedidos: [{ codigo: order.codigo, nome_cliente: order.nome_cliente }],
+          };
+          belowCostMap.set(pid, warning);
+          belowCostWarnings.push(warning);
+        }
+      }
+    }
+  }
+
+  return { fullStockOrders, conflicts, belowCostWarnings };
 }
 
 // --- PRODUCT DETAILS (for barcode enrichment) ---

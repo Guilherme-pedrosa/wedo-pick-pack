@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { listOS, listVendas, listOSMultiStatus, listVendasMultiStatus, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict } from '@/api/gestaoclick';
+import { listOS, listVendas, listOSMultiStatus, listVendasMultiStatus, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict, BelowCostWarning } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';
@@ -29,8 +29,10 @@ export default function OrderQueue() {
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
   const [stockFilter, setStockFilter] = useState<Set<string> | null>(null);
   const [stockConflicts, setStockConflicts] = useState<StockConflict[]>([]);
+  const [belowCostWarnings, setBelowCostWarnings] = useState<BelowCostWarning[]>([]);
   const [sortField, setSortField] = useState<SortField>('codigo');
   const [conflictsOpen, setConflictsOpen] = useState(true);
+  const [costWarningsOpen, setCostWarningsOpen] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
   const queryClient = useQueryClient();
@@ -182,6 +184,7 @@ export default function OrderQueue() {
       });
       setStockFilter(scanResult.fullStockOrders);
       setStockConflicts(scanResult.conflicts);
+      setBelowCostWarnings(scanResult.belowCostWarnings);
       const removed = filteredByConfig.length - scanResult.fullStockOrders.size;
       if (scanResult.conflicts.length > 0) {
         const msg = `Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo. ⚠️ ${scanResult.conflicts.length} conflito(s) de estoque encontrado(s)!`;
@@ -190,6 +193,9 @@ export default function OrderQueue() {
         toast.success('✅ Todos os pedidos possuem estoque completo e sem conflitos de quantidade!', { duration: 6000 });
       } else {
         toast.success(`Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo.`);
+      }
+      if (scanResult.belowCostWarnings.length > 0) {
+        toast.warning(`⚠️ ${scanResult.belowCostWarnings.length} item(ns) com preço de venda abaixo do custo!`, { duration: 8000 });
       }
     } catch (err) {
       toast.error('Erro durante varredura de estoque');
@@ -410,6 +416,44 @@ export default function OrderQueue() {
                         ❌ Sem pedido de compra
                       </p>
                     )}
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+        )}
+
+        {/* Below-cost warnings */}
+        {belowCostWarnings.length > 0 && !stockScanning && (
+          <Collapsible open={costWarningsOpen} onOpenChange={setCostWarningsOpen}>
+            <div className="bg-red-50 border border-red-200 rounded-md p-2">
+              <CollapsibleTrigger asChild>
+                <button className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                    <span className="text-xs font-semibold text-red-800">
+                      {belowCostWarnings.length} item(ns) abaixo do custo
+                    </span>
+                  </div>
+                  <ChevronDown className={`h-3.5 w-3.5 text-red-600 transition-transform ${costWarningsOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-1.5 mt-1.5">
+                {belowCostWarnings.map(w => (
+                  <div key={w.produto_id} className="text-[10px] text-red-900 bg-red-100/50 rounded px-1.5 py-1">
+                    <p className="font-medium">{w.nome_produto}</p>
+                    <p>
+                      Custo: <span className="font-semibold">R$ {w.valor_custo.toFixed(2)}</span>
+                      {' · '}
+                      Venda: <span className="font-semibold text-red-700">R$ {w.valor_venda.toFixed(2)}</span>
+                      {' · '}
+                      Prejuízo: <span className="font-bold text-red-700">R$ {(w.valor_custo - w.valor_venda).toFixed(2)}/un</span>
+                    </p>
+                    <div className="mt-0.5 space-y-0.5">
+                      {w.pedidos.map((p, i) => (
+                        <p key={i}>#{p.codigo} — {p.nome_cliente}</p>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </CollapsibleContent>

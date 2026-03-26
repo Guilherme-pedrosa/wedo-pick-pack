@@ -225,6 +225,8 @@ export type Database = {
           quantidade: number | null
           ref_numero: string | null
           ref_tipo: string | null
+          saldo_antes: number | null
+          saldo_depois: number | null
           technician_gc_id: string | null
           technician_name: string | null
         }
@@ -243,6 +245,8 @@ export type Database = {
           quantidade?: number | null
           ref_numero?: string | null
           ref_tipo?: string | null
+          saldo_antes?: number | null
+          saldo_depois?: number | null
           technician_gc_id?: string | null
           technician_name?: string | null
         }
@@ -261,6 +265,8 @@ export type Database = {
           quantidade?: number | null
           ref_numero?: string | null
           ref_tipo?: string | null
+          saldo_antes?: number | null
+          saldo_depois?: number | null
           technician_gc_id?: string | null
           technician_name?: string | null
         }

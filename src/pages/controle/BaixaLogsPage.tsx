@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Loader2, FileText, ArrowLeft, RefreshCw, Search,
-  Download, Calendar, Clock, User, Filter,
+  Download, Calendar, Clock, User, Filter, Package,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,17 @@ interface BaixaLog {
   operator_name: string;
   details: string | null;
   created_at: string;
+  saldo_antes: number | null;
+  saldo_depois: number | null;
+}
+
+interface CodigoMap {
+  [produto_id: string]: string;
 }
 
 export default function BaixaLogsPage() {
   const [logs, setLogs] = useState<BaixaLog[]>([]);
+  const [codigoMap, setCodigoMap] = useState<CodigoMap>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [refFilter, setRefFilter] = useState("all");
@@ -54,7 +61,23 @@ export default function BaixaLogsPage() {
     }
 
     const { data } = await query;
-    setLogs((data as BaixaLog[]) || []);
+    const rows = (data as BaixaLog[]) || [];
+    setLogs(rows);
+
+    // Fetch código interno for all unique produto_ids
+    const prodIds = [...new Set(rows.map((r) => r.produto_id).filter(Boolean))] as string[];
+    if (prodIds.length > 0) {
+      const { data: prods } = await supabase
+        .from("products_index")
+        .select("produto_id, codigo_interno")
+        .in("produto_id", prodIds);
+      const map: CodigoMap = {};
+      prods?.forEach((p) => {
+        if (p.codigo_interno) map[p.produto_id] = p.codigo_interno;
+      });
+      setCodigoMap(map);
+    }
+
     setLoading(false);
   }, [fromDate, toDate]);
 
@@ -71,11 +94,12 @@ export default function BaixaLogsPage() {
         l.technician_name?.toLowerCase().includes(s) ||
         l.operator_name?.toLowerCase().includes(s) ||
         l.ref_numero?.toLowerCase().includes(s) ||
-        l.details?.toLowerCase().includes(s)
+        l.details?.toLowerCase().includes(s) ||
+        (l.produto_id && codigoMap[l.produto_id]?.toLowerCase().includes(s))
       );
     }
     return list;
-  }, [logs, refFilter, search]);
+  }, [logs, refFilter, search, codigoMap]);
 
   const fmt = (iso: string) => {
     const d = new Date(iso);
@@ -91,13 +115,15 @@ export default function BaixaLogsPage() {
   );
 
   const exportCSV = () => {
-    const header = ["Data/Hora", "Caixa", "Produto", "Cod. Produto", "Qtd", "Valor Unit.", "Subtotal", "Tipo", "Ref.", "Técnico", "Operador", "Detalhes"];
+    const header = ["Data/Hora", "Caixa", "Código", "Produto", "Qtd", "Saldo Antes", "Saldo Depois", "Valor Unit.", "Subtotal", "Tipo", "Ref.", "Técnico", "Operador", "Detalhes"];
     const rows = filtered.map((l) => [
       fmt(l.created_at),
       l.box_name,
+      (l.produto_id && codigoMap[l.produto_id]) || l.produto_id || "",
       l.produto_nome || "",
-      l.produto_id || "",
       l.quantidade?.toString() || "",
+      l.saldo_antes?.toString() ?? "",
+      l.saldo_depois?.toString() ?? "",
       l.preco_unitario?.toString() || "",
       ((l.quantidade || 0) * (l.preco_unitario || 0)).toFixed(2),
       (l.ref_tipo || "").toUpperCase(),
@@ -119,12 +145,16 @@ export default function BaixaLogsPage() {
   const exportPDF = () => {
     const win = window.open("", "_blank");
     if (!win) return;
-    const rows = filtered.map((l, idx) => `
+    const rows = filtered.map((l, idx) => {
+      const codigo = (l.produto_id && codigoMap[l.produto_id]) || l.produto_id || "—";
+      return `
       <tr style="background:${idx % 2 === 0 ? 'white' : '#fafafa'}">
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;">${fmt(l.created_at)}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;">${l.box_name}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;font-family:monospace;">${codigo}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;">${l.produto_nome || "—"}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center;">${l.quantidade || "—"}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center;">${l.saldo_antes ?? "—"} → ${l.saldo_depois ?? "—"}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:right;">${l.preco_unitario ? formatCurrency(l.preco_unitario) : "—"}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;">
           <span style="background:${l.ref_tipo === 'os' ? '#dbeafe' : '#fef3c7'};padding:2px 6px;border-radius:4px;font-size:10px;">
@@ -134,7 +164,8 @@ export default function BaixaLogsPage() {
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;">${l.technician_name || "—"}</td>
         <td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;">${l.operator_name}</td>
       </tr>
-    `).join("");
+    `;
+    }).join("");
 
     win.document.write(`
       <html><head><title>Baixas</title><style>
@@ -143,8 +174,6 @@ export default function BaixaLogsPage() {
         p { font-size: 12px; color: #666; margin-bottom: 16px; }
         table { border-collapse: collapse; width: 100%; }
         th { background: #f3f4f6; padding: 6px 8px; border: 1px solid #ddd; font-size: 11px; text-align: left; }
-        th:nth-child(4) { text-align: center; }
-        th:nth-child(5) { text-align: right; }
         .totals { margin-top: 12px; text-align: right; font-size: 13px; font-weight: 700; }
         @media print { body { padding: 0; } }
       </style></head><body>
@@ -152,7 +181,7 @@ export default function BaixaLogsPage() {
         <p>Gerado em ${new Date().toLocaleString("pt-BR")} — ${filtered.length} registro(s)</p>
         <table>
           <thead><tr>
-            <th>Data/Hora</th><th>Caixa</th><th>Produto</th><th>Qtd</th><th>Valor</th><th>Documento</th><th>Técnico</th><th>Operador</th>
+            <th>Data/Hora</th><th>Caixa</th><th>Código</th><th>Produto</th><th>Qtd</th><th>Saldo</th><th>Valor</th><th>Documento</th><th>Técnico</th><th>Operador</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -193,7 +222,7 @@ export default function BaixaLogsPage() {
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar caixa, produto, técnico, operador, ref..."
+              placeholder="Buscar caixa, produto, código, técnico, operador..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-9"
@@ -235,6 +264,7 @@ export default function BaixaLogsPage() {
           <div className="space-y-1.5">
             {filtered.map((log) => {
               const subtotal = (log.quantidade || 0) * (log.preco_unitario || 0);
+              const codigo = log.produto_id ? codigoMap[log.produto_id] : null;
               return (
                 <Card key={log.id} className="p-3">
                   <div className="flex items-start gap-3">
@@ -270,11 +300,23 @@ export default function BaixaLogsPage() {
                         )}
                       </div>
                       {log.produto_nome && (
-                        <div className="text-sm">
+                        <div className="text-sm flex items-center gap-2">
+                          <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span className="font-medium">{log.produto_nome}</span>
-                          {log.produto_id && (
-                            <span className="text-[10px] text-muted-foreground font-mono ml-2">{log.produto_id}</span>
+                          {codigo && (
+                            <span className="text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{codigo}</span>
                           )}
+                          {!codigo && log.produto_id && (
+                            <span className="text-[10px] text-muted-foreground font-mono">{log.produto_id}</span>
+                          )}
+                        </div>
+                      )}
+                      {(log.saldo_antes != null || log.saldo_depois != null) && (
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <span className="text-muted-foreground">Saldo:</span>
+                          <span className="font-mono font-semibold text-orange-600 dark:text-orange-400">
+                            {log.saldo_antes ?? "?"} → {log.saldo_depois ?? "?"}
+                          </span>
                         </div>
                       )}
                       {log.details && (

@@ -489,44 +489,46 @@ function SeparationCard({
   const handleLinkTechnician = async (tech: { gc_id: string; name: string } | null) => {
     setLinking(true);
     try {
+      // Get current user's GC usuario_id for attribution
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      let gcUsuarioId: string | undefined;
+      if (currentUser) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('gc_usuario_id')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+        gcUsuarioId = prof?.gc_usuario_id || undefined;
+      }
+
+      // IMPORTANT: for OS, status in GC must be updated BEFORE persisting local technician link
+      // so we never keep a local technician linked with stale status.
+      if (sep.order_type === 'os') {
+        const order = await getOS(sep.order_id);
+        const nextStatusId = tech ? RETIRADA_TECNICO_STATUS_ID : sep.target_status_id;
+        await updateOSStatus(sep.order_id, order, nextStatusId, undefined, gcUsuarioId);
+      }
+
       const ok = await linkTechnicianToSeparation(
         sep.id,
         tech?.gc_id || null,
         tech?.name || null
       );
+
       if (!ok) {
-        toast.error('Erro ao vincular técnico');
-        setLinking(false);
+        if (sep.order_type === 'os') {
+          toast.error('Status alterado no GC, mas falhou ao salvar o vínculo no sistema');
+        } else {
+          toast.error('Erro ao vincular técnico no sistema');
+        }
         return;
       }
 
-      // Get current user's GC usuario_id for attribution
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      let gcUsuarioId: string | undefined;
-      if (currentUser) {
-        const { data: prof } = await supabase.from('profiles').select('gc_usuario_id').eq('id', currentUser.id).maybeSingle();
-        gcUsuarioId = prof?.gc_usuario_id || undefined;
-      }
-
       if (sep.order_type === 'os') {
-        try {
-          const order = await getOS(sep.order_id);
-          if (order) {
-            if (tech) {
-              // Linking: move to "Retirada pelo técnico"
-              await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID, undefined, gcUsuarioId);
-              toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
-            } else {
-              // Unlinking: revert to original conclusion status (target_status_id preserved)
-              await updateOSStatus(sep.order_id, order, sep.target_status_id, undefined, gcUsuarioId);
-              toast.success(`Técnico desvinculado e status revertido para "${sep.target_status_name}"`);
-            }
-          } else {
-            toast.success(tech ? `Técnico "${tech.name}" vinculado (OS não encontrada no GC)` : 'Técnico desvinculado (OS não encontrada no GC)');
-          }
-        } catch (err) {
-          console.error('Error updating OS status:', err);
-          toast.warning(`${tech ? 'Técnico vinculado' : 'Técnico desvinculado'}, mas erro ao alterar status no GC: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+        if (tech) {
+          toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
+        } else {
+          toast.success(`Técnico desvinculado e status revertido para "${sep.target_status_name}"`);
         }
       } else {
         toast.success(tech ? `Técnico "${tech.name}" vinculado` : 'Técnico desvinculado');
@@ -534,6 +536,9 @@ function SeparationCard({
 
       setTechDialogOpen(false);
       onUpdated();
+    } catch (err) {
+      console.error('Error linking technician:', err);
+      toast.error(`Não foi possível ${tech ? 'vincular' : 'desvincular'} técnico: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     } finally {
       setLinking(false);
     }

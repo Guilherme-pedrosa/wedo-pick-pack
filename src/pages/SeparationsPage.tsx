@@ -500,17 +500,25 @@ function SeparationCard({
         return;
       }
 
+      // Get current user's GC usuario_id for attribution
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      let gcUsuarioId: string | undefined;
+      if (currentUser) {
+        const { data: prof } = await supabase.from('profiles').select('gc_usuario_id').eq('id', currentUser.id).maybeSingle();
+        gcUsuarioId = prof?.gc_usuario_id || undefined;
+      }
+
       if (sep.order_type === 'os') {
         try {
           const order = await getOS(sep.order_id);
           if (order) {
             if (tech) {
               // Linking: move to "Retirada pelo técnico"
-              await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID);
+              await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID, undefined, gcUsuarioId);
               toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
             } else {
-              // Unlinking: revert to "Pedido Conferido" (target_status_id from the separation)
-              await updateOSStatus(sep.order_id, order, sep.target_status_id);
+              // Unlinking: revert to original conclusion status (target_status_id preserved)
+              await updateOSStatus(sep.order_id, order, sep.target_status_id, undefined, gcUsuarioId);
               toast.success(`Técnico desvinculado e status revertido para "${sep.target_status_name}"`);
             }
           } else {
@@ -659,7 +667,11 @@ function SeparationCard({
         <div className="flex items-center gap-2 mt-2 text-xs">
           <span className="text-muted-foreground">{sep.status_name}</span>
           <span className="text-muted-foreground">→</span>
-          <span className="font-medium text-foreground">{sep.target_status_name}</span>
+          {sep.technician_name && sep.order_type === 'os' ? (
+            <span className="font-medium text-primary">RETIRADA PELO TÉCNICO</span>
+          ) : (
+            <span className="font-medium text-foreground">{sep.target_status_name}</span>
+          )}
         </div>
 
         {isInvalid && sep.invalidated_reason && (

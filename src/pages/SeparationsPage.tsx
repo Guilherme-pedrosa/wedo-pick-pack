@@ -155,6 +155,7 @@ export default function SeparationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [separations.length]);
 
+  const handlePrint = () => {
     window.print();
   };
 

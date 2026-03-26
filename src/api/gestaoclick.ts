@@ -527,10 +527,11 @@ export interface StockScanResult {
 export async function getProductStock(produtoId: string): Promise<ProductStockInfo | null> {
   try {
     const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 15000));
-    const request = apiRequest<{ data: { id: string; estoque: string | number } }>(`/api/produtos/${produtoId}`);
+    const request = apiRequest<{ data: { id: string; estoque: string | number; valor_custo?: string | number } }>(`/api/produtos/${produtoId}`);
     const res = await Promise.race([request, timeout]);
     const estoque = typeof res.data.estoque === 'number' ? res.data.estoque : parseFloat(res.data.estoque || '0');
-    return { produto_id: res.data.id, estoque: isNaN(estoque) ? 0 : estoque };
+    const valorCusto = typeof res.data.valor_custo === 'number' ? res.data.valor_custo : parseFloat(String(res.data.valor_custo || '0'));
+    return { produto_id: res.data.id, estoque: isNaN(estoque) ? 0 : estoque, valor_custo: isNaN(valorCusto) ? 0 : valorCusto };
   } catch (err) {
     console.warn(`[STOCK] Failed to fetch stock for product ${produtoId}:`, err instanceof Error ? err.message : err);
     return null;

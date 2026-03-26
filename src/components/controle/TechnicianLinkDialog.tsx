@@ -126,7 +126,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
               .eq("produto_id", item.produto_id);
 
             if (item.quantidade > estoque) {
-              issues.push({ nome: item.nome_produto, naBox: item.quantidade, estoqueGC: estoque });
+              issues.push({ nome: item.nome_produto, codigo: codigoMap[item.produto_id] || item.produto_id, naBox: item.quantidade, estoqueGC: estoque });
             }
           }
         }

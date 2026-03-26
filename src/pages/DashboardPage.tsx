@@ -136,7 +136,7 @@ const DashboardPage = () => {
       subtitle: comprasSubtitle,
       icon: ShoppingCart,
       color: "text-warning",
-      href: "/compras",
+      onClick: () => setComprasDialogOpen(true),
     },
     {
       title: "Separações Hoje",

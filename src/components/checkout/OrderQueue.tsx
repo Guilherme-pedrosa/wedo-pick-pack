@@ -29,8 +29,10 @@ export default function OrderQueue() {
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
   const [stockFilter, setStockFilter] = useState<Set<string> | null>(null);
   const [stockConflicts, setStockConflicts] = useState<StockConflict[]>([]);
+  const [belowCostWarnings, setBelowCostWarnings] = useState<BelowCostWarning[]>([]);
   const [sortField, setSortField] = useState<SortField>('codigo');
   const [conflictsOpen, setConflictsOpen] = useState(true);
+  const [costWarningsOpen, setCostWarningsOpen] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
   const queryClient = useQueryClient();

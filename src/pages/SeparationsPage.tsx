@@ -137,7 +137,8 @@ export default function SeparationsPage() {
     } else if (opts?.showToast) {
       toast.success('Todas as separações estão válidas!');
     }
-  // Alias for backward compat
+  }, [separations, refetch, queryClient]);
+
   const syncWithGC = useCallback(() => fetchLiveStatusesAndSync({ showToast: true }), [fetchLiveStatusesAndSync]);
 
   const handlePrint = () => {

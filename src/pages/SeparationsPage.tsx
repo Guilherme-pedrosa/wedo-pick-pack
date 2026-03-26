@@ -741,6 +741,26 @@ function SeparationCard({
           )}
         </div>
 
+        {/* Live GC status - informational */}
+        {liveStatus && !isInvalid && !isReturn && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 mt-1.5 text-xs">
+                  <Radio className="h-3 w-3 text-green-500 animate-pulse" />
+                  <span className="text-muted-foreground">Status atual GC:</span>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
+                    {liveStatus.nome_situacao}
+                  </Badge>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                Atualizado em {new Date(liveStatus.fetchedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         {isInvalid && sep.invalidated_reason && (
           <div className="mt-2 bg-destructive/10 text-destructive rounded p-2 text-xs">
             <AlertTriangle className="h-3 w-3 inline mr-1" />

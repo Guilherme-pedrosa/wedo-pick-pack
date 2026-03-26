@@ -515,7 +515,7 @@ export interface BelowCostWarning {
   nome_produto: string;
   valor_custo: number;
   valor_venda: number;
-  pedidos: Array<{ codigo: string; nome_cliente: string }>;
+  pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
 }
 
 export interface StockScanResult {

@@ -189,7 +189,7 @@ const DashboardPage = () => {
           <div
             key={i}
             className="kpi-card"
-            onClick={() => navigate(kpi.href)}
+            onClick={() => kpi.onClick ? kpi.onClick() : kpi.href && navigate(kpi.href)}
           >
             <div className="kpi-card-title">
               <kpi.icon className={`h-4 w-4 ${kpi.color}`} />

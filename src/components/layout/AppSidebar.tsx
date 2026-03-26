@@ -72,6 +72,7 @@ const menuGroups: MenuGroup[] = [
       { title: "Mov. Caixas", icon: ClipboardList, href: "/controle/logs" },
       { title: "Mov. Maletas", icon: ClipboardList, href: "/controle/logs-maletas" },
       { title: "Log Check-ins", icon: ClipboardCheck, href: "/controle/checkins" },
+      { title: "Log Baixas", icon: FileText, href: "/controle/baixas" },
     ],
   },
   {

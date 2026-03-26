@@ -304,7 +304,9 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
     if (!matchedItem || !box || !validado || qty < 1) return;
     setSaving(true);
     try {
+      const saldoAntes = matchedItem.quantidade;
       const newQty = matchedItem.quantidade - qty;
+      const saldoDepois = Math.max(newQty, 0);
       if (newQty <= 0) {
         const { error } = await supabase.from("box_items").delete().eq("id", matchedItem.id);
         if (error) throw error;
@@ -329,6 +331,8 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         technicianName: box.technician_name || undefined,
         technicianGcId: box.technician_gc_id || undefined,
         details: `Baixa de ${qty}x vinculada à ${tipo === "os" ? "OS" : "Venda"} #${ref.trim()}`,
+        saldoAntes,
+        saldoDepois,
       });
 
       const label = tipo === "os" ? "OS" : "Venda";

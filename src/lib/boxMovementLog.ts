@@ -54,6 +54,8 @@ export async function logBoxMovement(params: LogMovementParams) {
       operator_id: user.id,
       operator_name: operatorName,
       details: params.details || null,
+      saldo_antes: params.saldoAntes ?? null,
+      saldo_depois: params.saldoDepois ?? null,
     });
   } catch (e) {
     console.error("Failed to log box movement:", e);

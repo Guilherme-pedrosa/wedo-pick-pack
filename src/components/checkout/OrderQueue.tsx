@@ -107,6 +107,9 @@ export default function OrderQueue() {
         )
       : [...filteredByStock];
 
+    // Hide already-separated orders
+    result = result.filter(o => !separatedIds.has(o.id));
+
     // Sort
     result.sort((a, b) => {
       switch (sortField) {
@@ -126,7 +129,7 @@ export default function OrderQueue() {
     });
 
     return result;
-  }, [filteredByStock, debouncedSearch, sortField]);
+  }, [filteredByStock, debouncedSearch, sortField, separatedIds]);
 
   // Compute which orders can't be fulfilled because stock ran out (allocated to earlier orders by code)
   const outOfStockOrderIds = useMemo(() => {

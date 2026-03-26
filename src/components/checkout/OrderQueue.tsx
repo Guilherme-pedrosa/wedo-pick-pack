@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { listOS, listVendas, listOSMultiStatus, listVendasMultiStatus, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict } from '@/api/gestaoclick';
+import { listOS, listVendas, listOSMultiStatus, listVendasMultiStatus, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict, BelowCostWarning } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';

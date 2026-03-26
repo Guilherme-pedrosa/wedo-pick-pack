@@ -59,97 +59,101 @@ export default function SeparationsPage() {
   const validCount = validSeparations.length;
   const invalidCount = separations.filter(s => s.invalidated).length;
 
-  const fetchLiveStatuses = useCallback(async (seps?: SeparationRecord[]) => {
-    const active = (seps || separations).filter(s => !s.invalidated);
-    if (active.length === 0) return;
+  const fetchLiveStatusesAndSync = useCallback(async (opts?: { showToast?: boolean }) => {
+    const active = separations.filter(s => !s.invalidated);
+    if (active.length === 0) {
+      if (opts?.showToast) toast.info('Nenhuma separação ativa para verificar');
+      return;
+    }
+
+    // Deduplicate by order_id to avoid redundant API calls
+    const orderMap = new Map<string, { order_type: string; order_id: string }>();
+    for (const sep of active) {
+      const key = `${sep.order_type}:${sep.order_id}`;
+      if (!orderMap.has(key)) {
+        orderMap.set(key, { order_type: sep.order_type, order_id: sep.order_id });
+      }
+    }
+    const uniqueOrders = Array.from(orderMap.values());
 
     setFetchingLive(true);
-    const results: Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null> = {};
+    setSyncing(true);
+    setSyncProgress({ checked: 0, total: uniqueOrders.length });
 
-    for (let i = 0; i < active.length; i++) {
-      const sep = active[i];
+    // Fetch each unique order once
+    const orderResults = new Map<string, { nome_situacao: string; situacao_id: string }>();
+    for (let i = 0; i < uniqueOrders.length; i++) {
+      const { order_type, order_id } = uniqueOrders[i];
       try {
-        const order = sep.order_type === 'os'
-          ? await getOS(sep.order_id)
-          : await getVenda(sep.order_id);
-        results[sep.id] = {
+        const order = order_type === 'os'
+          ? await getOS(order_id)
+          : await getVenda(order_id);
+        orderResults.set(`${order_type}:${order_id}`, {
           nome_situacao: order.nome_situacao || '—',
           situacao_id: String(order.situacao_id || ''),
-          fetchedAt: new Date().toISOString(),
-        };
-      } catch {
-        results[sep.id] = null;
+        });
+      } catch (err) {
+        console.error(`Error checking order ${order_id}:`, err);
       }
-      // Rate limit: 1.1s between calls
-      if (i < active.length - 1) {
+      setSyncProgress({ checked: i + 1, total: uniqueOrders.length });
+      if (i < uniqueOrders.length - 1) {
         await new Promise(r => setTimeout(r, 1100));
       }
     }
 
-    setLiveStatuses(prev => ({ ...prev, ...results }));
+    // Map results back to all separations + check for invalidations
+    const liveResults: Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null> = {};
+    let invalidated = 0;
+    const now = new Date().toISOString();
+
+    for (const sep of active) {
+      const key = `${sep.order_type}:${sep.order_id}`;
+      const result = orderResults.get(key);
+      if (result) {
+        liveResults[sep.id] = { ...result, fetchedAt: now };
+        // Invalidate if reverted to original status
+        if (result.situacao_id === sep.status_id) {
+          try {
+            const reason = `Status revertido no GC: "${result.nome_situacao}" (voltou ao status anterior à separação)`;
+            await invalidateSeparation(sep.id, reason);
+            invalidated++;
+          } catch (err) {
+            console.error(`Error invalidating sep ${sep.id}:`, err);
+          }
+        }
+      } else {
+        liveResults[sep.id] = null;
+      }
+    }
+
+    setLiveStatuses(prev => ({ ...prev, ...liveResults }));
     setFetchingLive(false);
-  }, [separations]);
+    setSyncing(false);
+
+    if (invalidated > 0) {
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ['valid-separated-ids'] });
+      toast.warning(`${invalidated} separação(ões) invalidada(s) por mudança de status no GC`);
+    } else if (opts?.showToast) {
+      toast.success('Todas as separações estão válidas!');
+    }
+  }, [separations, refetch, queryClient]);
+
+  const syncWithGC = useCallback(() => fetchLiveStatusesAndSync({ showToast: true }), [fetchLiveStatusesAndSync]);
 
   // Auto-fetch live statuses on mount and every 30 min
   useEffect(() => {
-    if (separations.length > 0) {
-      fetchLiveStatuses(separations);
+    if (separations.length > 0 && !fetchingLive && !syncing) {
+      fetchLiveStatusesAndSync();
     }
     liveStatusIntervalRef.current = setInterval(() => {
-      fetchLiveStatuses();
-    }, 30 * 60 * 1000); // 30 min
+      fetchLiveStatusesAndSync();
+    }, 30 * 60 * 1000);
     return () => {
       if (liveStatusIntervalRef.current) clearInterval(liveStatusIntervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [separations.length]);
-
-  const syncWithGC = useCallback(async () => {
-    const active = separations.filter(s => !s.invalidated);
-    if (active.length === 0) {
-      toast.info('Nenhuma separação ativa para verificar');
-      return;
-    }
-
-    setSyncing(true);
-    setSyncProgress({ checked: 0, total: active.length });
-    let invalidated = 0;
-
-    for (let i = 0; i < active.length; i++) {
-      const sep = active[i];
-      try {
-        const order = sep.order_type === 'os'
-          ? await getOS(sep.order_id)
-          : await getVenda(sep.order_id);
-
-        // Only invalidate if order reverted to its ORIGINAL status (before separation)
-        // Don't invalidate if order progressed forward (e.g., to "executado")
-        if (order.situacao_id === sep.status_id) {
-          const reason = `Status revertido no GC: "${order.nome_situacao}" (voltou ao status anterior à separação)`;
-          await invalidateSeparation(sep.id, reason);
-          invalidated++;
-        }
-      } catch (err) {
-        console.error(`Error checking order ${sep.order_code}:`, err);
-      }
-
-      setSyncProgress({ checked: i + 1, total: active.length });
-
-      if (i < active.length - 1) {
-        await new Promise(r => setTimeout(r, 1100));
-      }
-    }
-
-    await refetch();
-    setSyncing(false);
-    queryClient.invalidateQueries({ queryKey: ['valid-separated-ids'] });
-
-    if (invalidated > 0) {
-      toast.warning(`${invalidated} separação(ões) invalidada(s) por mudança de status no GC`);
-    } else {
-      toast.success('Todas as separações estão válidas!');
-    }
-  }, [separations, refetch, queryClient]);
 
   const handlePrint = () => {
     window.print();
@@ -209,22 +213,13 @@ export default function SeparationsPage() {
             Atualizar
           </Button>
           <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fetchLiveStatuses()}
-            disabled={fetchingLive || isLoading}
-          >
-            {fetchingLive ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Radio className="h-4 w-4 mr-1.5" />}
-            Status GC
-          </Button>
-          <Button
             variant="default"
             size="sm"
             onClick={syncWithGC}
-            disabled={syncing || isLoading}
+            disabled={syncing || fetchingLive || isLoading}
           >
-            {syncing ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <AlertTriangle className="h-4 w-4 mr-1.5" />}
-            Verificar no GC
+            {(syncing || fetchingLive) ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Radio className="h-4 w-4 mr-1.5" />}
+            Status GC
           </Button>
           <Button
             variant="outline"
@@ -307,7 +302,7 @@ export default function SeparationsPage() {
         <div className="space-y-1 print:hidden">
           <Progress value={syncProgress.total > 0 ? (syncProgress.checked / syncProgress.total) * 100 : 0} className="h-2" />
           <p className="text-xs text-muted-foreground text-center">
-            Verificando {syncProgress.checked}/{syncProgress.total} separações no GestãoClick…
+            Verificando {syncProgress.checked}/{syncProgress.total} pedidos no GestãoClick…
           </p>
         </div>
       )}

@@ -670,11 +670,13 @@ export async function checkStockForOrders(
         valorVenda = parseFloat(valorVendaRaw) || 0;
       }
 
+      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
+
       if (valorVenda > 0 && valorVenda < custo) {
         const existing = belowCostMap.get(pid);
         if (existing) {
           if (!existing.pedidos.some(pe => pe.codigo === order.codigo)) {
-            existing.pedidos.push({ codigo: order.codigo, nome_cliente: order.nome_cliente });
+            existing.pedidos.push({ codigo: order.codigo, nome_cliente: order.nome_cliente, qtd: qty });
           }
         } else {
           const warning: BelowCostWarning = {
@@ -682,7 +684,7 @@ export async function checkStockForOrders(
             nome_produto: p.produto.nome_produto,
             valor_custo: custo,
             valor_venda: valorVenda,
-            pedidos: [{ codigo: order.codigo, nome_cliente: order.nome_cliente }],
+            pedidos: [{ codigo: order.codigo, nome_cliente: order.nome_cliente, qtd: qty }],
           };
           belowCostMap.set(pid, warning);
           belowCostWarnings.push(warning);

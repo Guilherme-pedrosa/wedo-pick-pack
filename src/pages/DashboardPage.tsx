@@ -51,6 +51,7 @@ const DashboardPage = () => {
   } | null>(null);
   const comprasResult = useComprasStore((s) => s.result);
   const checkoutSession = useCheckoutStore((s) => s.session);
+  const [comprasDialogOpen, setComprasDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();

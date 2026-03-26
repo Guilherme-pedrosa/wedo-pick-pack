@@ -209,6 +209,15 @@ export default function SeparationsPage() {
             Atualizar
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchLiveStatuses()}
+            disabled={fetchingLive || isLoading}
+          >
+            {fetchingLive ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Radio className="h-4 w-4 mr-1.5" />}
+            Status GC
+          </Button>
+          <Button
             variant="default"
             size="sm"
             onClick={syncWithGC}

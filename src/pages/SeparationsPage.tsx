@@ -302,7 +302,7 @@ export default function SeparationsPage() {
         <div className="space-y-1 print:hidden">
           <Progress value={syncProgress.total > 0 ? (syncProgress.checked / syncProgress.total) * 100 : 0} className="h-2" />
           <p className="text-xs text-muted-foreground text-center">
-            Verificando {syncProgress.checked}/{syncProgress.total} separações no GestãoClick…
+            Verificando {syncProgress.checked}/{syncProgress.total} pedidos no GestãoClick…
           </p>
         </div>
       )}

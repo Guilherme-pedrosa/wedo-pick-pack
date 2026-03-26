@@ -92,7 +92,16 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
         return;
       }
 
-      const issues: Array<{ nome: string; naBox: number; estoqueGC: number }> = [];
+      const issues: Array<{ nome: string; codigo: string; naBox: number; estoqueGC: number }> = [];
+
+      // Fetch código interno for all items
+      const prodIds = boxItems.map(i => i.produto_id);
+      const { data: prodIndex } = await supabase
+        .from("products_index")
+        .select("produto_id, codigo_interno")
+        .in("produto_id", prodIds);
+      const codigoMap: Record<string, string> = {};
+      prodIndex?.forEach(p => { if (p.codigo_interno) codigoMap[p.produto_id] = p.codigo_interno; });
 
       // Check stock in batches of 3 to respect rate limits
       for (let i = 0; i < boxItems.length; i += 3) {

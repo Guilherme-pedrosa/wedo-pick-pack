@@ -15,6 +15,7 @@ import {
   Wrench,
   BarChart3,
   ClipboardList,
+  ClipboardCheck,
   Briefcase,
   Undo2,
 } from "lucide-react";
@@ -70,6 +71,7 @@ const menuGroups: MenuGroup[] = [
       { title: "Técnicos", icon: Wrench, href: "/controle/tecnicos" },
       { title: "Mov. Caixas", icon: ClipboardList, href: "/controle/logs" },
       { title: "Mov. Maletas", icon: ClipboardList, href: "/controle/logs-maletas" },
+      { title: "Log Check-ins", icon: ClipboardCheck, href: "/controle/checkins" },
     ],
   },
   {

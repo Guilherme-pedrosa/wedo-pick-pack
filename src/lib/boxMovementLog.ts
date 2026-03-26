@@ -22,6 +22,8 @@ interface LogMovementParams {
   technicianName?: string;
   technicianGcId?: string;
   details?: string;
+  saldoAntes?: number;
+  saldoDepois?: number;
 }
 
 export async function logBoxMovement(params: LogMovementParams) {

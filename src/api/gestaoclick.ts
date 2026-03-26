@@ -659,6 +659,10 @@ export async function checkStockForOrders(
   const belowCostMap = new Map<string, BelowCostWarning>();
 
   for (const order of orders) {
+    // Skip consignment clients
+    const clientLower = order.nome_cliente.toLowerCase();
+    if (CONSIGNMENT_CLIENT_PATTERNS.some(p => clientLower.includes(p))) continue;
+
     for (const p of order.produtos || []) {
       const pid = p.produto.produto_id;
       const custo = costMap.get(pid) ?? 0;

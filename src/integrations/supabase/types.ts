@@ -313,6 +313,54 @@ export type Database = {
         }
         Relationships: []
       }
+      compras_snapshots: {
+        Row: {
+          config_used: Json
+          created_at: string
+          duration_ms: number | null
+          error_message: string | null
+          estimativa_total: number
+          id: string
+          itens_list: Json
+          orcamentos_convertidos_count: number
+          status: string
+          total_itens_cobertos_pedido: number
+          total_orcamentos: number
+          total_produtos_ok: number
+          total_produtos_sem_estoque: number
+        }
+        Insert: {
+          config_used?: Json
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          estimativa_total?: number
+          id?: string
+          itens_list?: Json
+          orcamentos_convertidos_count?: number
+          status?: string
+          total_itens_cobertos_pedido?: number
+          total_orcamentos?: number
+          total_produtos_ok?: number
+          total_produtos_sem_estoque?: number
+        }
+        Update: {
+          config_used?: Json
+          created_at?: string
+          duration_ms?: number | null
+          error_message?: string | null
+          estimativa_total?: number
+          id?: string
+          itens_list?: Json
+          orcamentos_convertidos_count?: number
+          status?: string
+          total_itens_cobertos_pedido?: number
+          total_orcamentos?: number
+          total_produtos_ok?: number
+          total_produtos_sem_estoque?: number
+        }
+        Relationships: []
+      }
       doc_stock_effect: {
         Row: {
           debit_situacao_id: string | null

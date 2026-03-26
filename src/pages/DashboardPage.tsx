@@ -42,6 +42,11 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ status: string; finished_at: string | null } | null>(null);
   const [totalSeparations, setTotalSeparations] = useState(0);
+  const [comprasSnapshot, setComprasSnapshot] = useState<{
+    total_produtos_sem_estoque: number;
+    created_at: string;
+    status: string;
+  } | null>(null);
   const comprasResult = useComprasStore((s) => s.result);
   const checkoutSession = useCheckoutStore((s) => s.session);
 
@@ -79,6 +84,17 @@ const DashboardPage = () => {
         .maybeSingle();
 
       if (lastSync) setSyncStatus(lastSync);
+
+      // Fetch latest compras snapshot
+      const { data: snapshot } = await supabase
+        .from("compras_snapshots")
+        .select("total_produtos_sem_estoque, created_at, status")
+        .eq("status", "success")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (snapshot) setComprasSnapshot(snapshot as any);
     } catch (e) {
       console.error("Dashboard load error:", e);
     } finally {
@@ -90,10 +106,13 @@ const DashboardPage = () => {
     ? `Em andamento: #${checkoutSession.codigo}`
     : "Nenhum pedido em separação";
 
-  const comprasItens = comprasResult?.totalProdutosSemEstoque ?? 0;
-  const comprasSubtitle = comprasResult
-    ? `Última varredura: ${new Date(comprasResult.scannedAt).toLocaleString("pt-BR")}`
-    : "Nenhuma varredura realizada";
+  // Prefer DB snapshot over zustand store for compras
+  const comprasItens = comprasSnapshot?.total_produtos_sem_estoque ?? comprasResult?.totalProdutosSemEstoque ?? 0;
+  const comprasSubtitle = comprasSnapshot
+    ? `Último scan: ${new Date(comprasSnapshot.created_at).toLocaleString("pt-BR")}`
+    : comprasResult
+      ? `Última varredura: ${new Date(comprasResult.scannedAt).toLocaleString("pt-BR")}`
+      : "Nenhuma varredura realizada";
 
   const todayCount = recentSeparations.filter(
     (s) => new Date(s.concluded_at).toDateString() === new Date().toDateString()

@@ -425,12 +425,14 @@ function SeparationCard({
   formatDateTime,
   formatDuration,
   onUpdated,
+  liveStatus,
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
   formatDateTime: (iso: string) => string;
   formatDuration: (start: string, end: string) => string;
   onUpdated: () => void;
+  liveStatus?: { nome_situacao: string; situacao_id: string; fetchedAt: string };
 }) {
   const isReturn = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
   const isInvalid = sep.invalidated && !isReturn;

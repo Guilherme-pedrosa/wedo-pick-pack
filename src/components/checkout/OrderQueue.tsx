@@ -422,6 +422,44 @@ export default function OrderQueue() {
             </div>
           </Collapsible>
         )}
+
+        {/* Below-cost warnings */}
+        {belowCostWarnings.length > 0 && !stockScanning && (
+          <Collapsible open={costWarningsOpen} onOpenChange={setCostWarningsOpen}>
+            <div className="bg-red-50 border border-red-200 rounded-md p-2">
+              <CollapsibleTrigger asChild>
+                <button className="w-full flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                    <span className="text-xs font-semibold text-red-800">
+                      {belowCostWarnings.length} item(ns) abaixo do custo
+                    </span>
+                  </div>
+                  <ChevronDown className={`h-3.5 w-3.5 text-red-600 transition-transform ${costWarningsOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-1.5 mt-1.5">
+                {belowCostWarnings.map(w => (
+                  <div key={w.produto_id} className="text-[10px] text-red-900 bg-red-100/50 rounded px-1.5 py-1">
+                    <p className="font-medium">{w.nome_produto}</p>
+                    <p>
+                      Custo: <span className="font-semibold">R$ {w.valor_custo.toFixed(2)}</span>
+                      {' · '}
+                      Venda: <span className="font-semibold text-red-700">R$ {w.valor_venda.toFixed(2)}</span>
+                      {' · '}
+                      Prejuízo: <span className="font-bold text-red-700">R$ {(w.valor_custo - w.valor_venda).toFixed(2)}/un</span>
+                    </p>
+                    <div className="mt-0.5 space-y-0.5">
+                      {w.pedidos.map((p, i) => (
+                        <p key={i}>#{p.codigo} — {p.nome_cliente}</p>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CollapsibleContent>
+            </div>
+          </Collapsible>
+        )}
       </div>
 
       {/* Order list */}

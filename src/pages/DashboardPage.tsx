@@ -84,6 +84,17 @@ const DashboardPage = () => {
         .maybeSingle();
 
       if (lastSync) setSyncStatus(lastSync);
+
+      // Fetch latest compras snapshot
+      const { data: snapshot } = await supabase
+        .from("compras_snapshots")
+        .select("total_produtos_sem_estoque, created_at, status")
+        .eq("status", "success")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (snapshot) setComprasSnapshot(snapshot as any);
     } catch (e) {
       console.error("Dashboard load error:", e);
     } finally {

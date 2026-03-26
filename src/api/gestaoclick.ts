@@ -692,6 +692,7 @@ export async function checkStockForOrders(
   }
 
   return { fullStockOrders, conflicts, belowCostWarnings };
+}
 
 // --- PRODUCT DETAILS (for barcode enrichment) ---
 interface GCProductExtraField {

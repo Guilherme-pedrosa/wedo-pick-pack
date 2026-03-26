@@ -572,11 +572,7 @@ export default function BoxDetailDialog({
                     <Printer className="h-3.5 w-3.5 mr-1" />
                     Reimprimir recibo
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onUnlinkTechnician(box)}
-                    className="text-xs text-muted-foreground">
-                    <UserX className="h-3.5 w-3.5 mr-1" />
-                    Desvincular técnico
-                  </Button>
+                  {/* Desvincular técnico REMOVIDO — só via Check-in */}
                   {onClone && (
                     <Button variant="outline" size="sm" onClick={() => onClone(box)} className="text-xs">
                       <Copy className="h-3.5 w-3.5 mr-1" />

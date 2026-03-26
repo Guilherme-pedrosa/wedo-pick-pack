@@ -295,19 +295,13 @@ const BoxesPage = () => {
     }
   };
 
-  const handleUnlinkTechnician = async (box: BoxData) => {
-    try {
-      const { error } = await supabase
-        .from("boxes")
-        .update({ technician_name: null, technician_gc_id: null })
-        .eq("id", box.id);
-      if (error) throw error;
-      toast.success(`Técnico desvinculado de "${box.name}"`);
-      loadBoxes();
-      setSelectedBox(null);
-    } catch {
-      toast.error("Erro ao desvincular técnico");
-    }
+  const handleUnlinkTechnician = async (_box: BoxData) => {
+    // BLOCKED: Technician can ONLY be unlinked through a proper check-in process.
+    // Direct unlinking is never allowed for boxes with a linked technician.
+    toast.error(
+      "Não é possível desvincular o técnico diretamente. Realize o Check-in da caixa para devolvê-la ao Stand By.",
+      { duration: 5000 }
+    );
   };
 
   const loadBoxItems = async (box: BoxData, setAsSelected = true) => {

@@ -650,8 +650,48 @@ export async function checkStockForOrders(
     }
   }
 
-  return { fullStockOrders, conflicts };
-}
+  // Detect below-cost warnings: items where valor_venda < valor_custo
+  const belowCostWarnings: BelowCostWarning[] = [];
+  const belowCostMap = new Map<string, BelowCostWarning>();
+
+  for (const order of orders) {
+    for (const p of order.produtos || []) {
+      const pid = p.produto.produto_id;
+      const custo = costMap.get(pid) ?? 0;
+      if (custo <= 0) continue; // skip if no cost data
+
+      const valorVendaRaw = String(p.produto.valor_venda ?? '');
+      let valorVenda = 0;
+      if (valorVendaRaw.includes(',') && valorVendaRaw.includes('.')) {
+        valorVenda = parseFloat(valorVendaRaw.replace(/\./g, '').replace(',', '.')) || 0;
+      } else if (valorVendaRaw.includes(',')) {
+        valorVenda = parseFloat(valorVendaRaw.replace(',', '.')) || 0;
+      } else {
+        valorVenda = parseFloat(valorVendaRaw) || 0;
+      }
+
+      if (valorVenda > 0 && valorVenda < custo) {
+        const existing = belowCostMap.get(pid);
+        if (existing) {
+          if (!existing.pedidos.some(pe => pe.codigo === order.codigo)) {
+            existing.pedidos.push({ codigo: order.codigo, nome_cliente: order.nome_cliente });
+          }
+        } else {
+          const warning: BelowCostWarning = {
+            produto_id: pid,
+            nome_produto: p.produto.nome_produto,
+            valor_custo: custo,
+            valor_venda: valorVenda,
+            pedidos: [{ codigo: order.codigo, nome_cliente: order.nome_cliente }],
+          };
+          belowCostMap.set(pid, warning);
+          belowCostWarnings.push(warning);
+        }
+      }
+    }
+  }
+
+  return { fullStockOrders, conflicts, belowCostWarnings };
 
 // --- PRODUCT DETAILS (for barcode enrichment) ---
 interface GCProductExtraField {

@@ -210,12 +210,17 @@ export default function OrderQueue() {
   }, [startSession]);
 
   const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
+    // Block already-separated orders
+    if (separatedIds.has(id)) {
+      toast.info('Esta OS já foi separada.');
+      return;
+    }
     if (session && session.refId !== id && !session.concludedAt) {
       setConfirmSwitch({ tipo, id });
       return;
     }
     await loadAndStart(tipo, id);
-  }, [session, loadAndStart]);
+  }, [session, loadAndStart, separatedIds]);
 
   const handleConfirmSwitch = useCallback(async () => {
     if (!confirmSwitch) return;
@@ -424,12 +429,14 @@ export default function OrderQueue() {
           return (
             <Card
               key={order.id}
-              className={`p-3 cursor-pointer transition-all hover:shadow-md ${
-                isActive
-                  ? 'border-l-4 border-l-secondary bg-blue-50'
-                  : isOutOfStock
-                    ? 'border-l-4 border-l-destructive bg-red-50'
-                    : 'border-l-4 border-l-transparent'
+              className={`p-3 transition-all ${
+                separatedIds.has(order.id)
+                  ? 'border-l-4 border-l-green-500 opacity-50 cursor-default'
+                  : isActive
+                    ? 'border-l-4 border-l-secondary bg-blue-50 cursor-pointer hover:shadow-md'
+                    : isOutOfStock
+                      ? 'border-l-4 border-l-destructive bg-red-50 cursor-pointer hover:shadow-md'
+                      : 'border-l-4 border-l-transparent cursor-pointer hover:shadow-md'
               } ${loading ? 'pointer-events-none opacity-50' : ''}`}
               onClick={() => handleOrderClick(activeType, order.id)}
             >

@@ -514,6 +514,7 @@ export interface BelowCostWarning {
   produto_id: string;
   nome_produto: string;
   valor_custo: number;
+  custo_com_imposto: number;
   valor_venda: number;
   pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
 }

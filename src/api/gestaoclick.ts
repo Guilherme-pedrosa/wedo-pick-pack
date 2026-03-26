@@ -491,6 +491,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
 export interface ProductStockInfo {
   produto_id: string;
   estoque: number;
+  valor_custo: number;
 }
 
 export interface StockConflictPO {
@@ -509,9 +510,18 @@ export interface StockConflict {
   pedidos_compra: StockConflictPO[];
 }
 
+export interface BelowCostWarning {
+  produto_id: string;
+  nome_produto: string;
+  valor_custo: number;
+  valor_venda: number;
+  pedidos: Array<{ codigo: string; nome_cliente: string }>;
+}
+
 export interface StockScanResult {
   fullStockOrders: Set<string>;
   conflicts: StockConflict[];
+  belowCostWarnings: BelowCostWarning[];
 }
 
 export async function getProductStock(produtoId: string): Promise<ProductStockInfo | null> {

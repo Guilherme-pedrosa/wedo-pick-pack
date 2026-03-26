@@ -31,7 +31,7 @@ export default function SeparationsPage() {
   // Live GC status tracking
   const [liveStatuses, setLiveStatuses] = useState<Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null>>({});
   const [fetchingLive, setFetchingLive] = useState(false);
-  const liveStatusIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveStatusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const filters = useMemo<SeparationFilters>(() => ({
     search: search.trim() || undefined,

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useComprasStore } from "@/store/comprasStore";
 import { useCheckoutStore } from "@/store/checkoutStore";
+import ComprasSnapshotDialog from "@/components/dashboard/ComprasSnapshotDialog";
 
 interface KpiData {
   title: string;
@@ -22,7 +23,8 @@ interface KpiData {
   subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
-  href: string;
+  href?: string;
+  onClick?: () => void;
 }
 
 interface RecentSeparation {
@@ -49,6 +51,7 @@ const DashboardPage = () => {
   } | null>(null);
   const comprasResult = useComprasStore((s) => s.result);
   const checkoutSession = useCheckoutStore((s) => s.session);
+  const [comprasDialogOpen, setComprasDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -133,7 +136,7 @@ const DashboardPage = () => {
       subtitle: comprasSubtitle,
       icon: ShoppingCart,
       color: "text-warning",
-      href: "/compras",
+      onClick: () => setComprasDialogOpen(true),
     },
     {
       title: "Separações Hoje",
@@ -186,7 +189,7 @@ const DashboardPage = () => {
           <div
             key={i}
             className="kpi-card"
-            onClick={() => navigate(kpi.href)}
+            onClick={() => kpi.onClick ? kpi.onClick() : kpi.href && navigate(kpi.href)}
           >
             <div className="kpi-card-title">
               <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
@@ -304,6 +307,7 @@ const DashboardPage = () => {
           </div>
         )}
       </div>
+      <ComprasSnapshotDialog open={comprasDialogOpen} onOpenChange={setComprasDialogOpen} />
     </div>
   );
 };

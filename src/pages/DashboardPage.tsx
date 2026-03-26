@@ -42,6 +42,11 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<{ status: string; finished_at: string | null } | null>(null);
   const [totalSeparations, setTotalSeparations] = useState(0);
+  const [comprasSnapshot, setComprasSnapshot] = useState<{
+    total_produtos_sem_estoque: number;
+    created_at: string;
+    status: string;
+  } | null>(null);
   const comprasResult = useComprasStore((s) => s.result);
   const checkoutSession = useCheckoutStore((s) => s.session);
 

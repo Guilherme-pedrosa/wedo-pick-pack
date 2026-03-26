@@ -166,7 +166,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
     if (stockIssues.length > 0) {
       const confirmed = window.confirm(
         `Existem ${stockIssues.length} item(ns) com estoque insuficiente no GC.\n\n` +
-        stockIssues.map(i => `• ${i.nome}: ${i.naBox} na caixa, ${i.estoqueGC} no GC`).join("\n") +
+        stockIssues.map(i => `• [${i.codigo}] ${i.nome}: ${i.naBox} na caixa, ${i.estoqueGC} no GC`).join("\n") +
         "\n\nDeseja vincular mesmo assim?"
       );
       if (!confirmed) return;
@@ -392,7 +392,7 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
               </p>
               {stockIssues.map((issue, idx) => (
                 <p key={idx} className="text-xs text-destructive/80 pl-5">
-                  • {issue.nome}: <strong>{issue.naBox}</strong> na caixa, <strong>{issue.estoqueGC}</strong> disponível
+                  • <span className="font-mono">[{issue.codigo}]</span> {issue.nome}: <strong>{issue.naBox}</strong> na caixa, <strong>{issue.estoqueGC}</strong> disponível
                 </p>
               ))}
             </div>

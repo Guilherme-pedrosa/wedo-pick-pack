@@ -184,6 +184,7 @@ export default function OrderQueue() {
       });
       setStockFilter(scanResult.fullStockOrders);
       setStockConflicts(scanResult.conflicts);
+      setBelowCostWarnings(scanResult.belowCostWarnings);
       const removed = filteredByConfig.length - scanResult.fullStockOrders.size;
       if (scanResult.conflicts.length > 0) {
         const msg = `Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo. ⚠️ ${scanResult.conflicts.length} conflito(s) de estoque encontrado(s)!`;
@@ -192,6 +193,9 @@ export default function OrderQueue() {
         toast.success('✅ Todos os pedidos possuem estoque completo e sem conflitos de quantidade!', { duration: 6000 });
       } else {
         toast.success(`Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo.`);
+      }
+      if (scanResult.belowCostWarnings.length > 0) {
+        toast.warning(`⚠️ ${scanResult.belowCostWarnings.length} item(ns) com preço de venda abaixo do custo!`, { duration: 8000 });
       }
     } catch (err) {
       toast.error('Erro durante varredura de estoque');

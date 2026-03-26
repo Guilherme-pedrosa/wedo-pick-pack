@@ -123,8 +123,8 @@ export default function OrcamentosPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="sticky top-0 bg-card z-10 p-3 space-y-3 border-b border-border">
+      {/* Scrollable config + orcamentos area */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5 text-primary" />
           <h2 className="text-sm font-bold text-foreground">Orçamentos</h2>
@@ -202,10 +202,8 @@ export default function OrcamentosPanel() {
           <RefreshCw className={`h-3.5 w-3.5 ${loadingOrc ? 'animate-spin' : ''}`} />
           Atualizar
         </Button>
-      </div>
 
-      {/* Orcamentos list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {/* Orcamentos list */}
         {selectedSituacoes.length === 0 && (
           <p className="text-center text-xs text-muted-foreground py-6">Selecione ao menos uma situação acima</p>
         )}
@@ -217,26 +215,28 @@ export default function OrcamentosPanel() {
         {!loadingOrc && selectedSituacoes.length > 0 && orcamentos.length === 0 && (
           <p className="text-center text-xs text-muted-foreground py-6">Nenhum orçamento encontrado</p>
         )}
-        {orcamentos.map(orc => (
-          <Card key={orc.id} className="p-3 border-l-4 border-l-green-500">
-            <div className="flex items-center gap-2 mb-1">
-              <Badge className="bg-green-700 text-primary-foreground text-[10px] px-1.5">ORC</Badge>
-              <span className="font-semibold text-sm">#{orc.codigo}</span>
-            </div>
-            <p className="text-sm font-medium text-foreground truncate">{orc.nome_cliente}</p>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-              <span>{formatDate(orc.data)}</span>
-              <span>·</span>
-              <span className="font-medium text-foreground">R$ {orc.valor_total}</span>
-              <span>·</span>
-              <span>{orc.produtos?.length || 0} itens</span>
-            </div>
-          </Card>
-        ))}
+        <div className="space-y-2">
+          {orcamentos.map(orc => (
+            <Card key={orc.id} className="p-3 border-l-4 border-l-green-500">
+              <div className="flex items-center gap-2 mb-1">
+                <Badge className="bg-green-700 text-primary-foreground text-[10px] px-1.5">ORC</Badge>
+                <span className="font-semibold text-sm">#{orc.codigo}</span>
+              </div>
+              <p className="text-sm font-medium text-foreground truncate">{orc.nome_cliente}</p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                <span>{formatDate(orc.data)}</span>
+                <span>·</span>
+                <span className="font-medium text-foreground">R$ {orc.valor_total}</span>
+                <span>·</span>
+                <span>{orc.produtos?.length || 0} itens</span>
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
 
-      {/* Bottom action */}
-      <div className="sticky bottom-0 bg-card border-t border-border p-3 space-y-2">
+      {/* Bottom action - always visible */}
+      <div className="shrink-0 bg-card border-t border-border p-3 space-y-2">
         {isScanning && (
           <div className="space-y-1">
             <Progress value={progress.total > 0 ? (progress.checked / progress.total) * 100 : 0} className="h-2" />

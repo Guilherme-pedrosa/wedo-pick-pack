@@ -218,7 +218,7 @@ export default function ComprasSnapshotDialog({ open, onOpenChange }: Props) {
             </DialogTitle>
             {snapshot && (
               <div className="flex items-center gap-1.5 mr-6">
-                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={exportCSV}>
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={exportXLSX}>
                   <FileSpreadsheet className="h-3.5 w-3.5" />
                   Excel
                 </Button>

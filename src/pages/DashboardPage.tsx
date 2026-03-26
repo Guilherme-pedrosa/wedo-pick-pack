@@ -106,10 +106,13 @@ const DashboardPage = () => {
     ? `Em andamento: #${checkoutSession.codigo}`
     : "Nenhum pedido em separação";
 
-  const comprasItens = comprasResult?.totalProdutosSemEstoque ?? 0;
-  const comprasSubtitle = comprasResult
-    ? `Última varredura: ${new Date(comprasResult.scannedAt).toLocaleString("pt-BR")}`
-    : "Nenhuma varredura realizada";
+  // Prefer DB snapshot over zustand store for compras
+  const comprasItens = comprasSnapshot?.total_produtos_sem_estoque ?? comprasResult?.totalProdutosSemEstoque ?? 0;
+  const comprasSubtitle = comprasSnapshot
+    ? `Último scan: ${new Date(comprasSnapshot.created_at).toLocaleString("pt-BR")}`
+    : comprasResult
+      ? `Última varredura: ${new Date(comprasResult.scannedAt).toLocaleString("pt-BR")}`
+      : "Nenhuma varredura realizada";
 
   const todayCount = recentSeparations.filter(
     (s) => new Date(s.concluded_at).toDateString() === new Date().toDateString()

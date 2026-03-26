@@ -46,18 +46,22 @@ export default function ComprasSnapshotDialog({ open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setLoading(true);
-    supabase
-      .from("compras_snapshots")
-      .select("created_at, total_produtos_sem_estoque, total_produtos_ok, total_itens_cobertos_pedido, total_orcamentos, estimativa_total, itens_list, duration_ms")
-      .eq("status", "success")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
+    const fetchSnapshot = async () => {
+      setLoading(true);
+      try {
+        const { data } = await supabase
+          .from("compras_snapshots")
+          .select("created_at, total_produtos_sem_estoque, total_produtos_ok, total_itens_cobertos_pedido, total_orcamentos, estimativa_total, itens_list, duration_ms")
+          .eq("status", "success")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
         if (data) setSnapshot(data as any);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSnapshot();
   }, [open]);
 
   const formatCurrency = (v: number) =>

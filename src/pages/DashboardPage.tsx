@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useComprasStore } from "@/store/comprasStore";
 import { useCheckoutStore } from "@/store/checkoutStore";
+import ComprasSnapshotDialog from "@/components/dashboard/ComprasSnapshotDialog";
 
 interface KpiData {
   title: string;

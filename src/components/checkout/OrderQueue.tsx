@@ -210,12 +210,17 @@ export default function OrderQueue() {
   }, [startSession]);
 
   const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
+    // Block already-separated orders
+    if (separatedIds.has(id)) {
+      toast.info('Esta OS já foi separada.');
+      return;
+    }
     if (session && session.refId !== id && !session.concludedAt) {
       setConfirmSwitch({ tipo, id });
       return;
     }
     await loadAndStart(tipo, id);
-  }, [session, loadAndStart]);
+  }, [session, loadAndStart, separatedIds]);
 
   const handleConfirmSwitch = useCallback(async () => {
     if (!confirmSwitch) return;

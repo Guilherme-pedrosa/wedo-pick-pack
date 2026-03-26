@@ -16,6 +16,7 @@ import {
   BarChart3,
   ClipboardList,
   ClipboardCheck,
+  FileText,
   Briefcase,
   Undo2,
 } from "lucide-react";

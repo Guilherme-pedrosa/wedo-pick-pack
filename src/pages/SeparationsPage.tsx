@@ -111,8 +111,9 @@ export default function SeparationsPage() {
       const result = orderResults.get(key);
       if (result) {
         liveResults[sep.id] = { ...result, fetchedAt: now };
-        // Invalidate if reverted to original status
-        if (result.situacao_id === sep.status_id) {
+        // Invalidate if reverted to original pre-separation status,
+        // but NOT if it's the target (conclusion) status — that's expected after unlinking a technician
+        if (result.situacao_id === sep.status_id && result.situacao_id !== sep.target_status_id) {
           try {
             const reason = `Status revertido no GC: "${result.nome_situacao}" (voltou ao status anterior à separação)`;
             await invalidateSeparation(sep.id, reason);

@@ -563,6 +563,7 @@ export async function checkStockForOrders(
 
   const uniqueIds = [...productOrderMap.keys()];
   const stockMap = new Map<string, number>();
+  const costMap = new Map<string, number>();
   const total = uniqueIds.length;
   let checked = 0;
 
@@ -571,7 +572,10 @@ export async function checkStockForOrders(
     const batch = uniqueIds.slice(i, i + 3);
     const results = await Promise.all(batch.map(id => getProductStock(id)));
     for (const r of results) {
-      if (r) stockMap.set(r.produto_id, r.estoque);
+      if (r) {
+        stockMap.set(r.produto_id, r.estoque);
+        costMap.set(r.produto_id, r.valor_custo);
+      }
     }
     checked += batch.length;
     onProgress?.(checked, total);

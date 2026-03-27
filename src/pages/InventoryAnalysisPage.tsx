@@ -473,37 +473,84 @@ export default function InventoryAnalysisPage() {
     }
   };
 
-  // Export CSV
-  const handleExportCSV = () => {
-    const header = 'Produto ID,Código,Nome,Classe ABC,Eventos,Consumo Total,Valor Total (R$),Score Híbrido,Consumo Médio/Dia,Estoque Atual,Dias Cobertura,ROP,A Comprar\n';
-    const rows = filteredItems.map(i =>
-      `${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${i.abc_class},${i.event_count},${i.total_qty},${i.total_value.toFixed(2)},${i.hybrid_score.toFixed(1)},${i.avg_daily.toFixed(2)},${i.estoque_atual ?? ''},${i.dias_cobertura !== null ? i.dias_cobertura.toFixed(1) : ''},${i.rop?.toFixed(1) || ''},${i.qty_a_comprar ?? ''}`
-    ).join('\n');
+  const formatNumberBR = (value: number, digits = 2) =>
+    Number.isFinite(value)
+      ? value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+      : '';
 
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+  const escapeCsvCell = (value: string | number | null | undefined) => {
+    const text = value === null || value === undefined ? '' : String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const buildCsvPtBr = (headers: string[], rows: Array<Array<string | number | null | undefined>>) => {
+    const separator = ';';
+    const lines = [headers, ...rows].map((row) => row.map(escapeCsvCell).join(separator));
+    return `\uFEFF${lines.join('\r\n')}`;
+  };
+
+  const downloadCsv = (fileName: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `analise-estoque-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Export CSV
+  const handleExportCSV = () => {
+    const headers = ['Produto ID', 'Código', 'Nome', 'Classe ABC', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Score Híbrido', 'Consumo Médio/Dia', 'Estoque Atual', 'Dias Cobertura', 'ROP', 'A Comprar'];
+    const rows = filteredItems.map((i) => [
+      i.produto_id,
+      i.codigo_interno || '',
+      i.nome,
+      i.abc_class,
+      i.event_count,
+      formatNumberBR(i.total_qty, 0),
+      formatNumberBR(i.total_value, 2),
+      formatNumberBR(i.hybrid_score, 1),
+      formatNumberBR(i.avg_daily, 2),
+      i.estoque_atual ?? '',
+      i.dias_cobertura !== null ? formatNumberBR(i.dias_cobertura, 1) : '',
+      i.rop !== null ? formatNumberBR(i.rop, 1) : '',
+      i.qty_a_comprar ?? '',
+    ]);
+
+    downloadCsv(
+      `analise-estoque-${new Date().toISOString().split('T')[0]}.csv`,
+      buildCsvPtBr(headers, rows),
+    );
   };
 
   // Export shopping list CSV
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
-    const header = 'Classe ABC,Produto ID,Código,Nome,Saída (peças),OS Únicas,Estoque Atual,Consumo Méd/Dia,Lead Time,ROP,Cobertura (dias),Necessidade Bruta,PC em Andamento (peças),Qtd Líquida a Comprar,PCs\n';
-    const rows = purchaseItems.map(i =>
-      `${i.abc_class},${i.produto_id},${i.codigo_interno || ''},${i.nome.replace(/,/g, ' ')},${Math.round(i.total_qty)},${i.event_count},${i.estoque_atual},${i.avg_daily.toFixed(2)},${Math.round(i.lead_time_days)},${i.rop?.toFixed(0)},${i.dias_cobertura?.toFixed(0) || '0'},${i.qty_a_comprar},${i.pc_qty},${i.qty_liquida},${i.pc_refs.map(r => `PC${r.codigo}(${r.qtd})`).join(' ')}`
-    ).join('\n');
 
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `lista-compras-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const headers = ['Classe ABC', 'Produto ID', 'Código', 'Nome', 'Saída (peças)', 'OS Únicas', 'Estoque Atual', 'Consumo Méd/Dia', 'Lead Time', 'ROP', 'Cobertura (dias)', 'Necessidade Bruta', 'PC em Andamento (peças)', 'Qtd Líquida a Comprar', 'PCs'];
+    const rows = purchaseItems.map((i) => [
+      i.abc_class,
+      i.produto_id,
+      i.codigo_interno || '',
+      i.nome,
+      formatNumberBR(Math.round(i.total_qty), 0),
+      i.event_count,
+      i.estoque_atual,
+      formatNumberBR(i.avg_daily, 2),
+      formatNumberBR(Math.round(i.lead_time_days), 0),
+      i.rop !== null ? formatNumberBR(i.rop, 0) : '',
+      i.dias_cobertura !== null ? formatNumberBR(i.dias_cobertura, 0) : '0',
+      i.qty_a_comprar,
+      i.pc_qty,
+      i.qty_liquida,
+      i.pc_refs.map((r) => `PC${r.codigo}(${r.qtd})`).join(' · '),
+    ]);
+
+    downloadCsv(
+      `lista-compras-${new Date().toISOString().split('T')[0]}.csv`,
+      buildCsvPtBr(headers, rows),
+    );
   };
 
   const abcBadge = (cls: 'A' | 'B' | 'C') => {

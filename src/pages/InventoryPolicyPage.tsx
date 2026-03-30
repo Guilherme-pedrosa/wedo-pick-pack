@@ -44,20 +44,9 @@ export default function InventoryPolicyPage() {
   const [syncResult, setSyncResult] = useState<any>(null);
   const [syncProgress, setSyncProgress] = useState<any>(null);
 
-  // Last sync date
-  const lastSyncQuery = useQuery({
-    queryKey: ['last-consumption-sync'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sync_runs')
-        .select('finished_at, status')
-        .eq('run_type', 'inventory-consumption')
-        .eq('status', 'done')
-        .order('finished_at', { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      return (data as any[])?.[0] || null;
-    },
+   // Last sync date — stored in localStorage since edge function doesn't write to sync_runs
+  const [lastSyncDate, setLastSyncDate] = useState<string | null>(() => {
+    return localStorage.getItem('last-consumption-sync-date');
   });
 
   // Load config from DB

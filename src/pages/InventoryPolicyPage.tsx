@@ -411,10 +411,10 @@ export default function InventoryPolicyPage() {
         <div>
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Sincronização de Consumo</h2>
-            {lastSyncQuery.data?.finished_at && (
+            {lastSyncDate && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
                 <Clock className="h-3.5 w-3.5" />
-                <span>Última sync: {new Date(lastSyncQuery.data.finished_at).toLocaleString('pt-BR')}</span>
+                <span>Última sync: {new Date(lastSyncDate).toLocaleString('pt-BR')}</span>
               </div>
             )}
           </div>

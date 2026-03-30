@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, Play, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, Save, Play, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface PolicyConfig {
@@ -43,6 +43,22 @@ export default function InventoryPolicyPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
   const [syncProgress, setSyncProgress] = useState<any>(null);
+
+  // Last sync date
+  const lastSyncQuery = useQuery({
+    queryKey: ['last-consumption-sync'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sync_runs')
+        .select('finished_at, status')
+        .eq('run_type', 'inventory-consumption')
+        .eq('status', 'done')
+        .order('finished_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return (data as any[])?.[0] || null;
+    },
+  });
 
   // Load config from DB
   const configQuery = useQuery({
@@ -403,11 +419,21 @@ export default function InventoryPolicyPage() {
 
       {/* Sync */}
       <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Sincronização de Consumo</h2>
-        <p className="text-sm text-muted-foreground">
-          Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
-          O processo é idempotente — rodar múltiplas vezes não duplica dados.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Sincronização de Consumo</h2>
+            <p className="text-sm text-muted-foreground">
+              Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
+              O processo é idempotente — rodar múltiplas vezes não duplica dados.
+            </p>
+          </div>
+          {lastSyncQuery.data?.finished_at && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Última sync: {new Date(lastSyncQuery.data.finished_at).toLocaleString('pt-BR')}</span>
+            </div>
+          )}
+        </div>
         <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {syncing ? 'Sincronizando...' : `Sincronizar consumo (${config.lookback_days}d)`}

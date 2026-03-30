@@ -419,20 +419,20 @@ export default function InventoryPolicyPage() {
 
       {/* Sync */}
       <Card className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
+        <div>
+          <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Sincronização de Consumo</h2>
-            <p className="text-sm text-muted-foreground">
-              Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
-              O processo é idempotente — rodar múltiplas vezes não duplica dados.
-            </p>
+            {lastSyncQuery.data?.finished_at && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                <Clock className="h-3.5 w-3.5" />
+                <span>Última sync: {new Date(lastSyncQuery.data.finished_at).toLocaleString('pt-BR')}</span>
+              </div>
+            )}
           </div>
-          {lastSyncQuery.data?.finished_at && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-              <Clock className="h-3.5 w-3.5" />
-              <span>Última sync: {new Date(lastSyncQuery.data.finished_at).toLocaleString('pt-BR')}</span>
-            </div>
-          )}
+          <p className="text-sm text-muted-foreground mt-1">
+            Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
+            O processo é idempotente — rodar múltiplas vezes não duplica dados.
+          </p>
         </div>
         <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}

@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, Play, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, Save, Play, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface PolicyConfig {

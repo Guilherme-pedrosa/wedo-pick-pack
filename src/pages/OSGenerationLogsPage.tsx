@@ -41,7 +41,7 @@ export default function OSGenerationLogsPage() {
       const { data, error } = await (supabase.from("os_generation_logs") as any)
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(1000);
       if (error) throw error;
       return (data || []) as OSLog[];
     },

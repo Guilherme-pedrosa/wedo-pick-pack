@@ -347,9 +347,10 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase suggestions only for recurring demand (>= 2 unique documents)
+  // Purchase suggestions only for recurring demand (>= 3 unique documents)
+  // 2 documents over 6 months is too sporadic to justify stocking
   const purchaseItems = useMemo(() =>
-    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0 && i.event_count >= 2),
+    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0 && i.event_count >= 3),
     [analysisItems]
   );
 

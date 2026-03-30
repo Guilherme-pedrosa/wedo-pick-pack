@@ -44,20 +44,9 @@ export default function InventoryPolicyPage() {
   const [syncResult, setSyncResult] = useState<any>(null);
   const [syncProgress, setSyncProgress] = useState<any>(null);
 
-  // Last sync date
-  const lastSyncQuery = useQuery({
-    queryKey: ['last-consumption-sync'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('sync_runs')
-        .select('finished_at, status')
-        .eq('run_type', 'inventory-consumption')
-        .eq('status', 'done')
-        .order('finished_at', { ascending: false })
-        .limit(1);
-      if (error) throw error;
-      return (data as any[])?.[0] || null;
-    },
+   // Last sync date — stored in localStorage since edge function doesn't write to sync_runs
+  const [lastSyncDate, setLastSyncDate] = useState<string | null>(() => {
+    return localStorage.getItem('last-consumption-sync-date');
   });
 
   // Load config from DB
@@ -172,6 +161,9 @@ export default function InventoryPolicyPage() {
 
         if (data?.done) {
           const stats = data.stats || cursor?.stats || {};
+          const now = new Date().toISOString();
+          localStorage.setItem('last-consumption-sync-date', now);
+          setLastSyncDate(now);
           setSyncResult({ success: true, stats, period: data.period || null });
           toast.success(`Sincronização concluída! ${stats.os_debited || 0} OSs + ${stats.vendas_debited || 0} vendas processadas, ${stats.pecas_created || 0} peças.`);
           break;
@@ -419,20 +411,20 @@ export default function InventoryPolicyPage() {
 
       {/* Sync */}
       <Card className="p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
+        <div>
+          <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Sincronização de Consumo</h2>
-            <p className="text-sm text-muted-foreground">
-              Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
-              O processo é idempotente — rodar múltiplas vezes não duplica dados.
-            </p>
+            {lastSyncDate && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                <Clock className="h-3.5 w-3.5" />
+                <span>Última sync: {new Date(lastSyncDate).toLocaleString('pt-BR')}</span>
+              </div>
+            )}
           </div>
-          {lastSyncQuery.data?.finished_at && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-              <Clock className="h-3.5 w-3.5" />
-              <span>Última sync: {new Date(lastSyncQuery.data.finished_at).toLocaleString('pt-BR')}</span>
-            </div>
-          )}
+          <p className="text-sm text-muted-foreground mt-1">
+            Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
+            O processo é idempotente — rodar múltiplas vezes não duplica dados.
+          </p>
         </div>
         <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}

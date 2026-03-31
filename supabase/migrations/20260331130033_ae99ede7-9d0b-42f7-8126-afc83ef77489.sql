@@ -1,0 +1,1 @@
+ALTER TABLE public.inventory_consumption_events ADD COLUMN cliente_nome text DEFAULT NULL;

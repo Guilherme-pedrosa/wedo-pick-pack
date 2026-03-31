@@ -399,6 +399,7 @@ export type Database = {
       }
       inventory_consumption_events: {
         Row: {
+          cliente_nome: string | null
           id: string
           occurred_at: string
           produto_id: string
@@ -411,6 +412,7 @@ export type Database = {
           variacao_id: string | null
         }
         Insert: {
+          cliente_nome?: string | null
           id?: string
           occurred_at: string
           produto_id: string
@@ -423,6 +425,7 @@ export type Database = {
           variacao_id?: string | null
         }
         Update: {
+          cliente_nome?: string | null
           id?: string
           occurred_at?: string
           produto_id?: string

@@ -350,10 +350,15 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase suggestions only for recurring demand (>= 3 unique documents)
-  // 2 documents over 6 months is too sporadic to justify stocking
+  // Purchase suggestions: price-based client thresholds
+  // < R$1000 unit cost: 2+ unique clients; >= R$1000: 3+ unique clients
   const purchaseItems = useMemo(() =>
-    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0 && i.event_count >= 3),
+    analysisItems.filter(i => {
+      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
+      const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
+      const minClients = avgUnitCost >= 1000 ? 3 : 2;
+      return i.event_count >= minClients;
+    }),
     [analysisItems]
   );
 

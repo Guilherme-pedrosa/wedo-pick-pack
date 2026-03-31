@@ -115,23 +115,25 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
 
   const rows = await fetchAllRows(
     'inventory_consumption_events',
-    'produto_id, variacao_id, qty, valor_custo, occurred_at, source_id',
+    'produto_id, variacao_id, qty, valor_custo, occurred_at, source_id, cliente_nome',
     { gte: ['occurred_at', cutoffStr] },
   );
 
-  const map = new Map<string, ConsumptionRow & { _sources: Set<string> }>();
+  const map = new Map<string, ConsumptionRow & { _sources: Set<string>; _clients: Set<string> }>();
   for (const r of rows) {
     const key = r.produto_id;
     if (!key || key.trim() === '') continue;
     const qty = parseFloat(r.qty) || 0;
     const val = (parseFloat(r.valor_custo) || 0) * qty;
     const sourceId = r.source_id || '';
+    const clientKey = (r.cliente_nome || sourceId).toLowerCase().trim();
     const existing = map.get(key);
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
       existing._sources.add(sourceId);
-      existing.event_count = existing._sources.size; // unique documents
+      existing._clients.add(clientKey);
+      existing.event_count = existing._clients.size; // unique clients
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
     } else {
@@ -145,18 +147,19 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         last_date: r.occurred_at,
         hybrid_score: 0,
         _sources: new Set([sourceId]),
+        _clients: new Set([clientKey]),
       });
     }
   }
 
   // Hybrid score: total_value × daily_frequency
-  // Uses unique document count, not raw row count
+  // Uses unique client count, not raw row count
   for (const row of map.values()) {
     const dailyFrequency = row.event_count / lookbackDays;
     row.hybrid_score = row.total_value * dailyFrequency;
   }
 
-  // Include any product with at least 1 unique consumption document
+  // Include any product with at least 1 unique consumption event
   const filtered = [...map.values()].filter(r => r.event_count >= 1);
   return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
 }
@@ -347,10 +350,15 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase suggestions only for recurring demand (>= 3 unique documents)
-  // 2 documents over 6 months is too sporadic to justify stocking
+  // Purchase suggestions: price-based client thresholds
+  // < R$1000 unit cost: 2+ unique clients; >= R$1000: 3+ unique clients
   const purchaseItems = useMemo(() =>
-    analysisItems.filter(i => i.qty_liquida !== null && i.qty_liquida > 0 && i.event_count >= 3),
+    analysisItems.filter(i => {
+      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
+      const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
+      const minClients = avgUnitCost >= 1000 ? 3 : 2;
+      return i.event_count >= minClients;
+    }),
     [analysisItems]
   );
 

@@ -225,6 +225,7 @@ async function processDocument(
 
   const now = new Date().toISOString();
   const occurredAt = doc.data || now;
+  const clienteNome = doc.nome_cliente || doc.cliente?.nome || null;
 
   const events = items.map(item => ({
     occurred_at: occurredAt,
@@ -236,6 +237,7 @@ async function processDocument(
     qty: item.qty,
     valor_custo: item.raw.valor_custo ? parseFloat(String(item.raw.valor_custo)) : null,
     raw: item.raw,
+    cliente_nome: clienteNome,
   }));
 
   const { error: insertErr } = await supabase.from('inventory_consumption_events').insert(events);

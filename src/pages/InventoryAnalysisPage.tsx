@@ -846,6 +846,7 @@ export default function InventoryAnalysisPage() {
                     <TableHead className="w-10">#</TableHead>
                     <TableHead className="w-12">ABC</TableHead>
                     <TableHead>Produto</TableHead>
+                    <TableHead>Grupo</TableHead>
                     <TableHead className="text-right">Eventos</TableHead>
                     <TableHead className="text-right">Consumo</TableHead>
                     <TableHead className="text-right">Valor (R$)</TableHead>

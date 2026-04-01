@@ -745,7 +745,20 @@ export default function InventoryAnalysisPage() {
                     ROP = consumo médio × lead time (por fornecedor) × segurança · Saída = peças consumidas · OS = documentos únicos · Qtd líquida = necessidade − PC em andamento
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                  <Select value={grupoFilter} onValueChange={setGrupoFilter}>
+                    <SelectTrigger className="h-8 w-[200px] text-xs">
+                      <Filter className="h-3 w-3 mr-1" />
+                      <SelectValue placeholder="Filtrar grupo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Todos os grupos</SelectItem>
+                      {uniqueGrupos.map(g => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                      <SelectItem value="Sem grupo">Sem grupo</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button variant="outline" size="sm" onClick={handleFetchPCs} disabled={loadingPCs} className="gap-1">
                     {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}

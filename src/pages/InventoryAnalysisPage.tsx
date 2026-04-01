@@ -29,6 +29,7 @@ interface ProductInfo {
   nome: string;
   codigo_interno: string | null;
   fornecedor_id: string | null;
+  grupo: string | null;
 }
 
 interface SupplierLeadTime {
@@ -58,6 +59,7 @@ interface AnalysisItem {
   codigo_interno: string | null;
   fornecedor_id: string | null;
   fornecedor_nome: string | null;
+  grupo: string | null;
   total_qty: number;
   total_value: number;
   event_count: number;
@@ -176,10 +178,12 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
   if (ids.length === 0) return map;
   const { data } = await supabase
     .from('products_index')
-    .select('produto_id, nome, codigo_interno, fornecedor_id')
+    .select('produto_id, nome, codigo_interno, fornecedor_id, payload_min_json')
     .in('produto_id', ids);
   for (const p of (data || [])) {
-    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null });
+    const payload = (p as any).payload_min_json;
+    const grupo = payload?.nome_grupo || null;
+    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null, grupo });
   }
   return map;
 }
@@ -288,6 +292,7 @@ export default function InventoryAnalysisPage() {
         produto_id: r.produto_id,
         nome: info?.nome || `Produto ${r.produto_id}`,
         codigo_interno: info?.codigo_interno || null,
+        grupo: info?.grupo || null,
         fornecedor_id: fornecedorId,
         fornecedor_nome: fornecedorNome,
         total_qty: r.total_qty,
@@ -737,6 +742,7 @@ export default function InventoryAnalysisPage() {
                     <TableRow className="bg-muted/50">
                       <TableHead className="w-12">ABC</TableHead>
                       <TableHead>Produto</TableHead>
+                      <TableHead>Grupo</TableHead>
                       <TableHead className="text-right">Saída (peças)</TableHead>
                       <TableHead className="text-right">OS</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
@@ -763,6 +769,7 @@ export default function InventoryAnalysisPage() {
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                         <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                         <TableCell className="text-right text-xs">{item.event_count}</TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>
@@ -839,6 +846,7 @@ export default function InventoryAnalysisPage() {
                     <TableHead className="w-10">#</TableHead>
                     <TableHead className="w-12">ABC</TableHead>
                     <TableHead>Produto</TableHead>
+                    <TableHead>Grupo</TableHead>
                     <TableHead className="text-right">Eventos</TableHead>
                     <TableHead className="text-right">Consumo</TableHead>
                     <TableHead className="text-right">Valor (R$)</TableHead>
@@ -857,6 +865,7 @@ export default function InventoryAnalysisPage() {
                         <p className="text-sm font-medium truncate max-w-[250px]">{item.nome}</p>
                         {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                       <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
                       <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>

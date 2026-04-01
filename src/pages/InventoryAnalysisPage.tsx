@@ -224,8 +224,10 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 export default function InventoryAnalysisPage() {
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
   const [pcMap, setPcMap] = useState<Map<string, PCEntry>>(new Map());
+  const [orcMap, setOrcMap] = useState<Map<string, OrcEntry>>(new Map());
   const [loadingStock, setLoadingStock] = useState(false);
   const [loadingPCs, setLoadingPCs] = useState(false);
+  const [loadingOrcs, setLoadingOrcs] = useState(false);
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [grupoFilter, setGrupoFilter] = useState<string>('__all__');

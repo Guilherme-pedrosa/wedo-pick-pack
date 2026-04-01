@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { listOrdensCompra } from '@/api/compras';
+import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
+import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

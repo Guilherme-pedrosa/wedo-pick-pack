@@ -298,7 +298,15 @@ export default function InventoryAnalysisPage() {
       const coverageTarget = leadTimeDays;
       const rop = avgDaily * leadTimeDays * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
-      const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
+
+      // Budget demand (orçamentos pendentes)
+      const orcEntry = orcMap.get(r.produto_id);
+      const orcQty = orcEntry?.qtd || 0;
+      const orcRefs = orcEntry?.refs || [];
+
+      // qty_a_comprar considers ROP + budget demand
+      const ropNeed = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
+      const qtyAComprar = ropNeed !== null ? Math.max(ropNeed, Math.ceil(rop + orcQty - (estoque ?? 0))) : null;
 
       // Cross-reference with active purchase orders
       const pcEntry = pcMap.get(r.produto_id);
@@ -328,6 +336,8 @@ export default function InventoryAnalysisPage() {
         qty_liquida: qtyLiquida,
         pc_qty: pcQty,
         pc_refs: pcRefs,
+        orc_qty: orcQty,
+        orc_refs: orcRefs,
         coverage_target: coverageTarget,
       };
     });

@@ -215,6 +215,7 @@ export default function InventoryAnalysisPage() {
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [grupoFilter, setGrupoFilter] = useState<string>('__all__');
+  const [syncingLT, setSyncingLT] = useState(false);
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };

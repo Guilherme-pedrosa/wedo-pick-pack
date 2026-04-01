@@ -794,6 +794,63 @@ export default function InventoryAnalysisPage() {
 
         {/* LISTA DE COMPRAS (default tab) */}
         <TabsContent value="compras" className="mt-4 space-y-4">
+          {stockMap.size > 0 && (
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                {purchaseItems.length > 0 ? (
+                  <>
+                    <p className="text-sm font-medium">
+                      🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
+                      {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
+                      {orcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {orcMap.size} produtos em orçamentos</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      ROP + demanda de orçamentos pendentes · Qtd líquida = necessidade − PC em andamento
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm font-medium text-muted-foreground">
+                    {analysisItems.length} produtos analisados
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2 items-center flex-wrap">
+                <Input
+                  placeholder="Buscar produto..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="h-8 w-[180px] text-xs"
+                />
+                <Select value={grupoFilter} onValueChange={setGrupoFilter}>
+                  <SelectTrigger className="h-8 w-[200px] text-xs">
+                    <Filter className="h-3 w-3 mr-1" />
+                    <SelectValue placeholder="Filtrar grupo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Todos os grupos</SelectItem>
+                    {uniqueGrupos.map(g => (
+                      <SelectItem key={g} value={g}>{g}</SelectItem>
+                    ))}
+                    <SelectItem value="Sem grupo">Sem grupo</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={handleFetchPCs} disabled={loadingPCs} className="gap-1">
+                  {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                  {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleFetchOrcamentos} disabled={loadingOrcs} className="gap-1">
+                  {loadingOrcs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
+                  {loadingOrcs ? 'Buscando...' : orcMap.size > 0 ? 'Atualizar Orçamentos' : 'Cruzar c/ Orçamentos'}
+                </Button>
+                {purchaseItems.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
+                    <Download className="h-3 w-3" /> Exportar Lista
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {stockMap.size === 0 ? (
             <Card className="p-8 text-center">
               <ShoppingCart className="h-12 w-12 mx-auto text-amber-500 mb-3" />
@@ -832,44 +889,6 @@ export default function InventoryAnalysisPage() {
             </Card>
           ) : (
             <>
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <p className="text-sm font-medium">
-                    🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
-                    {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
-                    {orcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {orcMap.size} produtos em orçamentos</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP + demanda de orçamentos pendentes · Qtd líquida = necessidade − PC em andamento
-                  </p>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <Select value={grupoFilter} onValueChange={setGrupoFilter}>
-                    <SelectTrigger className="h-8 w-[200px] text-xs">
-                      <Filter className="h-3 w-3 mr-1" />
-                      <SelectValue placeholder="Filtrar grupo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">Todos os grupos</SelectItem>
-                      {uniqueGrupos.map(g => (
-                        <SelectItem key={g} value={g}>{g}</SelectItem>
-                      ))}
-                      <SelectItem value="Sem grupo">Sem grupo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" size="sm" onClick={handleFetchPCs} disabled={loadingPCs} className="gap-1">
-                    {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                    {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleFetchOrcamentos} disabled={loadingOrcs} className="gap-1">
-                    {loadingOrcs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
-                    {loadingOrcs ? 'Buscando...' : orcMap.size > 0 ? 'Atualizar Orçamentos' : 'Cruzar c/ Orçamentos'}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
-                    <Download className="h-3 w-3" /> Exportar Lista
-                  </Button>
-                </div>
-              </div>
 
               <div className="rounded-lg border overflow-auto max-h-[600px]">
                 <Table>

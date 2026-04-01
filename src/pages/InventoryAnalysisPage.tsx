@@ -861,13 +861,26 @@ export default function InventoryAnalysisPage() {
 
         {/* RANKING ABC */}
         <TabsContent value="ranking" className="mt-4 space-y-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Input
               placeholder="Buscar por nome, código ou ID..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="max-w-sm h-9"
             />
+            <Select value={grupoFilter} onValueChange={setGrupoFilter}>
+              <SelectTrigger className="h-9 w-[200px] text-xs">
+                <Filter className="h-3 w-3 mr-1" />
+                <SelectValue placeholder="Filtrar grupo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos os grupos</SelectItem>
+                {uniqueGrupos.map(g => (
+                  <SelectItem key={g} value={g}>{g}</SelectItem>
+                ))}
+                <SelectItem value="Sem grupo">Sem grupo</SelectItem>
+              </SelectContent>
+            </Select>
             <span className="text-xs text-muted-foreground">{filteredItems.length} produtos</span>
           </div>
 

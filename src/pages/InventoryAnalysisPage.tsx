@@ -374,15 +374,18 @@ export default function InventoryAnalysisPage() {
 
   // Purchase suggestions: price-based client thresholds
   // < R$1000 unit cost: 2+ unique clients; >= R$1000: 3+ unique clients
-  const purchaseItems = useMemo(() =>
-    analysisItems.filter(i => {
+  const purchaseItems = useMemo(() => {
+    let base = analysisItems;
+    if (grupoFilter !== '__all__') {
+      base = base.filter(i => (i.grupo || 'Sem grupo') === grupoFilter);
+    }
+    return base.filter(i => {
       if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       return i.event_count >= minClients;
-    }),
-    [analysisItems]
-  );
+    });
+  }, [analysisItems, grupoFilter]);
 
   // Fetch active purchase orders from GC
   const handleFetchPCs = useCallback(async () => {

@@ -865,6 +865,7 @@ export default function InventoryAnalysisPage() {
                         <p className="text-sm font-medium truncate max-w-[250px]">{item.nome}</p>
                         {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                       <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
                       <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>

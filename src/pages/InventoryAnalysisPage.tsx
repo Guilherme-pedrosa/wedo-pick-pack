@@ -463,6 +463,67 @@ export default function InventoryAnalysisPage() {
     }
   }, [crossrefSituacaoIds]);
 
+  // Fetch pending budgets (orçamentos) and aggregate product demand
+  const handleFetchOrcamentos = useCallback(async () => {
+    setLoadingOrcs(true);
+    try {
+      // Get all budget statuses
+      const statuses = await getStatusOrcamentos();
+      if (!statuses || statuses.length === 0) {
+        toast.error('Nenhuma situação de orçamento encontrada.');
+        setLoadingOrcs(false);
+        return;
+      }
+
+      const allOrcs: GCOrcamento[] = [];
+      for (const status of statuses) {
+        let page = 1;
+        while (true) {
+          const res = await listOrcamentos(status.id, page);
+          allOrcs.push(...res.data);
+          if (page >= res.meta.total_paginas) break;
+          page++;
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+
+      // Filter out converted budgets (situacao_financeiro or situacao_estoque = true)
+      const pending = allOrcs.filter(o => {
+        const fin = String(o.situacao_financeiro ?? '').toLowerCase();
+        const est = String(o.situacao_estoque ?? '').toLowerCase();
+        const isConverted = ['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est);
+        return !isConverted;
+      });
+
+      // Aggregate product demand
+      const newOrcMap = new Map<string, OrcEntry>();
+      for (const orc of pending) {
+        for (const p of orc.produtos || []) {
+          const pid = String(p.produto?.produto_id || '').trim();
+          if (!pid) continue;
+          const qty = parseFloat(String(p.produto?.quantidade || '0')) || 0;
+          if (qty <= 0) continue;
+
+          if (!newOrcMap.has(pid)) newOrcMap.set(pid, { qtd: 0, refs: [] });
+          const entry = newOrcMap.get(pid)!;
+          entry.qtd += qty;
+          entry.refs.push({
+            codigo: orc.codigo,
+            qtd: qty,
+            cliente: orc.nome_cliente,
+          });
+        }
+      }
+
+      setOrcMap(newOrcMap);
+      toast.success(`${pending.length} orçamentos pendentes · ${newOrcMap.size} produtos com demanda`);
+    } catch (err) {
+      toast.error('Erro ao buscar orçamentos: ' + (err instanceof Error ? err.message : 'Erro'));
+    } finally {
+      setLoadingOrcs(false);
+    }
+  }, []);
+
   // Bulk fetch stock for ALL products via paginated edge function
   const handleFetchStock = useCallback(async () => {
     setLoadingStock(true);

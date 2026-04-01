@@ -850,6 +850,10 @@ export default function InventoryAnalysisPage() {
                     {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}
                   </Button>
+                  <Button variant="outline" size="sm" onClick={handleFetchOrcamentos} disabled={loadingOrcs} className="gap-1">
+                    {loadingOrcs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
+                    {loadingOrcs ? 'Buscando...' : orcMap.size > 0 ? 'Atualizar Orçamentos' : 'Cruzar c/ Orçamentos'}
+                  </Button>
                   <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
                     <Download className="h-3 w-3" /> Exportar Lista
                   </Button>

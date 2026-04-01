@@ -88,6 +88,8 @@ interface AnalysisItem {
   qty_liquida: number | null;
   pc_qty: number;
   pc_refs: PCRef[];
+  orc_qty: number;
+  orc_refs: OrcRef[];
   coverage_target: number;
 }
 

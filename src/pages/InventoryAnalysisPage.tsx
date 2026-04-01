@@ -769,6 +769,7 @@ export default function InventoryAnalysisPage() {
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
                         </TableCell>
+                        <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                         <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                         <TableCell className="text-right text-xs">{item.event_count}</TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>

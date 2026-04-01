@@ -908,6 +908,18 @@ export default function InventoryAnalysisPage() {
                         </TableCell>
                         <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
                         <TableCell className="text-right">
+                          {item.orc_qty > 0 ? (
+                            <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
+                              {item.orc_qty}un
+                              <span className="text-[10px] text-muted-foreground block">
+                                {item.orc_refs.length} orç.
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
                           {item.pc_qty > 0 ? (
                             <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>
                               {item.pc_qty}un

@@ -317,16 +317,31 @@ export default function InventoryAnalysisPage() {
     });
   }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
 
-  // Filtered items
+  // Unique groups for filter
+  const uniqueGrupos = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of analysisItems) {
+      if (i.grupo) set.add(i.grupo);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [analysisItems]);
+
+  // Filtered items (search + grupo)
   const filteredItems = useMemo(() => {
-    if (!searchTerm.trim()) return analysisItems;
-    const q = searchTerm.toLowerCase();
-    return analysisItems.filter(i =>
-      i.nome.toLowerCase().includes(q) ||
-      i.codigo_interno?.toLowerCase().includes(q) ||
-      i.produto_id.includes(q)
-    );
-  }, [analysisItems, searchTerm]);
+    let items = analysisItems;
+    if (grupoFilter !== '__all__') {
+      items = items.filter(i => (i.grupo || 'Sem grupo') === grupoFilter);
+    }
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      items = items.filter(i =>
+        i.nome.toLowerCase().includes(q) ||
+        i.codigo_interno?.toLowerCase().includes(q) ||
+        i.produto_id.includes(q)
+      );
+    }
+    return items;
+  }, [analysisItems, searchTerm, grupoFilter]);
 
   // Trend chart data
   const trendChartData = useMemo(() => {

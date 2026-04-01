@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { listOrdensCompra } from '@/api/compras';
+import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
+import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,6 +55,17 @@ interface PCEntry {
   refs: PCRef[];
 }
 
+interface OrcRef {
+  codigo: string;
+  qtd: number;
+  cliente: string;
+}
+
+interface OrcEntry {
+  qtd: number;
+  refs: OrcRef[];
+}
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;
@@ -76,6 +88,8 @@ interface AnalysisItem {
   qty_liquida: number | null;
   pc_qty: number;
   pc_refs: PCRef[];
+  orc_qty: number;
+  orc_refs: OrcRef[];
   coverage_target: number;
 }
 
@@ -210,8 +224,10 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 export default function InventoryAnalysisPage() {
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
   const [pcMap, setPcMap] = useState<Map<string, PCEntry>>(new Map());
+  const [orcMap, setOrcMap] = useState<Map<string, OrcEntry>>(new Map());
   const [loadingStock, setLoadingStock] = useState(false);
   const [loadingPCs, setLoadingPCs] = useState(false);
+  const [loadingOrcs, setLoadingOrcs] = useState(false);
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [grupoFilter, setGrupoFilter] = useState<string>('__all__');
@@ -282,7 +298,15 @@ export default function InventoryAnalysisPage() {
       const coverageTarget = leadTimeDays;
       const rop = avgDaily * leadTimeDays * safetyFactor;
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
-      const qtyAComprar = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
+
+      // Budget demand (orçamentos pendentes)
+      const orcEntry = orcMap.get(r.produto_id);
+      const orcQty = orcEntry?.qtd || 0;
+      const orcRefs = orcEntry?.refs || [];
+
+      // qty_a_comprar considers ROP + budget demand
+      const ropNeed = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
+      const qtyAComprar = ropNeed !== null ? Math.max(ropNeed, Math.ceil(rop + orcQty - (estoque ?? 0))) : null;
 
       // Cross-reference with active purchase orders
       const pcEntry = pcMap.get(r.produto_id);
@@ -312,10 +336,12 @@ export default function InventoryAnalysisPage() {
         qty_liquida: qtyLiquida,
         pc_qty: pcQty,
         pc_refs: pcRefs,
+        orc_qty: orcQty,
+        orc_refs: orcRefs,
         coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
 
   // Unique groups for filter
   const uniqueGrupos = useMemo(() => {
@@ -436,6 +462,67 @@ export default function InventoryAnalysisPage() {
       setLoadingPCs(false);
     }
   }, [crossrefSituacaoIds]);
+
+  // Fetch pending budgets (orçamentos) and aggregate product demand
+  const handleFetchOrcamentos = useCallback(async () => {
+    setLoadingOrcs(true);
+    try {
+      // Get all budget statuses
+      const statuses = await getStatusOrcamentos();
+      if (!statuses || statuses.length === 0) {
+        toast.error('Nenhuma situação de orçamento encontrada.');
+        setLoadingOrcs(false);
+        return;
+      }
+
+      const allOrcs: GCOrcamento[] = [];
+      for (const status of statuses) {
+        let page = 1;
+        while (true) {
+          const res = await listOrcamentos(status.id, page);
+          allOrcs.push(...res.data);
+          if (page >= res.meta.total_paginas) break;
+          page++;
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+
+      // Filter out converted budgets (situacao_financeiro or situacao_estoque = true)
+      const pending = allOrcs.filter(o => {
+        const fin = String(o.situacao_financeiro ?? '').toLowerCase();
+        const est = String(o.situacao_estoque ?? '').toLowerCase();
+        const isConverted = ['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est);
+        return !isConverted;
+      });
+
+      // Aggregate product demand
+      const newOrcMap = new Map<string, OrcEntry>();
+      for (const orc of pending) {
+        for (const p of orc.produtos || []) {
+          const pid = String(p.produto?.produto_id || '').trim();
+          if (!pid) continue;
+          const qty = parseFloat(String(p.produto?.quantidade || '0')) || 0;
+          if (qty <= 0) continue;
+
+          if (!newOrcMap.has(pid)) newOrcMap.set(pid, { qtd: 0, refs: [] });
+          const entry = newOrcMap.get(pid)!;
+          entry.qtd += qty;
+          entry.refs.push({
+            codigo: orc.codigo,
+            qtd: qty,
+            cliente: orc.nome_cliente,
+          });
+        }
+      }
+
+      setOrcMap(newOrcMap);
+      toast.success(`${pending.length} orçamentos pendentes · ${newOrcMap.size} produtos com demanda`);
+    } catch (err) {
+      toast.error('Erro ao buscar orçamentos: ' + (err instanceof Error ? err.message : 'Erro'));
+    } finally {
+      setLoadingOrcs(false);
+    }
+  }, []);
 
   // Bulk fetch stock for ALL products via paginated edge function
   const handleFetchStock = useCallback(async () => {
@@ -740,9 +827,10 @@ export default function InventoryAnalysisPage() {
                   <p className="text-sm font-medium">
                     🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
                     {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
+                    {orcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {orcMap.size} produtos em orçamentos</span>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ROP = consumo médio × lead time (por fornecedor) × segurança · Saída = peças consumidas · OS = documentos únicos · Qtd líquida = necessidade − PC em andamento
+                    ROP + demanda de orçamentos pendentes · Qtd líquida = necessidade − PC em andamento
                   </p>
                 </div>
                 <div className="flex gap-2 items-center">
@@ -762,6 +850,10 @@ export default function InventoryAnalysisPage() {
                   <Button variant="outline" size="sm" onClick={handleFetchPCs} disabled={loadingPCs} className="gap-1">
                     {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleFetchOrcamentos} disabled={loadingOrcs} className="gap-1">
+                    {loadingOrcs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
+                    {loadingOrcs ? 'Buscando...' : orcMap.size > 0 ? 'Atualizar Orçamentos' : 'Cruzar c/ Orçamentos'}
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
                     <Download className="h-3 w-3" /> Exportar Lista
@@ -784,6 +876,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right">ROP</TableHead>
                       <TableHead className="text-right">Cobertura</TableHead>
                       <TableHead className="text-right">Necessidade</TableHead>
+                      <TableHead className="text-right text-amber-600">Orçamentos</TableHead>
                       <TableHead className="text-right text-blue-600">PC Andamento</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
                     </TableRow>
@@ -815,6 +908,18 @@ export default function InventoryAnalysisPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
+                        <TableCell className="text-right">
+                          {item.orc_qty > 0 ? (
+                            <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
+                              {item.orc_qty}un
+                              <span className="text-[10px] text-muted-foreground block">
+                                {item.orc_refs.length} orç.
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           {item.pc_qty > 0 ? (
                             <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>

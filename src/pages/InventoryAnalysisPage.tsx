@@ -405,13 +405,21 @@ export default function InventoryAnalysisPage() {
     if (grupoFilter !== '__all__') {
       base = base.filter(i => (i.grupo || 'Sem grupo') === grupoFilter);
     }
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase();
+      base = base.filter(i =>
+        i.nome.toLowerCase().includes(q) ||
+        i.codigo_interno?.toLowerCase().includes(q) ||
+        i.produto_id.includes(q)
+      );
+    }
     return base.filter(i => {
       if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       return i.event_count >= minClients;
     });
-  }, [analysisItems, grupoFilter]);
+  }, [analysisItems, grupoFilter, searchTerm]);
 
   // Fetch active purchase orders from GC
   const handleFetchPCs = useCallback(async () => {

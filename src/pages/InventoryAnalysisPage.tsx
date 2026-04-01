@@ -467,32 +467,42 @@ export default function InventoryAnalysisPage() {
   const handleFetchOrcamentos = useCallback(async () => {
     setLoadingOrcs(true);
     try {
-      // Get all budget statuses
+      // Get all budget statuses and find "Aguardando Aprovação"
       const statuses = await getStatusOrcamentos();
-      if (!statuses || statuses.length === 0) {
-        toast.error('Nenhuma situação de orçamento encontrada.');
+      const aguardando = statuses?.find(s => s.nome.toLowerCase().includes('aguardando aprov'));
+      if (!aguardando) {
+        toast.error('Status "Aguardando Aprovação" não encontrado.');
         setLoadingOrcs(false);
         return;
       }
 
+      // Date range: same lookback as consumption analysis
+      const now = new Date();
+      const start = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+      const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+
       const allOrcs: GCOrcamento[] = [];
-      for (const status of statuses) {
-        let page = 1;
-        while (true) {
-          const res = await listOrcamentos(status.id, page);
-          allOrcs.push(...res.data);
-          if (page >= res.meta.total_paginas) break;
-          page++;
-          await new Promise(r => setTimeout(r, 400));
-        }
+      let page = 1;
+      while (true) {
+        const res = await listOrcamentos(aguardando.id, page);
+        allOrcs.push(...res.data);
+        if (page >= res.meta.total_paginas) break;
+        page++;
+        await new Promise(r => setTimeout(r, 400));
       }
 
-      // Filter out converted budgets (situacao_financeiro or situacao_estoque = true)
+      // Client-side date filter (API may not support date_inicio/date_fim reliably)
       const pending = allOrcs.filter(o => {
+        // Filter converted
         const fin = String(o.situacao_financeiro ?? '').toLowerCase();
         const est = String(o.situacao_estoque ?? '').toLowerCase();
-        const isConverted = ['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est);
-        return !isConverted;
+        if (['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est)) return false;
+        // Filter by date
+        try {
+          const [y, m, d] = o.data.split('-').map(Number);
+          const orcDate = new Date(y, m - 1, d);
+          return orcDate >= start;
+        } catch { return false; }
       });
 
       // Aggregate product demand
@@ -516,13 +526,13 @@ export default function InventoryAnalysisPage() {
       }
 
       setOrcMap(newOrcMap);
-      toast.success(`${pending.length} orçamentos pendentes · ${newOrcMap.size} produtos com demanda`);
+      toast.success(`${pending.length} orçamentos (${lookbackDays}d, ${aguardando.nome}) · ${newOrcMap.size} produtos`);
     } catch (err) {
       toast.error('Erro ao buscar orçamentos: ' + (err instanceof Error ? err.message : 'Erro'));
     } finally {
       setLoadingOrcs(false);
     }
-  }, []);
+  }, [lookbackDays]);
 
   // Bulk fetch stock for ALL products via paginated edge function
   const handleFetchStock = useCallback(async () => {

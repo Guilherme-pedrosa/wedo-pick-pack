@@ -55,6 +55,17 @@ interface PCEntry {
   refs: PCRef[];
 }
 
+interface OrcRef {
+  codigo: string;
+  qtd: number;
+  cliente: string;
+}
+
+interface OrcEntry {
+  qtd: number;
+  refs: OrcRef[];
+}
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;

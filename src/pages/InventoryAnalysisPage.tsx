@@ -341,7 +341,7 @@ export default function InventoryAnalysisPage() {
         coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
 
   // Unique groups for filter
   const uniqueGrupos = useMemo(() => {

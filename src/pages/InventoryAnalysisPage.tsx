@@ -273,7 +273,8 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
   for (const p of (data || [])) {
     const payload = (p as any).payload_min_json;
     const grupo = payload?.nome_grupo || null;
-    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null, grupo });
+    const valorCusto = payload?.valor_custo ? parseFloat(payload.valor_custo) : null;
+    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null, grupo, valor_custo: valorCusto });
   }
   return map;
 }

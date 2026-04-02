@@ -103,6 +103,7 @@ export default function InventoryPolicyPage() {
         purchase_lt_start_situacao_id: config.purchase_lt_start_situacao_id,
         purchase_arrived_situacao_ids: config.purchase_arrived_situacao_ids,
         purchase_crossref_situacao_ids: config.purchase_crossref_situacao_ids,
+        budget_crossref_situacao_ids: config.budget_crossref_situacao_ids,
         updated_at: new Date().toISOString(),
       };
 

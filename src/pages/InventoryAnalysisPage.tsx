@@ -281,7 +281,7 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
 async function fetchConfig() {
   const { data } = await supabase
     .from('inventory_policy_config' as any)
-    .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids')
+    .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
     .order('created_at', { ascending: false })
     .limit(1);
   return (data as any[])?.[0] || { lookback_days: 180, abc_thresholds: { A: 0.8, B: 0.95 }, purchase_crossref_situacao_ids: [] };

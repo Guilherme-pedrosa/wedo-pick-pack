@@ -1057,6 +1057,9 @@ export default function InventoryAnalysisPage() {
                           </p>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
+                        <TableCell className="text-right text-xs">
+                          {item.valor_custo !== null ? `R$ ${item.valor_custo.toFixed(2)}` : '—'}
+                        </TableCell>
                         <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                         <TableCell className="text-right text-xs">
                           {item.event_count}

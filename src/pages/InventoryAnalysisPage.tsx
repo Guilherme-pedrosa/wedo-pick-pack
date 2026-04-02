@@ -101,6 +101,7 @@ interface AnalysisItem {
   pc_refs: PCRef[];
   orc_qty: number;
   orc_refs: OrcRef[];
+  source_refs: SourceRef[];
   coverage_target: number;
 }
 

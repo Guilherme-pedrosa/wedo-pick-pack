@@ -413,6 +413,7 @@ export default function InventoryAnalysisPage() {
         pc_refs: pcRefs,
         orc_qty: orcQty,
         orc_refs: orcRefs,
+        source_refs: r.source_refs || [],
         coverage_target: coverageTarget,
       };
     });

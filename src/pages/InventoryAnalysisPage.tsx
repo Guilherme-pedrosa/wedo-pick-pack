@@ -621,7 +621,7 @@ export default function InventoryAnalysisPage() {
       }
 
       setOrcMap(newOrcMap);
-      toast.success(`${pending.length} orçamentos (${lookbackDays}d, ${aguardando.nome}) · ${newOrcMap.size} produtos`);
+      toast.success(`${pending.length} orçamentos (${lookbackDays}d, ${statusIds.length} situação(ões)) · ${newOrcMap.size} produtos`);
     } catch (err) {
       toast.error('Erro ao buscar orçamentos: ' + (err instanceof Error ? err.message : 'Erro'));
     } finally {

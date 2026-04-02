@@ -86,6 +86,7 @@ export default function InventoryPolicyPage() {
   const osStatuses = useQuery({ queryKey: ['statuses', 'os'], queryFn: getStatusOS });
   const vendaStatuses = useQuery({ queryKey: ['statuses', 'venda'], queryFn: getStatusVendas });
   const compraStatuses = useQuery({ queryKey: ['statuses', 'compra'], queryFn: getStatusCompras });
+  const orcamentoStatuses = useQuery({ queryKey: ['statuses', 'orcamento'], queryFn: getStatusOrcamentos });
 
   const toggleList = (list: string[], id: string): string[] =>
     list.includes(id) ? list.filter(s => s !== id) : [...list, id];

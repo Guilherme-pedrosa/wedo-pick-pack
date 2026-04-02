@@ -93,9 +93,52 @@ interface AnalysisItem {
   coverage_target: number;
 }
 
+type AnalysisTab = 'compras' | 'ranking' | 'leadtime' | 'trend';
+
 // ABC-specific safety margins on top of lead time
 // A = critical items, 40% safety; B = 25%; C = 10%
 const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
+const ANALYSIS_FILTER_STORAGE_KEY = 'inventory-analysis-filters';
+const ALL_GROUPS_VALUE = '__all__';
+const DEFAULT_ANALYSIS_TAB: AnalysisTab = 'compras';
+
+const readPersistedAnalysisFilters = () => {
+  if (typeof window === 'undefined') {
+    return { searchTerm: '', grupoFilter: ALL_GROUPS_VALUE };
+  }
+
+  try {
+    const raw = window.localStorage.getItem(ANALYSIS_FILTER_STORAGE_KEY);
+    if (!raw) {
+      return { searchTerm: '', grupoFilter: ALL_GROUPS_VALUE };
+    }
+
+    const parsed = JSON.parse(raw);
+    return {
+      searchTerm: typeof parsed?.searchTerm === 'string' ? parsed.searchTerm : '',
+      grupoFilter: typeof parsed?.grupoFilter === 'string' ? parsed.grupoFilter : ALL_GROUPS_VALUE,
+    };
+  } catch {
+    return { searchTerm: '', grupoFilter: ALL_GROUPS_VALUE };
+  }
+};
+
+const matchesAnalysisFilters = (item: AnalysisItem, searchTerm: string, grupoFilter: string) => {
+  if (grupoFilter !== ALL_GROUPS_VALUE && (item.grupo || 'Sem grupo') !== grupoFilter) {
+    return false;
+  }
+
+  const query = searchTerm.trim().toLowerCase();
+  if (!query) {
+    return true;
+  }
+
+  return (
+    item.nome.toLowerCase().includes(query) ||
+    item.codigo_interno?.toLowerCase().includes(query) ||
+    item.produto_id.toLowerCase().includes(query)
+  );
+};
 
 // --- Data fetchers ---
 async function fetchAllRows(
@@ -222,6 +265,7 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 }
 
 export default function InventoryAnalysisPage() {
+  const [initialFilters] = useState(readPersistedAnalysisFilters);
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
   const [pcMap, setPcMap] = useState<Map<string, PCEntry>>(new Map());
   const [orcMap, setOrcMap] = useState<Map<string, OrcEntry>>(new Map());
@@ -229,8 +273,9 @@ export default function InventoryAnalysisPage() {
   const [loadingPCs, setLoadingPCs] = useState(false);
   const [loadingOrcs, setLoadingOrcs] = useState(false);
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
-  const [searchTerm, setSearchTerm] = useState('');
-  const [grupoFilter, setGrupoFilter] = useState<string>('__all__');
+  const [searchTerm, setSearchTerm] = useState(initialFilters.searchTerm);
+  const [grupoFilter, setGrupoFilter] = useState<string>(initialFilters.grupoFilter);
+  const [activeTab, setActiveTab] = useState<AnalysisTab>(DEFAULT_ANALYSIS_TAB);
   const [syncingLT, setSyncingLT] = useState(false);
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
@@ -352,21 +397,32 @@ export default function InventoryAnalysisPage() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [analysisItems]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      window.localStorage.setItem(
+        ANALYSIS_FILTER_STORAGE_KEY,
+        JSON.stringify({ searchTerm, grupoFilter }),
+      );
+    } catch {
+      // ignore persistence failures
+    }
+  }, [searchTerm, grupoFilter]);
+
+  useEffect(() => {
+    if (grupoFilter === ALL_GROUPS_VALUE || grupoFilter === 'Sem grupo' || uniqueGrupos.length === 0) {
+      return;
+    }
+
+    if (!uniqueGrupos.includes(grupoFilter)) {
+      setGrupoFilter(ALL_GROUPS_VALUE);
+    }
+  }, [grupoFilter, uniqueGrupos]);
+
   // Filtered items (search + grupo)
   const filteredItems = useMemo(() => {
-    let items = analysisItems;
-    if (grupoFilter !== '__all__') {
-      items = items.filter(i => (i.grupo || 'Sem grupo') === grupoFilter);
-    }
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      items = items.filter(i =>
-        i.nome.toLowerCase().includes(q) ||
-        i.codigo_interno?.toLowerCase().includes(q) ||
-        i.produto_id.includes(q)
-      );
-    }
-    return items;
+    return analysisItems.filter((item) => matchesAnalysisFilters(item, searchTerm, grupoFilter));
   }, [analysisItems, searchTerm, grupoFilter]);
 
   // Trend chart data
@@ -401,19 +457,10 @@ export default function InventoryAnalysisPage() {
   // Purchase suggestions: price-based client thresholds
   // < R$1000 unit cost: 2+ unique clients; >= R$1000: 3+ unique clients
   const purchaseItems = useMemo(() => {
-    let base = analysisItems;
-    if (grupoFilter !== '__all__') {
-      base = base.filter(i => (i.grupo || 'Sem grupo') === grupoFilter);
-    }
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase();
-      base = base.filter(i =>
-        i.nome.toLowerCase().includes(q) ||
-        i.codigo_interno?.toLowerCase().includes(q) ||
-        i.produto_id.includes(q)
-      );
-    }
-    return base.filter(i => {
+    return analysisItems.filter((item) => {
+      if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
+
+      const i = item;
       if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
@@ -732,6 +779,8 @@ export default function InventoryAnalysisPage() {
     { name: 'B', count: kpis.bCount, fill: 'hsl(45 93% 47%)' },
     { name: 'C', count: kpis.cCount, fill: 'hsl(142 71% 45%)' },
   ];
+  const showStickyFilters = activeTab === 'ranking' || (activeTab === 'compras' && stockMap.size > 0);
+  const activeFilterCount = activeTab === 'compras' ? purchaseItems.length : filteredItems.length;
 
   return (
     <div className="max-w-[1400px] mx-auto p-4 sm:p-6 space-y-6">
@@ -792,13 +841,46 @@ export default function InventoryAnalysisPage() {
       </div>
 
       {/* Main Tabs */}
-      <Tabs defaultValue="compras">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AnalysisTab)}>
         <TabsList className="flex-wrap">
           <TabsTrigger value="compras" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" /> Lista de Compras</TabsTrigger>
           <TabsTrigger value="ranking" className="gap-1"><BarChart3 className="h-3.5 w-3.5" /> Ranking ABC</TabsTrigger>
           <TabsTrigger value="leadtime" className="gap-1"><Clock className="h-3.5 w-3.5" /> Lead Times</TabsTrigger>
           <TabsTrigger value="trend" className="gap-1"><TrendingUp className="h-3.5 w-3.5" /> Tendência</TabsTrigger>
         </TabsList>
+
+        {showStickyFilters && (
+          <div className="sticky top-14 z-20 mt-4">
+            <Card className="border-border/80 bg-background/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    placeholder="Buscar por nome, código ou ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-9 w-full text-sm sm:max-w-sm"
+                  />
+                  <Select value={grupoFilter} onValueChange={setGrupoFilter}>
+                    <SelectTrigger className="h-9 w-full text-xs sm:w-[220px]">
+                      <Filter className="mr-1 h-3 w-3" />
+                      <SelectValue placeholder="Filtrar grupo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_GROUPS_VALUE}>Todos os grupos</SelectItem>
+                      {uniqueGrupos.map((g) => (
+                        <SelectItem key={g} value={g}>{g}</SelectItem>
+                      ))}
+                      <SelectItem value="Sem grupo">Sem grupo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Badge variant="secondary" className="w-fit">
+                  {activeFilterCount} {activeTab === 'compras' ? 'produto(s) na lista' : 'produto(s) filtrado(s)'}
+                </Badge>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {/* LISTA DE COMPRAS (default tab) */}
         <TabsContent value="compras" className="mt-4 space-y-4">
@@ -823,25 +905,6 @@ export default function InventoryAnalysisPage() {
                 )}
               </div>
               <div className="flex gap-2 items-center flex-wrap">
-                <Input
-                  placeholder="Buscar produto..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="h-8 w-[180px] text-xs"
-                />
-                <Select value={grupoFilter} onValueChange={setGrupoFilter}>
-                  <SelectTrigger className="h-8 w-[200px] text-xs">
-                    <Filter className="h-3 w-3 mr-1" />
-                    <SelectValue placeholder="Filtrar grupo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">Todos os grupos</SelectItem>
-                    {uniqueGrupos.map(g => (
-                      <SelectItem key={g} value={g}>{g}</SelectItem>
-                    ))}
-                    <SelectItem value="Sem grupo">Sem grupo</SelectItem>
-                  </SelectContent>
-                </Select>
                 <Button variant="outline" size="sm" onClick={handleFetchPCs} disabled={loadingPCs} className="gap-1">
                   {loadingPCs ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                   {loadingPCs ? 'Buscando PCs...' : pcMap.size > 0 ? 'Atualizar PCs' : 'Cruzar c/ PCs'}
@@ -1003,29 +1066,6 @@ export default function InventoryAnalysisPage() {
 
         {/* RANKING ABC */}
         <TabsContent value="ranking" className="mt-4 space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Input
-              placeholder="Buscar por nome, código ou ID..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="max-w-sm h-9"
-            />
-            <Select value={grupoFilter} onValueChange={setGrupoFilter}>
-              <SelectTrigger className="h-9 w-[200px] text-xs">
-                <Filter className="h-3 w-3 mr-1" />
-                <SelectValue placeholder="Filtrar grupo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">Todos os grupos</SelectItem>
-                {uniqueGrupos.map(g => (
-                  <SelectItem key={g} value={g}>{g}</SelectItem>
-                ))}
-                <SelectItem value="Sem grupo">Sem grupo</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground">{filteredItems.length} produtos</span>
-          </div>
-
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             <div className="lg:col-span-3 rounded-lg border overflow-auto max-h-[500px]">
               <Table>

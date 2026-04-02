@@ -36,6 +36,7 @@ const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
   purchase_lt_start_situacao_id: '1675083',
   purchase_arrived_situacao_ids: [],
   purchase_crossref_situacao_ids: [],
+  budget_crossref_situacao_ids: [],
 };
 
 export default function InventoryPolicyPage() {

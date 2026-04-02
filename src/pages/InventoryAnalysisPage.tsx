@@ -281,7 +281,7 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
 async function fetchConfig() {
   const { data } = await supabase
     .from('inventory_policy_config' as any)
-    .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids')
+    .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
     .order('created_at', { ascending: false })
     .limit(1);
   return (data as any[])?.[0] || { lookback_days: 180, abc_thresholds: { A: 0.8, B: 0.95 }, purchase_crossref_situacao_ids: [] };
@@ -314,6 +314,7 @@ export default function InventoryAnalysisPage() {
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
   const lookbackDays = configQuery.data?.lookback_days || 180;
   const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
+  const budgetSituacaoIds: string[] = configQuery.data?.budget_crossref_situacao_ids || [];
 
   const consumptionQuery = useQuery({
     queryKey: ['inv-consumption', lookbackDays],
@@ -556,28 +557,33 @@ export default function InventoryAnalysisPage() {
   const handleFetchOrcamentos = useCallback(async () => {
     setLoadingOrcs(true);
     try {
-      // Get all budget statuses and find "Aguardando Aprovação"
-      const statuses = await getStatusOrcamentos();
-      const aguardando = statuses?.find(s => s.nome.toLowerCase().includes('aguardando aprov'));
-      if (!aguardando) {
-        toast.error('Status "Aguardando Aprovação" não encontrado.');
-        setLoadingOrcs(false);
-        return;
+      // Use configured budget statuses, fallback to "Aguardando Aprovação"
+      let statusIds = budgetSituacaoIds;
+      if (!statusIds || statusIds.length === 0) {
+        const statuses = await getStatusOrcamentos();
+        const aguardando = statuses?.find(s => s.nome.toLowerCase().includes('aguardando aprov'));
+        if (!aguardando) {
+          toast.error('Status "Aguardando Aprovação" não encontrado. Configure as situações de orçamento na Política de Estoque.');
+          setLoadingOrcs(false);
+          return;
+        }
+        statusIds = [aguardando.id];
       }
 
       // Date range: same lookback as consumption analysis
       const now = new Date();
       const start = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-      const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
       const allOrcs: GCOrcamento[] = [];
-      let page = 1;
-      while (true) {
-        const res = await listOrcamentos(aguardando.id, page);
-        allOrcs.push(...res.data);
-        if (page >= res.meta.total_paginas) break;
-        page++;
-        await new Promise(r => setTimeout(r, 400));
+      for (const sid of statusIds) {
+        let page = 1;
+        while (true) {
+          const res = await listOrcamentos(sid, page);
+          allOrcs.push(...res.data);
+          if (page >= res.meta.total_paginas) break;
+          page++;
+          await new Promise(r => setTimeout(r, 400));
+        }
       }
 
       // Client-side date filter (API may not support date_inicio/date_fim reliably)
@@ -615,13 +621,13 @@ export default function InventoryAnalysisPage() {
       }
 
       setOrcMap(newOrcMap);
-      toast.success(`${pending.length} orçamentos (${lookbackDays}d, ${aguardando.nome}) · ${newOrcMap.size} produtos`);
+      toast.success(`${pending.length} orçamentos (${lookbackDays}d, ${statusIds.length} situação(ões)) · ${newOrcMap.size} produtos`);
     } catch (err) {
       toast.error('Erro ao buscar orçamentos: ' + (err instanceof Error ? err.message : 'Erro'));
     } finally {
       setLoadingOrcs(false);
     }
-  }, [lookbackDays]);
+  }, [lookbackDays, budgetSituacaoIds]);
 
   // Bulk fetch stock for ALL products via paginated edge function
   const handleFetchStock = useCallback(async () => {

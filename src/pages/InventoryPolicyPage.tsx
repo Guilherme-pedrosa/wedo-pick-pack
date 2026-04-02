@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getStatusOS, getStatusVendas } from '@/api/gestaoclick';
-import { getStatusCompras } from '@/api/compras';
+import { getStatusCompras, getStatusOrcamentos } from '@/api/compras';
 import { logSystemAction } from '@/lib/systemLog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ interface PolicyConfig {
   purchase_lt_start_situacao_id: string;
   purchase_arrived_situacao_ids: string[];
   purchase_crossref_situacao_ids: string[];
+  budget_crossref_situacao_ids: string[];
 }
 
 const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
@@ -35,6 +36,7 @@ const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
   purchase_lt_start_situacao_id: '1675083',
   purchase_arrived_situacao_ids: [],
   purchase_crossref_situacao_ids: [],
+  budget_crossref_situacao_ids: [],
 };
 
 export default function InventoryPolicyPage() {
@@ -75,6 +77,7 @@ export default function InventoryPolicyPage() {
         purchase_lt_start_situacao_id: d.purchase_lt_start_situacao_id || '1675083',
         purchase_arrived_situacao_ids: d.purchase_arrived_situacao_ids || [],
         purchase_crossref_situacao_ids: d.purchase_crossref_situacao_ids || [],
+        budget_crossref_situacao_ids: d.budget_crossref_situacao_ids || [],
       });
     }
   }, [configQuery.data]);
@@ -83,6 +86,7 @@ export default function InventoryPolicyPage() {
   const osStatuses = useQuery({ queryKey: ['statuses', 'os'], queryFn: getStatusOS });
   const vendaStatuses = useQuery({ queryKey: ['statuses', 'venda'], queryFn: getStatusVendas });
   const compraStatuses = useQuery({ queryKey: ['statuses', 'compra'], queryFn: getStatusCompras });
+  const orcamentoStatuses = useQuery({ queryKey: ['statuses', 'orcamento'], queryFn: getStatusOrcamentos });
 
   const toggleList = (list: string[], id: string): string[] =>
     list.includes(id) ? list.filter(s => s !== id) : [...list, id];
@@ -99,6 +103,7 @@ export default function InventoryPolicyPage() {
         purchase_lt_start_situacao_id: config.purchase_lt_start_situacao_id,
         purchase_arrived_situacao_ids: config.purchase_arrived_situacao_ids,
         purchase_crossref_situacao_ids: config.purchase_crossref_situacao_ids,
+        budget_crossref_situacao_ids: config.budget_crossref_situacao_ids,
         updated_at: new Date().toISOString(),
       };
 
@@ -215,6 +220,7 @@ export default function InventoryPolicyPage() {
             <TabsTrigger value="vendas" className="flex-1">Vendas (OUT)</TabsTrigger>
             <TabsTrigger value="os" className="flex-1">OS (OUT)</TabsTrigger>
             <TabsTrigger value="compras" className="flex-1">Compras (Lead Time)</TabsTrigger>
+            <TabsTrigger value="orcamentos" className="flex-1">Orçamentos</TabsTrigger>
           </TabsList>
 
           {/* VENDAS */}
@@ -350,6 +356,41 @@ export default function InventoryPolicyPage() {
               {config.purchase_crossref_situacao_ids.length === 0 && (
                 <p className="text-xs text-amber-600 mt-2">
                   ⚠️ Nenhuma situação selecionada — o cruzamento com PCs não será feito na análise de estoque
+                </p>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ORÇAMENTOS */}
+          <TabsContent value="orcamentos" className="space-y-4 mt-4">
+            <div>
+              <h3 className="text-sm font-medium mb-2">📋 Situações de Orçamento para cruzamento</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Na Análise de Estoque, o botão "Cruzar c/ Orçamentos" buscará orçamentos <strong>nessas situações</strong> para prever demanda futura e calcular a necessidade de compra.
+              </p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {orcamentoStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(orcamentoStatuses.data || []).map(s => (
+                  <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={config.budget_crossref_situacao_ids.includes(s.id)}
+                      onCheckedChange={() =>
+                        setConfig(c => c ? { ...c, budget_crossref_situacao_ids: toggleList(c.budget_crossref_situacao_ids, s.id) } : c)
+                      }
+                    />
+                    <span className="text-sm">{s.nome}</span>
+                    <span className="text-xs text-muted-foreground">({s.id})</span>
+                  </label>
+                ))}
+              </div>
+              {config.budget_crossref_situacao_ids.length > 0 && (
+                <p className="text-xs text-primary mt-2 font-medium">
+                  ✅ {config.budget_crossref_situacao_ids.length} situação(ões) selecionada(s)
+                </p>
+              )}
+              {config.budget_crossref_situacao_ids.length === 0 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Nenhuma situação selecionada — o cruzamento com orçamentos usará apenas "Aguardando Aprovação"
                 </p>
               )}
             </div>

@@ -220,6 +220,7 @@ export default function InventoryPolicyPage() {
             <TabsTrigger value="vendas" className="flex-1">Vendas (OUT)</TabsTrigger>
             <TabsTrigger value="os" className="flex-1">OS (OUT)</TabsTrigger>
             <TabsTrigger value="compras" className="flex-1">Compras (Lead Time)</TabsTrigger>
+            <TabsTrigger value="orcamentos" className="flex-1">Orçamentos</TabsTrigger>
           </TabsList>
 
           {/* VENDAS */}

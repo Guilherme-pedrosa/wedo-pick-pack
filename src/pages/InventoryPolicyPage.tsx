@@ -360,6 +360,41 @@ export default function InventoryPolicyPage() {
               )}
             </div>
           </TabsContent>
+
+          {/* ORÇAMENTOS */}
+          <TabsContent value="orcamentos" className="space-y-4 mt-4">
+            <div>
+              <h3 className="text-sm font-medium mb-2">📋 Situações de Orçamento para cruzamento</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Na Análise de Estoque, o botão "Cruzar c/ Orçamentos" buscará orçamentos <strong>nessas situações</strong> para prever demanda futura e calcular a necessidade de compra.
+              </p>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {orcamentoStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(orcamentoStatuses.data || []).map(s => (
+                  <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={config.budget_crossref_situacao_ids.includes(s.id)}
+                      onCheckedChange={() =>
+                        setConfig(c => c ? { ...c, budget_crossref_situacao_ids: toggleList(c.budget_crossref_situacao_ids, s.id) } : c)
+                      }
+                    />
+                    <span className="text-sm">{s.nome}</span>
+                    <span className="text-xs text-muted-foreground">({s.id})</span>
+                  </label>
+                ))}
+              </div>
+              {config.budget_crossref_situacao_ids.length > 0 && (
+                <p className="text-xs text-primary mt-2 font-medium">
+                  ✅ {config.budget_crossref_situacao_ids.length} situação(ões) selecionada(s)
+                </p>
+              )}
+              {config.budget_crossref_situacao_ids.length === 0 && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Nenhuma situação selecionada — o cruzamento com orçamentos usará apenas "Aguardando Aprovação"
+                </p>
+              )}
+            </div>
+          </TabsContent>
         </Tabs>
       </Card>
 

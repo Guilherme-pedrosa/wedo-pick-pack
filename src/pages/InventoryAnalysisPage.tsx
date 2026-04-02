@@ -18,6 +18,13 @@ import { cn } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 // --- Types ---
+interface SourceRef {
+  source_id: string;
+  source_type: string;
+  qty: number;
+  cliente: string;
+}
+
 interface ConsumptionRow {
   produto_id: string;
   variacao_id: string | null;
@@ -27,6 +34,7 @@ interface ConsumptionRow {
   first_date: string;
   last_date: string;
   hybrid_score: number;
+  source_refs: SourceRef[];
 }
 
 interface ProductInfo {
@@ -93,6 +101,7 @@ interface AnalysisItem {
   pc_refs: PCRef[];
   orc_qty: number;
   orc_refs: OrcRef[];
+  source_refs: SourceRef[];
   coverage_target: number;
 }
 
@@ -178,28 +187,39 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
 
   const rows = await fetchAllRows(
     'inventory_consumption_events',
-    'produto_id, variacao_id, qty, valor_custo, occurred_at, source_id, cliente_nome',
+    'produto_id, variacao_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
     { gte: ['occurred_at', cutoffStr] },
   );
 
-  const map = new Map<string, ConsumptionRow & { _sources: Set<string>; _clients: Set<string> }>();
+  const map = new Map<string, ConsumptionRow & { _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef> }>();
   for (const r of rows) {
     const key = r.produto_id;
     if (!key || key.trim() === '') continue;
     const qty = parseFloat(r.qty) || 0;
     const val = (parseFloat(r.valor_custo) || 0) * qty;
     const sourceId = r.source_id || '';
-    const clientKey = (r.cliente_nome || sourceId).toLowerCase().trim();
+    const sourceType = r.source_type || '';
+    const cliente = r.cliente_nome || '';
+    const clientKey = (cliente || sourceId).toLowerCase().trim();
     const existing = map.get(key);
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
       existing._sources.add(sourceId);
       existing._clients.add(clientKey);
-      existing.event_count = existing._clients.size; // unique clients
+      existing.event_count = existing._clients.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
+      // Aggregate source refs by source_id
+      const existingRef = existing._sourceRefs.get(sourceId);
+      if (existingRef) {
+        existingRef.qty += qty;
+      } else {
+        existing._sourceRefs.set(sourceId, { source_id: sourceId, source_type: sourceType, qty, cliente });
+      }
     } else {
+      const refMap = new Map<string, SourceRef>();
+      refMap.set(sourceId, { source_id: sourceId, source_type: sourceType, qty, cliente });
       map.set(key, {
         produto_id: r.produto_id,
         variacao_id: r.variacao_id,
@@ -209,10 +229,17 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         first_date: r.occurred_at,
         last_date: r.occurred_at,
         hybrid_score: 0,
+        source_refs: [],
         _sources: new Set([sourceId]),
         _clients: new Set([clientKey]),
+        _sourceRefs: refMap,
       });
     }
+  }
+
+  // Finalize source_refs from map
+  for (const row of map.values()) {
+    row.source_refs = [...row._sourceRefs.values()];
   }
 
   // Hybrid score: total_value × daily_frequency
@@ -386,6 +413,7 @@ export default function InventoryAnalysisPage() {
         pc_refs: pcRefs,
         orc_qty: orcQty,
         orc_refs: orcRefs,
+        source_refs: r.source_refs || [],
         coverage_target: coverageTarget,
       };
     });
@@ -1025,7 +1053,15 @@ export default function InventoryAnalysisPage() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                         <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
-                        <TableCell className="text-right text-xs">{item.event_count}</TableCell>
+                        <TableCell className="text-right text-xs">
+                          {item.event_count}
+                          {item.source_refs.length > 0 && (
+                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => `${r.source_type.toUpperCase()} ${r.source_id}: ${Math.round(r.qty)}un (${r.cliente})`).join('\n')}>
+                              {item.source_refs.slice(0, 3).map(r => `${r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase()}${r.source_id}`).join(', ')}
+                              {item.source_refs.length > 3 && ` +${item.source_refs.length - 3}`}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>
                         <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
                         <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
@@ -1040,8 +1076,8 @@ export default function InventoryAnalysisPage() {
                           {item.orc_qty > 0 ? (
                             <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
                               {item.orc_qty}un
-                              <span className="text-[10px] text-muted-foreground block">
-                                {item.orc_refs.length} orç.
+                              <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate">
+                                {item.orc_refs.map(r => `#${r.codigo}`).join(', ')}
                               </span>
                             </span>
                           ) : (

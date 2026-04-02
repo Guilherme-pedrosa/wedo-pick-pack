@@ -557,28 +557,33 @@ export default function InventoryAnalysisPage() {
   const handleFetchOrcamentos = useCallback(async () => {
     setLoadingOrcs(true);
     try {
-      // Get all budget statuses and find "Aguardando Aprovação"
-      const statuses = await getStatusOrcamentos();
-      const aguardando = statuses?.find(s => s.nome.toLowerCase().includes('aguardando aprov'));
-      if (!aguardando) {
-        toast.error('Status "Aguardando Aprovação" não encontrado.');
-        setLoadingOrcs(false);
-        return;
+      // Use configured budget statuses, fallback to "Aguardando Aprovação"
+      let statusIds = budgetSituacaoIds;
+      if (!statusIds || statusIds.length === 0) {
+        const statuses = await getStatusOrcamentos();
+        const aguardando = statuses?.find(s => s.nome.toLowerCase().includes('aguardando aprov'));
+        if (!aguardando) {
+          toast.error('Status "Aguardando Aprovação" não encontrado. Configure as situações de orçamento na Política de Estoque.');
+          setLoadingOrcs(false);
+          return;
+        }
+        statusIds = [aguardando.id];
       }
 
       // Date range: same lookback as consumption analysis
       const now = new Date();
       const start = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-      const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 
       const allOrcs: GCOrcamento[] = [];
-      let page = 1;
-      while (true) {
-        const res = await listOrcamentos(aguardando.id, page);
-        allOrcs.push(...res.data);
-        if (page >= res.meta.total_paginas) break;
-        page++;
-        await new Promise(r => setTimeout(r, 400));
+      for (const sid of statusIds) {
+        let page = 1;
+        while (true) {
+          const res = await listOrcamentos(sid, page);
+          allOrcs.push(...res.data);
+          if (page >= res.meta.total_paginas) break;
+          page++;
+          await new Promise(r => setTimeout(r, 400));
+        }
       }
 
       // Client-side date filter (API may not support date_inicio/date_fim reliably)

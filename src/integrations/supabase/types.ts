@@ -442,6 +442,7 @@ export type Database = {
       inventory_policy_config: {
         Row: {
           abc_thresholds: Json
+          budget_crossref_situacao_ids: Json
           created_at: string
           id: string
           lookback_days: number
@@ -455,6 +456,7 @@ export type Database = {
         }
         Insert: {
           abc_thresholds?: Json
+          budget_crossref_situacao_ids?: Json
           created_at?: string
           id?: string
           lookback_days?: number
@@ -468,6 +470,7 @@ export type Database = {
         }
         Update: {
           abc_thresholds?: Json
+          budget_crossref_situacao_ids?: Json
           created_at?: string
           id?: string
           lookback_days?: number

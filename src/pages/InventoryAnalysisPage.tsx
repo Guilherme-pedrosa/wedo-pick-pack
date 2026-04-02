@@ -85,6 +85,7 @@ interface AnalysisItem {
   fornecedor_id: string | null;
   fornecedor_nome: string | null;
   grupo: string | null;
+  valor_custo: number | null;
   total_qty: number;
   total_value: number;
   event_count: number;

@@ -1028,6 +1028,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="w-12">ABC</TableHead>
                       <TableHead>Produto</TableHead>
                       <TableHead>Grupo</TableHead>
+                      <TableHead className="text-right">Custo Unit.</TableHead>
                       <TableHead className="text-right">Saída (peças)</TableHead>
                       <TableHead className="text-right">OS</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>

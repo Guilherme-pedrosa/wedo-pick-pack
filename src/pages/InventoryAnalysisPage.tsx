@@ -1053,7 +1053,15 @@ export default function InventoryAnalysisPage() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                         <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
-                        <TableCell className="text-right text-xs">{item.event_count}</TableCell>
+                        <TableCell className="text-right text-xs">
+                          {item.event_count}
+                          {item.source_refs.length > 0 && (
+                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => `${r.source_type.toUpperCase()} ${r.source_id}: ${Math.round(r.qty)}un (${r.cliente})`).join('\n')}>
+                              {item.source_refs.slice(0, 3).map(r => `${r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase()}${r.source_id}`).join(', ')}
+                              {item.source_refs.length > 3 && ` +${item.source_refs.length - 3}`}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">{item.estoque_atual}</TableCell>
                         <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
                         <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
@@ -1068,8 +1076,8 @@ export default function InventoryAnalysisPage() {
                           {item.orc_qty > 0 ? (
                             <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
                               {item.orc_qty}un
-                              <span className="text-[10px] text-muted-foreground block">
-                                {item.orc_refs.length} orç.
+                              <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate">
+                                {item.orc_refs.map(r => `#${r.codigo}`).join(', ')}
                               </span>
                             </span>
                           ) : (

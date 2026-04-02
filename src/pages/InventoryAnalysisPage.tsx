@@ -627,7 +627,7 @@ export default function InventoryAnalysisPage() {
     } finally {
       setLoadingOrcs(false);
     }
-  }, [lookbackDays]);
+  }, [lookbackDays, budgetSituacaoIds]);
 
   // Bulk fetch stock for ALL products via paginated edge function
   const handleFetchStock = useCallback(async () => {

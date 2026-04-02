@@ -224,7 +224,10 @@ async function processDocument(
   if (items.length === 0) return;
 
   const now = new Date().toISOString();
-  const occurredAt = doc.data || now;
+  // OS uses data_saida or data_entrada; Vendas uses data
+  const occurredAt = docType === 'os'
+    ? (doc.data_saida || doc.data_entrada || doc.data || now)
+    : (doc.data || now);
   const clienteNome = doc.nome_cliente || doc.cliente?.nome || null;
 
   const events = items.map(item => ({

@@ -397,6 +397,7 @@ export default function InventoryAnalysisPage() {
         nome: info?.nome || `Produto ${r.produto_id}`,
         codigo_interno: info?.codigo_interno || null,
         grupo: info?.grupo || null,
+        valor_custo: info?.valor_custo ?? null,
         fornecedor_id: fornecedorId,
         fornecedor_nome: fornecedorNome,
         total_qty: r.total_qty,

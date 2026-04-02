@@ -43,6 +43,7 @@ interface ProductInfo {
   codigo_interno: string | null;
   fornecedor_id: string | null;
   grupo: string | null;
+  valor_custo: number | null;
 }
 
 interface SupplierLeadTime {
@@ -84,6 +85,7 @@ interface AnalysisItem {
   fornecedor_id: string | null;
   fornecedor_nome: string | null;
   grupo: string | null;
+  valor_custo: number | null;
   total_qty: number;
   total_value: number;
   event_count: number;
@@ -271,7 +273,8 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
   for (const p of (data || [])) {
     const payload = (p as any).payload_min_json;
     const grupo = payload?.nome_grupo || null;
-    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null, grupo });
+    const valorCusto = payload?.valor_custo ? parseFloat(payload.valor_custo) : null;
+    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null, grupo, valor_custo: valorCusto });
   }
   return map;
 }
@@ -394,6 +397,7 @@ export default function InventoryAnalysisPage() {
         nome: info?.nome || `Produto ${r.produto_id}`,
         codigo_interno: info?.codigo_interno || null,
         grupo: info?.grupo || null,
+        valor_custo: info?.valor_custo ?? null,
         fornecedor_id: fornecedorId,
         fornecedor_nome: fornecedorNome,
         total_qty: r.total_qty,
@@ -1024,6 +1028,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="w-12">ABC</TableHead>
                       <TableHead>Produto</TableHead>
                       <TableHead>Grupo</TableHead>
+                      <TableHead className="text-right">Custo Unit.</TableHead>
                       <TableHead className="text-right">Saída (peças)</TableHead>
                       <TableHead className="text-right">OS</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
@@ -1052,6 +1057,9 @@ export default function InventoryAnalysisPage() {
                           </p>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
+                        <TableCell className="text-right text-xs">
+                          {item.valor_custo !== null ? `R$ ${item.valor_custo.toFixed(2)}` : '—'}
+                        </TableCell>
                         <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
                         <TableCell className="text-right text-xs">
                           {item.event_count}

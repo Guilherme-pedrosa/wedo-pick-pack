@@ -863,19 +863,44 @@ export default function InventoryAnalysisPage() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="h-9 w-full text-sm sm:max-w-sm"
                   />
-                  <Select value={grupoFilter} onValueChange={setGrupoFilter}>
-                    <SelectTrigger className="h-9 w-full text-xs sm:w-[220px]">
-                      <Filter className="mr-1 h-3 w-3" />
-                      <SelectValue placeholder="Filtrar grupo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ALL_GROUPS_VALUE}>Todos os grupos</SelectItem>
-                      {uniqueGrupos.map((g) => (
-                        <SelectItem key={g} value={g}>{g}</SelectItem>
-                      ))}
-                      <SelectItem value="Sem grupo">Sem grupo</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" role="combobox" className="h-9 w-full justify-between text-xs sm:w-[260px]">
+                        <div className="flex items-center gap-1 truncate">
+                          <Filter className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{grupoFilter === ALL_GROUPS_VALUE ? 'Todos os grupos' : grupoFilter}</span>
+                        </div>
+                        <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[300px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar grupo..." />
+                        <CommandList>
+                          <CommandEmpty>Nenhum grupo encontrado.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value={ALL_GROUPS_VALUE}
+                              onSelect={() => setGrupoFilter(ALL_GROUPS_VALUE)}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", grupoFilter === ALL_GROUPS_VALUE ? "opacity-100" : "opacity-0")} />
+                              Todos os grupos
+                            </CommandItem>
+                            {uniqueGrupos.map((g) => (
+                              <CommandItem key={g} value={g} onSelect={() => setGrupoFilter(g)}>
+                                <Check className={cn("mr-2 h-4 w-4", grupoFilter === g ? "opacity-100" : "opacity-0")} />
+                                {g}
+                              </CommandItem>
+                            ))}
+                            <CommandItem value="Sem grupo" onSelect={() => setGrupoFilter('Sem grupo')}>
+                              <Check className={cn("mr-2 h-4 w-4", grupoFilter === 'Sem grupo' ? "opacity-100" : "opacity-0")} />
+                              Sem grupo
+                            </CommandItem>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <Badge variant="secondary" className="w-fit">
                   {activeFilterCount} {activeTab === 'compras' ? 'produto(s) na lista' : 'produto(s) filtrado(s)'}

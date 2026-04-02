@@ -25,6 +25,7 @@ interface PolicyConfig {
   purchase_lt_start_situacao_id: string;
   purchase_arrived_situacao_ids: string[];
   purchase_crossref_situacao_ids: string[];
+  budget_crossref_situacao_ids: string[];
 }
 
 const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {

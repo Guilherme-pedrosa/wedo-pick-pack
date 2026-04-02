@@ -244,16 +244,15 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     row.source_refs = [...row._sourceRefs.values()];
   }
 
-  // Hybrid score: total_value × daily_frequency
-  // Uses unique client count, not raw row count
+  // Classic ABC: rank by consumption value (unit cost × qty consumed)
+  // hybrid_score field reused to hold consumption_value for backward compat
   for (const row of map.values()) {
-    const dailyFrequency = row.event_count / lookbackDays;
-    row.hybrid_score = row.total_value * dailyFrequency;
+    row.hybrid_score = row.total_value;
   }
 
   // Include any product with at least 1 unique consumption event
   const filtered = [...map.values()].filter(r => r.event_count >= 1);
-  return filtered.sort((a, b) => b.hybrid_score - a.hybrid_score);
+  return filtered.sort((a, b) => b.total_value - a.total_value);
 }
 
 async function fetchTrendData(): Promise<any[]> {

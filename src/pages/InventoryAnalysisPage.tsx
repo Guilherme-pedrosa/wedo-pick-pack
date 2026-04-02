@@ -18,6 +18,13 @@ import { cn } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 // --- Types ---
+interface SourceRef {
+  source_id: string;
+  source_type: string;
+  qty: number;
+  cliente: string;
+}
+
 interface ConsumptionRow {
   produto_id: string;
   variacao_id: string | null;
@@ -27,6 +34,7 @@ interface ConsumptionRow {
   first_date: string;
   last_date: string;
   hybrid_score: number;
+  source_refs: SourceRef[];
 }
 
 interface ProductInfo {

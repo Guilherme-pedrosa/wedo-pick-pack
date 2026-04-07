@@ -588,7 +588,7 @@ const BoxesPage = () => {
             <Input
               value={locatorQuery}
               onChange={(e) => handleLocatorChange(e.target.value)}
-              placeholder="Buscar peça por nome ou código (apenas peças nas caixas)..."
+              placeholder="Buscar peça por nome ou código (em operação e stand by)..."
               className="pl-9"
             />
           </div>

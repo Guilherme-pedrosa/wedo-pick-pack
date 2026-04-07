@@ -578,7 +578,7 @@ const BoxesPage = () => {
         <CollapsibleTrigger asChild>
           <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
             <MapPin className="h-4 w-4" />
-            <span>Localizar Peça nas Caixas</span>
+            <span>Localizar Peça nas Caixas (Em Operação + Stand By)</span>
             <span className="text-xs text-muted-foreground/50 ml-1">{locatorOpen ? "▾" : "▸"}</span>
           </button>
         </CollapsibleTrigger>
@@ -588,7 +588,7 @@ const BoxesPage = () => {
             <Input
               value={locatorQuery}
               onChange={(e) => handleLocatorChange(e.target.value)}
-              placeholder="Buscar peça por nome ou código (apenas peças nas caixas)..."
+              placeholder="Buscar peça por nome ou código (em operação e stand by)..."
               className="pl-9"
             />
           </div>
@@ -614,16 +614,20 @@ const BoxesPage = () => {
                     if (box) loadBoxItems(box);
                   }}
                 >
-                  <Box className={`h-4 w-4 shrink-0 ${r.technician_name ? "text-primary" : "text-warning"}`} />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm font-medium text-foreground">{r.box_name}</span>
-                    {r.technician_name && (
-                      <span className="text-xs text-primary ml-2">
-                        <UserCheck className="h-3 w-3 inline mr-0.5" />
-                        {r.technician_name}
-                      </span>
-                    )}
-                  </div>
+                   <Box className={`h-4 w-4 shrink-0 ${r.technician_name ? "text-primary" : "text-warning"}`} />
+                   <div className="flex-1 min-w-0">
+                     <span className="text-sm font-medium text-foreground">{r.box_name}</span>
+                     {r.technician_name ? (
+                       <span className="text-xs text-primary ml-2">
+                         <UserCheck className="h-3 w-3 inline mr-0.5" />
+                         {r.technician_name}
+                       </span>
+                     ) : (
+                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-2 bg-warning/10 text-warning border-warning/20">
+                         Stand By
+                       </Badge>
+                     )}
+                   </div>
                   <Badge variant="secondary" className="text-xs shrink-0">
                     {r.quantidade}x
                   </Badge>

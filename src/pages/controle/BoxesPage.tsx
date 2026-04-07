@@ -578,7 +578,7 @@ const BoxesPage = () => {
         <CollapsibleTrigger asChild>
           <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
             <MapPin className="h-4 w-4" />
-            <span>Localizar Peça nas Caixas</span>
+            <span>Localizar Peça nas Caixas (Em Operação + Stand By)</span>
             <span className="text-xs text-muted-foreground/50 ml-1">{locatorOpen ? "▾" : "▸"}</span>
           </button>
         </CollapsibleTrigger>

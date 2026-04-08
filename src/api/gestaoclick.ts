@@ -335,12 +335,53 @@ function isInstallmentMismatchError(error: unknown): boolean {
   return message.includes('valor do pedido') && message.includes('valor das parcelas');
 }
 
+function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
+  const valorTotal = parseCurrency(payload.valor_total);
+  if (valorTotal <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
+    return payload;
+  }
+
+  const parcTotal = payload.pagamentos.reduce(
+    (sum: number, p: any) => sum + parseCurrency(p.valor),
+    0
+  );
+
+  // If parcelas already match valor_total (within 0.02), no adjustment needed
+  if (Math.abs(parcTotal - valorTotal) < 0.02) return payload;
+
+  console.warn(`[GC] Pagamentos total (${parcTotal}) ≠ valor_total (${valorTotal}). Recalculating parcelas.`);
+
+  // Single parcela: just set to valor_total
+  if (payload.pagamentos.length === 1) {
+    return {
+      ...payload,
+      pagamentos: [{ ...payload.pagamentos[0], valor: formatCurrency(valorTotal) }],
+    };
+  }
+
+  // Multiple parcelas: distribute proportionally
+  const ratio = valorTotal / (parcTotal || 1);
+  let distributed = 0;
+  const adjusted = payload.pagamentos.map((p: any, i: number) => {
+    if (i === payload.pagamentos.length - 1) {
+      // Last parcela gets the remainder to avoid rounding drift
+      return { ...p, valor: formatCurrency(roundTo(valorTotal - distributed, 2)) };
+    }
+    const newVal = roundTo(parseCurrency(p.valor) * ratio, 2);
+    distributed += newVal;
+    return { ...p, valor: formatCurrency(newVal) };
+  });
+
+  return { ...payload, pagamentos: adjusted };
+}
+
 function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<string, any> {
-  return {
+  const normalized = {
     ...payload,
     produtos: normalizeLineUnitPrice(payload.produtos, 'produto') || payload.produtos,
     servicos: normalizeLineUnitPrice(payload.servicos, 'servico') || payload.servicos,
   };
+  return recalcPagamentos(normalized);
 }
 
 async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {

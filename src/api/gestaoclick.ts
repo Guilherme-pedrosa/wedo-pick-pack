@@ -299,8 +299,31 @@ function formatCurrency(value: number, decimals = 2): string {
   return roundTo(value, decimals).toFixed(decimals);
 }
 
-function hasLineDiscount(item: Record<string, any>): boolean {
-  return parseCurrency(item.desconto_valor) > 0 || parseCurrency(item.desconto_porcentagem) > 0;
+function computeExpectedLineGrossUnitPrice(line: Record<string, any>): number | null {
+  const qty = parseCurrency(line.quantidade);
+  if (qty <= 0) return null;
+
+  const hasLineTotal = String(line.valor_total ?? '').trim() !== '';
+  if (!hasLineTotal) return null;
+
+  const lineTotal = parseCurrency(line.valor_total);
+  const fixedDiscount = parseCurrency(line.desconto_valor);
+  const percentDiscount = parseCurrency(line.desconto_porcentagem);
+
+  // GestãoClick validates PUTs using the gross unit price (before line discounts).
+  // Some documents with fixed discounts come back from GET with valor_venda already
+  // netted down to zero, which makes the ERP subtract the discount twice on update.
+  if (fixedDiscount > 0) {
+    return (lineTotal + fixedDiscount) / qty;
+  }
+
+  if (percentDiscount > 0 && percentDiscount < 100) {
+    const factor = 1 - percentDiscount / 100;
+    if (factor <= 0) return null;
+    return lineTotal / qty / factor;
+  }
+
+  return lineTotal / qty;
 }
 
 function normalizeLineUnitPrice<T extends Record<string, any>>(
@@ -313,18 +336,20 @@ function normalizeLineUnitPrice<T extends Record<string, any>>(
     const line = entry?.[key];
     if (!line || typeof line !== 'object') return entry;
 
-    const qty = parseCurrency(line.quantidade);
-    if (qty <= 0 || hasLineDiscount(line)) return entry;
+    const currentUnit = parseCurrency(line.valor_venda);
+    const expectedGrossUnit = computeExpectedLineGrossUnitPrice(line);
 
-    const lineTotal = parseCurrency(line.valor_total);
-    const normalizedUnit = formatCurrency(lineTotal / qty, 4);
-    if (String(line.valor_venda ?? '') === normalizedUnit) return entry;
+    if (expectedGrossUnit == null || !Number.isFinite(expectedGrossUnit) || expectedGrossUnit < 0) {
+      return entry;
+    }
+
+    if (Math.abs(currentUnit - expectedGrossUnit) < 0.02) return entry;
 
     return {
       ...entry,
       [key]: {
         ...line,
-        valor_venda: normalizedUnit,
+        valor_venda: formatCurrency(expectedGrossUnit, 4),
       },
     };
   });
@@ -360,12 +385,10 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
     0
   );
 
-  // If parcelas already match valor_total (within 0.02), no adjustment needed
   if (Math.abs(parcTotal - valorTotal) < 0.02) return payload;
 
   console.warn(`[GC] Pagamentos total (${parcTotal}) ≠ valor_total (${valorTotal}). Recalculating parcelas.`);
 
-  // Single parcela: just set to valor_total
   if (payload.pagamentos.length === 1) {
     return {
       ...payload,
@@ -373,7 +396,6 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
     };
   }
 
-  // Multiple parcelas: distribute proportionally
   const ratio = valorTotal / (parcTotal || 1);
   let distributed = 0;
   const adjusted = payload.pagamentos.map((p: any, i: number) => {
@@ -398,8 +420,7 @@ function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<
 }
 
 async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
-  // Proactively fix pagamentos mismatch before first attempt
-  const fixedPayload = recalcPagamentos(payload);
+  const fixedPayload = withInstallmentPrecisionFallback(payload);
 
   try {
     return await apiRequest<GCUpdateResponse>(path, {
@@ -409,7 +430,7 @@ async function putStatusWithRetry(path: string, payload: Record<string, any>): P
   } catch (error) {
     if (!isInstallmentMismatchError(error)) throw error;
 
-    console.warn('[GC] Installment mismatch detected. Retrying with normalized line unit prices.');
+    console.warn('[GC] Installment mismatch detected. Retrying with normalized financial payload.');
     return apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
       body: JSON.stringify(withInstallmentPrecisionFallback(fixedPayload)),

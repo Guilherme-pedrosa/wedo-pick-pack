@@ -335,6 +335,20 @@ function isInstallmentMismatchError(error: unknown): boolean {
   return message.includes('valor do pedido') && message.includes('valor das parcelas');
 }
 
+/** Read the valor from a pagamento entry, handling both flat {valor} and nested {pagamento:{valor}} */
+function getPagamentoValor(p: any): number {
+  if (p?.pagamento?.valor != null) return parseCurrency(p.pagamento.valor);
+  return parseCurrency(p?.valor);
+}
+
+/** Set the valor on a pagamento entry, preserving whichever structure it uses */
+function setPagamentoValor(p: any, newValor: string): any {
+  if (p?.pagamento && typeof p.pagamento === 'object') {
+    return { ...p, pagamento: { ...p.pagamento, valor: newValor } };
+  }
+  return { ...p, valor: newValor };
+}
+
 function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
   const valorTotal = parseCurrency(payload.valor_total);
   if (valorTotal <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
@@ -342,7 +356,7 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
   }
 
   const parcTotal = payload.pagamentos.reduce(
-    (sum: number, p: any) => sum + parseCurrency(p.valor),
+    (sum: number, p: any) => sum + getPagamentoValor(p),
     0
   );
 
@@ -355,7 +369,7 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
   if (payload.pagamentos.length === 1) {
     return {
       ...payload,
-      pagamentos: [{ ...payload.pagamentos[0], valor: formatCurrency(valorTotal) }],
+      pagamentos: [setPagamentoValor(payload.pagamentos[0], formatCurrency(valorTotal))],
     };
   }
 
@@ -364,12 +378,11 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
   let distributed = 0;
   const adjusted = payload.pagamentos.map((p: any, i: number) => {
     if (i === payload.pagamentos.length - 1) {
-      // Last parcela gets the remainder to avoid rounding drift
-      return { ...p, valor: formatCurrency(roundTo(valorTotal - distributed, 2)) };
+      return setPagamentoValor(p, formatCurrency(roundTo(valorTotal - distributed, 2)));
     }
-    const newVal = roundTo(parseCurrency(p.valor) * ratio, 2);
+    const newVal = roundTo(getPagamentoValor(p) * ratio, 2);
     distributed += newVal;
-    return { ...p, valor: formatCurrency(newVal) };
+    return setPagamentoValor(p, formatCurrency(newVal));
   });
 
   return { ...payload, pagamentos: adjusted };

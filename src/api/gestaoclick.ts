@@ -385,10 +385,13 @@ function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<
 }
 
 async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
+  // Proactively fix pagamentos mismatch before first attempt
+  const fixedPayload = recalcPagamentos(payload);
+
   try {
     return await apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(fixedPayload),
     });
   } catch (error) {
     if (!isInstallmentMismatchError(error)) throw error;
@@ -396,7 +399,7 @@ async function putStatusWithRetry(path: string, payload: Record<string, any>): P
     console.warn('[GC] Installment mismatch detected. Retrying with normalized line unit prices.');
     return apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
-      body: JSON.stringify(withInstallmentPrecisionFallback(payload)),
+      body: JSON.stringify(withInstallmentPrecisionFallback(fixedPayload)),
     });
   }
 }

@@ -326,6 +326,19 @@ function computeExpectedLineGrossUnitPrice(line: Record<string, any>): number | 
   return lineTotal / qty;
 }
 
+/**
+ * Conservative line price normalization.
+ *
+ * Only fixes the specific double-discount bug where GestãoClick GET returns
+ * `valor_venda = 0` (or near zero) on a line that has a `desconto_valor > 0`.
+ * In that case, sending the payload back as-is causes the ERP to subtract the
+ * discount a second time.
+ *
+ * In all other cases — including normal lines with discounts — we leave
+ * `valor_venda` untouched. The values returned by GET are already consistent
+ * with the installments stored in the ERP, and rewriting them would introduce
+ * sub-cent rounding drift that triggers "valor das parcelas" errors.
+ */
 function normalizeLineUnitPrice<T extends Record<string, any>>(
   items: T[] | undefined,
   key: 'produto' | 'servico'
@@ -336,20 +349,31 @@ function normalizeLineUnitPrice<T extends Record<string, any>>(
     const line = entry?.[key];
     if (!line || typeof line !== 'object') return entry;
 
+    const qty = parseCurrency(line.quantidade);
     const currentUnit = parseCurrency(line.valor_venda);
-    const expectedGrossUnit = computeExpectedLineGrossUnitPrice(line);
+    const fixedDiscount = parseCurrency(line.desconto_valor);
+    const lineTotal = parseCurrency(line.valor_total);
 
-    if (expectedGrossUnit == null || !Number.isFinite(expectedGrossUnit) || expectedGrossUnit < 0) {
-      return entry;
-    }
+    // Only intervene in the exact double-discount scenario:
+    // valor_venda is effectively zero, but the line carries a fixed discount
+    // and a positive line total. Without this fix the ERP would subtract the
+    // discount twice on PUT.
+    const isDoubleDiscountBug =
+      qty > 0 &&
+      fixedDiscount > 0 &&
+      currentUnit < 0.005 &&
+      lineTotal > 0;
 
-    if (Math.abs(currentUnit - expectedGrossUnit) < 0.02) return entry;
+    if (!isDoubleDiscountBug) return entry;
+
+    const grossUnit = (lineTotal + fixedDiscount) / qty;
+    if (!Number.isFinite(grossUnit) || grossUnit <= 0) return entry;
 
     return {
       ...entry,
       [key]: {
         ...line,
-        valor_venda: formatCurrency(expectedGrossUnit, 4),
+        valor_venda: formatCurrency(grossUnit, 4),
       },
     };
   });

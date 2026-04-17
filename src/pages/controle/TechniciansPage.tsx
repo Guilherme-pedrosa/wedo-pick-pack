@@ -339,9 +339,17 @@ const TechniciansPage = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <p className="text-muted-foreground text-sm">
-          Cadastre os técnicos que utilizam as caixas de ferramentas
-        </p>
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-sm">
+            Cadastre os técnicos que utilizam as caixas de ferramentas
+          </p>
+          {verifyingSeparations && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Verificando separações executadas no GestãoClick...
+            </p>
+          )}
+        </div>
         <Button onClick={handleOpenAdd}>
           <UserPlus className="h-4 w-4 mr-2" />
           Cadastrar Técnico

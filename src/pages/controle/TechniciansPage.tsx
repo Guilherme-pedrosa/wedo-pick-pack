@@ -59,6 +59,7 @@ interface ToolboxWithItems {
 interface TechSeparation {
   id: string;
   order_type: string;
+  order_id: string;
   order_code: string;
   client_name: string;
   equipment_name: string | null;
@@ -67,6 +68,7 @@ interface TechSeparation {
   items_confirmed: number;
   concluded_at: string;
   invalidated: boolean;
+  target_status_id: string;
 }
 
 interface TechnicianWithBoxes extends Technician {

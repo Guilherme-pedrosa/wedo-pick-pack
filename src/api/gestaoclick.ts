@@ -412,61 +412,63 @@ function setPagamentoValor(p: any, newValor: string): any {
  * same recomputed subtotal in cents.
  */
 /**
- * Compute the order total the way GestãoClick stores it.
+ * Compute the order total the way GestãoClick's PUT validator does.
  *
- * EMPIRICAL FINDING (OS 9271): the GC server validates installments against
- * the SUM OF THE PER-LINE `valor_total` values (each already rounded to 2
- * decimals on insert), NOT against a re-multiplication of qty × valor_venda.
+ * EMPIRICAL FINDING (OS 9271, simulação real 2026-04-17):
+ * O validador de PUT do GC NÃO soma os `valor_total` já arredondados de cada
+ * linha. Ele recalcula `qty × valor_venda` em precisão total e arredonda
+ * UMA ÚNICA VEZ no final.
  *
- * Example with fractional qty:
- *   line A: 0.600 × 280.57 → stored as 168.34 (raw 168.342)
- *   line B: 0.900 × 280.57 → stored as 252.51 (raw 252.513)
- *   Sum of stored totals = 420.85 ✅ (matches what GC shows)
- *   Sum of raw products  = 420.855 → would round to 420.86 ❌
+ * Exemplo da OS 9271 (com qty fracionária):
+ *   linha A: 0.600 × 280.57 = 168.342
+ *   linha B: 0.900 × 280.57 = 252.513
+ *   Soma raw = 420.855 → arredonda para 420.86 ✅ (que o validador exige)
+ *   Soma dos `valor_total` armazenados = 168.34 + 252.51 = 420.85 ❌
+ *   Diferença = R$ 0,01 → o exato erro "faltando 0.01" reportado pelo GC.
  *
- * If we send installments anchored to the raw sum, GC complains the order
- * total differs from the installments by 0.01. So we anchor to the sum of
- * stored line totals — falling back to recomputing only when a line has no
- * declared `valor_total`.
+ * Por isso, somamos qty × unit (com desconto) para CADA linha em precisão
+ * total, somamos tudo, e arredondamos uma única vez no final.
  */
 function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
-  const lineSumStored = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
+  const lineSumRaw = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
     if (!Array.isArray(arr)) return 0;
     return arr.reduce((s, entry) => {
       const line = entry?.[key] || entry;
-      const declared = line?.valor_total;
-      // Use the stored line total when present (this is what GC sums on its side).
-      if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
-        return s + parseCurrency(declared);
-      }
-      // Fallback: recompute from qty × unit − discount when no stored total.
       const qty = parseCurrency(line?.quantidade);
       const unit = parseCurrency(line?.valor_venda);
       const fixedDiscount = parseCurrency(line?.desconto_valor);
       const percentDiscount = parseCurrency(line?.desconto_porcentagem);
-      if (qty > 0 && unit > 0) {
-        let lineRaw = qty * unit;
-        if (percentDiscount > 0 && percentDiscount < 100) {
-          lineRaw = lineRaw * (1 - percentDiscount / 100);
+
+      // Caso especial: linha sem qty/unit mas com valor_total declarado
+      // (ex.: linhas de serviço sem multiplicação) — usa o declarado.
+      if ((qty <= 0 || unit <= 0)) {
+        const declared = line?.valor_total;
+        if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
+          return s + parseCurrency(declared);
         }
-        return s + Math.round((lineRaw - fixedDiscount) * 100) / 100;
+        return s;
       }
-      return s;
+
+      // Soma RAW (sem arredondar a linha) — o GC valida assim no PUT.
+      let lineRaw = qty * unit;
+      if (percentDiscount > 0 && percentDiscount < 100) {
+        lineRaw = lineRaw * (1 - percentDiscount / 100);
+      }
+      lineRaw -= fixedDiscount;
+      return s + lineRaw;
     }, 0);
   };
 
-  const produtosSum = lineSumStored(payload.produtos, 'produto');
-  const servicosSum = lineSumStored(payload.servicos, 'servico');
-  if (produtosSum <= 0 && servicosSum <= 0) return null;
+  const produtosRaw = lineSumRaw(payload.produtos, 'produto');
+  const servicosRaw = lineSumRaw(payload.servicos, 'servico');
+  if (produtosRaw <= 0 && servicosRaw <= 0) return null;
 
   const desconto = parseCurrency(payload.desconto_valor);
   const frete = parseCurrency(payload.valor_frete);
 
-  const totalCents =
-    Math.round(produtosSum * 100) +
-    Math.round(servicosSum * 100) -
-    Math.round(desconto * 100) +
-    Math.round(frete * 100);
+  // Único arredondamento — no total final, igual ao validador GC.
+  const totalRaw = produtosRaw + servicosRaw - desconto + frete;
+  const totalCents = Math.round(totalRaw * 100);
   return totalCents > 0 ? totalCents : null;
 }
 

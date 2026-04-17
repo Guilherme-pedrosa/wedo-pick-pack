@@ -375,37 +375,46 @@ function setPagamentoValor(p: any, newValor: string): any {
 }
 
 function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
-  const valorTotal = parseCurrency(payload.valor_total);
+  const valorTotal = roundTo(parseCurrency(payload.valor_total), 2);
   if (valorTotal <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
     return payload;
   }
 
-  const parcTotal = payload.pagamentos.reduce(
-    (sum: number, p: any) => sum + getPagamentoValor(p),
-    0
-  );
+  // Sum in cents to avoid floating-point drift
+  const valorTotalCents = Math.round(valorTotal * 100);
+  const parcCentsList = payload.pagamentos.map((p: any) => Math.round(getPagamentoValor(p) * 100));
+  const parcTotalCents = parcCentsList.reduce((s: number, c: number) => s + c, 0);
 
-  if (Math.abs(parcTotal - valorTotal) < 0.02) return payload;
+  // Already exact to the cent — no adjustment needed
+  if (parcTotalCents === valorTotalCents) return payload;
 
-  console.warn(`[GC] Pagamentos total (${parcTotal}) ≠ valor_total (${valorTotal}). Recalculating parcelas.`);
+  console.warn(`[GC] Pagamentos total (${parcTotalCents / 100}) ≠ valor_total (${valorTotal}). Diff=${(valorTotalCents - parcTotalCents) / 100}. Recalculating.`);
 
   if (payload.pagamentos.length === 1) {
     return {
       ...payload,
-      pagamentos: [setPagamentoValor(payload.pagamentos[0], formatCurrency(valorTotal))],
+      pagamentos: [setPagamentoValor(payload.pagamentos[0], formatCurrency(valorTotalCents / 100))],
     };
   }
 
-  const ratio = valorTotal / (parcTotal || 1);
-  let distributed = 0;
-  const adjusted = payload.pagamentos.map((p: any, i: number) => {
+  // Distribute in cents proportionally; assign rounding remainder to last parcel
+  const baseCents = parcTotalCents > 0 ? parcCentsList : payload.pagamentos.map(() => Math.floor(valorTotalCents / payload.pagamentos.length));
+  const baseSum = baseCents.reduce((s: number, c: number) => s + c, 0) || 1;
+
+  let distributedCents = 0;
+  const newCentsList: number[] = payload.pagamentos.map((_: any, i: number) => {
     if (i === payload.pagamentos.length - 1) {
-      return setPagamentoValor(p, formatCurrency(roundTo(valorTotal - distributed, 2)));
+      const last = valorTotalCents - distributedCents;
+      return last;
     }
-    const newVal = roundTo(getPagamentoValor(p) * ratio, 2);
-    distributed += newVal;
-    return setPagamentoValor(p, formatCurrency(newVal));
+    const portion = Math.round((baseCents[i] * valorTotalCents) / baseSum);
+    distributedCents += portion;
+    return portion;
   });
+
+  const adjusted = payload.pagamentos.map((p: any, i: number) =>
+    setPagamentoValor(p, formatCurrency(newCentsList[i] / 100))
+  );
 
   return { ...payload, pagamentos: adjusted };
 }

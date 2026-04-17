@@ -411,24 +411,57 @@ function setPagamentoValor(p: any, newValor: string): any {
  * To avoid this, we anchor BOTH `valor_total` and the installments to the
  * same recomputed subtotal in cents.
  */
+/**
+ * Compute the line total the way GestãoClick does on PUT.
+ *
+ * IMPORTANT: GestãoClick recomputes line totals server-side as
+ *   qty * valor_venda - desconto_valor
+ * and sums those raw products BEFORE rounding. The per-line `valor_total` we
+ * receive on GET is already rounded to 2 decimals, so summing those rounded
+ * values can underestimate the server total by 1-2 cents on lines with
+ * fractional quantities (e.g. 0.600 × 280.57 = 168.342 → stored as 168.34,
+ * but server adds the unrounded 168.342 to other unrounded amounts and only
+ * rounds the final sum).
+ *
+ * To make the installments match what the ERP will actually compute, we sum
+ * the unrounded `qty * valor_venda - desconto_valor` per line and round the
+ * grand total once at the end.
+ */
 function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
-  const lineSum = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
+  const lineSumRaw = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
     if (!Array.isArray(arr)) return 0;
     return arr.reduce((s, entry) => {
       const line = entry?.[key] || entry;
-      return s + Math.round(parseCurrency(line?.valor_total) * 100);
+      const qty = parseCurrency(line?.quantidade);
+      const unit = parseCurrency(line?.valor_venda);
+      const fixedDiscount = parseCurrency(line?.desconto_valor);
+      const percentDiscount = parseCurrency(line?.desconto_porcentagem);
+
+      let lineRaw: number;
+      if (qty > 0 && unit > 0) {
+        lineRaw = qty * unit;
+        if (percentDiscount > 0 && percentDiscount < 100) {
+          lineRaw = lineRaw * (1 - percentDiscount / 100);
+        }
+        lineRaw = lineRaw - fixedDiscount;
+      } else {
+        // Fallback to declared total when we can't recompute
+        lineRaw = parseCurrency(line?.valor_total);
+      }
+      return s + lineRaw;
     }, 0);
   };
 
-  const produtosCents = lineSum(payload.produtos, 'produto');
-  const servicosCents = lineSum(payload.servicos, 'servico');
-  if (produtosCents === 0 && servicosCents === 0) return null;
+  const produtosRaw = lineSumRaw(payload.produtos, 'produto');
+  const servicosRaw = lineSumRaw(payload.servicos, 'servico');
+  if (produtosRaw <= 0 && servicosRaw <= 0) return null;
 
-  const descontoCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
-  const freteCents = Math.round(parseCurrency(payload.valor_frete) * 100);
+  const descontoRaw = parseCurrency(payload.desconto_valor);
+  const freteRaw = parseCurrency(payload.valor_frete);
 
-  const total = produtosCents + servicosCents - descontoCents + freteCents;
-  return total > 0 ? total : null;
+  const totalRaw = produtosRaw + servicosRaw - descontoRaw + freteRaw;
+  const totalCents = Math.round(totalRaw * 100);
+  return totalCents > 0 ? totalCents : null;
 }
 
 function recalcPagamentos(payload: Record<string, any>): Record<string, any> {

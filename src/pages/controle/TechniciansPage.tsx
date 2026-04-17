@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getOS, getVenda } from "@/api/gestaoclick";
 
 interface GCEmployee {
   id: string;
@@ -58,6 +59,7 @@ interface ToolboxWithItems {
 interface TechSeparation {
   id: string;
   order_type: string;
+  order_id: string;
   order_code: string;
   client_name: string;
   equipment_name: string | null;
@@ -66,6 +68,7 @@ interface TechSeparation {
   items_confirmed: number;
   concluded_at: string;
   invalidated: boolean;
+  target_status_id: string;
 }
 
 interface TechnicianWithBoxes extends Technician {
@@ -81,6 +84,7 @@ interface TechnicianWithBoxes extends Technician {
 const TechniciansPage = () => {
   const [technicians, setTechnicians] = useState<TechnicianWithBoxes[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verifyingSeparations, setVerifyingSeparations] = useState(false);
   const [expandedTech, setExpandedTech] = useState<Set<string>>(new Set());
 
   // Add dialog
@@ -117,7 +121,7 @@ const TechniciansPage = () => {
           .eq("status", "active"),
         supabase
           .from("separations")
-          .select("id, order_type, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, concluded_at, invalidated, technician_gc_id")
+          .select("id, order_type, order_id, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, concluded_at, invalidated, technician_gc_id, target_status_id")
           .in("technician_gc_id", gcIds)
           .eq("invalidated", false)
           .order("concluded_at", { ascending: false }),
@@ -196,11 +200,60 @@ const TechniciansPage = () => {
       });
 
       setTechnicians(result);
+
+      // Após carregar, verifica status live no GC e oculta separações já executadas.
+      // Mantém apenas as que ainda estão no target_status_id (ex: "Retirada pelo técnico").
+      verifyAndFilterExecutedSeparations(result);
     } catch {
       toast.error("Erro ao carregar técnicos");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Busca o status atual no GC para cada OS/Venda vinculada e remove
+  // do histórico aquelas que já mudaram de status (foram executadas).
+  const verifyAndFilterExecutedSeparations = async (techs: TechnicianWithBoxes[]) => {
+    const allSeps: TechSeparation[] = techs.flatMap((t) => t.separations);
+    if (allSeps.length === 0) return;
+
+    const orderMap = new Map<string, { order_type: string; order_id: string }>();
+    for (const sep of allSeps) {
+      const key = `${sep.order_type}:${sep.order_id}`;
+      if (!orderMap.has(key)) orderMap.set(key, { order_type: sep.order_type, order_id: sep.order_id });
+    }
+    const uniqueOrders = Array.from(orderMap.values());
+
+    setVerifyingSeparations(true);
+    const liveStatusByKey = new Map<string, string>();
+
+    for (let i = 0; i < uniqueOrders.length; i++) {
+      const { order_type, order_id } = uniqueOrders[i];
+      try {
+        const order = order_type === "os" ? await getOS(order_id) : await getVenda(order_id);
+        liveStatusByKey.set(`${order_type}:${order_id}`, String(order.situacao_id || ""));
+      } catch (err) {
+        console.warn("[Technicians] Falha ao verificar status live", { order_type, order_id, err });
+      }
+      if (i < uniqueOrders.length - 1) {
+        await new Promise((r) => setTimeout(r, 1100));
+      }
+    }
+
+    // Mantém apenas separações cujo status atual ainda bate com target_status_id
+    // (ainda "Retirada pelo técnico" — não executada). Se falhou a verificação, preserva por segurança.
+    setTechnicians((prev) =>
+      prev.map((tech) => {
+        const filteredSeps = tech.separations.filter((sep) => {
+          const key = `${sep.order_type}:${sep.order_id}`;
+          const liveStatus = liveStatusByKey.get(key);
+          if (!liveStatus) return true;
+          return liveStatus === sep.target_status_id;
+        });
+        return { ...tech, separations: filteredSeps };
+      })
+    );
+    setVerifyingSeparations(false);
   };
 
   const toggleExpand = (id: string) => {
@@ -286,9 +339,17 @@ const TechniciansPage = () => {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <p className="text-muted-foreground text-sm">
-          Cadastre os técnicos que utilizam as caixas de ferramentas
-        </p>
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-sm">
+            Cadastre os técnicos que utilizam as caixas de ferramentas
+          </p>
+          {verifyingSeparations && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Verificando separações executadas no GestãoClick...
+            </p>
+          )}
+        </div>
         <Button onClick={handleOpenAdd}>
           <UserPlus className="h-4 w-4 mr-2" />
           Cadastrar Técnico

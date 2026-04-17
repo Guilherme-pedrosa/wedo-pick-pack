@@ -412,55 +412,61 @@ function setPagamentoValor(p: any, newValor: string): any {
  * same recomputed subtotal in cents.
  */
 /**
- * Compute the line total the way GestãoClick does on PUT.
+ * Compute the order total the way GestãoClick stores it.
  *
- * IMPORTANT: GestãoClick recomputes line totals server-side as
- *   qty * valor_venda - desconto_valor
- * and sums those raw products BEFORE rounding. The per-line `valor_total` we
- * receive on GET is already rounded to 2 decimals, so summing those rounded
- * values can underestimate the server total by 1-2 cents on lines with
- * fractional quantities (e.g. 0.600 × 280.57 = 168.342 → stored as 168.34,
- * but server adds the unrounded 168.342 to other unrounded amounts and only
- * rounds the final sum).
+ * EMPIRICAL FINDING (OS 9271): the GC server validates installments against
+ * the SUM OF THE PER-LINE `valor_total` values (each already rounded to 2
+ * decimals on insert), NOT against a re-multiplication of qty × valor_venda.
  *
- * To make the installments match what the ERP will actually compute, we sum
- * the unrounded `qty * valor_venda - desconto_valor` per line and round the
- * grand total once at the end.
+ * Example with fractional qty:
+ *   line A: 0.600 × 280.57 → stored as 168.34 (raw 168.342)
+ *   line B: 0.900 × 280.57 → stored as 252.51 (raw 252.513)
+ *   Sum of stored totals = 420.85 ✅ (matches what GC shows)
+ *   Sum of raw products  = 420.855 → would round to 420.86 ❌
+ *
+ * If we send installments anchored to the raw sum, GC complains the order
+ * total differs from the installments by 0.01. So we anchor to the sum of
+ * stored line totals — falling back to recomputing only when a line has no
+ * declared `valor_total`.
  */
 function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
-  const lineSumRaw = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
+  const lineSumStored = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
     if (!Array.isArray(arr)) return 0;
     return arr.reduce((s, entry) => {
       const line = entry?.[key] || entry;
+      const declared = line?.valor_total;
+      // Use the stored line total when present (this is what GC sums on its side).
+      if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
+        return s + parseCurrency(declared);
+      }
+      // Fallback: recompute from qty × unit − discount when no stored total.
       const qty = parseCurrency(line?.quantidade);
       const unit = parseCurrency(line?.valor_venda);
       const fixedDiscount = parseCurrency(line?.desconto_valor);
       const percentDiscount = parseCurrency(line?.desconto_porcentagem);
-
-      let lineRaw: number;
       if (qty > 0 && unit > 0) {
-        lineRaw = qty * unit;
+        let lineRaw = qty * unit;
         if (percentDiscount > 0 && percentDiscount < 100) {
           lineRaw = lineRaw * (1 - percentDiscount / 100);
         }
-        lineRaw = lineRaw - fixedDiscount;
-      } else {
-        // Fallback to declared total when we can't recompute
-        lineRaw = parseCurrency(line?.valor_total);
+        return s + Math.round((lineRaw - fixedDiscount) * 100) / 100;
       }
-      return s + lineRaw;
+      return s;
     }, 0);
   };
 
-  const produtosRaw = lineSumRaw(payload.produtos, 'produto');
-  const servicosRaw = lineSumRaw(payload.servicos, 'servico');
-  if (produtosRaw <= 0 && servicosRaw <= 0) return null;
+  const produtosSum = lineSumStored(payload.produtos, 'produto');
+  const servicosSum = lineSumStored(payload.servicos, 'servico');
+  if (produtosSum <= 0 && servicosSum <= 0) return null;
 
-  const descontoRaw = parseCurrency(payload.desconto_valor);
-  const freteRaw = parseCurrency(payload.valor_frete);
+  const desconto = parseCurrency(payload.desconto_valor);
+  const frete = parseCurrency(payload.valor_frete);
 
-  const totalRaw = produtosRaw + servicosRaw - descontoRaw + freteRaw;
-  const totalCents = Math.round(totalRaw * 100);
+  const totalCents =
+    Math.round(produtosSum * 100) +
+    Math.round(servicosSum * 100) -
+    Math.round(desconto * 100) +
+    Math.round(frete * 100);
   return totalCents > 0 ? totalCents : null;
 }
 

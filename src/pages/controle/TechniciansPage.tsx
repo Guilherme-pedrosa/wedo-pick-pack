@@ -84,6 +84,7 @@ interface TechnicianWithBoxes extends Technician {
 const TechniciansPage = () => {
   const [technicians, setTechnicians] = useState<TechnicianWithBoxes[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verifyingSeparations, setVerifyingSeparations] = useState(false);
   const [expandedTech, setExpandedTech] = useState<Set<string>>(new Set());
 
   // Add dialog

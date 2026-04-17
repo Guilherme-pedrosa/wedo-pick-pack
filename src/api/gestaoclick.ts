@@ -398,49 +398,92 @@ function setPagamentoValor(p: any, newValor: string): any {
   return { ...p, valor: newValor };
 }
 
+/**
+ * Compute the line total the way GestãoClick does on PUT:
+ * sum(line.valor_total) for produtos + servicos, minus general discount, plus frete.
+ *
+ * The ERP recalculates valor_total server-side from the line items. If the
+ * declared `valor_total` in the payload disagrees with this re-computation
+ * (often by 1-2 cents due to fractional quantities like 0.600 × 280.57), the
+ * ERP will compare its own recomputed total against the installments and
+ * complain that they don't match.
+ *
+ * To avoid this, we anchor BOTH `valor_total` and the installments to the
+ * same recomputed subtotal in cents.
+ */
+function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
+  const lineSum = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
+    if (!Array.isArray(arr)) return 0;
+    return arr.reduce((s, entry) => {
+      const line = entry?.[key] || entry;
+      return s + Math.round(parseCurrency(line?.valor_total) * 100);
+    }, 0);
+  };
+
+  const produtosCents = lineSum(payload.produtos, 'produto');
+  const servicosCents = lineSum(payload.servicos, 'servico');
+  if (produtosCents === 0 && servicosCents === 0) return null;
+
+  const descontoCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
+  const freteCents = Math.round(parseCurrency(payload.valor_frete) * 100);
+
+  const total = produtosCents + servicosCents - descontoCents + freteCents;
+  return total > 0 ? total : null;
+}
+
 function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
-  const valorTotal = roundTo(parseCurrency(payload.valor_total), 2);
-  if (valorTotal <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
+  const declaredTotalCents = Math.round(parseCurrency(payload.valor_total) * 100);
+  const recomputedCents = computeRecomputedTotalCents(payload);
+
+  // Anchor to the value the ERP will actually compute from line items.
+  // Fall back to the declared total only when we can't recompute (e.g. no items).
+  const targetCents = recomputedCents ?? declaredTotalCents;
+
+  if (targetCents <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
     return payload;
   }
 
-  // Sum in cents to avoid floating-point drift
-  const valorTotalCents = Math.round(valorTotal * 100);
-  const parcCentsList = payload.pagamentos.map((p: any) => Math.round(getPagamentoValor(p) * 100));
+  // If declared total disagrees with line-recomputed total, sync it.
+  let nextPayload = payload;
+  if (recomputedCents != null && recomputedCents !== declaredTotalCents) {
+    console.warn(`[GC] valor_total declarado (${declaredTotalCents/100}) ≠ soma das linhas (${recomputedCents/100}). Ajustando para ${recomputedCents/100}.`);
+    nextPayload = { ...payload, valor_total: formatCurrency(recomputedCents / 100) };
+  }
+
+  const parcCentsList = nextPayload.pagamentos.map((p: any) => Math.round(getPagamentoValor(p) * 100));
   const parcTotalCents = parcCentsList.reduce((s: number, c: number) => s + c, 0);
 
   // Already exact to the cent — no adjustment needed
-  if (parcTotalCents === valorTotalCents) return payload;
+  if (parcTotalCents === targetCents) return nextPayload;
 
-  console.warn(`[GC] Pagamentos total (${parcTotalCents / 100}) ≠ valor_total (${valorTotal}). Diff=${(valorTotalCents - parcTotalCents) / 100}. Recalculating.`);
+  console.warn(`[GC] Pagamentos total (${parcTotalCents / 100}) ≠ alvo (${targetCents / 100}). Diff=${(targetCents - parcTotalCents) / 100}. Redistribuindo.`);
 
-  if (payload.pagamentos.length === 1) {
+  if (nextPayload.pagamentos.length === 1) {
     return {
-      ...payload,
-      pagamentos: [setPagamentoValor(payload.pagamentos[0], formatCurrency(valorTotalCents / 100))],
+      ...nextPayload,
+      pagamentos: [setPagamentoValor(nextPayload.pagamentos[0], formatCurrency(targetCents / 100))],
     };
   }
 
   // Distribute in cents proportionally; assign rounding remainder to last parcel
-  const baseCents = parcTotalCents > 0 ? parcCentsList : payload.pagamentos.map(() => Math.floor(valorTotalCents / payload.pagamentos.length));
+  const baseCents = parcTotalCents > 0 ? parcCentsList : nextPayload.pagamentos.map(() => Math.floor(targetCents / nextPayload.pagamentos.length));
   const baseSum = baseCents.reduce((s: number, c: number) => s + c, 0) || 1;
 
   let distributedCents = 0;
-  const newCentsList: number[] = payload.pagamentos.map((_: any, i: number) => {
-    if (i === payload.pagamentos.length - 1) {
-      const last = valorTotalCents - distributedCents;
-      return last;
+  const newCentsList: number[] = nextPayload.pagamentos.map((_: any, i: number) => {
+    if (i === nextPayload.pagamentos.length - 1) {
+      return targetCents - distributedCents;
     }
-    const portion = Math.round((baseCents[i] * valorTotalCents) / baseSum);
+    const portion = Math.round((baseCents[i] * targetCents) / baseSum);
     distributedCents += portion;
     return portion;
   });
 
-  const adjusted = payload.pagamentos.map((p: any, i: number) =>
+  const adjusted = nextPayload.pagamentos.map((p: any, i: number) =>
     setPagamentoValor(p, formatCurrency(newCentsList[i] / 100))
   );
 
-  return { ...payload, pagamentos: adjusted };
+  return { ...nextPayload, pagamentos: adjusted };
 }
 
 function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<string, any> {

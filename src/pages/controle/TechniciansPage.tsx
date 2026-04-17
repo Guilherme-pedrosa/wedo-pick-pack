@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getOS, getVenda } from "@/api/gestaoclick";
 
 interface GCEmployee {
   id: string;

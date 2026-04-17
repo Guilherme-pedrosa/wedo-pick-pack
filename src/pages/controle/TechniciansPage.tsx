@@ -121,7 +121,7 @@ const TechniciansPage = () => {
           .eq("status", "active"),
         supabase
           .from("separations")
-          .select("id, order_type, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, concluded_at, invalidated, technician_gc_id")
+          .select("id, order_type, order_id, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, concluded_at, invalidated, technician_gc_id, target_status_id")
           .in("technician_gc_id", gcIds)
           .eq("invalidated", false)
           .order("concluded_at", { ascending: false }),

@@ -69,6 +69,29 @@ Deno.serve(async (req: Request) => {
       return jsonResp({ error: 'Nenhuma situação de chegada configurada. Configure na Política de Estoque.' }, 400);
     }
 
+    // === Buscar catálogo de situações para mapear ID -> NOME ===
+    // No payload de cada Compra, dentro de `situacoes[].situacao`, o GC NÃO retorna
+    // o ID do tipo de situação — apenas o nome (string) e um `id` que é o ID do
+    // registro histórico (não do tipo). Por isso precisamos comparar pelo NOME.
+    const sitCatalog = await gcRequest('/api/situacoes_compras', gcAccess, gcSecret);
+    const idToName = new Map<string, string>();
+    for (const item of (sitCatalog?.data || [])) {
+      const it = item?.SituacaoCompra ?? item;
+      if (it?.id && it?.nome) idToName.set(String(it.id), String(it.nome).trim());
+    }
+
+    const startSituacaoName = idToName.get(startSituacaoId);
+    const arrivedSituacaoNames = new Set(
+      arrivedSituacaoIds.map(id => idToName.get(id)).filter(Boolean) as string[]
+    );
+
+    if (!startSituacaoName) {
+      return jsonResp({ error: `Status de início ID=${startSituacaoId} não encontrado no catálogo do GC.` }, 400);
+    }
+    if (arrivedSituacaoNames.size === 0) {
+      return jsonResp({ error: 'Nenhum dos status de chegada configurados foi encontrado no GC.' }, 400);
+    }
+
     // === Coleta bruta de amostras por fornecedor ===
     const supplierMap = new Map<string, SupplierBucket>();
     let docsScanned = 0;

@@ -728,11 +728,12 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Classe ABC', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Valor Consumo', 'Consumo Médio/Dia', 'Estoque Atual', 'Dias Cobertura', 'ROP', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Valor Consumo', 'Consumo Médio/Dia', 'Estoque Atual', 'Dias Cobertura', 'ROP', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
+      i.grupo || 'Sem grupo',
       i.abc_class,
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.event_count,
@@ -756,12 +757,13 @@ export default function InventoryAnalysisPage() {
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
 
-    const headers = ['Classe ABC', 'Produto ID', 'Código', 'Nome', 'Saída (peças)', 'OS Únicas', 'Estoque Atual', 'Consumo Méd/Dia', 'Lead Time', 'ROP', 'Cobertura (dias)', 'Necessidade Bruta', 'PC em Andamento (peças)', 'Qtd Líquida a Comprar', 'PCs'];
+    const headers = ['Classe ABC', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Saída (peças)', 'OS Únicas', 'Estoque Atual', 'Consumo Méd/Dia', 'Lead Time', 'ROP', 'Cobertura (dias)', 'Necessidade Bruta', 'PC em Andamento (peças)', 'Qtd Líquida a Comprar', 'PCs'];
     const rows = purchaseItems.map((i) => [
       i.abc_class,
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
+      (i as any).grupo || 'Sem grupo',
       formatNumberBR(Math.round(i.total_qty), 0),
       i.event_count,
       i.estoque_atual,

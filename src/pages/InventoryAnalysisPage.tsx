@@ -1236,14 +1236,14 @@ export default function InventoryAnalysisPage() {
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                Lead time calculado a partir do histórico de pedidos de compra finalizados ({leadTimes.reduce((s, l) => s + l.sample_count, 0)} amostras)
+                Lead time (mediana em dias) calculado a partir do histórico de pedidos de compra finalizados ({leadTimes.reduce((s, l) => s + l.sample_count, 0)} amostras válidas). Fornecedores com menos de 3 amostras ou afetados por mudanças de status em lote no GestãoClick são descartados.
               </p>
               <div className="rounded-lg border overflow-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Fornecedor</TableHead>
-                      <TableHead className="text-right">Média (dias)</TableHead>
+                      <TableHead className="text-right">Mediana (dias)</TableHead>
                       <TableHead className="text-right">Mín.</TableHead>
                       <TableHead className="text-right">Máx.</TableHead>
                       <TableHead className="text-right">Amostras</TableHead>

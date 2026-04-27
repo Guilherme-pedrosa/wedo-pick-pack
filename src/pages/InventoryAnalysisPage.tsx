@@ -291,9 +291,10 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
   const { data, error } = await supabase
     .from('supplier_lead_times' as any)
     .select('fornecedor_id, fornecedor_nome, avg_lead_time_days, min_lead_time_days, max_lead_time_days, sample_count')
+    .gte('sample_count', 3)
     .order('avg_lead_time_days', { ascending: false });
   if (error) return [];
-  return (data as any[]) || [];
+  return ((data as any[]) || []).filter(lt => Number(lt.sample_count) >= 3);
 }
 
 export default function InventoryAnalysisPage() {

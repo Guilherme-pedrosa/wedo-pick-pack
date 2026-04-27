@@ -196,6 +196,7 @@ Deno.serve(async (req: Request) => {
     const results: any[] = [];
     let suppliersDiscardedBatch = 0;
     let suppliersDiscardedFewSamples = 0;
+    const discardedFornecedorIds = new Set<string>();
 
     for (const [fornecedorId, data] of supplierMap) {
       // Filtra amostras que caíram em datas de batch update
@@ -203,11 +204,13 @@ Deno.serve(async (req: Request) => {
 
       if (cleanSamples.length === 0) {
         suppliersDiscardedBatch++;
+        discardedFornecedorIds.add(fornecedorId);
         continue;
       }
 
       if (cleanSamples.length < MIN_SAMPLES) {
         suppliersDiscardedFewSamples++;
+        discardedFornecedorIds.add(fornecedorId);
         continue;
       }
 
@@ -243,6 +246,17 @@ Deno.serve(async (req: Request) => {
       }
 
       results.push(row);
+    }
+
+    if (discardedFornecedorIds.size > 0) {
+      const { error } = await supabase
+        .from('supplier_lead_times')
+        .delete()
+        .in('fornecedor_id', Array.from(discardedFornecedorIds));
+
+      if (error) {
+        console.error('Failed to delete discarded lead times:', error);
+      }
     }
 
     return jsonResp({

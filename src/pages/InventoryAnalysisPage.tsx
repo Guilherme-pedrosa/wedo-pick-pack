@@ -728,11 +728,12 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Classe ABC', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Valor Consumo', 'Consumo Médio/Dia', 'Estoque Atual', 'Dias Cobertura', 'ROP', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Valor Consumo', 'Consumo Médio/Dia', 'Estoque Atual', 'Dias Cobertura', 'ROP', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
+      i.grupo || 'Sem grupo',
       i.abc_class,
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.event_count,

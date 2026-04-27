@@ -125,20 +125,23 @@ Deno.serve(async (req: Request) => {
 
           for (const wrapper of situacoes) {
             const sit = wrapper?.situacao ?? wrapper;
-            const sitId = String(sit?.situacao_id ?? sit?.id ?? '');
+            // ATENÇÃO: dentro do payload de cada Compra, o GC NÃO devolve o ID do
+            // tipo de situação — só o nome (string `sit.situacao`) e um `id` que
+            // é o ID do registro histórico. Por isso comparamos pelo NOME.
+            const sitName = String(sit?.situacao ?? '').trim();
             const sitDate = sit?.data;
-            if (!sitDate) continue;
+            if (!sitName || !sitDate) continue;
 
             const parsed = new Date(sitDate);
             if (isNaN(parsed.getTime())) continue;
 
-            // Início: SOMENTE se o ID bate com o status configurado como "COMPRADO"
-            if (sitId === startSituacaoId) {
+            // Início: nome bate com o status configurado como "COMPRADO"
+            if (sitName === startSituacaoName) {
               if (!startDate || parsed < startDate) startDate = parsed;
             }
 
-            // Chegada: ID bate com algum dos status configurados como "ARRIVED"
-            if (arrivedSituacaoIds.includes(sitId)) {
+            // Chegada: nome bate com algum dos status configurados como "ARRIVED"
+            if (arrivedSituacaoNames.has(sitName)) {
               if (!endDate || parsed > endDate) endDate = parsed;
             }
           }

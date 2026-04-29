@@ -241,6 +241,12 @@ export default function SeparationsPage() {
           <p className="text-sm text-muted-foreground mt-1">
             {separations.length} resultado(s) — {validCount} válida(s), {invalidCount} invalidada(s)
           </p>
+          {stockRegressionCount > 0 && (
+            <div className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs font-medium w-fit">
+              <PackageX className="h-3.5 w-3.5" />
+              {stockRegressionCount} separação(ões) com regressão de estoque — status atual no GC NÃO está mais dando baixa.
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Button

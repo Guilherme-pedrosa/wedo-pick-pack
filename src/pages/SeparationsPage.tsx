@@ -47,6 +47,37 @@ export default function SeparationsPage() {
     refetchInterval: 30000,
   });
 
+  // Load stockout status configuration (which GC situations actually debit stock)
+  const { data: stockoutConfig } = useQuery({
+    queryKey: ['inventory-policy-stockout-ids'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('inventory_policy_config')
+        .select('os_stockout_situacao_ids, vendas_stockout_situacao_ids')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return {
+        os: new Set<string>(((data?.os_stockout_situacao_ids as string[]) || []).map(String)),
+        venda: new Set<string>(((data?.vendas_stockout_situacao_ids as string[]) || []).map(String)),
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  /** Returns true if separation's target status causes stockout but the live GC status no longer does */
+  const computeStockRegression = useCallback(
+    (sep: SeparationRecord, live?: { situacao_id: string } | null): boolean => {
+      if (!live || !stockoutConfig) return false;
+      const set = sep.order_type === 'os' ? stockoutConfig.os : stockoutConfig.venda;
+      if (set.size === 0) return false;
+      const targetDebits = set.has(String(sep.target_status_id));
+      const liveDebits = set.has(String(live.situacao_id));
+      return targetDebits && !liveDebits;
+    },
+    [stockoutConfig]
+  );
+
   const clearFilters = () => {
     setSearch('');
     setFromDate('');
@@ -58,6 +89,14 @@ export default function SeparationsPage() {
   const validSeparations = separations.filter(s => !s.invalidated);
   const validCount = validSeparations.length;
   const invalidCount = separations.filter(s => s.invalidated).length;
+
+  // Count stock regressions (active separations whose target debited stock but current GC status does not)
+  const stockRegressionCount = useMemo(() => {
+    return validSeparations.reduce((acc, s) => {
+      const live = liveStatuses[s.id];
+      return acc + (computeStockRegression(s, live) ? 1 : 0);
+    }, 0);
+  }, [validSeparations, liveStatuses, computeStockRegression]);
 
   const fetchLiveStatusesAndSync = useCallback(async (opts?: { showToast?: boolean }) => {
     const active = separations.filter(s => !s.invalidated);

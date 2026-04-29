@@ -814,9 +814,12 @@ function SeparationCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-1.5 mt-1.5 text-xs">
-                  <Radio className="h-3 w-3 text-green-500 animate-pulse" />
+                  <Radio className={cn('h-3 w-3 animate-pulse', stockRegression ? 'text-destructive' : 'text-green-500')} />
                   <span className="text-muted-foreground">Status atual GC:</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
+                  <Badge
+                    variant={stockRegression ? 'destructive' : 'outline'}
+                    className="text-[10px] px-1.5 py-0 font-medium"
+                  >
                     {liveStatus.nome_situacao}
                   </Badge>
                 </div>
@@ -826,6 +829,21 @@ function SeparationCard({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        )}
+
+        {/* Stock regression alert */}
+        {stockRegression && !isInvalid && !isReturn && (
+          <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded p-2 text-xs flex items-start gap-2">
+            <PackageX className="h-4 w-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold uppercase text-[11px]">Atenção — Regressão de status</p>
+              <p className="mt-0.5">
+                A separação foi concluída no status <strong>"{sep.target_status_name}"</strong>, que dá baixa no estoque.
+                O status atual no GestãoClick é <strong>"{liveStatus?.nome_situacao}"</strong>, que <strong>NÃO</strong> dá baixa.
+                O estoque pode estar inconsistente — verifique se a OS/Venda foi alterada manualmente no GC.
+              </p>
+            </div>
+          </div>
         )}
 
         {isInvalid && sep.invalidated_reason && (

@@ -464,10 +464,16 @@ function computeRecomputedTotalCents(payload: Record<string, any>): number | nul
   if (produtosRaw <= 0 && servicosRaw <= 0) return null;
 
   const desconto = parseCurrency(payload.desconto_valor);
+  const descontoPct = parseCurrency(payload.desconto_porcentagem);
   const frete = parseCurrency(payload.valor_frete);
 
-  // Único arredondamento — no total final, igual ao validador GC.
-  const totalRaw = produtosRaw + servicosRaw - desconto + frete;
+  // Aplica desconto geral percentual sobre o subtotal (produtos + serviços),
+  // depois subtrai o desconto fixo geral e soma o frete. Igual ao validador GC.
+  let subtotal = produtosRaw + servicosRaw;
+  if (descontoPct > 0 && descontoPct < 100) {
+    subtotal = subtotal * (1 - descontoPct / 100);
+  }
+  const totalRaw = subtotal - desconto + frete;
   const totalCents = Math.round(totalRaw * 100);
   return totalCents > 0 ? totalCents : null;
 }

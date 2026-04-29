@@ -779,12 +779,15 @@ export async function checkStockForOrders(
   orders: Array<GCOrdemServico | GCVenda>,
   onProgress?: (checked: number, total: number) => void,
 ): Promise<StockScanResult> {
-  // Collect all unique produto_ids across all orders
+  // Collect all unique produto_ids across all orders (track variacao_id seen for each pid)
   const productOrderMap = new Map<string, { orderId: string; orderCodigo: string; orderCliente: string; qty: number; nome: string }[]>();
-  
+  const variacaoIdByPid = new Map<string, string>();
+
   for (const order of orders) {
     for (const p of order.produtos || []) {
       const pid = p.produto.produto_id;
+      const vid = String((p.produto as any).variacao_id ?? '').trim();
+      if (vid && !variacaoIdByPid.has(pid)) variacaoIdByPid.set(pid, vid);
       const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
       if (!productOrderMap.has(pid)) productOrderMap.set(pid, []);
       productOrderMap.get(pid)!.push({
@@ -806,13 +809,14 @@ export async function checkStockForOrders(
   // Fetch 3 at a time (rate limit)
   for (let i = 0; i < uniqueIds.length; i += 3) {
     const batch = uniqueIds.slice(i, i + 3);
-    const results = await Promise.all(batch.map(id => getProductStock(id)));
-    for (const r of results) {
+    const results = await Promise.all(batch.map(id => getProductStock(id, variacaoIdByPid.get(id))));
+    batch.forEach((id, idx) => {
+      const r = results[idx];
       if (r) {
-        stockMap.set(r.produto_id, r.estoque);
-        costMap.set(r.produto_id, r.valor_custo);
+        stockMap.set(id, r.estoque);
+        costMap.set(id, r.valor_custo);
       }
-    }
+    });
     checked += batch.length;
     onProgress?.(checked, total);
     if (i + 3 < uniqueIds.length) {

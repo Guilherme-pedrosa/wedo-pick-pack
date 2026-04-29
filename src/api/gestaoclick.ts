@@ -450,9 +450,11 @@ function computeRecomputedTotalCents(payload: Record<string, any>): number | nul
       }
 
       // Soma RAW (sem arredondar a linha) — o GC valida assim no PUT.
+      // Desconto percentual de 100% zera a linha; antes ele era ignorado
+      // por causa do guard `< 100`, somando indevidamente produtos bonificados.
       let lineRaw = qty * unit;
-      if (percentDiscount > 0 && percentDiscount < 100) {
-        lineRaw = lineRaw * (1 - percentDiscount / 100);
+      if (percentDiscount > 0) {
+        lineRaw = percentDiscount >= 100 ? 0 : lineRaw * (1 - percentDiscount / 100);
       }
       lineRaw -= fixedDiscount;
       return s + lineRaw;

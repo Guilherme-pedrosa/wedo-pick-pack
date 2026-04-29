@@ -728,18 +728,50 @@ export interface StockScanResult {
   belowCostWarnings: BelowCostWarning[];
 }
 
-export async function getProductStock(produtoId: string): Promise<ProductStockInfo | null> {
-  try {
-    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 15000));
-    const request = apiRequest<{ data: { id: string; estoque: string | number; valor_custo?: string | number } }>(`/api/produtos/${produtoId}`);
-    const res = await Promise.race([request, timeout]);
-    const estoque = typeof res.data.estoque === 'number' ? res.data.estoque : parseFloat(res.data.estoque || '0');
-    const valorCusto = typeof res.data.valor_custo === 'number' ? res.data.valor_custo : parseFloat(String(res.data.valor_custo || '0'));
-    return { produto_id: res.data.id, estoque: isNaN(estoque) ? 0 : estoque, valor_custo: isNaN(valorCusto) ? 0 : valorCusto };
-  } catch (err) {
-    console.warn(`[STOCK] Failed to fetch stock for product ${produtoId}:`, err instanceof Error ? err.message : err);
-    return null;
+export async function getProductStock(produtoId: string, variacaoId?: string): Promise<ProductStockInfo | null> {
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await apiRequest<{
+        data: {
+          id: string;
+          estoque: string | number;
+          valor_custo?: string | number;
+          variacoes?: Array<{ variacao: { id: string | number; estoque: string | number } }>;
+        };
+      }>(`/api/produtos/${produtoId}`);
+
+      const data = res?.data;
+      if (!data) throw new Error('EMPTY_RESPONSE');
+
+      // Prefer variation stock when variacao_id is given (or when product has a single variation
+      // that holds the real stock instead of the parent — common GC quirk)
+      let estoqueRaw: string | number = data.estoque ?? 0;
+      const variacoes = data.variacoes ?? [];
+      if (variacoes.length > 0) {
+        const vid = variacaoId ? String(variacaoId) : '';
+        const byId = vid ? variacoes.find(v => String(v.variacao?.id) === vid) : undefined;
+        const single = !byId && variacoes.length === 1 ? variacoes[0] : undefined;
+        const chosen = byId ?? single;
+        if (chosen) estoqueRaw = chosen.variacao.estoque ?? estoqueRaw;
+      }
+
+      const estoque = typeof estoqueRaw === 'number' ? estoqueRaw : parseFloat(String(estoqueRaw).replace(',', '.') || '0');
+      const valorCusto = typeof data.valor_custo === 'number'
+        ? data.valor_custo
+        : parseFloat(String(data.valor_custo ?? '0').replace(',', '.') || '0');
+      return { produto_id: String(data.id ?? produtoId), estoque: isNaN(estoque) ? 0 : estoque, valor_custo: isNaN(valorCusto) ? 0 : valorCusto };
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const retryable = /Failed to send|NETWORK|TIMEOUT|RATE_LIMIT|fetch/i.test(msg);
+      if (!retryable || attempt === MAX_ATTEMPTS - 1) break;
+      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+    }
   }
+  console.warn(`[STOCK] Failed to fetch stock for product ${produtoId}:`, lastErr instanceof Error ? lastErr.message : lastErr);
+  return null;
 }
 
 /** Check stock for a list of orders. Returns Set of order IDs that have full stock + conflicts. */

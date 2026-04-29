@@ -689,7 +689,16 @@ function SeparationCard({
 
   return (
     <>
-      <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : isReturn ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-green-500'}`}>
+      <Card className={cn(
+        'p-4 transition-all',
+        isInvalid
+          ? 'opacity-60 border-l-4 border-l-destructive'
+          : isReturn
+          ? 'border-l-4 border-l-amber-500'
+          : stockRegression
+          ? 'border-l-4 border-l-destructive ring-2 ring-destructive/30 bg-destructive/5'
+          : 'border-l-4 border-l-green-500'
+      )}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             {isInvalid ? (

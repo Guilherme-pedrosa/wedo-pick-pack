@@ -476,6 +476,7 @@ function SeparationCard({
   formatDuration,
   onUpdated,
   liveStatus,
+  stockRegression = false,
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
@@ -483,6 +484,7 @@ function SeparationCard({
   formatDuration: (start: string, end: string) => string;
   onUpdated: () => void;
   liveStatus?: { nome_situacao: string; situacao_id: string; fetchedAt: string };
+  stockRegression?: boolean;
 }) {
   const isReturn = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
   const isInvalid = sep.invalidated && !isReturn;

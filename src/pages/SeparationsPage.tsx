@@ -722,6 +722,12 @@ function SeparationCard({
                 Devolvido
               </Badge>
             )}
+            {stockRegression && !isInvalid && !isReturn && (
+              <Badge variant="destructive" className="text-xs gap-1">
+                <PackageX className="h-3 w-3" />
+                Estoque NÃO baixou
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {!isInvalid && !isReturn && (

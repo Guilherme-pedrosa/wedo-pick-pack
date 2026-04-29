@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar, Radio } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar, Radio, PackageX } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils'; // util
 import { toast } from 'sonner';
@@ -47,6 +47,37 @@ export default function SeparationsPage() {
     refetchInterval: 30000,
   });
 
+  // Load stockout status configuration (which GC situations actually debit stock)
+  const { data: stockoutConfig } = useQuery({
+    queryKey: ['inventory-policy-stockout-ids'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('inventory_policy_config')
+        .select('os_stockout_situacao_ids, vendas_stockout_situacao_ids')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return {
+        os: new Set<string>(((data?.os_stockout_situacao_ids as string[]) || []).map(String)),
+        venda: new Set<string>(((data?.vendas_stockout_situacao_ids as string[]) || []).map(String)),
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  /** Returns true if separation's target status causes stockout but the live GC status no longer does */
+  const computeStockRegression = useCallback(
+    (sep: SeparationRecord, live?: { situacao_id: string } | null): boolean => {
+      if (!live || !stockoutConfig) return false;
+      const set = sep.order_type === 'os' ? stockoutConfig.os : stockoutConfig.venda;
+      if (set.size === 0) return false;
+      const targetDebits = set.has(String(sep.target_status_id));
+      const liveDebits = set.has(String(live.situacao_id));
+      return targetDebits && !liveDebits;
+    },
+    [stockoutConfig]
+  );
+
   const clearFilters = () => {
     setSearch('');
     setFromDate('');
@@ -58,6 +89,14 @@ export default function SeparationsPage() {
   const validSeparations = separations.filter(s => !s.invalidated);
   const validCount = validSeparations.length;
   const invalidCount = separations.filter(s => s.invalidated).length;
+
+  // Count stock regressions (active separations whose target debited stock but current GC status does not)
+  const stockRegressionCount = useMemo(() => {
+    return validSeparations.reduce((acc, s) => {
+      const live = liveStatuses[s.id];
+      return acc + (computeStockRegression(s, live) ? 1 : 0);
+    }, 0);
+  }, [validSeparations, liveStatuses, computeStockRegression]);
 
   const fetchLiveStatusesAndSync = useCallback(async (opts?: { showToast?: boolean }) => {
     const active = separations.filter(s => !s.invalidated);
@@ -202,6 +241,12 @@ export default function SeparationsPage() {
           <p className="text-sm text-muted-foreground mt-1">
             {separations.length} resultado(s) — {validCount} válida(s), {invalidCount} invalidada(s)
           </p>
+          {stockRegressionCount > 0 && (
+            <div className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs font-medium w-fit">
+              <PackageX className="h-3.5 w-3.5" />
+              {stockRegressionCount} separação(ões) com regressão de estoque — status atual no GC NÃO está mais dando baixa.
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Button
@@ -375,7 +420,16 @@ export default function SeparationsPage() {
       {/* Screen cards */}
       <div className="space-y-3 print:hidden">
         {separations.map(sep => (
-          <SeparationCard key={sep.id} sep={sep} formatTime={formatTime} formatDateTime={formatDateTime} formatDuration={formatDuration} onUpdated={() => refetch()} liveStatus={liveStatuses[sep.id] || undefined} />
+          <SeparationCard
+            key={sep.id}
+            sep={sep}
+            formatTime={formatTime}
+            formatDateTime={formatDateTime}
+            formatDuration={formatDuration}
+            onUpdated={() => refetch()}
+            liveStatus={liveStatuses[sep.id] || undefined}
+            stockRegression={computeStockRegression(sep, liveStatuses[sep.id])}
+          />
         ))}
       </div>
     </div>
@@ -422,6 +476,7 @@ function SeparationCard({
   formatDuration,
   onUpdated,
   liveStatus,
+  stockRegression = false,
 }: {
   sep: SeparationRecord;
   formatTime: (iso: string) => string;
@@ -429,6 +484,7 @@ function SeparationCard({
   formatDuration: (start: string, end: string) => string;
   onUpdated: () => void;
   liveStatus?: { nome_situacao: string; situacao_id: string; fetchedAt: string };
+  stockRegression?: boolean;
 }) {
   const isReturn = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
   const isInvalid = sep.invalidated && !isReturn;
@@ -633,7 +689,16 @@ function SeparationCard({
 
   return (
     <>
-      <Card className={`p-4 transition-all ${isInvalid ? 'opacity-60 border-l-4 border-l-destructive' : isReturn ? 'border-l-4 border-l-amber-500' : 'border-l-4 border-l-green-500'}`}>
+      <Card className={cn(
+        'p-4 transition-all',
+        isInvalid
+          ? 'opacity-60 border-l-4 border-l-destructive'
+          : isReturn
+          ? 'border-l-4 border-l-amber-500'
+          : stockRegression
+          ? 'border-l-4 border-l-destructive ring-2 ring-destructive/30 bg-destructive/5'
+          : 'border-l-4 border-l-green-500'
+      )}>
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2">
             {isInvalid ? (
@@ -655,6 +720,12 @@ function SeparationCard({
             {isReturn && (
               <Badge className="text-xs bg-amber-100 text-amber-800 border-amber-300">
                 Devolvido
+              </Badge>
+            )}
+            {stockRegression && !isInvalid && !isReturn && (
+              <Badge variant="destructive" className="text-xs gap-1">
+                <PackageX className="h-3 w-3" />
+                Estoque NÃO baixou
               </Badge>
             )}
           </div>
@@ -743,9 +814,12 @@ function SeparationCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-1.5 mt-1.5 text-xs">
-                  <Radio className="h-3 w-3 text-green-500 animate-pulse" />
+                  <Radio className={cn('h-3 w-3 animate-pulse', stockRegression ? 'text-destructive' : 'text-green-500')} />
                   <span className="text-muted-foreground">Status atual GC:</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
+                  <Badge
+                    variant={stockRegression ? 'destructive' : 'outline'}
+                    className="text-[10px] px-1.5 py-0 font-medium"
+                  >
                     {liveStatus.nome_situacao}
                   </Badge>
                 </div>
@@ -755,6 +829,21 @@ function SeparationCard({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        )}
+
+        {/* Stock regression alert */}
+        {stockRegression && !isInvalid && !isReturn && (
+          <div className="mt-2 bg-destructive/10 border border-destructive/30 text-destructive rounded p-2 text-xs flex items-start gap-2">
+            <PackageX className="h-4 w-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold uppercase text-[11px]">Atenção — Regressão de status</p>
+              <p className="mt-0.5">
+                A separação foi concluída no status <strong>"{sep.target_status_name}"</strong>, que dá baixa no estoque.
+                O status atual no GestãoClick é <strong>"{liveStatus?.nome_situacao}"</strong>, que <strong>NÃO</strong> dá baixa.
+                O estoque pode estar inconsistente — verifique se a OS/Venda foi alterada manualmente no GC.
+              </p>
+            </div>
+          </div>
         )}
 
         {isInvalid && sep.invalidated_reason && (

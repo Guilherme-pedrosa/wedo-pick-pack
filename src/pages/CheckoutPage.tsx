@@ -26,7 +26,8 @@ export default function CheckoutPage() {
               <SheetTrigger asChild>
                 <Button
                   size="icon"
-                  className="fixed bottom-4 left-4 z-50 rounded-full h-12 w-12 shadow-lg"
+                  className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-50 rounded-full h-14 w-14 shadow-xl touch-target"
+                  aria-label="Abrir fila de pedidos"
                 >
                   <ClipboardList className="h-5 w-5" />
                 </Button>

@@ -1,6 +1,7 @@
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "react-router-dom";
+import { PushToggle } from "@/components/push/PushToggle";
 
 interface AppLayoutHeaderProps {
   onMenuClick?: () => void;
@@ -51,6 +52,10 @@ export function AppLayoutHeader({ onMenuClick, showMenuButton }: AppLayoutHeader
             </div>
           )}
         </div>
+      </div>
+
+      <div className="ml-auto flex items-center gap-2">
+        <PushToggle variant="compact" />
       </div>
     </header>
   );

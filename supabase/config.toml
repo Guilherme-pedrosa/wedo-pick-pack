@@ -23,3 +23,12 @@ verify_jwt = false
 
 [functions.inventory-lead-time-sync]
 verify_jwt = false
+
+[functions.push-subscribe]
+verify_jwt = false
+
+[functions.push-send]
+verify_jwt = false
+
+[functions.push-watcher]
+verify_jwt = false

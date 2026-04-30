@@ -189,6 +189,19 @@ export default function OrderQueue() {
       if (scanResult.conflicts.length > 0) {
         const msg = `Varredura concluída! ${scanResult.fullStockOrders.size} pedidos com estoque, ${removed} sem estoque completo. ⚠️ ${scanResult.conflicts.length} conflito(s) de estoque encontrado(s)!`;
         toast.warning(msg, { duration: 8000 });
+        // Dispara push para todos os subscribers desse evento
+        try {
+          const { supabase } = await import('@/integrations/supabase/client');
+          await supabase.functions.invoke('push-send', {
+            body: {
+              event_type: 'stock_conflict',
+              title: `⚠️ ${scanResult.conflicts.length} conflito(s) de estoque`,
+              body: `Varredura encontrou divergências entre quantidade pedida e estoque disponível.`,
+              url: '/checkout',
+              tag: 'stock-conflict',
+            },
+          });
+        } catch {}
       } else if (removed === 0) {
         toast.success('✅ Todos os pedidos possuem estoque completo e sem conflitos de quantidade!', { duration: 6000 });
       } else {

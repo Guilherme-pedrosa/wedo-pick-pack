@@ -2,6 +2,8 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "react-router-dom";
 import { PushToggle } from "@/components/push/PushToggle";
+import { useStandalone } from "@/hooks/useStandalone";
+import { cn } from "@/lib/utils";
 
 interface AppLayoutHeaderProps {
   onMenuClick?: () => void;

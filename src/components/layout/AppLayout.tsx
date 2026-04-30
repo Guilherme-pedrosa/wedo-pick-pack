@@ -75,7 +75,7 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
 
       <div
         className={cn(
-          "flex min-h-screen flex-col transition-all duration-200",
+          "flex min-h-dvh flex-col transition-all duration-200",
           isMobile ? "ml-0" : collapsed ? "ml-16" : "ml-60"
         )}
       >
@@ -84,7 +84,7 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
           showMenuButton={isMobile}
         />
 
-        <main className="flex-1 p-4 md:p-8 overflow-x-hidden page-enter">
+        <main className="flex-1 p-4 md:p-8 overflow-x-hidden page-enter pl-safe pr-safe pb-safe">
           <div className="mx-auto max-w-7xl">
             <Outlet />
           </div>

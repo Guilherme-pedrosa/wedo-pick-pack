@@ -175,6 +175,17 @@ export default function ConfigPage() {
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
 
+      {/* Push Notifications */}
+      <Card className="p-6 space-y-3">
+        <h2 className="text-lg font-semibold">Notificações Push</h2>
+        <p className="text-sm text-muted-foreground">
+          Receba alertas no celular/desktop quando aparecer um novo pedido na fila do checkout,
+          quando outro operador concluir um pedido ou quando houver conflito/regressão de estoque.
+          Funciona apenas no app publicado, não no preview do editor.
+        </p>
+        <PushToggle />
+      </Card>
+
       {/* Connection Status */}
       <Card className="p-6 space-y-4">
         <h2 className="text-lg font-semibold">Conexão GestãoClick</h2>

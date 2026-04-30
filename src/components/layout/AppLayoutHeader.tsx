@@ -24,16 +24,24 @@ const pageMeta: Record<string, { title: string; breadcrumb: string[] }> = {
 export function AppLayoutHeader({ onMenuClick, showMenuButton }: AppLayoutHeaderProps) {
   const location = useLocation();
   const currentPage = pageMeta[location.pathname] || { title: "Página", breadcrumb: [] };
+  const standalone = useStandalone();
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center border-b border-border bg-card px-4 md:px-8">
+    <header
+      className={cn(
+        "sticky top-0 z-30 flex items-center border-b border-border bg-card px-4 md:px-8 pl-safe pr-safe",
+        // Slightly taller in installed PWA so content sits below the status bar
+        standalone ? "h-16 pt-safe-or-2" : "h-14"
+      )}
+    >
       <div className="flex items-center gap-4 min-w-0">
         {showMenuButton && (
           <Button
             variant="ghost"
             size="icon"
             onClick={onMenuClick}
-            className="h-9 w-9 flex-shrink-0 -ml-2"
+            className="h-11 w-11 flex-shrink-0 -ml-2 touch-target"
+            aria-label="Abrir menu"
           >
             <Menu className="h-5 w-5" />
           </Button>

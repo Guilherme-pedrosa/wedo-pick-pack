@@ -55,7 +55,7 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen w-full bg-background">
+    <div className="min-h-dvh w-full bg-background">
       {/* Mobile overlay */}
       {isMobile && mobileOpen && (
         <div

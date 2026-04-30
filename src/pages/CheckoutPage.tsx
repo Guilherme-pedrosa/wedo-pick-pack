@@ -15,7 +15,7 @@ export default function CheckoutPage() {
   // On mobile, show OrderQueue full-screen when no session, otherwise show ConferencePanel
   if (isMobile) {
     return (
-      <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background">
+      <div className="flex flex-col h-screen-mobile bg-background">
         {!session ? (
           <OrderQueue />
         ) : (

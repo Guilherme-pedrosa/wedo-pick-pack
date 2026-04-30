@@ -129,6 +129,24 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Prevent pull-to-refresh and rubber-band on installed PWA */
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Standalone (installed PWA) tweaks */
+  @media (display-mode: standalone) {
+    html, body {
+      /* Disable text selection on long-press for app-like feel */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    /* Re-enable selection inside inputs and editable content */
+    input, textarea, [contenteditable="true"], .selectable {
+      -webkit-user-select: text;
+      user-select: text;
+    }
   }
 
   h1, .h1 {

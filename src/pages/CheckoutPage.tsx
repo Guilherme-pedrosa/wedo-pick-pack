@@ -43,7 +43,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] bg-background">
+    <div className="flex h-screen-mobile bg-background">
       {/* Desktop left panel */}
       <div className="flex w-[360px] border-r border-border bg-card flex-col shrink-0">
         <OrderQueue />

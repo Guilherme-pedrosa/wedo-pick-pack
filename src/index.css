@@ -228,9 +228,27 @@
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.03); }
   }
-}
 
-@media print {
+  /* Safe-area helpers for notched devices / installed PWA */
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .pl-safe { padding-left: env(safe-area-inset-left); }
+  .pr-safe { padding-right: env(safe-area-inset-right); }
+  .pt-safe-or-2 { padding-top: max(env(safe-area-inset-top), 0.5rem); }
+  .mt-safe { margin-top: env(safe-area-inset-top); }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
+  .h-safe-top { height: env(safe-area-inset-top); }
+
+  /* Use dynamic viewport height — avoids being cut by mobile browser bars */
+  .h-dvh { height: 100dvh; }
+  .min-h-dvh { min-height: 100dvh; }
+  .h-screen-mobile { height: calc(100dvh - 3.5rem); }
+
+  /* Touch-friendly minimums (Apple HIG / Material guidelines) */
+  @media (hover: none) and (pointer: coarse) {
+    .touch-target { min-height: 44px; min-width: 44px; }
+  }
+}
   header, nav, aside, .sonner-toaster, [data-sonner-toaster], .no-print-content {
     display: none !important;
   }

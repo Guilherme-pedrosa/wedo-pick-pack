@@ -231,7 +231,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose, isA
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col transition-all duration-200",
+          "fixed left-0 top-0 z-40 hidden md:flex h-dvh flex-col transition-all duration-200 pt-safe pb-safe pl-safe",
           "bg-[hsl(var(--sidebar-background))]",
           collapsed ? "w-16" : "w-60"
         )}
@@ -242,7 +242,7 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose, isA
       {/* Mobile sidebar (drawer) */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 flex md:hidden h-screen w-72 flex-col transition-transform duration-300 shadow-2xl",
+          "fixed left-0 top-0 z-50 flex md:hidden h-dvh w-72 flex-col transition-transform duration-300 shadow-2xl pt-safe pb-safe pl-safe",
           "bg-[hsl(var(--sidebar-background))]",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}

@@ -15,7 +15,7 @@ export default function CheckoutPage() {
   // On mobile, show OrderQueue full-screen when no session, otherwise show ConferencePanel
   if (isMobile) {
     return (
-      <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background">
+      <div className="flex flex-col h-screen-mobile bg-background">
         {!session ? (
           <OrderQueue />
         ) : (
@@ -26,7 +26,8 @@ export default function CheckoutPage() {
               <SheetTrigger asChild>
                 <Button
                   size="icon"
-                  className="fixed bottom-4 left-4 z-50 rounded-full h-12 w-12 shadow-lg"
+                  className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-50 rounded-full h-14 w-14 shadow-xl touch-target"
+                  aria-label="Abrir fila de pedidos"
                 >
                   <ClipboardList className="h-5 w-5" />
                 </Button>
@@ -42,7 +43,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] bg-background">
+    <div className="flex h-screen-mobile bg-background">
       {/* Desktop left panel */}
       <div className="flex w-[360px] border-r border-border bg-card flex-col shrink-0">
         <OrderQueue />

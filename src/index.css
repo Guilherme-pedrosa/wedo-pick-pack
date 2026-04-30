@@ -249,6 +249,8 @@
     .touch-target { min-height: 44px; min-width: 44px; }
   }
 }
+
+@media print {
   header, nav, aside, .sonner-toaster, [data-sonner-toaster], .no-print-content {
     display: none !important;
   }

@@ -527,11 +527,22 @@ export default function InventoryAnalysisPage() {
       const passesClientGate = i.event_count >= minClients;
       const passesVolumeGate = (i.source_count ?? 0) >= 2;
 
-      // Override: saída recorrente (>=2 docs) + estoque zerado/negativo
+      // Override 1: saída recorrente (>=2 docs) + estoque zerado/negativo
       // → sempre reportar, mesmo que PC ativa "cubra no papel" ou rop seja baixo.
       const isRecurring = (i.source_count ?? 0) >= 2;
       const isOutOfStock = i.estoque_atual !== null && i.estoque_atual <= 0;
       if (isRecurring && isOutOfStock) return true;
+
+      // Override 2: saída recorrente + cobertura insuficiente para o lead time
+      // → vai zerar antes da PC chegar. Cobre consignado Ecolab onde tem 1-3 peças
+      // em estoque mas a cadência de saída esvazia antes da reposição.
+      const coverageBelowLT = i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days;
+      if (isRecurring && coverageBelowLT) return true;
+
+      // Override 3: saída recorrente + estoque < ROP (ponto de reposição atingido)
+      // → mesmo que PC cubra no papel, sinalizar que cruzou o gatilho.
+      const belowROP = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
+      if (isRecurring && belowROP) return true;
 
       if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       return passesClientGate || passesVolumeGate;

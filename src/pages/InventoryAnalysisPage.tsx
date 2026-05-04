@@ -424,19 +424,11 @@ export default function InventoryAnalysisPage() {
       }
 
       // Cross-reference with active purchase orders
+      // Se há PC aberta, ela cobre a demanda — não forçar piso adicional.
       const pcEntry = pcMap.get(r.produto_id);
       const pcQty = pcEntry?.qtd || 0;
       const pcRefs = pcEntry?.refs || [];
-      let qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
-      // Se entrou por override de recorrência mas a PC zera a líquida, ainda
-      // sinalizar pelo menos 1un para o comprador validar (não silenciar a demanda).
-      if (
-        qtyLiquida !== null && qtyLiquida === 0 &&
-        isRecurringCalc && (isOutOfStockCalc || coverageBelowLTCalc)
-      ) {
-        qtyLiquida = Math.max(1, Math.ceil(avgQtyPerDoc) - pcQty);
-        if (qtyLiquida < 1) qtyLiquida = 1;
-      }
+      const qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
 
       return {
         produto_id: r.produto_id,

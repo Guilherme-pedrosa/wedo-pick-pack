@@ -522,11 +522,18 @@ export default function InventoryAnalysisPage() {
       if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
 
       const i = item;
-      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       const passesClientGate = i.event_count >= minClients;
       const passesVolumeGate = (i.source_count ?? 0) >= 2;
+
+      // Override: saída recorrente (>=2 docs) + estoque zerado/negativo
+      // → sempre reportar, mesmo que PC ativa "cubra no papel" ou rop seja baixo.
+      const isRecurring = (i.source_count ?? 0) >= 2;
+      const isOutOfStock = i.estoque_atual !== null && i.estoque_atual <= 0;
+      if (isRecurring && isOutOfStock) return true;
+
+      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       return passesClientGate || passesVolumeGate;
     });
   }, [analysisItems, grupoFilter, searchTerm]);

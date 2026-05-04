@@ -381,15 +381,22 @@ export default function InventoryAnalysisPage() {
       const coverageTarget = leadTimeDays;
       // Base ROP from average daily consumption
       const ropAvg = avgDaily * leadTimeDays * safetyFactor;
-      // Recurrence-based ROP: cobre saídas esperadas durante o lead time
-      // (resolve casos de baixa frequência mas alta recorrência, ex.: contrato Ecolab)
+      // Recurrence-based ROP: usa o INTERVALO MÉDIO ENTRE SAÍDAS observado
+      // (não diluído pelo lookback inteiro). Se o intervalo médio entre saídas
+      // for menor que o lead time, esperam-se múltiplas saídas durante a reposição
+      // → precisamos cobrir essa demanda. Resolve produtos como contrato Ecolab,
+      // onde poucas saídas grandes em janela curta zeram o estoque antes da PC chegar.
       const sourceCount = r.source_count ?? 0;
-      const docsPerDay = lookbackDays > 0 ? sourceCount / lookbackDays : 0;
       const avgQtyPerDoc = sourceCount > 0 ? r.total_qty / sourceCount : 0;
-      const expectedDocsInLT = docsPerDay * leadTimeDays;
-      const ropRecurrence = sourceCount >= 2
-        ? Math.max(avgQtyPerDoc, expectedDocsInLT * avgQtyPerDoc * safetyFactor)
-        : 0;
+      let ropRecurrence = 0;
+      if (sourceCount >= 2) {
+        const firstMs = new Date(r.first_date).getTime();
+        const lastMs = new Date(r.last_date).getTime();
+        const spanDays = Math.max(1, (lastMs - firstMs) / 86400000);
+        const intervalDays = spanDays / (sourceCount - 1); // intervalo médio entre saídas
+        const expectedDocsInLT = leadTimeDays / intervalDays;
+        ropRecurrence = Math.max(avgQtyPerDoc, expectedDocsInLT * avgQtyPerDoc * safetyFactor);
+      }
       const rop = Math.max(ropAvg, ropRecurrence);
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
 

@@ -519,7 +519,7 @@ export default function InventoryAnalysisPage() {
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       const passesClientGate = i.event_count >= minClients;
-      const passesVolumeGate = (i.source_count ?? 0) >= 4;
+      const passesVolumeGate = (i.source_count ?? 0) >= 2;
       return passesClientGate || passesVolumeGate;
     });
   }, [analysisItems, grupoFilter, searchTerm]);

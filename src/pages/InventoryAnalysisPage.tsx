@@ -156,6 +156,16 @@ const matchesAnalysisFilters = (item: AnalysisItem, searchTerm: string, grupoFil
   );
 };
 
+const normalizeGroupName = (value: string | null | undefined) =>
+  (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+const isSpecificProductGroup = (grupo: string | null | undefined) =>
+  normalizeGroupName(grupo).startsWith('especifico');
+
 // --- Data fetchers ---
 async function fetchAllRows(
   table: string,
@@ -376,6 +386,7 @@ export default function InventoryAnalysisPage() {
       const supplierLT = fornecedorId ? supplierLTMap.get(fornecedorId) : null;
       const leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : fallbackLeadTime;
       const fornecedorNome = supplierLT?.fornecedor_nome || null;
+      const isSpecificItem = isSpecificProductGroup(info?.grupo);
 
       const safetyFactor = ABC_SAFETY[abcClass];
       const coverageTarget = leadTimeDays;
@@ -409,6 +420,12 @@ export default function InventoryAnalysisPage() {
       const ropNeed = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
       let qtyAComprar = ropNeed !== null ? Math.max(ropNeed, Math.ceil(rop + orcQty - (estoque ?? 0))) : null;
 
+      // Produtos ESPECÍFICOS não podem virar reposição preventiva por histórico/ROP.
+      // Eles só entram quando o usuário cruzar orçamento e houver demanda pendente.
+      if (isSpecificItem) {
+        qtyAComprar = orcQty > 0 ? Math.max(0, Math.ceil(orcQty - (estoque ?? 0))) : 0;
+      }
+
       // Piso por recorrência: se há saída recorrente (>=2 docs) e o item está
       // sob algum gatilho (estoque <=0, cobertura < LT ou estoque < ROP), garantir
       // ao menos a média de peças por documento de saída — caso contrário a sugestão
@@ -418,7 +435,7 @@ export default function InventoryAnalysisPage() {
       const isOutOfStockCalc = estoque !== null && estoque <= 0;
       const coverageBelowLTCalc = diasCobertura !== null && diasCobertura < leadTimeDays;
       const belowROPCalc = estoque !== null && rop > 0 && estoque < rop;
-      if (qtyAComprar !== null && isRecurringCalc && (isOutOfStockCalc || coverageBelowLTCalc || belowROPCalc)) {
+      if (!isSpecificItem && qtyAComprar !== null && isRecurringCalc && (isOutOfStockCalc || coverageBelowLTCalc || belowROPCalc)) {
         const minByRecurrence = Math.max(1, Math.ceil(avgQtyPerDoc));
         qtyAComprar = Math.max(qtyAComprar, minByRecurrence);
       }

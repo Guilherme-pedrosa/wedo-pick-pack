@@ -217,6 +217,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     const cliente = r.cliente_nome || '';
     const clientKey = (cliente || sourceId).toLowerCase().trim();
     const existing = map.get(key);
+    const monthKey = (r.occurred_at || '').slice(0, 7); // YYYY-MM
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
@@ -226,6 +227,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
       existing.source_count = existing._sources.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
+      existing.monthly_qty[monthKey] = (existing.monthly_qty[monthKey] || 0) + qty;
       // Aggregate source refs by source_id
       const existingRef = existing._sourceRefs.get(sourceId);
       if (existingRef) {
@@ -247,6 +249,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         last_date: r.occurred_at,
         hybrid_score: 0,
         source_refs: [],
+        monthly_qty: { [monthKey]: qty },
         _sources: new Set([sourceId]),
         _clients: new Set([clientKey]),
         _sourceRefs: refMap,

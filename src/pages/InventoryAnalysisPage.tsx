@@ -562,6 +562,11 @@ export default function InventoryAnalysisPage() {
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       const passesClientGate = i.event_count >= minClients;
       const passesVolumeGate = (i.source_count ?? 0) >= 2;
+      const isSpecificItem = isSpecificProductGroup(i.grupo);
+
+      // Item ESPECÍFICO só aparece na sugestão quando o usuário clicar em
+      // "Cruzar c/ Orçamentos" e existir quantidade em orçamento pendente.
+      if (isSpecificItem) return i.orc_qty > 0;
 
       // Override 1: saída recorrente (>=2 docs) + estoque zerado/negativo
       // → reportar apenas se ainda houver compra líquida após abater PC ativa.

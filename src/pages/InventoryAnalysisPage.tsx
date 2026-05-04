@@ -379,7 +379,18 @@ export default function InventoryAnalysisPage() {
 
       const safetyFactor = ABC_SAFETY[abcClass];
       const coverageTarget = leadTimeDays;
-      const rop = avgDaily * leadTimeDays * safetyFactor;
+      // Base ROP from average daily consumption
+      const ropAvg = avgDaily * leadTimeDays * safetyFactor;
+      // Recurrence-based ROP: cobre saídas esperadas durante o lead time
+      // (resolve casos de baixa frequência mas alta recorrência, ex.: contrato Ecolab)
+      const sourceCount = r.source_count ?? 0;
+      const docsPerDay = lookbackDays > 0 ? sourceCount / lookbackDays : 0;
+      const avgQtyPerDoc = sourceCount > 0 ? r.total_qty / sourceCount : 0;
+      const expectedDocsInLT = docsPerDay * leadTimeDays;
+      const ropRecurrence = sourceCount >= 2
+        ? Math.max(avgQtyPerDoc, expectedDocsInLT * avgQtyPerDoc * safetyFactor)
+        : 0;
+      const rop = Math.max(ropAvg, ropRecurrence);
       const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
 
       // Budget demand (orçamentos pendentes)
@@ -508,7 +519,7 @@ export default function InventoryAnalysisPage() {
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       const passesClientGate = i.event_count >= minClients;
-      const passesVolumeGate = (i.source_count ?? 0) >= 4;
+      const passesVolumeGate = (i.source_count ?? 0) >= 2;
       return passesClientGate || passesVolumeGate;
     });
   }, [analysisItems, grupoFilter, searchTerm]);

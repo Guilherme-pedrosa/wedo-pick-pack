@@ -31,6 +31,7 @@ interface ConsumptionRow {
   total_qty: number;
   total_value: number;
   event_count: number;
+  source_count: number;
   first_date: string;
   last_date: string;
   hybrid_score: number;
@@ -89,6 +90,7 @@ interface AnalysisItem {
   total_qty: number;
   total_value: number;
   event_count: number;
+  source_count: number;
   hybrid_score: number;
   avg_daily: number;
   abc_class: 'A' | 'B' | 'C';
@@ -210,6 +212,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
       existing._sources.add(sourceId);
       existing._clients.add(clientKey);
       existing.event_count = existing._clients.size;
+      existing.source_count = existing._sources.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
       // Aggregate source refs by source_id
@@ -228,6 +231,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         total_qty: qty,
         total_value: val,
         event_count: 1,
+        source_count: 1,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
         hybrid_score: 0,
@@ -404,6 +408,7 @@ export default function InventoryAnalysisPage() {
         total_qty: r.total_qty,
         total_value: r.total_value,
         event_count: r.event_count,
+        source_count: r.source_count,
         hybrid_score: r.hybrid_score,
         avg_daily: avgDaily,
         abc_class: abcClass,
@@ -490,8 +495,10 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase suggestions: price-based client thresholds
-  // < R$1000 unit cost: 2+ unique clients; >= R$1000: 3+ unique clients
+  // Purchase suggestions: triggered by client reach OR by recurring outflow volume.
+  // - Client-reach gate: <R$1k → 2+ clients, ≥R$1k → 3+ clients (catches broad demand)
+  // - Volume gate: 4+ documentos de saída únicos (cobre casos como contratos Ecolab,
+  //   onde um único cliente puxa muita peça e o gate de clientes únicos sozinho ignoraria)
   const purchaseItems = useMemo(() => {
     return analysisItems.filter((item) => {
       if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
@@ -500,7 +507,9 @@ export default function InventoryAnalysisPage() {
       if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
-      return i.event_count >= minClients;
+      const passesClientGate = i.event_count >= minClients;
+      const passesVolumeGate = (i.source_count ?? 0) >= 4;
+      return passesClientGate || passesVolumeGate;
     });
   }, [analysisItems, grupoFilter, searchTerm]);
 

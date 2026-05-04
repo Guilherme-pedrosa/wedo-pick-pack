@@ -36,6 +36,7 @@ interface ConsumptionRow {
   last_date: string;
   hybrid_score: number;
   source_refs: SourceRef[];
+  monthly_qty: Record<string, number>;
 }
 
 interface ProductInfo {
@@ -216,6 +217,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     const cliente = r.cliente_nome || '';
     const clientKey = (cliente || sourceId).toLowerCase().trim();
     const existing = map.get(key);
+    const monthKey = (r.occurred_at || '').slice(0, 7); // YYYY-MM
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
@@ -225,6 +227,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
       existing.source_count = existing._sources.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
+      existing.monthly_qty[monthKey] = (existing.monthly_qty[monthKey] || 0) + qty;
       // Aggregate source refs by source_id
       const existingRef = existing._sourceRefs.get(sourceId);
       if (existingRef) {
@@ -246,6 +249,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         last_date: r.occurred_at,
         hybrid_score: 0,
         source_refs: [],
+        monthly_qty: { [monthKey]: qty },
         _sources: new Set([sourceId]),
         _clients: new Set([clientKey]),
         _sourceRefs: refMap,
@@ -388,15 +392,33 @@ export default function InventoryAnalysisPage() {
       const fornecedorNome = supplierLT?.fornecedor_nome || null;
       const isSpecificItem = isSpecificProductGroup(info?.grupo);
 
+      // ============================================================
+      // MÉDIA PONDERADA MENSAL — últimos 3 meses, mais recente pesa mais.
+      // Ex.: mês atual=5, anterior=1, retrasado=0 → (5*3 + 1*2 + 0*1) / 6 = 2,83 un/mês.
+      // O teto de compra é 1 mês de cobertura máximo.
+      // ============================================================
+      const now = new Date();
+      const monthKeys: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+      const weights = [3, 2, 1]; // mês atual, -1, -2
+      let weightedSum = 0;
+      let weightTotal = 0;
+      for (let i = 0; i < monthKeys.length; i++) {
+        const q = r.monthly_qty?.[monthKeys[i]] || 0;
+        weightedSum += q * weights[i];
+        weightTotal += weights[i];
+      }
+      const monthlyWeightedAvg = weightTotal > 0 ? weightedSum / weightTotal : 0;
+      const targetCoverage = Math.ceil(monthlyWeightedAvg); // teto = 1 mês
+
       const safetyFactor = ABC_SAFETY[abcClass];
       const coverageTarget = leadTimeDays;
-      // Base ROP from average daily consumption
+      // ROP mantido apenas como referência informativa (gatilho de cobertura), mas
+      // a sugestão real é limitada pela média ponderada mensal.
       const ropAvg = avgDaily * leadTimeDays * safetyFactor;
-      // Recurrence-based ROP: usa o INTERVALO MÉDIO ENTRE SAÍDAS observado
-      // (não diluído pelo lookback inteiro). Se o intervalo médio entre saídas
-      // for menor que o lead time, esperam-se múltiplas saídas durante a reposição
-      // → precisamos cobrir essa demanda. Resolve produtos como contrato Ecolab,
-      // onde poucas saídas grandes em janela curta zeram o estoque antes da PC chegar.
       const sourceCount = r.source_count ?? 0;
       const avgQtyPerDoc = sourceCount > 0 ? r.total_qty / sourceCount : 0;
       let ropRecurrence = 0;
@@ -404,7 +426,7 @@ export default function InventoryAnalysisPage() {
         const firstMs = new Date(r.first_date).getTime();
         const lastMs = new Date(r.last_date).getTime();
         const spanDays = Math.max(1, (lastMs - firstMs) / 86400000);
-        const intervalDays = spanDays / (sourceCount - 1); // intervalo médio entre saídas
+        const intervalDays = spanDays / (sourceCount - 1);
         const expectedDocsInLT = leadTimeDays / intervalDays;
         ropRecurrence = Math.max(avgQtyPerDoc, expectedDocsInLT * avgQtyPerDoc * safetyFactor);
       }
@@ -416,32 +438,19 @@ export default function InventoryAnalysisPage() {
       const orcQty = orcEntry?.qtd || 0;
       const orcRefs = orcEntry?.refs || [];
 
-      // qty_a_comprar considers ROP + budget demand
-      const ropNeed = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
-      let qtyAComprar = ropNeed !== null ? Math.max(ropNeed, Math.ceil(rop + orcQty - (estoque ?? 0))) : null;
+      // Necessidade base = cobrir 1 mês (média ponderada) + orçamentos pendentes,
+      // sempre descontando estoque atual.
+      const baseNeed = estoque !== null
+        ? Math.max(0, Math.ceil(targetCoverage + orcQty - estoque))
+        : null;
+      let qtyAComprar: number | null = baseNeed;
 
-      // Produtos ESPECÍFICOS não podem virar reposição preventiva por histórico/ROP.
-      // Eles só entram quando o usuário cruzar orçamento e houver demanda pendente.
+      // Produtos ESPECÍFICOS: só entram via orçamento.
       if (isSpecificItem) {
         qtyAComprar = orcQty > 0 ? Math.max(0, Math.ceil(orcQty - (estoque ?? 0))) : 0;
       }
 
-      // Piso por recorrência: se há saída recorrente (>=2 docs) e o item está
-      // sob algum gatilho (estoque <=0, cobertura < LT ou estoque < ROP), garantir
-      // ao menos a média de peças por documento de saída — caso contrário a sugestão
-      // pode dar 0 quando o ROP é baixo mas o histórico mostra que o próximo
-      // chamado vai esvaziar o estoque novamente.
-      const isRecurringCalc = sourceCount >= 2;
-      const isOutOfStockCalc = estoque !== null && estoque <= 0;
-      const coverageBelowLTCalc = diasCobertura !== null && diasCobertura < leadTimeDays;
-      const belowROPCalc = estoque !== null && rop > 0 && estoque < rop;
-      if (!isSpecificItem && qtyAComprar !== null && isRecurringCalc && (isOutOfStockCalc || coverageBelowLTCalc || belowROPCalc)) {
-        const minByRecurrence = Math.max(1, Math.ceil(avgQtyPerDoc));
-        qtyAComprar = Math.max(qtyAComprar, minByRecurrence);
-      }
-
       // Cross-reference with active purchase orders
-      // Se há PC aberta, ela cobre a demanda — não forçar piso adicional.
       const pcEntry = pcMap.get(r.produto_id);
       const pcQty = pcEntry?.qtd || 0;
       const pcRefs = pcEntry?.refs || [];

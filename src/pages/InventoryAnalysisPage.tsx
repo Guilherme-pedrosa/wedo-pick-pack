@@ -495,8 +495,10 @@ export default function InventoryAnalysisPage() {
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase suggestions: price-based client thresholds
-  // < R$1000 unit cost: 2+ unique clients; >= R$1000: 3+ unique clients
+  // Purchase suggestions: triggered by client reach OR by recurring outflow volume.
+  // - Client-reach gate: <R$1k → 2+ clients, ≥R$1k → 3+ clients (catches broad demand)
+  // - Volume gate: 4+ documentos de saída únicos (cobre casos como contratos Ecolab,
+  //   onde um único cliente puxa muita peça e o gate de clientes únicos sozinho ignoraria)
   const purchaseItems = useMemo(() => {
     return analysisItems.filter((item) => {
       if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
@@ -505,7 +507,9 @@ export default function InventoryAnalysisPage() {
       if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
-      return i.event_count >= minClients;
+      const passesClientGate = i.event_count >= minClients;
+      const passesVolumeGate = (i.source_count ?? 0) >= 4;
+      return passesClientGate || passesVolumeGate;
     });
   }, [analysisItems, grupoFilter, searchTerm]);
 

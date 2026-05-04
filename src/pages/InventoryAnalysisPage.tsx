@@ -537,13 +537,17 @@ export default function InventoryAnalysisPage() {
       if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
 
       const i = item;
+      // Se a PC ativa já cobre a demanda, não entra na lista de compras.
+      // Item com compra líquida 0 pode continuar na análise, mas não como sugestão.
+      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
+
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       const passesClientGate = i.event_count >= minClients;
       const passesVolumeGate = (i.source_count ?? 0) >= 2;
 
       // Override 1: saída recorrente (>=2 docs) + estoque zerado/negativo
-      // → sempre reportar, mesmo que PC ativa "cubra no papel" ou rop seja baixo.
+      // → reportar apenas se ainda houver compra líquida após abater PC ativa.
       const isRecurring = (i.source_count ?? 0) >= 2;
       const isOutOfStock = i.estoque_atual !== null && i.estoque_atual <= 0;
       if (isRecurring && isOutOfStock) return true;
@@ -555,11 +559,10 @@ export default function InventoryAnalysisPage() {
       if (isRecurring && coverageBelowLT) return true;
 
       // Override 3: saída recorrente + estoque < ROP (ponto de reposição atingido)
-      // → mesmo que PC cubra no papel, sinalizar que cruzou o gatilho.
+      // → sinalizar que cruzou o gatilho somente se a compra líquida for positiva.
       const belowROP = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
       if (isRecurring && belowROP) return true;
 
-      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
       return passesClientGate || passesVolumeGate;
     });
   }, [analysisItems, grupoFilter, searchTerm]);

@@ -407,13 +407,36 @@ export default function InventoryAnalysisPage() {
 
       // qty_a_comprar considers ROP + budget demand
       const ropNeed = estoque !== null ? Math.max(0, Math.ceil(rop - estoque)) : null;
-      const qtyAComprar = ropNeed !== null ? Math.max(ropNeed, Math.ceil(rop + orcQty - (estoque ?? 0))) : null;
+      let qtyAComprar = ropNeed !== null ? Math.max(ropNeed, Math.ceil(rop + orcQty - (estoque ?? 0))) : null;
+
+      // Piso por recorrência: se há saída recorrente (>=2 docs) e o item está
+      // sob algum gatilho (estoque <=0, cobertura < LT ou estoque < ROP), garantir
+      // ao menos a média de peças por documento de saída — caso contrário a sugestão
+      // pode dar 0 quando o ROP é baixo mas o histórico mostra que o próximo
+      // chamado vai esvaziar o estoque novamente.
+      const isRecurringCalc = sourceCount >= 2;
+      const isOutOfStockCalc = estoque !== null && estoque <= 0;
+      const coverageBelowLTCalc = diasCobertura !== null && diasCobertura < leadTimeDays;
+      const belowROPCalc = estoque !== null && rop > 0 && estoque < rop;
+      if (qtyAComprar !== null && isRecurringCalc && (isOutOfStockCalc || coverageBelowLTCalc || belowROPCalc)) {
+        const minByRecurrence = Math.max(1, Math.ceil(avgQtyPerDoc));
+        qtyAComprar = Math.max(qtyAComprar, minByRecurrence);
+      }
 
       // Cross-reference with active purchase orders
       const pcEntry = pcMap.get(r.produto_id);
       const pcQty = pcEntry?.qtd || 0;
       const pcRefs = pcEntry?.refs || [];
-      const qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
+      let qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
+      // Se entrou por override de recorrência mas a PC zera a líquida, ainda
+      // sinalizar pelo menos 1un para o comprador validar (não silenciar a demanda).
+      if (
+        qtyLiquida !== null && qtyLiquida === 0 &&
+        isRecurringCalc && (isOutOfStockCalc || coverageBelowLTCalc)
+      ) {
+        qtyLiquida = Math.max(1, Math.ceil(avgQtyPerDoc) - pcQty);
+        if (qtyLiquida < 1) qtyLiquida = 1;
+      }
 
       return {
         produto_id: r.produto_id,

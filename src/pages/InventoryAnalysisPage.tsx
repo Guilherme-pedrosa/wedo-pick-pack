@@ -211,6 +211,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
       existing._sources.add(sourceId);
       existing._clients.add(clientKey);
       existing.event_count = existing._clients.size;
+      existing.source_count = existing._sources.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
       // Aggregate source refs by source_id
@@ -229,6 +230,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         total_qty: qty,
         total_value: val,
         event_count: 1,
+        source_count: 1,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
         hybrid_score: 0,

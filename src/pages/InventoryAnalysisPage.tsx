@@ -1045,6 +1045,11 @@ export default function InventoryAnalysisPage() {
                   {loadingOrcs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
                   {loadingOrcs ? 'Buscando...' : orcMap.size > 0 ? 'Atualizar Orçamentos' : 'Cruzar c/ Orçamentos'}
                 </Button>
+                {orcMap.size > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => setOrcMap(new Map())} className="gap-1 text-muted-foreground">
+                    Limpar Orçamentos
+                  </Button>
+                )}
                 {purchaseItems.length > 0 && (
                   <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
                     <Download className="h-3 w-3" /> Exportar Lista

@@ -31,6 +31,7 @@ interface ConsumptionRow {
   total_qty: number;
   total_value: number;
   event_count: number;
+  source_count: number;
   first_date: string;
   last_date: string;
   hybrid_score: number;

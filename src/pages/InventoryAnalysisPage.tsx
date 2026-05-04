@@ -36,6 +36,7 @@ interface ConsumptionRow {
   last_date: string;
   hybrid_score: number;
   source_refs: SourceRef[];
+  monthly_qty: Record<string, number>;
 }
 
 interface ProductInfo {

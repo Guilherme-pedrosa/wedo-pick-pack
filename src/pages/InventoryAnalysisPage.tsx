@@ -90,6 +90,7 @@ interface AnalysisItem {
   total_qty: number;
   total_value: number;
   event_count: number;
+  source_count: number;
   hybrid_score: number;
   avg_daily: number;
   abc_class: 'A' | 'B' | 'C';

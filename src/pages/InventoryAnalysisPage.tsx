@@ -439,15 +439,26 @@ export default function InventoryAnalysisPage() {
       const orcRefs = orcEntry?.refs || [];
 
       // Necessidade base = cobrir 1 mês (média ponderada) + orçamentos pendentes,
-      // sempre descontando estoque atual.
+      // descontando APENAS estoque positivo (estoque negativo no ERP não justifica
+      // inflar compra — é ajuste pendente, não demanda real).
+      // TETO ABSOLUTO: 1 mês de cobertura + orçamentos. Nunca sugerir mais do que isso.
+      const estoquePositivo = Math.max(0, estoque ?? 0);
+      const demandaTotal = targetCoverage + orcQty; // teto duro
       const baseNeed = estoque !== null
-        ? Math.max(0, Math.ceil(targetCoverage + orcQty - estoque))
+        ? Math.max(0, Math.min(demandaTotal, Math.ceil(demandaTotal - estoquePositivo)))
         : null;
       let qtyAComprar: number | null = baseNeed;
 
-      // Produtos ESPECÍFICOS: só entram via orçamento.
+      // Produtos ESPECÍFICOS: só entram via orçamento (nunca por histórico/ROP).
       if (isSpecificItem) {
-        qtyAComprar = orcQty > 0 ? Math.max(0, Math.ceil(orcQty - (estoque ?? 0))) : 0;
+        qtyAComprar = orcQty > 0 ? Math.max(0, Math.ceil(orcQty - estoquePositivo)) : 0;
+      }
+
+      // Salvaguarda final: se não há orçamento e a média ponderada mensal é zero,
+      // não sugerir compra por histórico antigo. Evita pedir 15 peças com 4 saídas
+      // na vida toda e nenhum orçamento.
+      if (orcQty === 0 && monthlyWeightedAvg === 0) {
+        qtyAComprar = 0;
       }
 
       // Cross-reference with active purchase orders

@@ -42,17 +42,15 @@ export default function OrcamentosPanel() {
     setSelectedCompra(config.situacoesCompraEmAndamento ?? []);
   }, [hydrated, config.situacoesOrcamentoSelecionadas, config.situacoesCompraEmAndamento]);
 
-  // Auto-select ALL purchase order statuses (user deselects finalized/cancelled)
+  // One-time reset: clear previously auto-selected purchase order statuses
   useEffect(() => {
     if (!hydrated) return;
-    if (statusCompraQuery.data && (config.situacoesCompraEmAndamento ?? []).length === 0) {
-      const autoSelect = statusCompraQuery.data.map(s => s.id);
-      if (autoSelect.length > 0) {
-        setSelectedCompra(autoSelect);
-        setConfig({ situacoesCompraEmAndamento: autoSelect });
-      }
-    }
-  }, [hydrated, statusCompraQuery.data, config.situacoesCompraEmAndamento, setConfig]);
+    const RESET_KEY = 'wedo-compras-reset-situacoes-v1';
+    if (localStorage.getItem(RESET_KEY)) return;
+    setSelectedCompra([]);
+    setConfig({ situacoesCompraEmAndamento: [] });
+    localStorage.setItem(RESET_KEY, '1');
+  }, [hydrated, setConfig]);
 
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev => {

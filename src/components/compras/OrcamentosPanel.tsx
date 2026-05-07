@@ -42,15 +42,15 @@ export default function OrcamentosPanel() {
     setSelectedCompra(config.situacoesCompraEmAndamento ?? []);
   }, [hydrated, config.situacoesOrcamentoSelecionadas, config.situacoesCompraEmAndamento]);
 
-  // Clear any previously auto-selected purchase order statuses (one-time reset)
+  // One-time reset: clear previously auto-selected purchase order statuses
   useEffect(() => {
     if (!hydrated) return;
-    if ((config.situacoesCompraEmAndamento ?? []).length > 0) {
-      setSelectedCompra([]);
-      setConfig({ situacoesCompraEmAndamento: [] });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated]);
+    const RESET_KEY = 'wedo-compras-reset-situacoes-v1';
+    if (localStorage.getItem(RESET_KEY)) return;
+    setSelectedCompra([]);
+    setConfig({ situacoesCompraEmAndamento: [] });
+    localStorage.setItem(RESET_KEY, '1');
+  }, [hydrated, setConfig]);
 
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev => {

@@ -42,17 +42,15 @@ export default function OrcamentosPanel() {
     setSelectedCompra(config.situacoesCompraEmAndamento ?? []);
   }, [hydrated, config.situacoesOrcamentoSelecionadas, config.situacoesCompraEmAndamento]);
 
-  // Auto-select ALL purchase order statuses (user deselects finalized/cancelled)
+  // Clear any previously auto-selected purchase order statuses (one-time reset)
   useEffect(() => {
     if (!hydrated) return;
-    if (statusCompraQuery.data && (config.situacoesCompraEmAndamento ?? []).length === 0) {
-      const autoSelect = statusCompraQuery.data.map(s => s.id);
-      if (autoSelect.length > 0) {
-        setSelectedCompra(autoSelect);
-        setConfig({ situacoesCompraEmAndamento: autoSelect });
-      }
+    if ((config.situacoesCompraEmAndamento ?? []).length > 0) {
+      setSelectedCompra([]);
+      setConfig({ situacoesCompraEmAndamento: [] });
     }
-  }, [hydrated, statusCompraQuery.data, config.situacoesCompraEmAndamento, setConfig]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev => {

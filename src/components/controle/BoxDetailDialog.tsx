@@ -44,6 +44,7 @@ export interface BoxData {
   technician_gc_id?: string | null;
   items_count?: number;
   total_value?: number;
+  last_linked_at?: string | null;
 }
 
 export interface BoxItemData {

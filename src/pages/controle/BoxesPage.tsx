@@ -243,9 +243,18 @@ const BoxesPage = () => {
       if (requestId !== loadBoxesRequestRef.current) return;
 
       if (data && data.length > 0) {
-        const { data: itemsData } = await supabase
-          .from("box_items")
-          .select("box_id, quantidade, preco_unitario");
+        const boxIds = data.map((b) => b.id);
+        const [{ data: itemsData }, { data: linkLogs }] = await Promise.all([
+          supabase
+            .from("box_items")
+            .select("box_id, quantidade, preco_unitario"),
+          supabase
+            .from("box_movement_logs")
+            .select("box_id, action, created_at")
+            .in("box_id", boxIds)
+            .in("action", ["saida", "vinculacao"])
+            .order("created_at", { ascending: false }),
+        ]);
 
         if (requestId !== loadBoxesRequestRef.current) return;
 
@@ -256,12 +265,18 @@ const BoxesPage = () => {
           valueMap.set(c.box_id, (valueMap.get(c.box_id) || 0) + (c.quantidade || 0) * (c.preco_unitario || 0));
         });
 
+        const lastLinkMap = new Map<string, string>();
+        linkLogs?.forEach((l: any) => {
+          if (!lastLinkMap.has(l.box_id)) lastLinkMap.set(l.box_id, l.created_at);
+        });
+
         setBoxes(
           data.map((b) => ({
             ...b,
             status: b.status as BoxData["status"],
             items_count: countMap.get(b.id) || 0,
             total_value: valueMap.get(b.id) || 0,
+            last_linked_at: lastLinkMap.get(b.id) || null,
           }))
         );
       } else {

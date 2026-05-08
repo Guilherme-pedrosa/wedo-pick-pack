@@ -241,15 +241,39 @@ const TechniciansPage = () => {
     }
 
     // Mantém apenas separações cujo status atual ainda bate com target_status_id
-    // (ainda "Retirada pelo técnico" — não executada). Se falhou a verificação, preserva por segurança.
+    // (ainda "Retirada pelo técnico" — não executada). As que mudaram de status
+    // são automaticamente desvinculadas do técnico no banco. Se a verificação
+    // falhou, preserva por segurança.
+    const idsToUnlink: string[] = [];
+    for (const sep of allSeps) {
+      const key = `${sep.order_type}:${sep.order_id}`;
+      const liveStatus = liveStatusByKey.get(key);
+      if (!liveStatus) continue;
+      if (liveStatus !== sep.target_status_id) {
+        idsToUnlink.push(sep.id);
+      }
+    }
+
+    if (idsToUnlink.length > 0) {
+      try {
+        const { error: unlinkErr } = await supabase
+          .from("separations")
+          .update({ technician_gc_id: null, technician_name: null })
+          .in("id", idsToUnlink);
+        if (unlinkErr) {
+          console.warn("[Technicians] Falha ao desvincular separações executadas", unlinkErr);
+        } else {
+          console.log(`[Technicians] ${idsToUnlink.length} separação(ões) desvinculada(s) (status mudou)`);
+        }
+      } catch (e) {
+        console.warn("[Technicians] Erro ao desvincular separações", e);
+      }
+    }
+
+    const unlinkedSet = new Set(idsToUnlink);
     setTechnicians((prev) =>
       prev.map((tech) => {
-        const filteredSeps = tech.separations.filter((sep) => {
-          const key = `${sep.order_type}:${sep.order_id}`;
-          const liveStatus = liveStatusByKey.get(key);
-          if (!liveStatus) return true;
-          return liveStatus === sep.target_status_id;
-        });
+        const filteredSeps = tech.separations.filter((sep) => !unlinkedSet.has(sep.id));
         return { ...tech, separations: filteredSeps };
       })
     );

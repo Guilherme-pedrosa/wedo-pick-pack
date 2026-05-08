@@ -461,9 +461,9 @@ const BoxesPage = () => {
                 {formatCurrency(box.total_value || 0)}
               </span>
             )}
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground" title={isOperation ? "Última vinculação" : "Criada em"}>
               <Clock className="h-3 w-3" />
-              {formatDate(box.created_at)}
+              {formatDate(isOperation && box.last_linked_at ? box.last_linked_at : box.created_at)}
             </span>
           </div>
         </div>

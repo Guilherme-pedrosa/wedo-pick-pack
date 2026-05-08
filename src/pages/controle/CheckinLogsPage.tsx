@@ -76,12 +76,19 @@ export default function CheckinLogsPage() {
       return;
     }
 
-    // Fetch all items for these checkins
+    // Fetch all items for these checkins (em lotes p/ contornar limite de 1000 do Supabase)
     const checkinIds = checkins.map((c) => c.id);
-    const { data: allItems } = await supabase
-      .from("box_checkin_items")
-      .select("*")
-      .in("checkin_id", checkinIds);
+    const allItems: any[] = [];
+    const CHUNK = 40;
+    for (let i = 0; i < checkinIds.length; i += CHUNK) {
+      const slice = checkinIds.slice(i, i + CHUNK);
+      const { data: chunkItems } = await supabase
+        .from("box_checkin_items")
+        .select("*")
+        .in("checkin_id", slice)
+        .limit(10000);
+      if (chunkItems) allItems.push(...chunkItems);
+    }
 
     // Fetch box names and technician info from the movement logs (entrada action)
     const boxIds = [...new Set(checkins.map((c) => c.box_id))];

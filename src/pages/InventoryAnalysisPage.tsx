@@ -449,9 +449,16 @@ export default function InventoryAnalysisPage() {
         : null;
       let qtyAComprar: number | null = baseNeed;
 
-      // Produtos ESPECÍFICOS: só entram via orçamento (nunca por histórico/ROP).
+      // Produtos ESPECÍFICOS: entram via orçamento OU quando há recorrência real
+      // de saída (≥2 documentos no período). Sem recorrência e sem orçamento, zera.
       if (isSpecificItem) {
-        qtyAComprar = orcQty > 0 ? Math.max(0, Math.ceil(orcQty - estoquePositivo)) : 0;
+        const isRecurringSpec = (r.source_count ?? 0) >= 2;
+        if (orcQty > 0) {
+          qtyAComprar = Math.max(0, Math.ceil(orcQty - estoquePositivo));
+        } else if (!isRecurringSpec) {
+          qtyAComprar = 0;
+        }
+        // Se recorrente sem orçamento, mantém baseNeed (cobertura de 1 mês - estoque).
       }
 
       // Salvaguarda final: se não há orçamento e a média ponderada mensal é zero,
@@ -584,9 +591,17 @@ export default function InventoryAnalysisPage() {
       const passesVolumeGate = (i.source_count ?? 0) >= 2;
       const isSpecificItem = isSpecificProductGroup(i.grupo);
 
-      // Item ESPECÍFICO só aparece na sugestão quando o usuário clicar em
-      // "Cruzar c/ Orçamentos" e existir quantidade em orçamento pendente.
-      if (isSpecificItem) return i.orc_qty > 0;
+      // Item ESPECÍFICO entra na sugestão quando:
+      //  (a) há orçamento pendente cruzado, OU
+      //  (b) há recorrência real de saída (≥2 documentos) com estoque insuficiente.
+      if (isSpecificItem) {
+        if (i.orc_qty > 0) return true;
+        const isRecurringSpec = (i.source_count ?? 0) >= 2;
+        const isOutOfStockSpec = i.estoque_atual !== null && i.estoque_atual <= 0;
+        const belowROPSpec = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
+        const coverageBelowLTSpec = i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days;
+        return isRecurringSpec && (isOutOfStockSpec || belowROPSpec || coverageBelowLTSpec);
+      }
 
       // Override 1: saída recorrente (>=2 docs) + estoque zerado/negativo
       // → reportar apenas se ainda houver compra líquida após abater PC ativa.

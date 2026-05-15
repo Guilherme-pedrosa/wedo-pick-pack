@@ -342,6 +342,38 @@ export async function rastrearOrcamentos(
     else pendentes.push(entry);
   }
 
+  // Per-item readiness for blocked budgets (already became OS), so the user can still see
+  // stock, conflict, and coverage info for them.
+  const orcamentoById = new Map(filteredOrcamentos.map(o => [o.id, o]));
+  for (const b of bloqueados) {
+    const orc = orcamentoById.get(b.orcamento_id);
+    if (!orc) continue;
+    const itens: NonNullable<typeof b.itens> = [];
+    for (const p of orc.produtos || []) {
+      const pid = normalizeId(p.produto.produto_id);
+      const vid = normalizeId(p.produto.variacao_id);
+      if (!pid) continue;
+      const key = makeKey(pid, vid);
+      const qtd = parseDecimal(p.produto.quantidade);
+      const stockTotal = stockMapOriginal.get(key) ?? 0;
+      itens.push({
+        produto_id: pid,
+        variacao_id: vid,
+        nome_produto: p.produto.nome_produto,
+        codigo_produto: codeMap.get(key) || String(p.produto.codigo_produto ?? '').trim(),
+        qtd_necessaria: qtd,
+        estoque_total: stockTotal,
+        estoque_disponivel: stockTotal,
+        pronto: stockTotal >= qtd,
+        comprometido: conflictKeys.has(key),
+      });
+    }
+    b.itens = itens;
+    b.totalItens = itens.length;
+    b.itensProntos = itens.filter(i => i.pronto).length;
+    b.temComprometido = itens.some(i => i.comprometido);
+  }
+
   return {
     orcamentosProntos: prontos,
     orcamentosPendentes: pendentes,

@@ -429,12 +429,17 @@ export default function RastreadorPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {ready && alreadyGenerated && (
+            {entry.osLinked && (
+              <Badge variant="outline" className="text-[10px] px-1.5 border-blue-500 text-blue-600" title={`Já é OS #${entry.osLinked.os_codigo} [${entry.osLinked.nome_situacao}] — ignorada pelo filtro`}>
+                Já é OS #{entry.osLinked.os_codigo} [{entry.osLinked.nome_situacao}]
+              </Badge>
+            )}
+            {!entry.osLinked && ready && alreadyGenerated && (
               <Badge variant="outline" className="text-[10px] px-1.5 border-green-500 text-green-600">
                 <CheckCircle2 className="h-3 w-3 mr-1" /> OS Gerada
               </Badge>
             )}
-            {ready && !alreadyGenerated && (
+            {!entry.osLinked && ready && !alreadyGenerated && (
               <Button
                 variant="outline"
                 size="sm"

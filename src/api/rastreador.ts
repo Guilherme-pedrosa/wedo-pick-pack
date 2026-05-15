@@ -116,9 +116,10 @@ export async function rastrearOrcamentos(
   const bloqueados: OrcamentoConvertidoWarning[] = [];
   const uniqueOrcamentos: GCOrcamento[] = [];
 
-  // If situacaoOSNomes is provided, only OS in those situations count as "blocked"
-  const osFilterActive = situacaoOSNomes !== undefined;
-  const osFilterSet = new Set((situacaoOSNomes || []).map(n => n.trim().toLowerCase()));
+  // situacaoOSNomes = situações de OS a IGNORAR (não tratar como bloqueio).
+  // Se a OS vinculada estiver em uma das situações marcadas, o orçamento volta ao rastreio normal.
+  const osIgnoreActive = situacaoOSNomes !== undefined && situacaoOSNomes.length > 0;
+  const osIgnoreSet = new Set((situacaoOSNomes || []).map(n => n.trim().toLowerCase()));
 
   for (const o of filteredOrcamentos) {
     const flagFin = String(o.situacao_financeiro ?? '');

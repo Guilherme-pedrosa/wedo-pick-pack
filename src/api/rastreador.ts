@@ -74,6 +74,7 @@ export async function rastrearOrcamentos(
   nomeCliente?: string,
   onProgress?: (step: string, checked: number, total: number) => void,
   dataInicio?: string, // YYYY-MM-DD — only include orçamentos with data >= dataInicio
+  situacaoCompraIds?: string[], // if empty/undefined, skip purchase-order coverage analysis
 ): Promise<RastreadorResult> {
   // Phase 1: Fetch budgets
   onProgress?.('Buscando orçamentos…', 0, 1);

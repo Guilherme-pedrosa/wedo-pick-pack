@@ -409,13 +409,16 @@ export async function rastrearOrcamentos(
     const allReady = itens.length > 0 && itens.every(i => i.pronto);
     const temComprometido = itens.some(i => i.comprometido);
 
+    const osLinked = ignoredOSLinks.get(orc.id);
     const entry: OrcamentoReadiness = {
       orcamento: orc,
       itens,
       totalItens: itens.length,
       itensProntos: itens.filter(i => i.pronto).length,
-      pronto: allReady,
+      // Se o orçamento já é OS (apenas com situação ignorada), nunca tratar como "pronto p/ virar OS"
+      pronto: allReady && !osLinked,
       temComprometido,
+      ...(osLinked ? { osLinked } : {}),
     };
 
     if (entry.pronto) prontos.push(entry);

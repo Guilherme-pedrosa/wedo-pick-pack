@@ -69,14 +69,14 @@ export default function RastreadorPage() {
   const [selectedSituacoesCompra, setSelectedSituacoesCompra] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('rastreador-situacoes-compra') || '[]'); } catch { return []; }
   });
-  // OS situations that count as "blocked" (already became OS). null = include all (default).
-  const [selectedSituacoesOS, setSelectedSituacoesOS] = useState<string[] | null>(() => {
+  // OS situations that count as "blocked". Empty = nothing blocked (manual selection from zero).
+  const [selectedSituacoesOS, setSelectedSituacoesOS] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem('rastreador-situacoes-os');
-      if (raw == null) return null;
+      if (raw == null) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : null;
-    } catch { return null; }
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
   });
   const [nomeCliente, setNomeCliente] = useState('');
   const [dataInicio, setDataInicio] = useState<string>(() => {
@@ -299,18 +299,21 @@ export default function RastreadorPage() {
 
   const toggleSituacaoOS = (nome: string) => {
     setSelectedSituacoesOS(prev => {
-      const all = (statusOSQuery.data || []).map(s => s.nome);
-      // First click on a list that was "include all" (null) → start from full set, then toggle off
-      const base = prev ?? all;
-      const next = base.includes(nome) ? base.filter(s => s !== nome) : [...base, nome];
+      const next = prev.includes(nome) ? prev.filter(s => s !== nome) : [...prev, nome];
       try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(next)); } catch {}
       return next;
     });
   };
 
-  const resetSituacoesOS = () => {
-    setSelectedSituacoesOS(null);
-    try { localStorage.removeItem('rastreador-situacoes-os'); } catch {}
+  const selectAllSituacoesOS = () => {
+    const all = (statusOSQuery.data || []).map(s => s.nome);
+    setSelectedSituacoesOS(all);
+    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(all)); } catch {}
+  };
+
+  const clearSituacoesOS = () => {
+    setSelectedSituacoesOS([]);
+    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify([])); } catch {}
   };
 
   const handleScan = async () => {
@@ -325,7 +328,7 @@ export default function RastreadorPage() {
         (step, checked, total) => setProgress({ step, checked, total }),
         dataInicio || undefined,
         selectedSituacoesCompra.length > 0 ? selectedSituacoesCompra : undefined,
-        selectedSituacoesOS === null ? undefined : selectedSituacoesOS,
+        selectedSituacoesOS,
       );
       setResult(res);
       toast.success(
@@ -760,18 +763,19 @@ export default function RastreadorPage() {
                   Situações de OS <span className="text-muted-foreground font-normal">(o que conta como "já virou OS")</span>
                 </p>
                 <div className="flex items-center gap-2">
-                  {selectedSituacoesOS !== null && (
-                    <span className="text-[10px] text-muted-foreground">{selectedSituacoesOS.length} selecionada(s)</span>
-                  )}
-                  {selectedSituacoesOS !== null && (
-                    <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={resetSituacoesOS} disabled={scanning}>
-                      Incluir todas
+                  <span className="text-[10px] text-muted-foreground">{selectedSituacoesOS.length} selecionada(s)</span>
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={selectAllSituacoesOS} disabled={scanning}>
+                    Selecionar todas
+                  </Button>
+                  {selectedSituacoesOS.length > 0 && (
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={clearSituacoesOS} disabled={scanning}>
+                      Limpar
                     </Button>
                   )}
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Marque apenas as situações de OS que devem ser tratadas como bloqueio. Orçamentos vinculados a OS de situações <strong>desmarcadas</strong> voltam ao rastreio normal (ex.: OS canceladas). Por padrão, todas contam como bloqueio.
+                Marque as situações de OS que devem ser tratadas como bloqueio. Orçamentos vinculados a OS de situações <strong>desmarcadas</strong> voltam ao rastreio normal. Por padrão, nada vem marcado — selecione manualmente.
               </p>
               {statusOSQuery.isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -780,7 +784,7 @@ export default function RastreadorPage() {
               ) : (
                 <div className="flex flex-wrap gap-3">
                   {(statusOSQuery.data || []).map(s => {
-                    const checked = selectedSituacoesOS === null ? true : selectedSituacoesOS.includes(s.nome);
+                    const checked = selectedSituacoesOS.includes(s.nome);
                     return (
                       <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
                         <Checkbox

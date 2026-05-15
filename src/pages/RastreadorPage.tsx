@@ -276,6 +276,7 @@ export default function RastreadorPage() {
         selectedSituacoes,
         nomeCliente.trim() || undefined,
         (step, checked, total) => setProgress({ step, checked, total }),
+        dataInicio || undefined,
       );
       setResult(res);
       toast.success(

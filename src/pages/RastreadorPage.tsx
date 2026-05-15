@@ -69,6 +69,15 @@ export default function RastreadorPage() {
   const [selectedSituacoesCompra, setSelectedSituacoesCompra] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('rastreador-situacoes-compra') || '[]'); } catch { return []; }
   });
+  // OS situations that count as "blocked" (already became OS). null = include all (default).
+  const [selectedSituacoesOS, setSelectedSituacoesOS] = useState<string[] | null>(() => {
+    try {
+      const raw = localStorage.getItem('rastreador-situacoes-os');
+      if (raw == null) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch { return null; }
+  });
   const [nomeCliente, setNomeCliente] = useState('');
   const [dataInicio, setDataInicio] = useState<string>(() => {
     // default: 90 days back

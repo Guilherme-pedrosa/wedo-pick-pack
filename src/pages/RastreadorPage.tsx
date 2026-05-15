@@ -65,6 +65,9 @@ function formatDateBR(d: string) {
 
 export default function RastreadorPage() {
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
+  const [selectedSituacoesCompra, setSelectedSituacoesCompra] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('rastreador-situacoes-compra') || '[]'); } catch { return []; }
+  });
   const [nomeCliente, setNomeCliente] = useState('');
   const [dataInicio, setDataInicio] = useState<string>(() => {
     // default: 90 days back

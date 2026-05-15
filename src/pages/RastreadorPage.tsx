@@ -74,7 +74,7 @@ export default function RastreadorPage() {
   const [selectedSituacoesOS, setSelectedSituacoesOS] = useState<string[]>(() => {
     try {
       // Limpa chave antiga (semântica invertida)
-      localStorage.removeItem('rastreador-situacoes-os');
+      localStorage.removeItem('rastreador-situacoes-os-ignore-v2');
       const raw = localStorage.getItem('rastreador-situacoes-os-ignore-v2');
       if (raw == null) return [];
       const parsed = JSON.parse(raw);
@@ -303,7 +303,7 @@ export default function RastreadorPage() {
   const toggleSituacaoOS = (nome: string) => {
     setSelectedSituacoesOS(prev => {
       const next = prev.includes(nome) ? prev.filter(s => s !== nome) : [...prev, nome];
-      try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(next)); } catch {}
+      try { localStorage.setItem('rastreador-situacoes-os-ignore-v2', JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -311,12 +311,12 @@ export default function RastreadorPage() {
   const selectAllSituacoesOS = () => {
     const all = (statusOSQuery.data || []).map(s => s.nome);
     setSelectedSituacoesOS(all);
-    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(all)); } catch {}
+    try { localStorage.setItem('rastreador-situacoes-os-ignore-v2', JSON.stringify(all)); } catch {}
   };
 
   const clearSituacoesOS = () => {
     setSelectedSituacoesOS([]);
-    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify([])); } catch {}
+    try { localStorage.setItem('rastreador-situacoes-os-ignore-v2', JSON.stringify([])); } catch {}
   };
 
   const handleScan = async () => {

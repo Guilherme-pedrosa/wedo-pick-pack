@@ -752,6 +752,49 @@ export default function RastreadorPage() {
                 </div>
               )}
             </div>
+
+            {/* OS situations: which ones count as "blocked / already became OS" */}
+            <div className="pt-3 border-t border-border space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-foreground">
+                  Situações de OS <span className="text-muted-foreground font-normal">(o que conta como "já virou OS")</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  {selectedSituacoesOS !== null && (
+                    <span className="text-[10px] text-muted-foreground">{selectedSituacoesOS.length} selecionada(s)</span>
+                  )}
+                  {selectedSituacoesOS !== null && (
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={resetSituacoesOS} disabled={scanning}>
+                      Incluir todas
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Marque apenas as situações de OS que devem ser tratadas como bloqueio. Orçamentos vinculados a OS de situações <strong>desmarcadas</strong> voltam ao rastreio normal (ex.: OS canceladas). Por padrão, todas contam como bloqueio.
+              </p>
+              {statusOSQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações de OS…
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {(statusOSQuery.data || []).map(s => {
+                    const checked = selectedSituacoesOS === null ? true : selectedSituacoesOS.includes(s.nome);
+                    return (
+                      <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleSituacaoOS(s.nome)}
+                          disabled={scanning}
+                        />
+                        {s.nome}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </CollapsibleContent>
         </Collapsible>
 

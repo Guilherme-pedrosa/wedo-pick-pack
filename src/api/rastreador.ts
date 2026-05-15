@@ -71,6 +71,7 @@ export async function rastrearOrcamentos(
   situacaoIds: string[],
   nomeCliente?: string,
   onProgress?: (step: string, checked: number, total: number) => void,
+  dataInicio?: string, // YYYY-MM-DD — only include orçamentos with data >= dataInicio
 ): Promise<RastreadorResult> {
   // Phase 1: Fetch budgets
   onProgress?.('Buscando orçamentos…', 0, 1);
@@ -93,9 +94,14 @@ export async function rastrearOrcamentos(
   const deduped = [...new Map(allOrcamentos.map(o => [o.id, o])).values()];
 
   // Client-side fallback filter (in case API ignores nome param)
-  const filteredOrcamentos = nomeCliente
+  let filteredOrcamentos = nomeCliente
     ? deduped.filter(o => o.nome_cliente.toLowerCase().includes(nomeCliente.toLowerCase()))
     : deduped;
+
+  // Date filter (data >= dataInicio). GC dates come as YYYY-MM-DD, so string compare works.
+  if (dataInicio) {
+    filteredOrcamentos = filteredOrcamentos.filter(o => String(o.data || '') >= dataInicio);
+  }
 
   // Phase 1b: Build OS index and filter out converted budgets
   onProgress?.('Construindo índice de OS…', 0, 1);

@@ -20,6 +20,7 @@ export interface OrcamentoReadiness {
   itensProntos: number;
   pronto: boolean;
   temComprometido: boolean;      // true if any item is in a conflict
+  osLinked?: { os_codigo: string; os_id: string; nome_situacao: string }; // set when budget is already an OS but its OS situation was ignored by the filter
 }
 
 export interface ConflictInfo {

@@ -75,6 +75,7 @@ export async function rastrearOrcamentos(
   onProgress?: (step: string, checked: number, total: number) => void,
   dataInicio?: string, // YYYY-MM-DD — only include orçamentos with data >= dataInicio
   situacaoCompraIds?: string[], // if empty/undefined, skip purchase-order coverage analysis
+  situacaoOSNomes?: string[], // OS situation NAMES that count as "blocked". If undefined, all OS-linked budgets are blocked (current default). If empty array, no OS-linked budgets are blocked (everything goes back to normal tracking).
 ): Promise<RastreadorResult> {
   // Phase 1: Fetch budgets
   onProgress?.('Buscando orçamentos…', 0, 1);
@@ -115,6 +116,10 @@ export async function rastrearOrcamentos(
   const bloqueados: OrcamentoConvertidoWarning[] = [];
   const uniqueOrcamentos: GCOrcamento[] = [];
 
+  // If situacaoOSNomes is provided, only OS in those situations count as "blocked"
+  const osFilterActive = situacaoOSNomes !== undefined;
+  const osFilterSet = new Set((situacaoOSNomes || []).map(n => n.trim().toLowerCase()));
+
   for (const o of filteredOrcamentos) {
     const flagFin = String(o.situacao_financeiro ?? '');
     const flagEst = String(o.situacao_estoque ?? '');
@@ -122,11 +127,15 @@ export async function rastrearOrcamentos(
                     ['1', 'true', 'sim'].includes(flagEst.toLowerCase());
     const osMatch = osIndex[String(o.codigo)];
 
-    if (byFlags || osMatch) {
+    // Apply OS-situation filter: if filter is active and the OS situation isn't selected,
+    // ignore this OS link (treat budget as still active for tracking purposes).
+    const osMatchPasses = osMatch && (!osFilterActive || osFilterSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase()));
+
+    if (byFlags || osMatchPasses) {
       const reason = byFlags ? 'flag' as const : 'os_index' as const;
       let warning = '';
-      if (osMatch) {
-        warning = `Orçamento #${o.codigo} → já é OS #${osMatch.os_codigo} [${osMatch.nome_situacao}]`;
+      if (osMatchPasses) {
+        warning = `Orçamento #${o.codigo} → já é OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}]`;
       } else {
         warning = `Orçamento #${o.codigo} → convertido (flag financeiro/estoque)`;
       }
@@ -137,9 +146,9 @@ export async function rastrearOrcamentos(
         situacao_financeiro: flagFin,
         situacao_estoque: flagEst,
         reason,
-        link_number: osMatch?.os_codigo ?? null,
-        link_id: osMatch?.os_id ?? null,
-        link_situacao: osMatch?.nome_situacao ?? null,
+        link_number: osMatchPasses ? osMatch!.os_codigo : null,
+        link_id: osMatchPasses ? osMatch!.os_id : null,
+        link_situacao: osMatchPasses ? osMatch!.nome_situacao : null,
         warning,
       });
       console.warn(`[RASTREADOR] ${warning}`);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
+import { getStatusOS } from '@/api/gestaoclick';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo, OSReservedInfo } from '@/api/rastreador';
 import { OrcamentoConvertidoWarning } from '@/api/types';
 import { GCOrcamento } from '@/api/types';
@@ -67,6 +68,15 @@ export default function RastreadorPage() {
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
   const [selectedSituacoesCompra, setSelectedSituacoesCompra] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('rastreador-situacoes-compra') || '[]'); } catch { return []; }
+  });
+  // OS situations that count as "blocked" (already became OS). null = include all (default).
+  const [selectedSituacoesOS, setSelectedSituacoesOS] = useState<string[] | null>(() => {
+    try {
+      const raw = localStorage.getItem('rastreador-situacoes-os');
+      if (raw == null) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch { return null; }
   });
   const [nomeCliente, setNomeCliente] = useState('');
   const [dataInicio, setDataInicio] = useState<string>(() => {
@@ -268,6 +278,11 @@ export default function RastreadorPage() {
     queryFn: getStatusCompras,
   });
 
+  const statusOSQuery = useQuery({
+    queryKey: ['status-os'],
+    queryFn: getStatusOS,
+  });
+
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev =>
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
@@ -282,6 +297,22 @@ export default function RastreadorPage() {
     });
   };
 
+  const toggleSituacaoOS = (nome: string) => {
+    setSelectedSituacoesOS(prev => {
+      const all = (statusOSQuery.data || []).map(s => s.nome);
+      // First click on a list that was "include all" (null) → start from full set, then toggle off
+      const base = prev ?? all;
+      const next = base.includes(nome) ? base.filter(s => s !== nome) : [...base, nome];
+      try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const resetSituacoesOS = () => {
+    setSelectedSituacoesOS(null);
+    try { localStorage.removeItem('rastreador-situacoes-os'); } catch {}
+  };
+
   const handleScan = async () => {
     if (selectedSituacoes.length === 0) return;
     setScanning(true);
@@ -294,6 +325,7 @@ export default function RastreadorPage() {
         (step, checked, total) => setProgress({ step, checked, total }),
         dataInicio || undefined,
         selectedSituacoesCompra.length > 0 ? selectedSituacoesCompra : undefined,
+        selectedSituacoesOS === null ? undefined : selectedSituacoesOS,
       );
       setResult(res);
       toast.success(
@@ -717,6 +749,49 @@ export default function RastreadorPage() {
                       {s.nome}
                     </label>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* OS situations: which ones count as "blocked / already became OS" */}
+            <div className="pt-3 border-t border-border space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-foreground">
+                  Situações de OS <span className="text-muted-foreground font-normal">(o que conta como "já virou OS")</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  {selectedSituacoesOS !== null && (
+                    <span className="text-[10px] text-muted-foreground">{selectedSituacoesOS.length} selecionada(s)</span>
+                  )}
+                  {selectedSituacoesOS !== null && (
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={resetSituacoesOS} disabled={scanning}>
+                      Incluir todas
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Marque apenas as situações de OS que devem ser tratadas como bloqueio. Orçamentos vinculados a OS de situações <strong>desmarcadas</strong> voltam ao rastreio normal (ex.: OS canceladas). Por padrão, todas contam como bloqueio.
+              </p>
+              {statusOSQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações de OS…
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {(statusOSQuery.data || []).map(s => {
+                    const checked = selectedSituacoesOS === null ? true : selectedSituacoesOS.includes(s.nome);
+                    return (
+                      <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleSituacaoOS(s.nome)}
+                          disabled={scanning}
+                        />
+                        {s.nome}
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>

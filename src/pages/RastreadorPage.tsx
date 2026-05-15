@@ -263,10 +263,23 @@ export default function RastreadorPage() {
     queryFn: getStatusOrcamentos,
   });
 
+  const statusCompraQuery = useQuery({
+    queryKey: ['status-compras'],
+    queryFn: getStatusCompras,
+  });
+
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev =>
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
     );
+  };
+
+  const toggleSituacaoCompra = (id: string) => {
+    setSelectedSituacoesCompra(prev => {
+      const next = prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id];
+      try { localStorage.setItem('rastreador-situacoes-compra', JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   const handleScan = async () => {

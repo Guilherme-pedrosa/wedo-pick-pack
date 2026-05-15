@@ -1,5 +1,5 @@
 import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning, GCOrdemCompra } from './types';
-import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra, getStatusCompras } from './compras';
+import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra } from './compras';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;

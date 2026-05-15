@@ -139,9 +139,11 @@ export async function rastrearOrcamentos(
     }
   }
 
-  // Phase 2: Collect unique product IDs
+  // Phase 2: Collect unique product IDs (from BOTH unique budgets AND blocked budgets,
+  // so we can also show stock/conflict info for blocked ones)
+  const orcamentosForStock: GCOrcamento[] = [...uniqueOrcamentos, ...filteredOrcamentos.filter(o => bloqueados.some(b => b.orcamento_id === o.id))];
   const uniqueProductIds = new Set<string>();
-  for (const orc of uniqueOrcamentos) {
+  for (const orc of orcamentosForStock) {
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
       if (pid) uniqueProductIds.add(pid);
@@ -171,7 +173,7 @@ export async function rastrearOrcamentos(
   const stockMap = new Map<string, number>(); // key -> real stock from API
   const codeMap = new Map<string, string>();  // key -> best available product code
 
-  for (const orc of uniqueOrcamentos) {
+  for (const orc of orcamentosForStock) {
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
       const vid = normalizeId(p.produto.variacao_id);
@@ -205,22 +207,12 @@ export async function rastrearOrcamentos(
 
           if (selectedVariation) {
             estoque = parseDecimal(selectedVariation.variacao.estoque);
-            const strategy = byId ? 'id' : byCode ? 'codigo' : 'single_variation';
-            console.log(
-              `[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}, vid=${vid}) → variação[${strategy}] estoque raw=${selectedVariation.variacao.estoque}, parsed=${estoque}`,
-            );
           } else {
             estoque = 0;
-            console.warn(
-              `[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}, vid=${vid}) → sem variação correspondente; parent raw=${detail.estoque}, parsed=${parseDecimal(detail.estoque)} (ignorado para evitar superestimar)`,
-            );
           }
         } else {
           estoque = parseDecimal(detail.estoque);
-          console.log(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}) → parent estoque raw=${detail.estoque}, parsed=${estoque}`);
         }
-      } else {
-        console.warn(`[RASTREADOR STOCK] ${p.produto.nome_produto} (pid=${pid}) → NO DETAIL FOUND`);
       }
 
       stockMap.set(key, estoque);
@@ -348,6 +340,38 @@ export async function rastrearOrcamentos(
 
     if (entry.pronto) prontos.push(entry);
     else pendentes.push(entry);
+  }
+
+  // Per-item readiness for blocked budgets (already became OS), so the user can still see
+  // stock, conflict, and coverage info for them.
+  const orcamentoById = new Map(filteredOrcamentos.map(o => [o.id, o]));
+  for (const b of bloqueados) {
+    const orc = orcamentoById.get(b.orcamento_id);
+    if (!orc) continue;
+    const itens: NonNullable<typeof b.itens> = [];
+    for (const p of orc.produtos || []) {
+      const pid = normalizeId(p.produto.produto_id);
+      const vid = normalizeId(p.produto.variacao_id);
+      if (!pid) continue;
+      const key = makeKey(pid, vid);
+      const qtd = parseDecimal(p.produto.quantidade);
+      const stockTotal = stockMapOriginal.get(key) ?? 0;
+      itens.push({
+        produto_id: pid,
+        variacao_id: vid,
+        nome_produto: p.produto.nome_produto,
+        codigo_produto: codeMap.get(key) || String(p.produto.codigo_produto ?? '').trim(),
+        qtd_necessaria: qtd,
+        estoque_total: stockTotal,
+        estoque_disponivel: stockTotal,
+        pronto: stockTotal >= qtd,
+        comprometido: conflictKeys.has(key),
+      });
+    }
+    b.itens = itens;
+    b.totalItens = itens.length;
+    b.itensProntos = itens.filter(i => i.pronto).length;
+    b.temComprometido = itens.some(i => i.comprometido);
   }
 
   return {

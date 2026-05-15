@@ -690,6 +690,40 @@ export default function RastreadorPage() {
                               Vínculo baseado em campo digitado manualmente na OS (atributo "Nº Orçamento")
                             </p>
                           )}
+                          {c.itens && c.itens.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-border space-y-1">
+                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                <span>Análise de estoque ({c.itensProntos}/{c.totalItens} prontos)</span>
+                                {c.temComprometido && (
+                                  <Badge variant="outline" className="text-[9px] px-1 py-0 border-red-500 text-red-500">⚠ Comprometido</Badge>
+                                )}
+                              </div>
+                              {c.itens.map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-xs gap-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    {item.pronto
+                                      ? <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                                      : <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                                    }
+                                    <span className="truncate">
+                                      {item.codigo_produto && <span className="font-mono text-muted-foreground">[{item.codigo_produto}]</span>}{' '}
+                                      {item.nome_produto}
+                                    </span>
+                                    {item.comprometido && (
+                                      <span className="text-[10px] text-red-500 font-medium shrink-0" title="Disputado por outros orçamentos/OSs">⚠</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
+                                    <span>Precisa: {item.qtd_necessaria}</span>
+                                    <span>|</span>
+                                    <span className={`font-medium ${item.pronto ? (item.comprometido ? 'text-amber-600' : 'text-green-600') : 'text-red-500'}`}>
+                                      Disp: {item.estoque_disponivel}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </Card>
                       ))}
                     </div>

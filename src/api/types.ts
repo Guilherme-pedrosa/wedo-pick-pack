@@ -163,6 +163,21 @@ export interface OrcamentoConvertidoWarning {
   link_id: string | null;
   link_situacao: string | null;
   warning: string;              // e.g. "Orçamento #4748 → já é OS #8978 [STATUS]"
+  // Optional per-item readiness (used by Rastreador to surface stock/conflict info on blocked budgets)
+  itens?: Array<{
+    produto_id: string;
+    variacao_id: string;
+    nome_produto: string;
+    codigo_produto: string;
+    qtd_necessaria: number;
+    estoque_total: number;
+    estoque_disponivel: number;
+    pronto: boolean;
+    comprometido: boolean;
+  }>;
+  totalItens?: number;
+  itensProntos?: number;
+  temComprometido?: boolean;
 }
 
 export interface OSIndexEntry {

@@ -128,9 +128,9 @@ export async function rastrearOrcamentos(
                     ['1', 'true', 'sim'].includes(flagEst.toLowerCase());
     const osMatch = osIndex[String(o.codigo)];
 
-    // Apply OS-situation filter: if filter is active and the OS situation isn't selected,
-    // ignore this OS link (treat budget as still active for tracking purposes).
-    const osMatchPasses = osMatch && (!osFilterActive || osFilterSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase()));
+    // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo.
+    const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase());
+    const osMatchPasses = osMatch && !osMatchIgnored;
 
     if (byFlags || osMatchPasses) {
       const reason = byFlags ? 'flag' as const : 'os_index' as const;

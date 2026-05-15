@@ -75,6 +75,7 @@ export async function rastrearOrcamentos(
   onProgress?: (step: string, checked: number, total: number) => void,
   dataInicio?: string, // YYYY-MM-DD — only include orçamentos with data >= dataInicio
   situacaoCompraIds?: string[], // if empty/undefined, skip purchase-order coverage analysis
+  situacaoOSNomes?: string[], // OS situation NAMES that count as "blocked". If undefined, all OS-linked budgets are blocked (current default). If empty array, no OS-linked budgets are blocked (everything goes back to normal tracking).
 ): Promise<RastreadorResult> {
   // Phase 1: Fetch budgets
   onProgress?.('Buscando orçamentos…', 0, 1);

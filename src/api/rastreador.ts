@@ -116,9 +116,10 @@ export async function rastrearOrcamentos(
   const bloqueados: OrcamentoConvertidoWarning[] = [];
   const uniqueOrcamentos: GCOrcamento[] = [];
 
-  // If situacaoOSNomes is provided, only OS in those situations count as "blocked"
-  const osFilterActive = situacaoOSNomes !== undefined;
-  const osFilterSet = new Set((situacaoOSNomes || []).map(n => n.trim().toLowerCase()));
+  // situacaoOSNomes = situações de OS a IGNORAR (não tratar como bloqueio).
+  // Se a OS vinculada estiver em uma das situações marcadas, o orçamento volta ao rastreio normal.
+  const osIgnoreActive = situacaoOSNomes !== undefined && situacaoOSNomes.length > 0;
+  const osIgnoreSet = new Set((situacaoOSNomes || []).map(n => n.trim().toLowerCase()));
 
   for (const o of filteredOrcamentos) {
     const flagFin = String(o.situacao_financeiro ?? '');
@@ -127,9 +128,9 @@ export async function rastrearOrcamentos(
                     ['1', 'true', 'sim'].includes(flagEst.toLowerCase());
     const osMatch = osIndex[String(o.codigo)];
 
-    // Apply OS-situation filter: if filter is active and the OS situation isn't selected,
-    // ignore this OS link (treat budget as still active for tracking purposes).
-    const osMatchPasses = osMatch && (!osFilterActive || osFilterSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase()));
+    // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo.
+    const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase());
+    const osMatchPasses = osMatch && !osMatchIgnored;
 
     if (byFlags || osMatchPasses) {
       const reason = byFlags ? 'flag' as const : 'os_index' as const;

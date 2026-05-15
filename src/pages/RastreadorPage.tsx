@@ -299,18 +299,21 @@ export default function RastreadorPage() {
 
   const toggleSituacaoOS = (nome: string) => {
     setSelectedSituacoesOS(prev => {
-      const all = (statusOSQuery.data || []).map(s => s.nome);
-      // First click on a list that was "include all" (null) → start from full set, then toggle off
-      const base = prev ?? all;
-      const next = base.includes(nome) ? base.filter(s => s !== nome) : [...base, nome];
+      const next = prev.includes(nome) ? prev.filter(s => s !== nome) : [...prev, nome];
       try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(next)); } catch {}
       return next;
     });
   };
 
-  const resetSituacoesOS = () => {
-    setSelectedSituacoesOS(null);
-    try { localStorage.removeItem('rastreador-situacoes-os'); } catch {}
+  const selectAllSituacoesOS = () => {
+    const all = (statusOSQuery.data || []).map(s => s.nome);
+    setSelectedSituacoesOS(all);
+    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(all)); } catch {}
+  };
+
+  const clearSituacoesOS = () => {
+    setSelectedSituacoesOS([]);
+    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify([])); } catch {}
   };
 
   const handleScan = async () => {
@@ -325,7 +328,7 @@ export default function RastreadorPage() {
         (step, checked, total) => setProgress({ step, checked, total }),
         dataInicio || undefined,
         selectedSituacoesCompra.length > 0 ? selectedSituacoesCompra : undefined,
-        selectedSituacoesOS === null ? undefined : selectedSituacoesOS,
+        selectedSituacoesOS,
       );
       setResult(res);
       toast.success(

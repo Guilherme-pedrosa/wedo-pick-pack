@@ -69,10 +69,13 @@ export default function RastreadorPage() {
   const [selectedSituacoesCompra, setSelectedSituacoesCompra] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('rastreador-situacoes-compra') || '[]'); } catch { return []; }
   });
-  // OS situations that count as "blocked". Empty = nothing blocked (manual selection from zero).
+  // OS situations to IGNORE (not treat as blocked). Empty = all OS-linked budgets blocked.
+  // Versioned key (v2) — semântica mudou, valores antigos da chave v1 são descartados.
   const [selectedSituacoesOS, setSelectedSituacoesOS] = useState<string[]>(() => {
     try {
-      const raw = localStorage.getItem('rastreador-situacoes-os');
+      // Limpa chave antiga (semântica invertida)
+      localStorage.removeItem('rastreador-situacoes-os');
+      const raw = localStorage.getItem('rastreador-situacoes-os-ignore-v2');
       if (raw == null) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
@@ -300,7 +303,7 @@ export default function RastreadorPage() {
   const toggleSituacaoOS = (nome: string) => {
     setSelectedSituacoesOS(prev => {
       const next = prev.includes(nome) ? prev.filter(s => s !== nome) : [...prev, nome];
-      try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(next)); } catch {}
+      try { localStorage.setItem('rastreador-situacoes-os-ignore-v2', JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -308,12 +311,12 @@ export default function RastreadorPage() {
   const selectAllSituacoesOS = () => {
     const all = (statusOSQuery.data || []).map(s => s.nome);
     setSelectedSituacoesOS(all);
-    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(all)); } catch {}
+    try { localStorage.setItem('rastreador-situacoes-os-ignore-v2', JSON.stringify(all)); } catch {}
   };
 
   const clearSituacoesOS = () => {
     setSelectedSituacoesOS([]);
-    try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify([])); } catch {}
+    try { localStorage.setItem('rastreador-situacoes-os-ignore-v2', JSON.stringify([])); } catch {}
   };
 
   const handleScan = async () => {

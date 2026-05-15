@@ -13,6 +13,8 @@ export interface OrcamentoReadiness {
     estoque_disponivel: number;  // same as estoque_total (real stock)
     pronto: boolean;             // real stock >= needed
     comprometido: boolean;       // true if this item is disputed by other budgets/OSs
+    qtd_em_compra?: number;
+    ordens_compra?: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
   }>;
   totalItens: number;
   itensProntos: number;

@@ -74,7 +74,7 @@ export default function RastreadorPage() {
   const [selectedSituacoesOS, setSelectedSituacoesOS] = useState<string[]>(() => {
     try {
       // Limpa chave antiga (semântica invertida)
-      localStorage.removeItem('rastreador-situacoes-os-ignore-v2');
+      localStorage.removeItem('rastreador-situacoes-os');
       const raw = localStorage.getItem('rastreador-situacoes-os-ignore-v2');
       if (raw == null) return [];
       const parsed = JSON.parse(raw);

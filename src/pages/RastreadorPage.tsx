@@ -687,6 +687,39 @@ export default function RastreadorPage() {
                 ))}
               </div>
             )}
+
+            {/* Purchase order statuses for coverage analysis */}
+            <div className="pt-3 border-t border-border space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-foreground">
+                  Situações de Pedido de Compra <span className="text-muted-foreground font-normal">(cruzamento de cobertura)</span>
+                </p>
+                {selectedSituacoesCompra.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{selectedSituacoesCompra.length} selecionada(s)</span>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Selecione quais status de PC contam como "em compra" (ex.: Aguardando, Aprovado). Se vazio, a análise de cobertura é desativada.
+              </p>
+              {statusCompraQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações de compra…
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {(statusCompraQuery.data || []).map(s => (
+                    <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={selectedSituacoesCompra.includes(s.id)}
+                        onCheckedChange={() => toggleSituacaoCompra(s.id)}
+                        disabled={scanning}
+                      />
+                      {s.nome}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </CollapsibleContent>
         </Collapsible>
 

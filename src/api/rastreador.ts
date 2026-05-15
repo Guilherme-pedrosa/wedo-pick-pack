@@ -116,6 +116,9 @@ export async function rastrearOrcamentos(
 
   const bloqueados: OrcamentoConvertidoWarning[] = [];
   const uniqueOrcamentos: GCOrcamento[] = [];
+  // Orçamentos que JÁ SÃO OS, mas cuja situação está sendo ignorada pelo filtro.
+  // Voltam ao rastreio normal (visíveis), porém marcados para impedir nova geração de OS.
+  const ignoredOSLinks = new Map<string, { os_codigo: string; os_id: string; nome_situacao: string }>();
 
   // situacaoOSNomes = situações de OS a IGNORAR (não tratar como bloqueio).
   // Se a OS vinculada estiver em uma das situações marcadas, o orçamento volta ao rastreio normal.
@@ -129,7 +132,7 @@ export async function rastrearOrcamentos(
                     ['1', 'true', 'sim'].includes(flagEst.toLowerCase());
     const osMatch = osIndex[String(o.codigo)];
 
-    // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo.
+    // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo (para fins de bloqueio).
     const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase());
     const osMatchPasses = osMatch && !osMatchIgnored;
 
@@ -155,6 +158,13 @@ export async function rastrearOrcamentos(
       });
       console.warn(`[RASTREADOR] ${warning}`);
     } else {
+      if (osMatchIgnored) {
+        ignoredOSLinks.set(o.id, {
+          os_codigo: osMatch!.os_codigo,
+          os_id: osMatch!.os_id,
+          nome_situacao: osMatch!.nome_situacao,
+        });
+      }
       uniqueOrcamentos.push(o);
     }
   }

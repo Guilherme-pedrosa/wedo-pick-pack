@@ -550,6 +550,46 @@ export default function RastreadorPage() {
               />
             </div>
 
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs text-muted-foreground whitespace-nowrap">A partir de:</label>
+              <Input
+                type="date"
+                value={dataInicio}
+                onChange={e => setDataInicio(e.target.value)}
+                disabled={scanning}
+                className="h-8 text-sm w-[160px]"
+              />
+              {[30, 60, 90, 180].map(days => (
+                <Button
+                  key={days}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - days);
+                    setDataInicio(d.toISOString().slice(0, 10));
+                  }}
+                  disabled={scanning}
+                >
+                  {days}d
+                </Button>
+              ))}
+              {dataInicio && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[11px] px-2 text-muted-foreground"
+                  onClick={() => setDataInicio('')}
+                  disabled={scanning}
+                >
+                  Limpar
+                </Button>
+              )}
+            </div>
+
             {statusQuery.isLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações…

@@ -535,23 +535,34 @@ export default function RastreadorPage() {
                       <tr className="border-b">
                         <th className="text-left py-0.5 pr-2">Produto</th>
                         <th className="text-right py-0.5 px-2">Precisa</th>
-                        <th className="text-right py-0.5 px-2">Disponível</th>
-                        <th className="text-right py-0.5 px-2">Total</th>
+                        <th className="text-right py-0.5 px-2">Disp.</th>
+                        <th className="text-right py-0.5 px-2">Em compra</th>
+                        <th className="text-left py-0.5 px-2">Pedidos</th>
                         <th className="text-center py-0.5 pl-2">OK?</th>
-                        <th className="text-center py-0.5 pl-2">Conflito?</th>
+                        <th className="text-center py-0.5 pl-2">Conf.?</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {b.itens.map((item, idx) => (
-                        <tr key={idx} className="border-b border-gray-200">
-                          <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
-                          <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
-                          <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
-                          <td className="text-right py-0.5 px-2">{item.estoque_total}</td>
-                          <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
-                          <td className="text-center py-0.5 pl-2">{item.comprometido ? '⚠️' : '—'}</td>
-                        </tr>
-                      ))}
+                      {b.itens.map((item, idx) => {
+                        const falta = Math.max(0, item.qtd_necessaria - item.estoque_disponivel);
+                        const emCompra = item.qtd_em_compra ?? 0;
+                        const coberto = falta === 0 || emCompra >= falta;
+                        return (
+                          <tr key={idx} className="border-b border-gray-200">
+                            <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
+                            <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
+                            <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
+                            <td className={`text-right py-0.5 px-2 ${!item.pronto ? (coberto ? 'text-green-700' : 'text-red-700') : ''}`}>{emCompra || '—'}</td>
+                            <td className="py-0.5 px-2 text-[10px]">
+                              {item.ordens_compra && item.ordens_compra.length > 0
+                                ? item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${o.qtd}`).join(' • ')
+                                : (!item.pronto ? '⛔ Sem PC' : '—')}
+                            </td>
+                            <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
+                            <td className="text-center py-0.5 pl-2">{item.comprometido ? '⚠️' : '—'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -797,27 +808,51 @@ export default function RastreadorPage() {
                                 )}
                               </div>
                               {c.itens.map((item, idx) => (
-                                <div key={idx} className="flex items-center justify-between text-xs gap-2">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    {item.pronto
-                                      ? <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                                      : <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
-                                    }
-                                    <span className="truncate">
-                                      {item.codigo_produto && <span className="font-mono text-muted-foreground">[{item.codigo_produto}]</span>}{' '}
-                                      {item.nome_produto}
-                                    </span>
-                                    {item.comprometido && (
-                                      <span className="text-[10px] text-red-500 font-medium shrink-0" title="Disputado por outros orçamentos/OSs">⚠</span>
-                                    )}
+                                <div key={idx} className="text-xs">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      {item.pronto
+                                        ? <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                                        : <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                                      }
+                                      <span className="truncate">
+                                        {item.codigo_produto && <span className="font-mono text-muted-foreground">[{item.codigo_produto}]</span>}{' '}
+                                        {item.nome_produto}
+                                      </span>
+                                      {item.comprometido && (
+                                        <span className="text-[10px] text-red-500 font-medium shrink-0" title="Disputado por outros orçamentos/OSs">⚠</span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
+                                      <span>Precisa: {item.qtd_necessaria}</span>
+                                      <span>|</span>
+                                      <span className={`font-medium ${item.pronto ? (item.comprometido ? 'text-amber-600' : 'text-green-600') : 'text-red-500'}`}>
+                                        Disp: {item.estoque_disponivel}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
-                                    <span>Precisa: {item.qtd_necessaria}</span>
-                                    <span>|</span>
-                                    <span className={`font-medium ${item.pronto ? (item.comprometido ? 'text-amber-600' : 'text-green-600') : 'text-red-500'}`}>
-                                      Disp: {item.estoque_disponivel}
-                                    </span>
-                                  </div>
+                                  {!item.pronto && (
+                                    <div className="ml-4 mt-0.5 text-[10px]">
+                                      {(item.qtd_em_compra ?? 0) > 0 ? (
+                                        <span className="text-blue-600">
+                                          🛒 Em compra: {item.qtd_em_compra} {item.ordens_compra && item.ordens_compra.length > 0 && (
+                                            <span className="text-muted-foreground">
+                                              ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${o.qtd}`).join(' • ')})
+                                            </span>
+                                          )}
+                                          {(() => {
+                                            const falta = item.qtd_necessaria - item.estoque_disponivel;
+                                            const cobertura = (item.qtd_em_compra ?? 0) >= falta;
+                                            return cobertura
+                                              ? <span className="ml-1 text-green-600 font-medium">✓ Cobre falta de {falta}</span>
+                                              : <span className="ml-1 text-red-500 font-medium">✗ Cobre só {item.qtd_em_compra}/{falta}</span>;
+                                          })()}
+                                        </span>
+                                      ) : (
+                                        <span className="text-red-500 font-medium">⛔ Sem pedido de compra</span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>

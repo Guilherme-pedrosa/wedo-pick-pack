@@ -174,6 +174,8 @@ export interface OrcamentoConvertidoWarning {
     estoque_disponivel: number;
     pronto: boolean;
     comprometido: boolean;
+    qtd_em_compra?: number;
+    ordens_compra?: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
   }>;
   totalItens?: number;
   itensProntos?: number;

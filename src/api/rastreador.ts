@@ -1,5 +1,5 @@
-import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning } from './types';
-import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand } from './compras';
+import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning, GCOrdemCompra } from './types';
+import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra, getStatusCompras } from './compras';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;
@@ -13,6 +13,8 @@ export interface OrcamentoReadiness {
     estoque_disponivel: number;  // same as estoque_total (real stock)
     pronto: boolean;             // real stock >= needed
     comprometido: boolean;       // true if this item is disputed by other budgets/OSs
+    qtd_em_compra?: number;
+    ordens_compra?: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
   }>;
   totalItens: number;
   itensProntos: number;
@@ -240,6 +242,52 @@ export async function rastrearOrcamentos(
     });
   }
 
+  // Phase 4c: Fetch ALL purchase orders (across all statuses) so we can show coverage info
+  // (qtd em compra + lista de POs) for each item — both pending and blocked budgets.
+  onProgress?.('Buscando pedidos de compra…', 0, 1);
+  const compraMapByKey = new Map<string, { qtd: number; ordens: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
+  const compraMapByProduto = new Map<string, { qtd: number; ordens: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
+  try {
+    const allStatusCompra = await getStatusCompras();
+    const allOrdens: GCOrdemCompra[] = [];
+    for (const status of allStatusCompra) {
+      let page = 1;
+      while (true) {
+        const res = await listOrdensCompra(status.id, page);
+        allOrdens.push(...res.data);
+        if (page >= res.meta.total_paginas) break;
+        page++;
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+    for (const ordem of allOrdens) {
+      for (const p of ordem.produtos || []) {
+        const pid = normalizeId(p.produto.produto_id);
+        if (!pid) continue;
+        const vid = normalizeId(p.produto.variacao_id);
+        const key = makeKey(pid, vid);
+        const qty = parseDecimal(p.produto.quantidade);
+        const ref = { codigo: ordem.codigo, qtd: qty, nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao };
+        if (!compraMapByKey.has(key)) compraMapByKey.set(key, { qtd: 0, ordens: [] });
+        const e1 = compraMapByKey.get(key)!;
+        e1.qtd += qty; e1.ordens.push(ref);
+        if (!compraMapByProduto.has(pid)) compraMapByProduto.set(pid, { qtd: 0, ordens: [] });
+        const e2 = compraMapByProduto.get(pid)!;
+        e2.qtd += qty; e2.ordens.push(ref);
+      }
+    }
+  } catch (e) {
+    console.warn('[RASTREADOR] Falha ao buscar pedidos de compra para análise de cobertura:', e);
+  }
+
+  function getCompraInfo(pid: string, key: string) {
+    const entry = compraMapByKey.get(key) ?? compraMapByProduto.get(pid);
+    if (!entry) return { qtd_em_compra: 0, ordens_compra: [] as Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> };
+    const seen = new Set<string>();
+    const ordens = entry.ordens.filter(o => { if (seen.has(o.codigo)) return false; seen.add(o.codigo); return true; });
+    return { qtd_em_compra: entry.qtd, ordens_compra: ordens };
+  }
+
   // Phase 5: Compute total demand per product across all budgets (for conflict detection)
   const demandMap = new Map<string, { total: number; nome: string; codigo: string; orcamentos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }> }>();
   for (const orc of uniqueOrcamentos) {
@@ -319,6 +367,7 @@ export async function rastrearOrcamentos(
       const qtd = parseDecimal(p.produto.quantidade);
       const stockTotal = stockMapOriginal.get(key) ?? 0;
 
+      const compraInfo = getCompraInfo(pid, key);
       itens.push({
         produto_id: pid,
         variacao_id: vid,
@@ -329,6 +378,8 @@ export async function rastrearOrcamentos(
         estoque_disponivel: stockTotal, // real stock, never reduced
         pronto: stockTotal >= qtd,
         comprometido: conflictKeys.has(key),
+        qtd_em_compra: compraInfo.qtd_em_compra,
+        ordens_compra: compraInfo.ordens_compra,
       });
     }
 
@@ -362,6 +413,7 @@ export async function rastrearOrcamentos(
       const key = makeKey(pid, vid);
       const qtd = parseDecimal(p.produto.quantidade);
       const stockTotal = stockMapOriginal.get(key) ?? 0;
+      const compraInfo = getCompraInfo(pid, key);
       itens.push({
         produto_id: pid,
         variacao_id: vid,
@@ -372,6 +424,8 @@ export async function rastrearOrcamentos(
         estoque_disponivel: stockTotal,
         pronto: stockTotal >= qtd,
         comprometido: conflictKeys.has(key),
+        qtd_em_compra: compraInfo.qtd_em_compra,
+        ordens_compra: compraInfo.ordens_compra,
       });
     }
     b.itens = itens;

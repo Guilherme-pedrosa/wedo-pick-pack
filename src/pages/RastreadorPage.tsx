@@ -278,6 +278,11 @@ export default function RastreadorPage() {
     queryFn: getStatusCompras,
   });
 
+  const statusOSQuery = useQuery({
+    queryKey: ['status-os'],
+    queryFn: getStatusOS,
+  });
+
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev =>
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
@@ -292,6 +297,22 @@ export default function RastreadorPage() {
     });
   };
 
+  const toggleSituacaoOS = (nome: string) => {
+    setSelectedSituacoesOS(prev => {
+      const all = (statusOSQuery.data || []).map(s => s.nome);
+      // First click on a list that was "include all" (null) → start from full set, then toggle off
+      const base = prev ?? all;
+      const next = base.includes(nome) ? base.filter(s => s !== nome) : [...base, nome];
+      try { localStorage.setItem('rastreador-situacoes-os', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const resetSituacoesOS = () => {
+    setSelectedSituacoesOS(null);
+    try { localStorage.removeItem('rastreador-situacoes-os'); } catch {}
+  };
+
   const handleScan = async () => {
     if (selectedSituacoes.length === 0) return;
     setScanning(true);
@@ -304,6 +325,7 @@ export default function RastreadorPage() {
         (step, checked, total) => setProgress({ step, checked, total }),
         dataInicio || undefined,
         selectedSituacoesCompra.length > 0 ? selectedSituacoesCompra : undefined,
+        selectedSituacoesOS === null ? undefined : selectedSituacoesOS,
       );
       setResult(res);
       toast.success(

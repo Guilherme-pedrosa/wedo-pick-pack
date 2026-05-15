@@ -535,23 +535,34 @@ export default function RastreadorPage() {
                       <tr className="border-b">
                         <th className="text-left py-0.5 pr-2">Produto</th>
                         <th className="text-right py-0.5 px-2">Precisa</th>
-                        <th className="text-right py-0.5 px-2">Disponível</th>
-                        <th className="text-right py-0.5 px-2">Total</th>
+                        <th className="text-right py-0.5 px-2">Disp.</th>
+                        <th className="text-right py-0.5 px-2">Em compra</th>
+                        <th className="text-left py-0.5 px-2">Pedidos</th>
                         <th className="text-center py-0.5 pl-2">OK?</th>
-                        <th className="text-center py-0.5 pl-2">Conflito?</th>
+                        <th className="text-center py-0.5 pl-2">Conf.?</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {b.itens.map((item, idx) => (
-                        <tr key={idx} className="border-b border-gray-200">
-                          <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
-                          <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
-                          <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
-                          <td className="text-right py-0.5 px-2">{item.estoque_total}</td>
-                          <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
-                          <td className="text-center py-0.5 pl-2">{item.comprometido ? '⚠️' : '—'}</td>
-                        </tr>
-                      ))}
+                      {b.itens.map((item, idx) => {
+                        const falta = Math.max(0, item.qtd_necessaria - item.estoque_disponivel);
+                        const emCompra = item.qtd_em_compra ?? 0;
+                        const coberto = falta === 0 || emCompra >= falta;
+                        return (
+                          <tr key={idx} className="border-b border-gray-200">
+                            <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
+                            <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
+                            <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
+                            <td className={`text-right py-0.5 px-2 ${!item.pronto ? (coberto ? 'text-green-700' : 'text-red-700') : ''}`}>{emCompra || '—'}</td>
+                            <td className="py-0.5 px-2 text-[10px]">
+                              {item.ordens_compra && item.ordens_compra.length > 0
+                                ? item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${o.qtd}`).join(' • ')
+                                : (!item.pronto ? '⛔ Sem PC' : '—')}
+                            </td>
+                            <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
+                            <td className="text-center py-0.5 pl-2">{item.comprometido ? '⚠️' : '—'}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

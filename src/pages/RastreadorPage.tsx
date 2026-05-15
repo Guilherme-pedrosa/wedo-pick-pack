@@ -508,6 +508,57 @@ export default function RastreadorPage() {
           </div>
         )}
         {renderSection('⏳ Aguardando peças', result.orcamentosPendentes)}
+
+        {result.orcamentosBloqueados.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-base font-bold mb-2 border-b pb-1">
+              🚫 Bloqueados — já viraram OS ({result.orcamentosBloqueados.length})
+            </h2>
+            {result.orcamentosBloqueados.map(b => (
+              <div key={b.orcamento_id} className="mb-4">
+                <div className="flex justify-between items-baseline mb-1">
+                  <span className="font-semibold text-sm">
+                    #{b.codigo} — {b.nome_cliente}
+                  </span>
+                  <span className="text-xs">
+                    {b.link_number ? `→ OS #${b.link_number}` : '—'}
+                    {b.link_situacao && ` [${b.link_situacao}]`}
+                    {b.itens && b.totalItens != null && ` | ${b.itensProntos}/${b.totalItens} itens OK`}
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-600 mb-1">
+                  {b.reason === 'flag' ? 'Flag automática (financeiro/estoque)' : 'OS detectada via índice'}
+                </p>
+                {b.itens && b.itens.length > 0 && (
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-0.5 pr-2">Produto</th>
+                        <th className="text-right py-0.5 px-2">Precisa</th>
+                        <th className="text-right py-0.5 px-2">Disponível</th>
+                        <th className="text-right py-0.5 px-2">Total</th>
+                        <th className="text-center py-0.5 pl-2">OK?</th>
+                        <th className="text-center py-0.5 pl-2">Conflito?</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {b.itens.map((item, idx) => (
+                        <tr key={idx} className="border-b border-gray-200">
+                          <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
+                          <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
+                          <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
+                          <td className="text-right py-0.5 px-2">{item.estoque_total}</td>
+                          <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
+                          <td className="text-center py-0.5 pl-2">{item.comprometido ? '⚠️' : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

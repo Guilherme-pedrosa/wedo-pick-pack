@@ -66,6 +66,12 @@ function formatDateBR(d: string) {
 export default function RastreadorPage() {
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
   const [nomeCliente, setNomeCliente] = useState('');
+  const [dataInicio, setDataInicio] = useState<string>(() => {
+    // default: 90 days back
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return d.toISOString().slice(0, 10);
+  });
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [result, setResult] = useState<RastreadorResult | null>(null);
@@ -270,6 +276,7 @@ export default function RastreadorPage() {
         selectedSituacoes,
         nomeCliente.trim() || undefined,
         (step, checked, total) => setProgress({ step, checked, total }),
+        dataInicio || undefined,
       );
       setResult(res);
       toast.success(
@@ -541,6 +548,46 @@ export default function RastreadorPage() {
                 disabled={scanning}
                 className="h-8 text-sm pl-8"
               />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs text-muted-foreground whitespace-nowrap">A partir de:</label>
+              <Input
+                type="date"
+                value={dataInicio}
+                onChange={e => setDataInicio(e.target.value)}
+                disabled={scanning}
+                className="h-8 text-sm w-[160px]"
+              />
+              {[30, 60, 90, 180].map(days => (
+                <Button
+                  key={days}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() - days);
+                    setDataInicio(d.toISOString().slice(0, 10));
+                  }}
+                  disabled={scanning}
+                >
+                  {days}d
+                </Button>
+              ))}
+              {dataInicio && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[11px] px-2 text-muted-foreground"
+                  onClick={() => setDataInicio('')}
+                  disabled={scanning}
+                >
+                  Limpar
+                </Button>
+              )}
             </div>
 
             {statusQuery.isLoading ? (

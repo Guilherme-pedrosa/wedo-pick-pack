@@ -367,6 +367,7 @@ export async function rastrearOrcamentos(
       const qtd = parseDecimal(p.produto.quantidade);
       const stockTotal = stockMapOriginal.get(key) ?? 0;
 
+      const compraInfo = getCompraInfo(pid, key);
       itens.push({
         produto_id: pid,
         variacao_id: vid,
@@ -377,6 +378,8 @@ export async function rastrearOrcamentos(
         estoque_disponivel: stockTotal, // real stock, never reduced
         pronto: stockTotal >= qtd,
         comprometido: conflictKeys.has(key),
+        qtd_em_compra: compraInfo.qtd_em_compra,
+        ordens_compra: compraInfo.ordens_compra,
       });
     }
 

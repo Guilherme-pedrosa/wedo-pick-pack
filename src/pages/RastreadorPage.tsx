@@ -293,6 +293,7 @@ export default function RastreadorPage() {
         nomeCliente.trim() || undefined,
         (step, checked, total) => setProgress({ step, checked, total }),
         dataInicio || undefined,
+        selectedSituacoesCompra.length > 0 ? selectedSituacoesCompra : undefined,
       );
       setResult(res);
       toast.success(

@@ -1,5 +1,5 @@
 import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning, GCOrdemCompra } from './types';
-import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra, getStatusCompras } from './compras';
+import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra } from './compras';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;
@@ -74,6 +74,7 @@ export async function rastrearOrcamentos(
   nomeCliente?: string,
   onProgress?: (step: string, checked: number, total: number) => void,
   dataInicio?: string, // YYYY-MM-DD — only include orçamentos with data >= dataInicio
+  situacaoCompraIds?: string[], // if empty/undefined, skip purchase-order coverage analysis
 ): Promise<RastreadorResult> {
   // Phase 1: Fetch budgets
   onProgress?.('Buscando orçamentos…', 0, 1);
@@ -242,42 +243,43 @@ export async function rastrearOrcamentos(
     });
   }
 
-  // Phase 4c: Fetch ALL purchase orders (across all statuses) so we can show coverage info
-  // (qtd em compra + lista de POs) for each item — both pending and blocked budgets.
-  onProgress?.('Buscando pedidos de compra…', 0, 1);
+  // Phase 4c: Fetch purchase orders for the SELECTED statuses (user controls which count
+  // as "em compra"). If no statuses selected, skip — coverage analysis is disabled.
   const compraMapByKey = new Map<string, { qtd: number; ordens: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
   const compraMapByProduto = new Map<string, { qtd: number; ordens: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
-  try {
-    const allStatusCompra = await getStatusCompras();
-    const allOrdens: GCOrdemCompra[] = [];
-    for (const status of allStatusCompra) {
-      let page = 1;
-      while (true) {
-        const res = await listOrdensCompra(status.id, page);
-        allOrdens.push(...res.data);
-        if (page >= res.meta.total_paginas) break;
-        page++;
-        await new Promise(r => setTimeout(r, 400));
+  if (situacaoCompraIds && situacaoCompraIds.length > 0) {
+    onProgress?.('Buscando pedidos de compra…', 0, 1);
+    try {
+      const allOrdens: GCOrdemCompra[] = [];
+      for (const sid of situacaoCompraIds) {
+        let page = 1;
+        while (true) {
+          const res = await listOrdensCompra(sid, page);
+          allOrdens.push(...res.data);
+          if (page >= res.meta.total_paginas) break;
+          page++;
+          await new Promise(r => setTimeout(r, 400));
+        }
       }
-    }
-    for (const ordem of allOrdens) {
-      for (const p of ordem.produtos || []) {
-        const pid = normalizeId(p.produto.produto_id);
-        if (!pid) continue;
-        const vid = normalizeId(p.produto.variacao_id);
-        const key = makeKey(pid, vid);
-        const qty = parseDecimal(p.produto.quantidade);
-        const ref = { codigo: ordem.codigo, qtd: qty, nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao };
-        if (!compraMapByKey.has(key)) compraMapByKey.set(key, { qtd: 0, ordens: [] });
-        const e1 = compraMapByKey.get(key)!;
-        e1.qtd += qty; e1.ordens.push(ref);
-        if (!compraMapByProduto.has(pid)) compraMapByProduto.set(pid, { qtd: 0, ordens: [] });
-        const e2 = compraMapByProduto.get(pid)!;
-        e2.qtd += qty; e2.ordens.push(ref);
+      for (const ordem of allOrdens) {
+        for (const p of ordem.produtos || []) {
+          const pid = normalizeId(p.produto.produto_id);
+          if (!pid) continue;
+          const vid = normalizeId(p.produto.variacao_id);
+          const key = makeKey(pid, vid);
+          const qty = parseDecimal(p.produto.quantidade);
+          const ref = { codigo: ordem.codigo, qtd: qty, nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao };
+          if (!compraMapByKey.has(key)) compraMapByKey.set(key, { qtd: 0, ordens: [] });
+          const e1 = compraMapByKey.get(key)!;
+          e1.qtd += qty; e1.ordens.push(ref);
+          if (!compraMapByProduto.has(pid)) compraMapByProduto.set(pid, { qtd: 0, ordens: [] });
+          const e2 = compraMapByProduto.get(pid)!;
+          e2.qtd += qty; e2.ordens.push(ref);
+        }
       }
+    } catch (e) {
+      console.warn('[RASTREADOR] Falha ao buscar pedidos de compra para análise de cobertura:', e);
     }
-  } catch (e) {
-    console.warn('[RASTREADOR] Falha ao buscar pedidos de compra para análise de cobertura:', e);
   }
 
   function getCompraInfo(pid: string, key: string) {

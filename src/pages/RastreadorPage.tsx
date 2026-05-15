@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getStatusOrcamentos } from '@/api/compras';
+import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo, OSReservedInfo } from '@/api/rastreador';
 import { OrcamentoConvertidoWarning } from '@/api/types';
 import { GCOrcamento } from '@/api/types';
@@ -65,6 +65,9 @@ function formatDateBR(d: string) {
 
 export default function RastreadorPage() {
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
+  const [selectedSituacoesCompra, setSelectedSituacoesCompra] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('rastreador-situacoes-compra') || '[]'); } catch { return []; }
+  });
   const [nomeCliente, setNomeCliente] = useState('');
   const [dataInicio, setDataInicio] = useState<string>(() => {
     // default: 90 days back
@@ -260,10 +263,23 @@ export default function RastreadorPage() {
     queryFn: getStatusOrcamentos,
   });
 
+  const statusCompraQuery = useQuery({
+    queryKey: ['status-compras'],
+    queryFn: getStatusCompras,
+  });
+
   const toggleSituacao = (id: string) => {
     setSelectedSituacoes(prev =>
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
     );
+  };
+
+  const toggleSituacaoCompra = (id: string) => {
+    setSelectedSituacoesCompra(prev => {
+      const next = prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id];
+      try { localStorage.setItem('rastreador-situacoes-compra', JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   const handleScan = async () => {
@@ -277,6 +293,7 @@ export default function RastreadorPage() {
         nomeCliente.trim() || undefined,
         (step, checked, total) => setProgress({ step, checked, total }),
         dataInicio || undefined,
+        selectedSituacoesCompra.length > 0 ? selectedSituacoesCompra : undefined,
       );
       setResult(res);
       toast.success(
@@ -670,6 +687,39 @@ export default function RastreadorPage() {
                 ))}
               </div>
             )}
+
+            {/* Purchase order statuses for coverage analysis */}
+            <div className="pt-3 border-t border-border space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-foreground">
+                  Situações de Pedido de Compra <span className="text-muted-foreground font-normal">(cruzamento de cobertura)</span>
+                </p>
+                {selectedSituacoesCompra.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{selectedSituacoesCompra.length} selecionada(s)</span>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Selecione quais status de PC contam como "em compra" (ex.: Aguardando, Aprovado). Se vazio, a análise de cobertura é desativada.
+              </p>
+              {statusCompraQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações de compra…
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {(statusCompraQuery.data || []).map(s => (
+                    <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={selectedSituacoesCompra.includes(s.id)}
+                        onCheckedChange={() => toggleSituacaoCompra(s.id)}
+                        disabled={scanning}
+                      />
+                      {s.nome}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </CollapsibleContent>
         </Collapsible>
 

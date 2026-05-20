@@ -91,6 +91,58 @@ async function auvoGetTask(token: string, taskId: string | number): Promise<any>
   return data;
 }
 
+function parseMoney(value: unknown): number {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 0;
+  const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoney(value: number): string {
+  return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+}
+
+function getPaymentValue(payment: any): number {
+  if (payment?.pagamento?.valor != null) return parseMoney(payment.pagamento.valor);
+  return parseMoney(payment?.valor);
+}
+
+function setPaymentValue(payment: any, value: string): any {
+  if (payment?.pagamento && typeof payment.pagamento === 'object') {
+    return { ...payment, pagamento: { ...payment.pagamento, valor: value } };
+  }
+  return { ...payment, valor: value };
+}
+
+function normalizePaymentsToDeclaredTotal<T extends Record<string, any>>(payload: T): T {
+  if (!Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) return payload;
+
+  const targetCents = Math.round(parseMoney(payload.valor_total) * 100);
+  if (targetCents <= 0) return payload;
+
+  const currentCents = payload.pagamentos
+    .map((p: any) => Math.round(getPaymentValue(p) * 100))
+    .reduce((sum: number, cents: number) => sum + cents, 0);
+
+  if (currentCents === targetCents) return payload;
+
+  if (payload.pagamentos.length === 1) {
+    return {
+      ...payload,
+      pagamentos: [setPaymentValue(payload.pagamentos[0], formatMoney(targetCents / 100))],
+    };
+  }
+
+  const payments = payload.pagamentos.map((payment: any, index: number) => {
+    if (index !== payload.pagamentos.length - 1) return payment;
+    const lastCents = Math.round(getPaymentValue(payment) * 100) + (targetCents - currentCents);
+    return setPaymentValue(payment, formatMoney(lastCents / 100));
+  });
+
+  return { ...payload, pagamentos: payments };
+}
+
 // ---------- GC: Discover OS attribute IDs ----------
 interface AtributoMeta { id: string; nome: string }
 

@@ -227,13 +227,15 @@ export async function buildExplorerIndex(
       'Indexando Vendas',
     );
     for (const v of vendaList) {
+      const dataStr = String(v.data ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(v.id),
         codigo: String(v.codigo ?? v.id),
         nome_cliente: String(v.nome_cliente ?? ''),
         situacao_id: String(v.situacao_id ?? ''),
         nome_situacao: String(v.nome_situacao ?? ''),
-        data: String(v.data ?? ''),
+        data: dataStr,
       };
       for (const w of v.produtos || []) {
         const pid = normId((w as any)?.produto?.produto_id);

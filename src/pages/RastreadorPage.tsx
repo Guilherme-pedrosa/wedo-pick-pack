@@ -24,31 +24,53 @@ import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
 
 function exportCSV(result: RastreadorResult) {
-  const header = ['Status', 'Código ORC', 'Cliente', 'Data', 'Itens Prontos', 'Total Itens', 'Produto', 'Qtd Necessária', 'Estoque Disponível', 'Estoque Total', 'Item Pronto'];
+  const header = [
+    'Status', 'Grupo', 'Código Produto', 'Produto', 'Quantidade',
+    'Nº Orçamento', 'Cliente', 'Nº OS', 'Situação OS',
+    'Qtd em Compra', 'Nº Pedido(s) Compra', 'Fornecedor(es)', 'Situação(ões) PC',
+  ];
   const rows: string[][] = [];
 
-  const addRows = (entries: OrcamentoReadiness[], status: string) => {
-    for (const e of entries) {
-      for (const item of e.itens) {
-        rows.push([
-          status,
-          e.orcamento.codigo,
-          e.orcamento.nome_cliente,
-          e.orcamento.data,
-          String(e.itensProntos),
-          String(e.totalItens),
-          item.nome_produto,
-          String(item.qtd_necessaria),
-          String(item.estoque_disponivel),
-          String(item.estoque_total),
-          item.pronto ? 'Sim' : 'Não',
-        ]);
-      }
+  const pushItems = (
+    status: string,
+    orcCodigo: string,
+    cliente: string,
+    osCodigo: string,
+    osSituacao: string,
+    itens: OrcamentoReadiness['itens'] | undefined,
+  ) => {
+    if (!itens || itens.length === 0) return;
+    for (const item of itens) {
+      const ordens = item.ordens_compra || [];
+      rows.push([
+        status,
+        item.grupo || '',
+        item.codigo_produto || '',
+        item.nome_produto,
+        String(item.qtd_necessaria).replace('.', ','),
+        orcCodigo,
+        cliente,
+        osCodigo,
+        osSituacao,
+        String(item.qtd_em_compra || 0).replace('.', ','),
+        ordens.map(o => o.codigo).join(' | '),
+        ordens.map(o => o.nome_fornecedor).join(' | '),
+        ordens.map(o => o.situacao).join(' | '),
+      ]);
     }
   };
 
-  addRows(result.orcamentosProntos, 'Pronto para OS');
-  addRows(result.orcamentosPendentes, 'Aguardando peças');
+  for (const e of result.orcamentosProntos) {
+    pushItems('Pronto p/ OS', e.orcamento.codigo, e.orcamento.nome_cliente, '', '', e.itens);
+  }
+  for (const e of result.orcamentosPendentes) {
+    const osCod = e.osLinked?.os_codigo || '';
+    const osSit = e.osLinked?.nome_situacao || '';
+    pushItems('Aguardando peças', e.orcamento.codigo, e.orcamento.nome_cliente, osCod, osSit, e.itens);
+  }
+  for (const b of result.orcamentosBloqueados || []) {
+    pushItems('Já é OS', b.codigo, b.nome_cliente, b.link_number || '', b.link_situacao || '', b.itens as OrcamentoReadiness['itens'] | undefined);
+  }
 
   const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });

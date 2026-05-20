@@ -357,9 +357,11 @@ Deno.serve(async (req: Request) => {
 
         const sourceEquipments = source?.equipmentsId;
         if (Array.isArray(sourceEquipments)) {
-          clonedEquipmentIds = sourceEquipments
+          const parsedSourceEquipmentIds = sourceEquipments
             .map((v: unknown) => Number(v))
-            .filter((n: number) => Number.isFinite(n) && n > 0 && n <= INT32_MAX);
+            .filter((n: number) => Number.isFinite(n) && n > 0);
+          oversizedEquipIds.push(...parsedSourceEquipmentIds.filter((n: number) => n > INT32_MAX));
+          clonedEquipmentIds = parsedSourceEquipmentIds.filter((n: number) => n <= INT32_MAX);
         }
 
         console.log(`[generate-os] Cloned source tarefa OS ${sourceTaskOsId}: customerId=${clonedCustomerId ?? 0}, equipments=${clonedEquipmentIds.length}`);
@@ -537,7 +539,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 
-    const gcResult = await gcRequest('/api/ordens_servicos', 'POST', osPayload);
+    const gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(osPayload));
 
     const osId = gcResult?.data?.id;
     const osCodigo = gcResult?.data?.codigo;
@@ -569,7 +571,7 @@ Deno.serve(async (req: Request) => {
       if (orcamento.observacoes_interna) orcUpdatePayload.observacoes_interna = orcamento.observacoes_interna;
       if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
 
-      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', orcUpdatePayload);
+      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(orcUpdatePayload));
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);
     } catch (orcErr) {
       const orcMsg = orcErr instanceof Error ? orcErr.message : String(orcErr);

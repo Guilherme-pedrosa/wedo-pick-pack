@@ -248,6 +248,20 @@ export default function PurchaseTrackerPage() {
     return { warn, crit, atrasoChegada };
   }, [rows, now, today0]);
 
+  const filteredRows = useMemo(() => {
+    if (filter === 'all') return rows;
+    return rows.filter(r => {
+      const lastDate = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
+      const days = lastDate ? daysBetween(lastDate, now) : null;
+      const prevDate = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;
+      const overdue = prevDate ? daysBetween(prevDate, today0) : null;
+      if (filter === 'crit') return days !== null && days > 30;
+      if (filter === 'warn') return days !== null && days > 15 && days <= 30;
+      if (filter === 'arr') return overdue !== null && overdue > 0;
+      return true;
+    });
+  }, [rows, filter, now, today0]);
+
 
   const selectedLabels = selected
     .map(id => statuses.find(s => s.id === id)?.nome)

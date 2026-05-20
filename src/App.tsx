@@ -22,6 +22,7 @@ import ConfigPage from "./pages/ConfigPage";
 import InventoryPolicyPage from "./pages/InventoryPolicyPage";
 import InventoryAnalysisPage from "./pages/InventoryAnalysisPage";
 import ComprasPage from "./pages/ComprasPage";
+import PurchaseTrackerPage from "./pages/PurchaseTrackerPage";
 import RastreadorPage from "./pages/RastreadorPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";

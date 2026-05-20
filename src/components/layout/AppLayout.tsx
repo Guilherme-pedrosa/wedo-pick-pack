@@ -91,6 +91,7 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
           </div>
         </main>
       </div>
+      <PurchaseTrackerAlertWatcher />
     </div>
   );
 }

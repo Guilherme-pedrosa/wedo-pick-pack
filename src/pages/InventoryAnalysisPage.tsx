@@ -390,7 +390,7 @@ export default function InventoryAnalysisPage() {
       const supplierLT = fornecedorId ? supplierLTMap.get(fornecedorId) : null;
       const leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : fallbackLeadTime;
       const fornecedorNome = supplierLT?.fornecedor_nome || null;
-      const isSpecificItem = isSpecificProductGroup(info?.grupo);
+      // (grupo ESPECÍFICO segue mesma regra dos demais — sem distinção)
 
       // ============================================================
       // MÉDIA PONDERADA MENSAL — últimos 3 meses, mais recente pesa mais.

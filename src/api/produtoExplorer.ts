@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { listOrcamentos, listOrdensCompra, getProdutoDetalhe } from './compras';
-import { listOS } from './gestaoclick';
-import { GCMeta, GCOrcamento, GCOrdemCompra, GCOrdemServico, GCProdutoDetalhe } from './types';
+import { listOS, listVendas } from './gestaoclick';
+import { GCMeta, GCOrcamento, GCOrdemCompra, GCOrdemServico, GCProdutoDetalhe, GCVenda } from './types';
 import { getExplorerConfig } from '@/lib/explorerConfig';
 
 // ------------ utils ------------
@@ -50,6 +50,15 @@ export interface ExplorerCompraRef {
   data: string;
   qtd: number;
 }
+export interface ExplorerVendaRef {
+  id: string;
+  codigo: string;
+  nome_cliente: string;
+  situacao_id: string;
+  nome_situacao: string;
+  data: string;
+  qtd: number;
+}
 
 export interface ProductExplorerData {
   produto_id: string;
@@ -58,8 +67,10 @@ export interface ProductExplorerData {
   oss: ExplorerOSRef[];
   orcamentos: ExplorerOrcRef[];
   compras: ExplorerCompraRef[];
+  vendas: ExplorerVendaRef[];
   qtd_demanda_os: number;
   qtd_demanda_orcamentos: number;
+  qtd_demanda_vendas: number;
   qtd_em_compra: number;
   saldo_projetado: number; // estoque + compras - demandas
   health: 'ok' | 'warn' | 'critical';
@@ -70,6 +81,7 @@ interface ExplorerIndex {
   oss: Map<string, ExplorerOSRef[]>;
   orcamentos: Map<string, ExplorerOrcRef[]>;
   compras: Map<string, ExplorerCompraRef[]>;
+  vendas: Map<string, ExplorerVendaRef[]>;
 }
 
 const TTL = 5 * 60 * 1000;

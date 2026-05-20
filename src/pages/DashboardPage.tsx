@@ -49,6 +49,12 @@ const DashboardPage = () => {
     created_at: string;
     status: string;
   } | null>(null);
+  const [trackerSnapshot, setTrackerSnapshot] = useState<{
+    crit_count: number;
+    arrival_overdue_count: number;
+    warn_count: number;
+    created_at: string;
+  } | null>(null);
   const comprasResult = useComprasStore((s) => s.result);
   const checkoutSession = useCheckoutStore((s) => s.session);
   const [comprasDialogOpen, setComprasDialogOpen] = useState(false);
@@ -98,6 +104,17 @@ const DashboardPage = () => {
         .maybeSingle();
 
       if (snapshot) setComprasSnapshot(snapshot as any);
+
+      // Fetch latest purchase tracker snapshot
+      const { data: tracker } = await supabase
+        .from("purchase_tracker_snapshots")
+        .select("crit_count, arrival_overdue_count, warn_count, created_at")
+        .eq("status", "success")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (tracker) setTrackerSnapshot(tracker as any);
     } catch (e) {
       console.error("Dashboard load error:", e);
     } finally {
@@ -147,6 +164,20 @@ const DashboardPage = () => {
       href: "/separations",
     },
     {
+      title: "Compras Atrasadas",
+      value: trackerSnapshot
+        ? (trackerSnapshot.crit_count ?? 0) + (trackerSnapshot.arrival_overdue_count ?? 0)
+        : "—",
+      subtitle: trackerSnapshot
+        ? `${trackerSnapshot.crit_count ?? 0} parados +30d · ${trackerSnapshot.arrival_overdue_count ?? 0} c/ chegada atrasada — ${new Date(trackerSnapshot.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`
+        : "Nenhum snapshot ainda",
+      icon: AlertTriangle,
+      color: (trackerSnapshot && ((trackerSnapshot.crit_count ?? 0) > 0 || (trackerSnapshot.arrival_overdue_count ?? 0) > 0))
+        ? "text-red-500"
+        : "text-muted-foreground",
+      href: "/compras/acompanhamento",
+    },
+    {
       title: "Índice de Produtos",
       value: syncStatus ? (syncStatus.status === "success" ? "✓ Sincronizado" : syncStatus.status) : "—",
       subtitle: syncStatus?.finished_at
@@ -184,7 +215,7 @@ const DashboardPage = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {kpis.map((kpi, i) => (
           <div
             key={i}

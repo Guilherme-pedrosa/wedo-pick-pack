@@ -640,6 +640,69 @@ export type Database = {
         }
         Relationships: []
       }
+      purchase_tracker_settings: {
+        Row: {
+          id: string
+          updated_at: string
+          updated_by: string | null
+          watched_situacao_ids: string[]
+        }
+        Insert: {
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          watched_situacao_ids?: string[]
+        }
+        Update: {
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          watched_situacao_ids?: string[]
+        }
+        Relationships: []
+      }
+      purchase_tracker_snapshots: {
+        Row: {
+          arrival_overdue_count: number
+          arrival_rows: Json
+          created_at: string
+          crit_count: number
+          crit_rows: Json
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          status: string
+          total: number
+          warn_count: number
+        }
+        Insert: {
+          arrival_overdue_count?: number
+          arrival_rows?: Json
+          created_at?: string
+          crit_count?: number
+          crit_rows?: Json
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status?: string
+          total?: number
+          warn_count?: number
+        }
+        Update: {
+          arrival_overdue_count?: number
+          arrival_rows?: Json
+          created_at?: string
+          crit_count?: number
+          crit_rows?: Json
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          status?: string
+          total?: number
+          warn_count?: number
+        }
+        Relationships: []
+      }
       push_event_log: {
         Row: {
           created_at: string

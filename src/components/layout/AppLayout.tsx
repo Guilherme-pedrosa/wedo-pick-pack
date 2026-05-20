@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { AppLayoutHeader } from "./AppLayoutHeader";
+import { PurchaseTrackerAlertWatcher } from "./PurchaseTrackerAlertWatcher";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { logSystemAction } from "@/lib/systemLog";
@@ -90,6 +91,7 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
           </div>
         </main>
       </div>
+      <PurchaseTrackerAlertWatcher />
     </div>
   );
 }

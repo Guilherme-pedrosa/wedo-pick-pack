@@ -104,6 +104,18 @@ function extractRow(raw: any): CompraRow {
 
   const ultima = historico[0]?.data ?? null;
 
+  // Extract "DATA DA CHEGADA DAS PEÇAS" from campos_extras
+  let previsao: string | null = null;
+  const extras = c?.campos_extras || [];
+  for (const w of extras) {
+    const e = w?.extras ?? w;
+    const desc = String(e?.descricao ?? '').toUpperCase();
+    if (desc.includes('CHEGADA') && desc.includes('PE')) {
+      const v = String(e?.conteudo ?? '').trim();
+      if (v) { previsao = v; break; }
+    }
+  }
+
   return {
     id: String(c?.id ?? ''),
     codigo: String(c?.codigo ?? ''),
@@ -113,6 +125,7 @@ function extractRow(raw: any): CompraRow {
     data_emissao: String(c?.data_emissao ?? ''),
     valor_total: String(c?.valor_total ?? '0'),
     ultima_alteracao: ultima,
+    previsao_chegada: previsao,
     historico,
   };
 }

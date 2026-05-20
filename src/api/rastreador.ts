@@ -82,6 +82,43 @@ function normalizeSituacaoNome(value: string | null | undefined): string {
     .toLowerCase();
 }
 
+async function fetchGeneratedOSFallback(orcamentos: GCOrcamento[]): Promise<Map<string, LinkedOSInfo>> {
+  const ids = orcamentos.map(o => o.id).filter(Boolean);
+  if (!ids.length) return new Map();
+
+  const { data, error } = await (supabase.from('os_generation_logs') as any)
+    .select('orcamento_id, os_id, os_codigo, nome_cliente, created_at')
+    .in('orcamento_id', ids)
+    .eq('success', true)
+    .not('os_id', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (error || !Array.isArray(data)) return new Map();
+
+  const latestByOrc = new Map<string, any>();
+  for (const row of data) {
+    if (!latestByOrc.has(row.orcamento_id)) latestByOrc.set(row.orcamento_id, row);
+  }
+
+  const pairs = await Promise.all([...latestByOrc.entries()].map(async ([orcamentoId, row]) => {
+    try {
+      const osId = normalizeId(row.os_id);
+      if (!osId) return null;
+      const os = await getOS(osId);
+      return [orcamentoId, {
+        os_codigo: String(os.codigo || row.os_codigo || ''),
+        os_id: String(os.id || osId),
+        nome_situacao: String(os.nome_situacao || ''),
+        nome_cliente: String(os.nome_cliente || row.nome_cliente || ''),
+      }] as const;
+    } catch {
+      return null;
+    }
+  }));
+
+  return new Map(pairs.filter((p): p is readonly [string, LinkedOSInfo] => Boolean(p)));
+}
+
 export { getStatusOrcamentos };
 
 export async function rastrearOrcamentos(

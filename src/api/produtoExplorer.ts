@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { listOrcamentos, listOrdensCompra, getProdutoDetalhe } from './compras';
 import { listOS } from './gestaoclick';
 import { GCMeta, GCOrcamento, GCOrdemCompra, GCOrdemServico, GCProdutoDetalhe } from './types';
+import { getExplorerConfig } from '@/lib/explorerConfig';
 
 // ------------ utils ------------
 function normId(v: unknown): string {
@@ -26,6 +27,7 @@ export interface ExplorerOSRef {
   id: string;
   codigo: string;
   nome_cliente: string;
+  situacao_id: string;
   nome_situacao: string;
   data: string;
   qtd: number;
@@ -34,6 +36,7 @@ export interface ExplorerOrcRef {
   id: string;
   codigo: string;
   nome_cliente: string;
+  situacao_id: string;
   nome_situacao: string;
   data: string;
   qtd: number;
@@ -42,6 +45,7 @@ export interface ExplorerCompraRef {
   id: string;
   codigo: string;
   nome_fornecedor: string;
+  situacao_id: string;
   nome_situacao: string;
   data: string;
   qtd: number;
@@ -114,6 +118,7 @@ export async function buildExplorerIndex(
         id: String(os.id),
         codigo: String(os.codigo ?? os.id),
         nome_cliente: String(os.nome_cliente ?? ''),
+        situacao_id: String((os as any).situacao_id ?? ''),
         nome_situacao: String(os.nome_situacao ?? ''),
         data: String(os.data ?? ''),
       };
@@ -137,6 +142,7 @@ export async function buildExplorerIndex(
         id: String(o.id),
         codigo: String(o.codigo ?? o.id),
         nome_cliente: String(o.nome_cliente ?? ''),
+        situacao_id: String((o as any).situacao_id ?? ''),
         nome_situacao: String(o.nome_situacao ?? ''),
         data: String(o.data ?? ''),
       };
@@ -160,6 +166,7 @@ export async function buildExplorerIndex(
         id: String(c.id),
         codigo: String(c.codigo ?? c.id),
         nome_fornecedor: String(c.nome_fornecedor ?? ''),
+        situacao_id: String((c as any).situacao_id ?? ''),
         nome_situacao: String(c.nome_situacao ?? ''),
         data: String(c.data_emissao ?? ''),
       };
@@ -219,9 +226,21 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const orcamentos = (idx.orcamentos.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
   const compras = (idx.compras.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
 
-  const qtd_demanda_os = oss.filter(o => isOpenOS(o.nome_situacao)).reduce((s, o) => s + o.qtd, 0);
-  const qtd_demanda_orcamentos = orcamentos.filter(o => isOpenOrc(o.nome_situacao)).reduce((s, o) => s + o.qtd, 0);
-  const qtd_em_compra = compras.filter(c => isOpenCompra(c.nome_situacao)).reduce((s, c) => s + c.qtd, 0);
+  const cfg = getExplorerConfig();
+  const osSet = new Set(cfg.osSituacaoIds);
+  const orcSet = new Set(cfg.orcSituacaoIds);
+  const compraSet = new Set(cfg.compraSituacaoIds);
+
+  const matchOS = (o: ExplorerOSRef) =>
+    osSet.size > 0 ? osSet.has(o.situacao_id) : isOpenOS(o.nome_situacao);
+  const matchOrc = (o: ExplorerOrcRef) =>
+    orcSet.size > 0 ? orcSet.has(o.situacao_id) : isOpenOrc(o.nome_situacao);
+  const matchCompra = (c: ExplorerCompraRef) =>
+    compraSet.size > 0 ? compraSet.has(c.situacao_id) : isOpenCompra(c.nome_situacao);
+
+  const qtd_demanda_os = oss.filter(matchOS).reduce((s, o) => s + o.qtd, 0);
+  const qtd_demanda_orcamentos = orcamentos.filter(matchOrc).reduce((s, o) => s + o.qtd, 0);
+  const qtd_em_compra = compras.filter(matchCompra).reduce((s, c) => s + c.qtd, 0);
 
   const demanda = qtd_demanda_os + qtd_demanda_orcamentos;
   const saldo_projetado = estoque + qtd_em_compra - demanda;

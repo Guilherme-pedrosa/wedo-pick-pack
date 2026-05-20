@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Search, RefreshCw, Package, AlertTriangle, CheckCircle2, ShoppingCart, FileText, Wrench } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Package, AlertTriangle, CheckCircle2, ShoppingCart, FileText, Wrench, Settings } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   buildExplorerIndex,
@@ -118,6 +119,11 @@ export default function ProductExplorerPage() {
               Índice: {lastBuilt}
             </span>
           )}
+          <Link to="/produtos/explorar/config">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Settings className="h-4 w-4" /> Configurar
+            </Button>
+          </Link>
           <Button
             variant="outline"
             size="sm"

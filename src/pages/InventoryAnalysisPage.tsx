@@ -1231,8 +1231,15 @@ export default function InventoryAnalysisPage() {
                         <TableCell className="text-right text-xs">
                           {item.event_count}
                           {item.source_refs.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => `${r.source_type.toUpperCase()} ${r.source_id}: ${Math.round(r.qty)}un (${r.cliente})`).join('\n')}>
-                              {item.source_refs.slice(0, 3).map(r => `${r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase()}${r.source_id}`).join(', ')}
+                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => {
+                              const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
+                              return `${r.source_type.toUpperCase()} ${codigo}: ${Math.round(r.qty)}un (${r.cliente})`;
+                            }).join('\n')}>
+                              {item.source_refs.slice(0, 3).map(r => {
+                                const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
+                                const prefix = r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase();
+                                return `${prefix}${codigo}`;
+                              }).join(', ')}
                               {item.source_refs.length > 3 && ` +${item.source_refs.length - 3}`}
                             </span>
                           )}

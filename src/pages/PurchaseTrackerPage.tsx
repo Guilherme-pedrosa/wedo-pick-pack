@@ -215,7 +215,8 @@ export default function PurchaseTrackerPage() {
       for (const r of collected) map.set(r.id, r);
       const final = [...map.values()];
 
-      // Sort by arrival overdue DESC, then by days-in-current-status DESC
+      // Sort by combined severity (max of stuck-in-status vs arrival-overdue) DESC
+      // so all warning/critical rows cluster together regardless of which signal triggered them.
       const now = new Date();
       const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const arrOverdue = (r: CompraRow): number => {
@@ -226,7 +227,12 @@ export default function PurchaseTrackerPage() {
         const d = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
         return d ? daysBetween(d, now) : -1;
       };
-      final.sort((a, b) => (arrOverdue(b) - arrOverdue(a)) || (stuckDays(b) - stuckDays(a)));
+      const severity = (r: CompraRow): number => Math.max(stuckDays(r), arrOverdue(r));
+      final.sort((a, b) =>
+        (severity(b) - severity(a)) ||
+        (stuckDays(b) - stuckDays(a)) ||
+        (arrOverdue(b) - arrOverdue(a))
+      );
 
       setRows(final);
       setLastScanAt(new Date());

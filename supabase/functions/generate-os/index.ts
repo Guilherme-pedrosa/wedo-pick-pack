@@ -430,9 +430,7 @@ Deno.serve(async (req: Request) => {
 
     const warnings: string[] = [];
     if (oversizedEquipIds.length > 0) {
-      const warnMsg = `ID(s) de equipamento ignorado(s) por exceder limite Int32 do Auvo: ${oversizedEquipIds.join(', ')}. Vincule manualmente no Auvo.`;
-      warnings.push(warnMsg);
-      console.warn(`[generate-os] ⚠️ ${warnMsg}`);
+      console.warn(`[generate-os] Equipamento(s) fora do limite Int32 filtrado(s) antes do envio ao Auvo: ${Array.from(new Set(oversizedEquipIds)).join(', ')}`);
     }
     if (equipmentsToSend.length === 0) {
       const warnMsg = sourceTaskOsId

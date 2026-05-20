@@ -34,6 +34,8 @@ export interface ConflictInfo {
   estoque_total: number;
   demanda_total: number;
   orcamentos_envolvidos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }>;
+  qtd_em_compra?: number;
+  ordens_compra?: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
 }
 
 export interface OSReservedInfo {

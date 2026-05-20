@@ -173,6 +173,7 @@ export interface OrcamentoConvertidoWarning {
     qtd_necessaria: number;
     estoque_total: number;
     estoque_disponivel: number;
+    qtd_comprometida?: number;
     pronto: boolean;
     comprometido: boolean;
     qtd_em_compra?: number;

@@ -342,7 +342,7 @@ export default function PurchaseTrackerPage() {
           <Badge variant="secondary">{rows.length} pedido(s)</Badge>
           {summary.warn > 0 && (
             <Badge className="bg-red-200 text-red-900 hover:bg-red-200 border-red-300 gap-1">
-              <AlertTriangle className="h-3 w-3" /> {summary.warn} acima de 15 dias
+              <AlertTriangle className="h-3 w-3" /> {summary.warn} parados +15 dias
             </Badge>
           )}
           {summary.crit > 0 && (

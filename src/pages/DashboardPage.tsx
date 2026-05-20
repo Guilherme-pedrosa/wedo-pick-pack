@@ -177,6 +177,16 @@ const DashboardPage = () => {
         : "text-muted-foreground",
       href: "/compras/acompanhamento",
     },
+    {
+      title: "Índice de Produtos",
+      value: syncStatus ? (syncStatus.status === "success" ? "✓ Sincronizado" : syncStatus.status) : "—",
+      subtitle: syncStatus?.finished_at
+        ? `Último sync: ${new Date(syncStatus.finished_at).toLocaleString("pt-BR")}`
+        : "Nenhum sync executado",
+      icon: RefreshCw,
+      color: "text-muted-foreground",
+      href: "/config",
+    },
   ];
 
   const formatTime = (dateStr: string) => {

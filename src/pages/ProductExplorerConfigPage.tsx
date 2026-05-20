@@ -117,7 +117,7 @@ export default function ProductExplorerConfigPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SitGroup
             title="Situações de OS"
             icon={<Wrench className="h-4 w-4" />}
@@ -135,6 +135,15 @@ export default function ProductExplorerConfigPage() {
             onToggle={(id) => toggle('orcSituacaoIds', id)}
             onAll={() => selectAll('orcSituacaoIds', orcList)}
             onNone={() => clearAll('orcSituacaoIds')}
+          />
+          <SitGroup
+            title="Situações de Vendas"
+            icon={<Receipt className="h-4 w-4" />}
+            options={vendaList}
+            selected={cfg.vendaSituacaoIds}
+            onToggle={(id) => toggle('vendaSituacaoIds', id)}
+            onAll={() => selectAll('vendaSituacaoIds', vendaList)}
+            onNone={() => clearAll('vendaSituacaoIds')}
           />
           <SitGroup
             title="Situações de Pedidos de Compra"

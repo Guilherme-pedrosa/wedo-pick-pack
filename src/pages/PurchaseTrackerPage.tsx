@@ -138,6 +138,7 @@ export default function PurchaseTrackerPage() {
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [rows, setRows] = useState<CompraRow[]>([]);
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
+  const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr'>('all');
 
   // Load statuses + persisted selection
   useEffect(() => {
@@ -247,6 +248,20 @@ export default function PurchaseTrackerPage() {
     return { warn, crit, atrasoChegada };
   }, [rows, now, today0]);
 
+  const filteredRows = useMemo(() => {
+    if (filter === 'all') return rows;
+    return rows.filter(r => {
+      const lastDate = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
+      const days = lastDate ? daysBetween(lastDate, now) : null;
+      const prevDate = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;
+      const overdue = prevDate ? daysBetween(prevDate, today0) : null;
+      if (filter === 'crit') return days !== null && days > 30;
+      if (filter === 'warn') return days !== null && days > 15 && days <= 30;
+      if (filter === 'arr') return overdue !== null && overdue > 0;
+      return true;
+    });
+  }, [rows, filter, now, today0]);
+
 
   const selectedLabels = selected
     .map(id => statuses.find(s => s.id === id)?.nome)
@@ -339,21 +354,55 @@ export default function PurchaseTrackerPage() {
 
       {rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Badge variant="secondary">{rows.length} pedido(s)</Badge>
+          <Badge
+            variant={filter === 'all' ? 'default' : 'secondary'}
+            className="cursor-pointer"
+            onClick={() => setFilter('all')}
+          >
+            {rows.length} pedido(s)
+          </Badge>
           {summary.warn > 0 && (
-            <Badge className="bg-red-200 text-red-900 hover:bg-red-200 border-red-300 gap-1">
+            <Badge
+              onClick={() => setFilter(filter === 'warn' ? 'all' : 'warn')}
+              className={cn(
+                'bg-red-200 text-red-900 hover:bg-red-300 border-red-300 gap-1 cursor-pointer',
+                filter === 'warn' && 'ring-2 ring-red-500 ring-offset-1',
+              )}
+            >
               <AlertTriangle className="h-3 w-3" /> {summary.warn} parados +15 dias
             </Badge>
           )}
           {summary.crit > 0 && (
-            <Badge className="bg-red-500 text-white hover:bg-red-500 gap-1">
+            <Badge
+              onClick={() => setFilter(filter === 'crit' ? 'all' : 'crit')}
+              className={cn(
+                'bg-red-500 text-white hover:bg-red-600 gap-1 cursor-pointer',
+                filter === 'crit' && 'ring-2 ring-red-700 ring-offset-1',
+              )}
+            >
               <Flame className="h-3 w-3" /> {summary.crit} parados +30 dias
             </Badge>
           )}
           {summary.atrasoChegada > 0 && (
-            <Badge className="bg-amber-500 text-white hover:bg-amber-500 gap-1">
+            <Badge
+              onClick={() => setFilter(filter === 'arr' ? 'all' : 'arr')}
+              className={cn(
+                'bg-amber-500 text-white hover:bg-amber-600 gap-1 cursor-pointer',
+                filter === 'arr' && 'ring-2 ring-amber-700 ring-offset-1',
+              )}
+            >
               <AlertTriangle className="h-3 w-3" /> {summary.atrasoChegada} com chegada atrasada
             </Badge>
+          )}
+          {filter !== 'all' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setFilter('all')}
+            >
+              Limpar filtro
+            </Button>
           )}
           {lastScanAt && (
             <span className="text-xs text-muted-foreground ml-auto">
@@ -362,6 +411,7 @@ export default function PurchaseTrackerPage() {
           )}
         </div>
       )}
+
 
       <Card>
         <CardContent className="p-0">
@@ -380,16 +430,18 @@ export default function PurchaseTrackerPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 && !scanning && (
+              {filteredRows.length === 0 && !scanning && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     {selected.length === 0
                       ? 'Selecione as situações e clique em "Atualizar" para começar.'
-                      : 'Nenhum pedido encontrado para as situações selecionadas.'}
+                      : rows.length === 0
+                        ? 'Nenhum pedido encontrado para as situações selecionadas.'
+                        : 'Nenhum pedido corresponde ao filtro selecionado.'}
                   </TableCell>
                 </TableRow>
               )}
-              {rows.map(r => {
+              {filteredRows.map(r => {
                 const lastDate = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
                 const days = lastDate ? daysBetween(lastDate, now) : null;
                 const prevDate = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;

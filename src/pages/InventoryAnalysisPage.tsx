@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
+import { getOS, getVenda } from '@/api/gestaoclick';
 import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -328,6 +329,7 @@ export default function InventoryAnalysisPage() {
   const [grupoFilter, setGrupoFilter] = useState<string>(initialFilters.grupoFilter);
   const [activeTab, setActiveTab] = useState<AnalysisTab>(DEFAULT_ANALYSIS_TAB);
   const [syncingLT, setSyncingLT] = useState(false);
+  const [docCodigoMap, setDocCodigoMap] = useState<Map<string, string>>(new Map());
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
@@ -519,6 +521,56 @@ export default function InventoryAnalysisPage() {
       // ignore persistence failures
     }
   }, [searchTerm, grupoFilter]);
+
+  // Resolve internal doc IDs (source_id) → visible codigo (4-digit OS / Venda).
+  // Fetches via gc-proxy with limited concurrency and caches in docCodigoMap.
+  useEffect(() => {
+    if (analysisItems.length === 0) return;
+    const pending: Array<{ id: string; type: string }> = [];
+    const seen = new Set<string>();
+    for (const it of analysisItems) {
+      for (const r of it.source_refs) {
+        if (!r.source_id) continue;
+        if (r.source_type !== 'os' && r.source_type !== 'venda') continue;
+        const key = `${r.source_type}:${r.source_id}`;
+        if (seen.has(key) || docCodigoMap.has(key)) continue;
+        seen.add(key);
+        pending.push({ id: r.source_id, type: r.source_type });
+      }
+    }
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const CONCURRENCY = 4;
+      const updates = new Map<string, string>();
+      let cursor = 0;
+      const workers = Array.from({ length: CONCURRENCY }, async () => {
+        while (!cancelled && cursor < pending.length) {
+          const item = pending[cursor++];
+          try {
+            const doc = item.type === 'os'
+              ? await getOS(item.id)
+              : await getVenda(item.id);
+            if (doc?.codigo) {
+              updates.set(`${item.type}:${item.id}`, String(doc.codigo));
+            }
+          } catch {
+            // ignore individual failures
+          }
+        }
+      });
+      await Promise.all(workers);
+      if (cancelled || updates.size === 0) return;
+      setDocCodigoMap(prev => {
+        const next = new Map(prev);
+        updates.forEach((v, k) => next.set(k, v));
+        return next;
+      });
+    })();
+
+    return () => { cancelled = true; };
+  }, [analysisItems, docCodigoMap]);
 
   useEffect(() => {
     if (grupoFilter === ALL_GROUPS_VALUE || grupoFilter === 'Sem grupo' || uniqueGrupos.length === 0) {
@@ -1179,8 +1231,15 @@ export default function InventoryAnalysisPage() {
                         <TableCell className="text-right text-xs">
                           {item.event_count}
                           {item.source_refs.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => `${r.source_type.toUpperCase()} ${r.source_id}: ${Math.round(r.qty)}un (${r.cliente})`).join('\n')}>
-                              {item.source_refs.slice(0, 3).map(r => `${r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase()}${r.source_id}`).join(', ')}
+                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => {
+                              const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
+                              return `${r.source_type.toUpperCase()} ${codigo}: ${Math.round(r.qty)}un (${r.cliente})`;
+                            }).join('\n')}>
+                              {item.source_refs.slice(0, 3).map(r => {
+                                const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
+                                const prefix = r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase();
+                                return `${prefix}${codigo}`;
+                              }).join(', ')}
                               {item.source_refs.length > 3 && ` +${item.source_refs.length - 3}`}
                             </span>
                           )}

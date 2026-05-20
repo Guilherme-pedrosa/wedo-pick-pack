@@ -329,6 +329,7 @@ export default function InventoryAnalysisPage() {
   const [grupoFilter, setGrupoFilter] = useState<string>(initialFilters.grupoFilter);
   const [activeTab, setActiveTab] = useState<AnalysisTab>(DEFAULT_ANALYSIS_TAB);
   const [syncingLT, setSyncingLT] = useState(false);
+  const [docCodigoMap, setDocCodigoMap] = useState<Map<string, string>>(new Map());
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };

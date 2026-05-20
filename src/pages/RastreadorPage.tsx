@@ -1123,6 +1123,29 @@ export default function RastreadorPage() {
                             );
                           })}
                         </div>
+                        <div className="mt-2 text-xs">
+                          {(c.qtd_em_compra ?? 0) > 0 ? (
+                            <span className="text-blue-600">
+                              🛒 Em compra: <strong>{formatQty(c.qtd_em_compra)}</strong>
+                              {c.ordens_compra && c.ordens_compra.length > 0 && (
+                                <span className="text-muted-foreground ml-1">
+                                  ({c.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')})
+                                </span>
+                              )}
+                              {(() => {
+                                const falta = c.demanda_total - c.estoque_total;
+                                const cobre = (c.qtd_em_compra ?? 0) >= falta;
+                                return cobre
+                                  ? <span className="ml-1 text-green-600 font-medium">✓ Cobre falta de {formatQty(falta)}</span>
+                                  : <span className="ml-1 text-red-500 font-medium">✗ Cobre só {formatQty(c.qtd_em_compra)}/{formatQty(falta)}</span>;
+                              })()}
+                            </span>
+                          ) : (
+                            selectedSituacoesCompra.length > 0
+                              ? <span className="text-red-500 font-medium">⛔ Sem pedido de compra nos status selecionados</span>
+                              : <span className="text-muted-foreground italic">Selecione status de PC nos filtros para ver cobertura</span>
+                          )}
+                        </div>
                       </Card>
                     ))}
                   </div>

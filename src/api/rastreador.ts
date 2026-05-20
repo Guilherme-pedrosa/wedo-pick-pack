@@ -34,6 +34,8 @@ export interface ConflictInfo {
   estoque_total: number;
   demanda_total: number;
   orcamentos_envolvidos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }>;
+  qtd_em_compra?: number;
+  ordens_compra?: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
 }
 
 export interface OSReservedInfo {
@@ -409,6 +411,8 @@ export async function rastrearOrcamentos(
 
     // Conflict = total demand (all budgets + OS reservations) exceeds real stock
     if (totalDemand > realStock) {
+      const pidFromKey = key.split('::')[0];
+      const compraInfo = getCompraInfo(pidFromKey, key);
       conflitos.push({
         produto_key: key,
         nome_produto: demand.nome,
@@ -424,6 +428,8 @@ export async function rastrearOrcamentos(
             qtd: os.qtd,
           })) ?? []),
         ],
+        qtd_em_compra: compraInfo.qtd_em_compra,
+        ordens_compra: compraInfo.ordens_compra,
       });
     }
   }

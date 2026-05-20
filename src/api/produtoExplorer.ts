@@ -201,13 +201,15 @@ export async function buildExplorerIndex(
       'Indexando Pedidos de Compra',
     );
     for (const c of compList) {
+      const dataStr = String(c.data_emissao ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(c.id),
         codigo: String(c.codigo ?? c.id),
         nome_fornecedor: String(c.nome_fornecedor ?? ''),
         situacao_id: String((c as any).situacao_id ?? ''),
         nome_situacao: String(c.nome_situacao ?? ''),
-        data: String(c.data_emissao ?? ''),
+        data: dataStr,
       };
       for (const w of c.produtos || []) {
         const pid = normId(w.produto?.produto_id);

@@ -118,6 +118,7 @@ function AuthenticatedApp() {
         <Route path="/controle/vinculacoes" element={<HandoffHistoryPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
+        <Route path="/produtos/explorar" element={<ProductExplorerPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route path="/config/estoque" element={<InventoryPolicyPage />} />
         <Route path="/analise-estoque" element={<InventoryAnalysisPage />} />

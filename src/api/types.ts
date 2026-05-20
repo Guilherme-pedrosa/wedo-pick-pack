@@ -169,6 +169,7 @@ export interface OrcamentoConvertidoWarning {
     variacao_id: string;
     nome_produto: string;
     codigo_produto: string;
+    grupo?: string;
     qtd_necessaria: number;
     estoque_total: number;
     estoque_disponivel: number;

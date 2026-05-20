@@ -106,6 +106,7 @@ function AuthenticatedApp() {
         <Route path="/separations" element={<SeparationsPage />} />
         <Route path="/devolucoes" element={<ReturnLogsPage />} />
         <Route path="/compras" element={<ComprasPage />} />
+        <Route path="/compras/acompanhamento" element={<PurchaseTrackerPage />} />
         <Route path="/controle/caixas" element={<BoxesPage />} />
         <Route path="/controle/maletas" element={<ToolboxesPage />} />
         <Route path="/controle/tecnicos" element={<TechniciansPage />} />

@@ -149,13 +149,15 @@ export async function buildExplorerIndex(
       'Indexando OS',
     );
     for (const os of osList) {
+      const dataStr = String(os.data ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(os.id),
         codigo: String(os.codigo ?? os.id),
         nome_cliente: String(os.nome_cliente ?? ''),
         situacao_id: String((os as any).situacao_id ?? ''),
         nome_situacao: String(os.nome_situacao ?? ''),
-        data: String(os.data ?? ''),
+        data: dataStr,
       };
       for (const w of os.produtos || []) {
         const pid = normId((w as any)?.produto?.produto_id);

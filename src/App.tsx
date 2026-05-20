@@ -22,6 +22,7 @@ import ConfigPage from "./pages/ConfigPage";
 import InventoryPolicyPage from "./pages/InventoryPolicyPage";
 import InventoryAnalysisPage from "./pages/InventoryAnalysisPage";
 import ComprasPage from "./pages/ComprasPage";
+import PurchaseTrackerPage from "./pages/PurchaseTrackerPage";
 import RastreadorPage from "./pages/RastreadorPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
@@ -105,6 +106,7 @@ function AuthenticatedApp() {
         <Route path="/separations" element={<SeparationsPage />} />
         <Route path="/devolucoes" element={<ReturnLogsPage />} />
         <Route path="/compras" element={<ComprasPage />} />
+        <Route path="/compras/acompanhamento" element={<PurchaseTrackerPage />} />
         <Route path="/controle/caixas" element={<BoxesPage />} />
         <Route path="/controle/maletas" element={<ToolboxesPage />} />
         <Route path="/controle/tecnicos" element={<TechniciansPage />} />

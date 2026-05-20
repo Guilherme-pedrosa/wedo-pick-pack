@@ -270,6 +270,7 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
         <TabsList>
           <TabsTrigger value="os">OS ({data.oss.length})</TabsTrigger>
           <TabsTrigger value="orc">Orçamentos ({data.orcamentos.length})</TabsTrigger>
+          <TabsTrigger value="vendas">Vendas ({data.vendas.length})</TabsTrigger>
           <TabsTrigger value="compras">Pedidos de Compra ({data.compras.length})</TabsTrigger>
         </TabsList>
 

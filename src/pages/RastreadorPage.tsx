@@ -575,7 +575,8 @@ export default function RastreadorPage() {
                   <tr className="border-b">
                     <th className="text-left py-0.5 pr-2">Produto</th>
                     <th className="text-right py-0.5 px-2">Precisa</th>
-                    <th className="text-right py-0.5 px-2">Disponível</th>
+                    <th className="text-right py-0.5 px-2">Qtd em saldo</th>
+                    <th className="text-right py-0.5 px-2">Qtd comprometida</th>
                     <th className="text-right py-0.5 px-2">Total</th>
                     <th className="text-center py-0.5 pl-2">OK?</th>
                   </tr>
@@ -584,9 +585,10 @@ export default function RastreadorPage() {
                   {e.itens.map((item, idx) => (
                     <tr key={idx} className="border-b border-gray-200">
                       <td className="py-0.5 pr-2">{item.codigo_produto && <span className="font-mono">[{item.codigo_produto}]</span>} {item.nome_produto}</td>
-                      <td className="text-right py-0.5 px-2">{item.qtd_necessaria}</td>
-                      <td className="text-right py-0.5 px-2">{item.estoque_disponivel}</td>
-                      <td className="text-right py-0.5 px-2">{item.estoque_total}</td>
+                      <td className="text-right py-0.5 px-2">{formatQty(item.qtd_necessaria)}</td>
+                      <td className="text-right py-0.5 px-2">{formatQty(item.estoque_disponivel)}</td>
+                      <td className="text-right py-0.5 px-2">{formatQty(item.qtd_comprometida ?? item.qtd_necessaria)}</td>
+                      <td className="text-right py-0.5 px-2">{formatQty(item.estoque_total)}</td>
                       <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
                     </tr>
                   ))}

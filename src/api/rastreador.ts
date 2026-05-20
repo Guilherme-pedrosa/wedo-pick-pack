@@ -1,5 +1,7 @@
 import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning, GCOrdemCompra } from './types';
 import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra } from './compras';
+import { getOS } from './gestaoclick';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;
@@ -52,6 +54,8 @@ export interface RastreadorResult {
   scannedAt: string;
 }
 
+type LinkedOSInfo = { os_codigo: string; os_id: string; nome_situacao: string; nome_cliente: string };
+
 function normalizeId(value: string | number | null | undefined): string {
   if (value == null) return '';
   const raw = String(value).trim();
@@ -67,6 +71,52 @@ function parseDecimal(value: string | number | null | undefined): number {
   if (raw.includes(',') && raw.includes('.')) return parseFloat(raw.replace(/\./g, '').replace(',', '.')) || 0;
   if (raw.includes(',')) return parseFloat(raw.replace(',', '.')) || 0;
   return parseFloat(raw) || 0;
+}
+
+function normalizeSituacaoNome(value: string | null | undefined): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+async function fetchGeneratedOSFallback(orcamentos: GCOrcamento[]): Promise<Map<string, LinkedOSInfo>> {
+  const ids = orcamentos.map(o => o.id).filter(Boolean);
+  if (!ids.length) return new Map();
+
+  const { data, error } = await (supabase.from('os_generation_logs') as any)
+    .select('orcamento_id, os_id, os_codigo, nome_cliente, created_at')
+    .in('orcamento_id', ids)
+    .eq('success', true)
+    .not('os_id', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (error || !Array.isArray(data)) return new Map();
+
+  const latestByOrc = new Map<string, any>();
+  for (const row of data) {
+    if (!latestByOrc.has(row.orcamento_id)) latestByOrc.set(row.orcamento_id, row);
+  }
+
+  const pairs = await Promise.all([...latestByOrc.entries()].map(async ([orcamentoId, row]) => {
+    try {
+      const osId = normalizeId(row.os_id);
+      if (!osId) return null;
+      const os = await getOS(osId);
+      return [orcamentoId, {
+        os_codigo: String(os.codigo || row.os_codigo || ''),
+        os_id: String(os.id || osId),
+        nome_situacao: String(os.nome_situacao || ''),
+        nome_cliente: String(os.nome_cliente || row.nome_cliente || ''),
+      }] as const;
+    } catch {
+      return null;
+    }
+  }));
+
+  return new Map(pairs.filter((p): p is readonly [string, LinkedOSInfo] => Boolean(p)));
 }
 
 export { getStatusOrcamentos };
@@ -113,6 +163,7 @@ export async function rastrearOrcamentos(
   onProgress?.('Construindo índice de OS…', 0, 1);
   const { index: osIndex, reservedDemand } = await buildOSIndex(
     (step, checked, total) => onProgress?.(step, checked, total),
+    true,
   );
 
   const bloqueados: OrcamentoConvertidoWarning[] = [];
@@ -124,18 +175,27 @@ export async function rastrearOrcamentos(
   // situacaoOSNomes = situações de OS a IGNORAR (não tratar como bloqueio).
   // Se a OS vinculada estiver em uma das situações marcadas, o orçamento volta ao rastreio normal.
   const osIgnoreActive = situacaoOSNomes !== undefined && situacaoOSNomes.length > 0;
-  const osIgnoreSet = new Set((situacaoOSNomes || []).map(n => n.trim().toLowerCase()));
+  const osIgnoreSet = new Set((situacaoOSNomes || []).map(normalizeSituacaoNome));
+  const generatedOSFallback = await fetchGeneratedOSFallback(filteredOrcamentos);
 
   for (const o of filteredOrcamentos) {
     const flagFin = String(o.situacao_financeiro ?? '');
     const flagEst = String(o.situacao_estoque ?? '');
     const byFlags = ['1', 'true', 'sim'].includes(flagFin.toLowerCase()) ||
                     ['1', 'true', 'sim'].includes(flagEst.toLowerCase());
-    const osMatch = osIndex[String(o.codigo)];
+    const osMatch = osIndex[String(o.codigo)] ?? generatedOSFallback.get(o.id);
 
     // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo (para fins de bloqueio).
-    const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase());
+    const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(normalizeSituacaoNome(osMatch.nome_situacao));
     const osMatchPasses = osMatch && !osMatchIgnored;
+
+    // Se a OS vinculada está numa situação marcada para ocultar, oculta TUDO antes
+    // de qualquer outro bloqueio por flag. Assim não aparece nem em prontos,
+    // nem em pendentes, nem em bloqueados.
+    if (osMatchIgnored) {
+      console.info(`[RASTREADOR] Ocultando orçamento #${o.codigo} → OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}] (situação OS ocultada)`);
+      continue;
+    }
 
     if (byFlags || osMatchPasses) {
       const reason = byFlags ? 'flag' as const : 'os_index' as const;
@@ -159,12 +219,6 @@ export async function rastrearOrcamentos(
       });
       console.warn(`[RASTREADOR] ${warning}`);
     } else {
-      // Se a OS vinculada está numa situação marcada para ignorar, oculta TUDO
-      // (nem orçamento nem OS aparecem na lista).
-      if (osMatchIgnored) {
-        console.info(`[RASTREADOR] Ocultando orçamento #${o.codigo} → OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}] (situação OS ignorada)`);
-        continue;
-      }
       uniqueOrcamentos.push(o);
     }
   }

@@ -159,12 +159,11 @@ export async function rastrearOrcamentos(
       });
       console.warn(`[RASTREADOR] ${warning}`);
     } else {
+      // Se a OS vinculada está numa situação marcada para ignorar, oculta TUDO
+      // (nem orçamento nem OS aparecem na lista).
       if (osMatchIgnored) {
-        ignoredOSLinks.set(o.id, {
-          os_codigo: osMatch!.os_codigo,
-          os_id: osMatch!.os_id,
-          nome_situacao: osMatch!.nome_situacao,
-        });
+        console.info(`[RASTREADOR] Ocultando orçamento #${o.codigo} → OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}] (situação OS ignorada)`);
+        continue;
       }
       uniqueOrcamentos.push(o);
     }

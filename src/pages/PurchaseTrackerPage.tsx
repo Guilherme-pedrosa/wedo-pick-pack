@@ -153,7 +153,7 @@ export default function PurchaseTrackerPage() {
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [rows, setRows] = useState<CompraRow[]>([]);
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
-  const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr'>('all');
+  const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr' | 'stuck'>('all');
 
   // Load statuses + persisted selection
   useEffect(() => {
@@ -278,6 +278,7 @@ export default function PurchaseTrackerPage() {
       const overdue = prevDate ? daysBetween(prevDate, today0) : null;
       if (filter === 'crit') return days !== null && days > 30;
       if (filter === 'warn') return days !== null && days > 15 && days <= 30;
+      if (filter === 'stuck') return days !== null && days > 15;
       if (filter === 'arr') return overdue !== null && overdue > 0;
       return true;
     });
@@ -443,9 +444,27 @@ export default function PurchaseTrackerPage() {
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Situação atual</TableHead>
                 <TableHead className="w-[110px]">Pedido em</TableHead>
-                <TableHead className="w-[160px]">Última alteração</TableHead>
+                <TableHead
+                  className={cn(
+                    'w-[160px] cursor-pointer select-none hover:text-primary transition-colors',
+                    filter === 'stuck' && 'text-primary underline underline-offset-4',
+                  )}
+                  onClick={() => setFilter(filter === 'stuck' ? 'all' : 'stuck')}
+                  title="Clique para filtrar pedidos parados +15 dias"
+                >
+                  Última alteração
+                </TableHead>
                 <TableHead className="w-[120px] text-right">Dias parado</TableHead>
-                <TableHead className="w-[120px]">Previsão chegada</TableHead>
+                <TableHead
+                  className={cn(
+                    'w-[120px] cursor-pointer select-none hover:text-primary transition-colors',
+                    filter === 'arr' && 'text-primary underline underline-offset-4',
+                  )}
+                  onClick={() => setFilter(filter === 'arr' ? 'all' : 'arr')}
+                  title="Clique para filtrar pedidos com chegada atrasada"
+                >
+                  Previsão chegada
+                </TableHead>
                 <TableHead className="w-[140px] text-right">Atraso chegada</TableHead>
                 <TableHead className="w-[110px] text-right">Valor</TableHead>
               </TableRow>

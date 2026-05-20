@@ -816,12 +816,12 @@ export default function RastreadorPage() {
             <div className="pt-3 border-t border-border space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-medium text-foreground">
-                  Situações de OS a <span className="text-amber-700">ignorar</span> <span className="text-muted-foreground font-normal">(não tratar como bloqueio)</span>
+                  Situações de OS a <span className="text-amber-700">ocultar</span> <span className="text-muted-foreground font-normal">(remover da lista)</span>
                 </p>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground">{selectedSituacoesOS.length} ignorada(s)</span>
+                  <span className="text-[10px] text-muted-foreground">{selectedSituacoesOS.length} oculta(s)</span>
                   <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={selectAllSituacoesOS} disabled={scanning}>
-                    Ignorar todas
+                    Ocultar todas
                   </Button>
                   {selectedSituacoesOS.length > 0 && (
                     <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={clearSituacoesOS} disabled={scanning}>
@@ -831,7 +831,7 @@ export default function RastreadorPage() {
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Marque as situações de OS que devem ser <strong>ignoradas</strong>. Orçamentos vinculados a OS dessas situações voltam ao rastreio normal (não aparecem como bloqueados). Por padrão, nada vem marcado — todas as OS bloqueiam.
+                Marque as situações de OS que devem ser <strong>ocultadas</strong>. Orçamentos vinculados a OS dessas situações <strong>não aparecem na lista</strong> (nem como prontos, nem como bloqueados). Por padrão, nada vem marcado — todas as OS bloqueiam normalmente.
               </p>
               {statusOSQuery.isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">

@@ -8,6 +8,7 @@ export interface OrcamentoReadiness {
     variacao_id: string;
     nome_produto: string;
     codigo_produto: string;
+    grupo?: string;
     qtd_necessaria: number;
     estoque_total: number;      // real stock from ERP (never reduced)
     estoque_disponivel: number;  // same as estoque_total (real stock)
@@ -396,6 +397,7 @@ export async function rastrearOrcamentos(
         variacao_id: vid,
         nome_produto: p.produto.nome_produto,
         codigo_produto: codeMap.get(key) || String(p.produto.codigo_produto ?? '').trim(),
+        grupo: detailCache.get(pid)?.nome_grupo,
         qtd_necessaria: qtd,
         estoque_total: stockTotal,
         estoque_disponivel: stockTotal, // real stock, never reduced
@@ -445,6 +447,7 @@ export async function rastrearOrcamentos(
         variacao_id: vid,
         nome_produto: p.produto.nome_produto,
         codigo_produto: codeMap.get(key) || String(p.produto.codigo_produto ?? '').trim(),
+        grupo: detailCache.get(pid)?.nome_grupo,
         qtd_necessaria: qtd,
         estoque_total: stockTotal,
         estoque_disponivel: stockTotal,

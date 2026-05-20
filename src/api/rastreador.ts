@@ -397,6 +397,7 @@ export async function rastrearOrcamentos(
         variacao_id: vid,
         nome_produto: p.produto.nome_produto,
         codigo_produto: codeMap.get(key) || String(p.produto.codigo_produto ?? '').trim(),
+        grupo: detailCache.get(pid)?.nome_grupo,
         qtd_necessaria: qtd,
         estoque_total: stockTotal,
         estoque_disponivel: stockTotal, // real stock, never reduced

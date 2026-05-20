@@ -91,6 +91,58 @@ async function auvoGetTask(token: string, taskId: string | number): Promise<any>
   return data;
 }
 
+function parseMoney(value: unknown): number {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 0;
+  const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoney(value: number): string {
+  return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
+}
+
+function getPaymentValue(payment: any): number {
+  if (payment?.pagamento?.valor != null) return parseMoney(payment.pagamento.valor);
+  return parseMoney(payment?.valor);
+}
+
+function setPaymentValue(payment: any, value: string): any {
+  if (payment?.pagamento && typeof payment.pagamento === 'object') {
+    return { ...payment, pagamento: { ...payment.pagamento, valor: value } };
+  }
+  return { ...payment, valor: value };
+}
+
+function normalizePaymentsToDeclaredTotal<T extends Record<string, any>>(payload: T): T {
+  if (!Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) return payload;
+
+  const targetCents = Math.round(parseMoney(payload.valor_total) * 100);
+  if (targetCents <= 0) return payload;
+
+  const currentCents = payload.pagamentos
+    .map((p: any) => Math.round(getPaymentValue(p) * 100))
+    .reduce((sum: number, cents: number) => sum + cents, 0);
+
+  if (currentCents === targetCents) return payload;
+
+  if (payload.pagamentos.length === 1) {
+    return {
+      ...payload,
+      pagamentos: [setPaymentValue(payload.pagamentos[0], formatMoney(targetCents / 100))],
+    };
+  }
+
+  const payments = payload.pagamentos.map((payment: any, index: number) => {
+    if (index !== payload.pagamentos.length - 1) return payment;
+    const lastCents = Math.round(getPaymentValue(payment) * 100) + (targetCents - currentCents);
+    return setPaymentValue(payment, formatMoney(lastCents / 100));
+  });
+
+  return { ...payload, pagamentos: payments };
+}
+
 // ---------- GC: Discover OS attribute IDs ----------
 interface AtributoMeta { id: string; nome: string }
 
@@ -305,9 +357,11 @@ Deno.serve(async (req: Request) => {
 
         const sourceEquipments = source?.equipmentsId;
         if (Array.isArray(sourceEquipments)) {
-          clonedEquipmentIds = sourceEquipments
+          const parsedSourceEquipmentIds = sourceEquipments
             .map((v: unknown) => Number(v))
-            .filter((n: number) => Number.isFinite(n) && n > 0 && n <= INT32_MAX);
+            .filter((n: number) => Number.isFinite(n) && n > 0);
+          oversizedEquipIds.push(...parsedSourceEquipmentIds.filter((n: number) => n > INT32_MAX));
+          clonedEquipmentIds = parsedSourceEquipmentIds.filter((n: number) => n <= INT32_MAX);
         }
 
         console.log(`[generate-os] Cloned source tarefa OS ${sourceTaskOsId}: customerId=${clonedCustomerId ?? 0}, equipments=${clonedEquipmentIds.length}`);
@@ -376,9 +430,7 @@ Deno.serve(async (req: Request) => {
 
     const warnings: string[] = [];
     if (oversizedEquipIds.length > 0) {
-      const warnMsg = `ID(s) de equipamento ignorado(s) por exceder limite Int32 do Auvo: ${oversizedEquipIds.join(', ')}. Vincule manualmente no Auvo.`;
-      warnings.push(warnMsg);
-      console.warn(`[generate-os] ⚠️ ${warnMsg}`);
+      console.warn(`[generate-os] Equipamento(s) fora do limite Int32 filtrado(s) antes do envio ao Auvo: ${Array.from(new Set(oversizedEquipIds)).join(', ')}`);
     }
     if (equipmentsToSend.length === 0) {
       const warnMsg = sourceTaskOsId
@@ -481,11 +533,12 @@ Deno.serve(async (req: Request) => {
     if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
     if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
     if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
+    if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
     if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
 
     console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 
-    const gcResult = await gcRequest('/api/ordens_servicos', 'POST', osPayload);
+    const gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(osPayload));
 
     const osId = gcResult?.data?.id;
     const osCodigo = gcResult?.data?.codigo;
@@ -498,26 +551,34 @@ Deno.serve(async (req: Request) => {
     try {
       console.log(`[generate-os] Step 6: Updating orçamento #${orcamento.codigo} status to ${NEW_ORC_STATUS_ID}...`);
 
+      let orcForUpdate = orcamento;
+      try {
+        const latestOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, 'GET');
+        if (latestOrc?.data) orcForUpdate = { ...orcamento, ...latestOrc.data };
+      } catch (latestErr) {
+        console.warn('[generate-os] Could not refresh orçamento before status update:', latestErr);
+      }
+
       const orcUpdatePayload: Record<string, any> = {
-        cliente_id: orcamento.cliente_id,
-        data: orcamento.data || new Date().toISOString().split('T')[0],
+        cliente_id: orcForUpdate.cliente_id,
+        data: orcForUpdate.data || new Date().toISOString().split('T')[0],
         situacao_id: NEW_ORC_STATUS_ID,
-        valor_total: orcamento.valor_total,
-        valor_frete: orcamento.valor_frete ?? '0.00',
-        condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
-        produtos: orcamento.produtos || [],
-        servicos: orcamento.servicos || [],
-        atributos: orcamento.atributos || [],
-        equipamentos: orcamento.equipamentos || [],
+        valor_total: formatMoney(parseMoney(orcForUpdate.valor_total)),
+        valor_frete: formatMoney(parseMoney(orcForUpdate.valor_frete ?? '0.00')),
+        condicao_pagamento: orcForUpdate.condicao_pagamento || 'a_vista',
+        produtos: orcForUpdate.produtos || [],
+        servicos: orcForUpdate.servicos || [],
+        atributos: orcForUpdate.atributos || [],
+        equipamentos: orcForUpdate.equipamentos || [],
       };
       // Preserve pagamentos to avoid total vs parcelas mismatch
-      if (orcamento.pagamentos?.length) orcUpdatePayload.pagamentos = orcamento.pagamentos;
-      if (orcamento.vendedor_id) orcUpdatePayload.vendedor_id = orcamento.vendedor_id;
-      if (orcamento.observacoes) orcUpdatePayload.observacoes = orcamento.observacoes;
-      if (orcamento.observacoes_interna) orcUpdatePayload.observacoes_interna = orcamento.observacoes_interna;
+      if (orcForUpdate.pagamentos?.length) orcUpdatePayload.pagamentos = orcForUpdate.pagamentos;
+      if (orcForUpdate.vendedor_id) orcUpdatePayload.vendedor_id = orcForUpdate.vendedor_id;
+      if (orcForUpdate.observacoes) orcUpdatePayload.observacoes = orcForUpdate.observacoes;
+      if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
       if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
 
-      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', orcUpdatePayload);
+      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(orcUpdatePayload));
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);
     } catch (orcErr) {
       const orcMsg = orcErr instanceof Error ? orcErr.message : String(orcErr);

@@ -414,69 +414,50 @@ function setPagamentoValor(p: any, newValor: string): any {
 /**
  * Compute the order total the way GestãoClick's PUT validator does.
  *
- * EMPIRICAL FINDING (OS 9271, simulação real 2026-04-17):
- * O validador de PUT do GC NÃO soma os `valor_total` já arredondados de cada
- * linha. Ele recalcula `qty × valor_venda` em precisão total e arredonda
- * UMA ÚNICA VEZ no final.
- *
- * Exemplo da OS 9271 (com qty fracionária):
- *   linha A: 0.600 × 280.57 = 168.342
- *   linha B: 0.900 × 280.57 = 252.513
- *   Soma raw = 420.855 → arredonda para 420.86 ✅ (que o validador exige)
- *   Soma dos `valor_total` armazenados = 168.34 + 252.51 = 420.85 ❌
- *   Diferença = R$ 0,01 → o exato erro "faltando 0.01" reportado pelo GC.
- *
- * Por isso, somamos qty × unit (com desconto) para CADA linha em precisão
- * total, somamos tudo, e arredondamos uma única vez no final.
+ * O GC valida dinheiro em centavos. Portanto, se a linha já trouxe
+ * `valor_total`, ela é a fonte de verdade com 2 casas; quando não trouxe,
+ * calculamos a linha e arredondamos imediatamente para centavos antes de somar.
+ * Isso evita que frações invisíveis depois da vírgula alterem o total das parcelas.
  */
 function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
-  const lineSumRaw = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
+  const lineSumCents = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
     if (!Array.isArray(arr)) return 0;
     return arr.reduce((s, entry) => {
       const line = entry?.[key] || entry;
+      const declared = line?.valor_total;
+      if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
+        return s + Math.round(parseCurrency(declared) * 100);
+      }
+
       const qty = parseCurrency(line?.quantidade);
       const unit = parseCurrency(line?.valor_venda);
       const fixedDiscount = parseCurrency(line?.desconto_valor);
       const percentDiscount = parseCurrency(line?.desconto_porcentagem);
 
-      // Caso especial: linha sem qty/unit mas com valor_total declarado
-      // (ex.: linhas de serviço sem multiplicação) — usa o declarado.
-      if ((qty <= 0 || unit <= 0)) {
-        const declared = line?.valor_total;
-        if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
-          return s + parseCurrency(declared);
-        }
-        return s;
-      }
+      if (qty <= 0 || unit <= 0) return s;
 
-      // Soma RAW (sem arredondar a linha) — o GC valida assim no PUT.
-      // Desconto percentual de 100% zera a linha; antes ele era ignorado
-      // por causa do guard `< 100`, somando indevidamente produtos bonificados.
       let lineRaw = qty * unit;
       if (percentDiscount > 0) {
         lineRaw = percentDiscount >= 100 ? 0 : lineRaw * (1 - percentDiscount / 100);
       }
       lineRaw -= fixedDiscount;
-      return s + lineRaw;
+      return s + Math.round(lineRaw * 100);
     }, 0);
   };
 
-  const produtosRaw = lineSumRaw(payload.produtos, 'produto');
-  const servicosRaw = lineSumRaw(payload.servicos, 'servico');
-  if (produtosRaw <= 0 && servicosRaw <= 0) return null;
+  const produtosCents = lineSumCents(payload.produtos, 'produto');
+  const servicosCents = lineSumCents(payload.servicos, 'servico');
+  if (produtosCents <= 0 && servicosCents <= 0) return null;
 
-  const desconto = parseCurrency(payload.desconto_valor);
+  const descontoCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
   const descontoPct = parseCurrency(payload.desconto_porcentagem);
-  const frete = parseCurrency(payload.valor_frete);
+  const freteCents = Math.round(parseCurrency(payload.valor_frete) * 100);
 
-  // Aplica desconto geral percentual sobre o subtotal (produtos + serviços),
-  // depois subtrai o desconto fixo geral e soma o frete. Igual ao validador GC.
-  let subtotal = produtosRaw + servicosRaw;
+  let subtotalCents = produtosCents + servicosCents;
   if (descontoPct > 0 && descontoPct < 100) {
-    subtotal = subtotal * (1 - descontoPct / 100);
+    subtotalCents = Math.round(subtotalCents * (1 - descontoPct / 100));
   }
-  const totalRaw = subtotal - desconto + frete;
-  const totalCents = Math.round(totalRaw * 100);
+  const totalCents = subtotalCents - descontoCents + freteCents;
   return totalCents > 0 ? totalCents : null;
 }
 

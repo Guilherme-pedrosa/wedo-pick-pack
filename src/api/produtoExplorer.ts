@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { listOrcamentos, listOrdensCompra, getProdutoDetalhe } from './compras';
 import { listOS } from './gestaoclick';
 import { GCMeta, GCOrcamento, GCOrdemCompra, GCOrdemServico, GCProdutoDetalhe } from './types';
+import { getExplorerConfig } from '@/lib/explorerConfig';
 
 // ------------ utils ------------
 function normId(v: unknown): string {
@@ -26,6 +27,7 @@ export interface ExplorerOSRef {
   id: string;
   codigo: string;
   nome_cliente: string;
+  situacao_id: string;
   nome_situacao: string;
   data: string;
   qtd: number;
@@ -34,6 +36,7 @@ export interface ExplorerOrcRef {
   id: string;
   codigo: string;
   nome_cliente: string;
+  situacao_id: string;
   nome_situacao: string;
   data: string;
   qtd: number;
@@ -42,6 +45,7 @@ export interface ExplorerCompraRef {
   id: string;
   codigo: string;
   nome_fornecedor: string;
+  situacao_id: string;
   nome_situacao: string;
   data: string;
   qtd: number;

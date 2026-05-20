@@ -199,13 +199,18 @@ export default function PurchaseTrackerPage() {
       for (const r of collected) map.set(r.id, r);
       const final = [...map.values()];
 
-      // Sort by days-in-current-status DESC (most delayed first)
+      // Sort by arrival overdue DESC, then by days-in-current-status DESC
       const now = new Date();
-      final.sort((a, b) => {
-        const da = a.ultima_alteracao ? daysBetween(parseGCDate(a.ultima_alteracao)!, now) : -1;
-        const db = b.ultima_alteracao ? daysBetween(parseGCDate(b.ultima_alteracao)!, now) : -1;
-        return db - da;
-      });
+      const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const arrOverdue = (r: CompraRow): number => {
+        const p = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;
+        return p ? daysBetween(p, today0) : -Infinity;
+      };
+      const stuckDays = (r: CompraRow): number => {
+        const d = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
+        return d ? daysBetween(d, now) : -1;
+      };
+      final.sort((a, b) => (arrOverdue(b) - arrOverdue(a)) || (stuckDays(b) - stuckDays(a)));
 
       setRows(final);
       setLastScanAt(new Date());
@@ -219,19 +224,29 @@ export default function PurchaseTrackerPage() {
   };
 
   const now = useMemo(() => new Date(), [rows]);
+  const today0 = useMemo(() => new Date(now.getFullYear(), now.getMonth(), now.getDate()), [now]);
 
   const summary = useMemo(() => {
-    let warn = 0, crit = 0;
+    let warn = 0, crit = 0, atrasoChegada = 0;
     for (const r of rows) {
-      if (!r.ultima_alteracao) continue;
-      const d = parseGCDate(r.ultima_alteracao);
-      if (!d) continue;
-      const days = daysBetween(d, now);
-      if (days > 30) crit++;
-      else if (days > 15) warn++;
+      // Stuck-in-status signal
+      if (r.ultima_alteracao) {
+        const d = parseGCDate(r.ultima_alteracao);
+        if (d) {
+          const days = daysBetween(d, now);
+          if (days > 30) crit++;
+          else if (days > 15) warn++;
+        }
+      }
+      // Arrival overdue signal
+      if (r.previsao_chegada) {
+        const p = parseFlexibleDate(r.previsao_chegada);
+        if (p && daysBetween(p, today0) > 0) atrasoChegada++;
+      }
     }
-    return { warn, crit };
-  }, [rows, now]);
+    return { warn, crit, atrasoChegada };
+  }, [rows, now, today0]);
+
 
   const selectedLabels = selected
     .map(id => statuses.find(s => s.id === id)?.nome)

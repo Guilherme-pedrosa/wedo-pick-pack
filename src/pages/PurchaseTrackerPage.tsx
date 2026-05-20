@@ -430,16 +430,18 @@ export default function PurchaseTrackerPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.length === 0 && !scanning && (
+              {filteredRows.length === 0 && !scanning && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     {selected.length === 0
                       ? 'Selecione as situações e clique em "Atualizar" para começar.'
-                      : 'Nenhum pedido encontrado para as situações selecionadas.'}
+                      : rows.length === 0
+                        ? 'Nenhum pedido encontrado para as situações selecionadas.'
+                        : 'Nenhum pedido corresponde ao filtro selecionado.'}
                   </TableCell>
                 </TableRow>
               )}
-              {rows.map(r => {
+              {filteredRows.map(r => {
                 const lastDate = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
                 const days = lastDate ? daysBetween(lastDate, now) : null;
                 const prevDate = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;

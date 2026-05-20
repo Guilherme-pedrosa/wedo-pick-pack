@@ -74,6 +74,7 @@ function normalizeSituacaoNome(value: string | null | undefined): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
+    .replace(/\s+/g, ' ')
     .toLowerCase();
 }
 
@@ -121,6 +122,7 @@ export async function rastrearOrcamentos(
   onProgress?.('Construindo índice de OS…', 0, 1);
   const { index: osIndex, reservedDemand } = await buildOSIndex(
     (step, checked, total) => onProgress?.(step, checked, total),
+    true,
   );
 
   const bloqueados: OrcamentoConvertidoWarning[] = [];

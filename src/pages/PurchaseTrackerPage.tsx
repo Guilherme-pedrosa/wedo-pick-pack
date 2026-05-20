@@ -347,7 +347,12 @@ export default function PurchaseTrackerPage() {
           )}
           {summary.crit > 0 && (
             <Badge className="bg-red-500 text-white hover:bg-red-500 gap-1">
-              <Flame className="h-3 w-3" /> {summary.crit} acima de 30 dias
+              <Flame className="h-3 w-3" /> {summary.crit} parados +30 dias
+            </Badge>
+          )}
+          {summary.atrasoChegada > 0 && (
+            <Badge className="bg-amber-500 text-white hover:bg-amber-500 gap-1">
+              <AlertTriangle className="h-3 w-3" /> {summary.atrasoChegada} com chegada atrasada
             </Badge>
           )}
           {lastScanAt && (
@@ -366,16 +371,18 @@ export default function PurchaseTrackerPage() {
                 <TableHead className="w-[90px]">Código</TableHead>
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Situação atual</TableHead>
-                <TableHead className="w-[120px]">Pedido em</TableHead>
-                <TableHead className="w-[170px]">Última alteração</TableHead>
-                <TableHead className="w-[140px] text-right">Dias parado</TableHead>
-                <TableHead className="w-[120px] text-right">Valor</TableHead>
+                <TableHead className="w-[110px]">Pedido em</TableHead>
+                <TableHead className="w-[160px]">Última alteração</TableHead>
+                <TableHead className="w-[120px] text-right">Dias parado</TableHead>
+                <TableHead className="w-[120px]">Previsão chegada</TableHead>
+                <TableHead className="w-[140px] text-right">Atraso chegada</TableHead>
+                <TableHead className="w-[110px] text-right">Valor</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 && !scanning && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     {selected.length === 0
                       ? 'Selecione as situações e clique em "Atualizar" para começar.'
                       : 'Nenhum pedido encontrado para as situações selecionadas.'}
@@ -385,8 +392,14 @@ export default function PurchaseTrackerPage() {
               {rows.map(r => {
                 const lastDate = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
                 const days = lastDate ? daysBetween(lastDate, now) : null;
-                const isCrit = days !== null && days > 30;
-                const isWarn = days !== null && days > 15 && !isCrit;
+                const prevDate = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;
+                const overdueDays = prevDate ? daysBetween(prevDate, today0) : null; // >0 = atrasado
+                const isArrCrit = overdueDays !== null && overdueDays > 30;
+                const isArrWarn = overdueDays !== null && overdueDays > 0 && !isArrCrit;
+                const isStuckCrit = days !== null && days > 30;
+                const isStuckWarn = days !== null && days > 15 && !isStuckCrit;
+                const isCrit = isArrCrit || isStuckCrit;
+                const isWarn = !isCrit && (isArrWarn || isStuckWarn);
                 return (
                   <TableRow
                     key={r.id}
@@ -409,12 +422,28 @@ export default function PurchaseTrackerPage() {
                         <span
                           className={cn(
                             'font-semibold tabular-nums',
-                            isCrit && 'text-red-900',
-                            isWarn && 'text-red-800',
+                            isStuckCrit && 'text-red-900',
+                            isStuckWarn && 'text-red-800',
                           )}
                         >
                           {days} {days === 1 ? 'dia' : 'dias'}
                         </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm tabular-nums">
+                      {prevDate ? prevDate.toLocaleDateString('pt-BR') : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {overdueDays === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : overdueDays > 0 ? (
+                        <span className={cn('font-semibold tabular-nums', isArrCrit ? 'text-red-900' : 'text-red-800')}>
+                          +{overdueDays} {overdueDays === 1 ? 'dia' : 'dias'}
+                        </span>
+                      ) : overdueDays === 0 ? (
+                        <span className="font-medium text-amber-700 tabular-nums">hoje</span>
+                      ) : (
+                        <span className="text-muted-foreground tabular-nums">em {Math.abs(overdueDays)}d</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(r.valor_total)}</TableCell>

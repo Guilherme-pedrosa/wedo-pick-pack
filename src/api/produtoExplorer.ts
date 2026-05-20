@@ -226,9 +226,21 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const orcamentos = (idx.orcamentos.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
   const compras = (idx.compras.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
 
-  const qtd_demanda_os = oss.filter(o => isOpenOS(o.nome_situacao)).reduce((s, o) => s + o.qtd, 0);
-  const qtd_demanda_orcamentos = orcamentos.filter(o => isOpenOrc(o.nome_situacao)).reduce((s, o) => s + o.qtd, 0);
-  const qtd_em_compra = compras.filter(c => isOpenCompra(c.nome_situacao)).reduce((s, c) => s + c.qtd, 0);
+  const cfg = getExplorerConfig();
+  const osSet = new Set(cfg.osSituacaoIds);
+  const orcSet = new Set(cfg.orcSituacaoIds);
+  const compraSet = new Set(cfg.compraSituacaoIds);
+
+  const matchOS = (o: ExplorerOSRef) =>
+    osSet.size > 0 ? osSet.has(o.situacao_id) : isOpenOS(o.nome_situacao);
+  const matchOrc = (o: ExplorerOrcRef) =>
+    orcSet.size > 0 ? orcSet.has(o.situacao_id) : isOpenOrc(o.nome_situacao);
+  const matchCompra = (c: ExplorerCompraRef) =>
+    compraSet.size > 0 ? compraSet.has(c.situacao_id) : isOpenCompra(c.nome_situacao);
+
+  const qtd_demanda_os = oss.filter(matchOS).reduce((s, o) => s + o.qtd, 0);
+  const qtd_demanda_orcamentos = orcamentos.filter(matchOrc).reduce((s, o) => s + o.qtd, 0);
+  const qtd_em_compra = compras.filter(matchCompra).reduce((s, c) => s + c.qtd, 0);
 
   const demanda = qtd_demanda_os + qtd_demanda_orcamentos;
   const saldo_projetado = estoque + qtd_em_compra - demanda;

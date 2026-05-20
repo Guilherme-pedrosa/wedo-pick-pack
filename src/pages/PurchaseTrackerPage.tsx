@@ -155,7 +155,7 @@ export default function PurchaseTrackerPage() {
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr' | 'stuck'>('all');
 
-  // Load statuses + persisted selection
+  // Load statuses + persisted selection (DB first, fallback localStorage)
   useEffect(() => {
     (async () => {
       try {
@@ -167,6 +167,18 @@ export default function PurchaseTrackerPage() {
         setLoadingStatuses(false);
       }
       try {
+        const { data } = await supabase
+          .from('purchase_tracker_settings')
+          .select('watched_situacao_ids')
+          .limit(1)
+          .maybeSingle();
+        const ids = data?.watched_situacao_ids as string[] | undefined;
+        if (ids && ids.length) {
+          setSelected(ids.map(String));
+          return;
+        }
+      } catch {/* ignore */}
+      try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
@@ -176,9 +188,32 @@ export default function PurchaseTrackerPage() {
     })();
   }, []);
 
+  // Persist to localStorage + DB (so cron horário usa as mesmas situações)
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(selected)); } catch {/* ignore */}
-  }, [selected]);
+    if (loadingStatuses) return;
+    (async () => {
+      try {
+        const { data: existing } = await supabase
+          .from('purchase_tracker_settings')
+          .select('id')
+          .limit(1)
+          .maybeSingle();
+        if (existing?.id) {
+          await supabase
+            .from('purchase_tracker_settings')
+            .update({ watched_situacao_ids: selected, updated_at: new Date().toISOString() })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('purchase_tracker_settings')
+            .insert({ watched_situacao_ids: selected });
+        }
+      } catch (e) {
+        console.warn('Falha ao persistir settings do tracker', e);
+      }
+    })();
+  }, [selected, loadingStatuses]);
 
   const toggle = (id: string) =>
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);

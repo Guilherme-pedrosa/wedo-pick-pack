@@ -118,6 +118,7 @@ export async function buildExplorerIndex(
     const oss = new Map<string, ExplorerOSRef[]>();
     const orcamentos = new Map<string, ExplorerOrcRef[]>();
     const compras = new Map<string, ExplorerCompraRef[]>();
+    const vendas = new Map<string, ExplorerVendaRef[]>();
 
     // OS
     const osList = await paginate<GCOrdemServico>(
@@ -191,7 +192,31 @@ export async function buildExplorerIndex(
       }
     }
 
-    cache = { builtAt: Date.now(), oss, orcamentos, compras };
+    // Vendas
+    const vendaList = await paginate<GCVenda>(
+      (p) => listVendas(undefined, p),
+      onProgress,
+      'Indexando Vendas',
+    );
+    for (const v of vendaList) {
+      const ref = {
+        id: String(v.id),
+        codigo: String(v.codigo ?? v.id),
+        nome_cliente: String(v.nome_cliente ?? ''),
+        situacao_id: String(v.situacao_id ?? ''),
+        nome_situacao: String(v.nome_situacao ?? ''),
+        data: String(v.data ?? ''),
+      };
+      for (const w of v.produtos || []) {
+        const pid = normId((w as any)?.produto?.produto_id);
+        if (!pid) continue;
+        const qtd = parseDec((w as any)?.produto?.quantidade);
+        if (!vendas.has(pid)) vendas.set(pid, []);
+        vendas.get(pid)!.push({ ...ref, qtd });
+      }
+    }
+
+    cache = { builtAt: Date.now(), oss, orcamentos, compras, vendas };
     return cache;
   })();
 

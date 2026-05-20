@@ -522,6 +522,56 @@ export default function InventoryAnalysisPage() {
     }
   }, [searchTerm, grupoFilter]);
 
+  // Resolve internal doc IDs (source_id) → visible codigo (4-digit OS / Venda).
+  // Fetches via gc-proxy with limited concurrency and caches in docCodigoMap.
+  useEffect(() => {
+    if (analysisItems.length === 0) return;
+    const pending: Array<{ id: string; type: string }> = [];
+    const seen = new Set<string>();
+    for (const it of analysisItems) {
+      for (const r of it.source_refs) {
+        if (!r.source_id) continue;
+        if (r.source_type !== 'os' && r.source_type !== 'venda') continue;
+        const key = `${r.source_type}:${r.source_id}`;
+        if (seen.has(key) || docCodigoMap.has(key)) continue;
+        seen.add(key);
+        pending.push({ id: r.source_id, type: r.source_type });
+      }
+    }
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const CONCURRENCY = 4;
+      const updates = new Map<string, string>();
+      let cursor = 0;
+      const workers = Array.from({ length: CONCURRENCY }, async () => {
+        while (!cancelled && cursor < pending.length) {
+          const item = pending[cursor++];
+          try {
+            const doc = item.type === 'os'
+              ? await getOS(item.id)
+              : await getVenda(item.id);
+            if (doc?.codigo) {
+              updates.set(`${item.type}:${item.id}`, String(doc.codigo));
+            }
+          } catch {
+            // ignore individual failures
+          }
+        }
+      });
+      await Promise.all(workers);
+      if (cancelled || updates.size === 0) return;
+      setDocCodigoMap(prev => {
+        const next = new Map(prev);
+        updates.forEach((v, k) => next.set(k, v));
+        return next;
+      });
+    })();
+
+    return () => { cancelled = true; };
+  }, [analysisItems, docCodigoMap]);
+
   useEffect(() => {
     if (grupoFilter === ALL_GROUPS_VALUE || grupoFilter === 'Sem grupo' || uniqueGrupos.length === 0) {
       return;

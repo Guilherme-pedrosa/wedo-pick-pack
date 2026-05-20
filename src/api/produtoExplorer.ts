@@ -107,12 +107,34 @@ async function paginate<T>(
   return out;
 }
 
+/** Normalize a GC/Auvo date string to YYYY-MM-DD for lexicographic compare. */
+function toIsoDate(s: string): string {
+  if (!s) return '';
+  const t = s.trim();
+  // YYYY-MM-DD[...]
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // DD/MM/YYYY
+  const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  return '';
+}
+
 export async function buildExplorerIndex(
   onProgress?: (step: string, page: number, total: number) => void,
   force = false,
 ): Promise<ExplorerIndex> {
   if (!force && cache && Date.now() - cache.builtAt < TTL) return cache;
   if (building) return building;
+
+  const cfg = getExplorerConfig();
+  const fromDate = cfg.fromDate || '';
+  const afterFrom = (raw: string) => {
+    if (!fromDate) return true;
+    const iso = toIsoDate(raw);
+    if (!iso) return true; // keep records with unknown dates
+    return iso >= fromDate;
+  };
 
   building = (async () => {
     const oss = new Map<string, ExplorerOSRef[]>();

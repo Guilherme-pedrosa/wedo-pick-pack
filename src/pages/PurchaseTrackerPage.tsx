@@ -37,12 +37,27 @@ interface CompraRow {
 function parseFlexibleDate(s: string): Date | null {
   if (!s) return null;
   const t = s.trim();
-  const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]));
-  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  // DD/MM/YYYY or DD/MM/YY
+  const br = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (br) {
+    const day = Number(br[1]);
+    const month = Number(br[2]);
+    let year = Number(br[3]);
+    if (year < 100) year += 2000;
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return new Date(year, month - 1, day);
+  }
+  // DD/MM (no year) → assume current year
+  const brShort = t.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (brShort) {
+    const day = Number(brShort[1]);
+    const month = Number(brShort[2]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return new Date(new Date().getFullYear(), month - 1, day);
+  }
+  const iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-  const d = new Date(t);
-  return isNaN(d.getTime()) ? null : d;
+  return null;
 }
 
 function parseGCDate(s: string): Date | null {

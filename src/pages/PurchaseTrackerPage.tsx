@@ -29,7 +29,20 @@ interface CompraRow {
   data_emissao: string;
   valor_total: string;
   ultima_alteracao: string | null; // ISO/GC date string
+  previsao_chegada: string | null; // dd/mm/yyyy from campos_extras
   historico: SituacaoHist[];
+}
+
+/** Accepts "dd/mm/yyyy" or "yyyy-mm-dd" → Date at local midnight */
+function parseFlexibleDate(s: string): Date | null {
+  if (!s) return null;
+  const t = s.trim();
+  const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]));
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  const d = new Date(t);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function parseGCDate(s: string): Date | null {

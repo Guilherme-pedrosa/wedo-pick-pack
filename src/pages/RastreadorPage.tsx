@@ -25,7 +25,7 @@ import { logSystemAction } from '@/lib/systemLog';
 
 function exportCSV(result: RastreadorResult) {
   const header = [
-    'Status', 'Grupo', 'Código Produto', 'Produto', 'Quantidade',
+    'Status', 'Grupo', 'Código Produto', 'Produto', 'Quantidade', 'Qtd em Saldo', 'Qtd Comprometida',
     'Nº Orçamento', 'Cliente', 'Nº OS', 'Situação OS',
     'Qtd em Compra', 'Nº Pedido(s) Compra', 'Fornecedor(es)', 'Situação(ões) PC',
   ];
@@ -48,6 +48,8 @@ function exportCSV(result: RastreadorResult) {
         item.codigo_produto || '',
         item.nome_produto,
         String(item.qtd_necessaria).replace('.', ','),
+        String(item.estoque_disponivel).replace('.', ','),
+        String(item.qtd_comprometida ?? item.qtd_necessaria).replace('.', ','),
         orcCodigo,
         cliente,
         osCodigo,
@@ -84,6 +86,12 @@ function exportCSV(result: RastreadorResult) {
 
 function formatDateBR(d: string) {
   try { const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; } catch { return d; }
+}
+
+function formatQty(value: number | undefined): string {
+  const n = Number(value ?? 0);
+  if (Number.isInteger(n)) return String(n);
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function RastreadorPage() {

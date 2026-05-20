@@ -550,23 +550,31 @@ Deno.serve(async (req: Request) => {
     try {
       console.log(`[generate-os] Step 6: Updating orçamento #${orcamento.codigo} status to ${NEW_ORC_STATUS_ID}...`);
 
+      let orcForUpdate = orcamento;
+      try {
+        const latestOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, 'GET');
+        if (latestOrc?.data) orcForUpdate = { ...orcamento, ...latestOrc.data };
+      } catch (latestErr) {
+        console.warn('[generate-os] Could not refresh orçamento before status update:', latestErr);
+      }
+
       const orcUpdatePayload: Record<string, any> = {
-        cliente_id: orcamento.cliente_id,
-        data: orcamento.data || new Date().toISOString().split('T')[0],
+        cliente_id: orcForUpdate.cliente_id,
+        data: orcForUpdate.data || new Date().toISOString().split('T')[0],
         situacao_id: NEW_ORC_STATUS_ID,
-        valor_total: orcamento.valor_total,
-        valor_frete: orcamento.valor_frete ?? '0.00',
-        condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
-        produtos: orcamento.produtos || [],
-        servicos: orcamento.servicos || [],
-        atributos: orcamento.atributos || [],
-        equipamentos: orcamento.equipamentos || [],
+        valor_total: formatMoney(parseMoney(orcForUpdate.valor_total)),
+        valor_frete: formatMoney(parseMoney(orcForUpdate.valor_frete ?? '0.00')),
+        condicao_pagamento: orcForUpdate.condicao_pagamento || 'a_vista',
+        produtos: orcForUpdate.produtos || [],
+        servicos: orcForUpdate.servicos || [],
+        atributos: orcForUpdate.atributos || [],
+        equipamentos: orcForUpdate.equipamentos || [],
       };
       // Preserve pagamentos to avoid total vs parcelas mismatch
-      if (orcamento.pagamentos?.length) orcUpdatePayload.pagamentos = orcamento.pagamentos;
-      if (orcamento.vendedor_id) orcUpdatePayload.vendedor_id = orcamento.vendedor_id;
-      if (orcamento.observacoes) orcUpdatePayload.observacoes = orcamento.observacoes;
-      if (orcamento.observacoes_interna) orcUpdatePayload.observacoes_interna = orcamento.observacoes_interna;
+      if (orcForUpdate.pagamentos?.length) orcUpdatePayload.pagamentos = orcForUpdate.pagamentos;
+      if (orcForUpdate.vendedor_id) orcUpdatePayload.vendedor_id = orcForUpdate.vendedor_id;
+      if (orcForUpdate.observacoes) orcUpdatePayload.observacoes = orcForUpdate.observacoes;
+      if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
       if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
 
       await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(orcUpdatePayload));

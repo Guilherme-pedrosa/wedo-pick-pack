@@ -4,9 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, ArrowLeft, Wrench, FileText, ShoppingCart } from 'lucide-react';
+import { Loader2, Save, ArrowLeft, Wrench, FileText, ShoppingCart, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
-import { getStatusOS } from '@/api/gestaoclick';
+import { getStatusOS, getStatusVendas } from '@/api/gestaoclick';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
 import { getExplorerConfig, setExplorerConfig, ExplorerConfig } from '@/lib/explorerConfig';
 import { clearExplorerIndex } from '@/api/produtoExplorer';
@@ -21,20 +21,23 @@ export default function ProductExplorerConfigPage() {
   const [osList, setOsList] = useState<SitOption[]>([]);
   const [orcList, setOrcList] = useState<SitOption[]>([]);
   const [compraList, setCompraList] = useState<SitOption[]>([]);
+  const [vendaList, setVendaList] = useState<SitOption[]>([]);
   const [cfg, setCfg] = useState<ExplorerConfig>(getExplorerConfig());
 
   useEffect(() => {
     logSystemAction({ module: 'compras', action: 'Acessou Configuração do Explorador de Peças' });
     (async () => {
       try {
-        const [os, orc, comp] = await Promise.all([
+        const [os, orc, comp, vend] = await Promise.all([
           getStatusOS(),
           getStatusOrcamentos(),
           getStatusCompras(),
+          getStatusVendas(),
         ]);
         setOsList(os.map(s => ({ id: String(s.id), nome: String(s.nome) })));
         setOrcList(orc.map(s => ({ id: String(s.id), nome: String(s.nome) })));
         setCompraList(comp.map(s => ({ id: String(s.id), nome: String(s.nome) })));
+        setVendaList(vend.map(s => ({ id: String(s.id), nome: String(s.nome) })));
       } catch (e) {
         toast.error('Falha ao carregar situações');
       } finally {
@@ -71,6 +74,7 @@ export default function ProductExplorerConfigPage() {
           os: cfg.osSituacaoIds.length,
           orc: cfg.orcSituacaoIds.length,
           compra: cfg.compraSituacaoIds.length,
+          venda: cfg.vendaSituacaoIds.length,
         },
       });
       navigate('/produtos/explorar');
@@ -113,7 +117,7 @@ export default function ProductExplorerConfigPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SitGroup
             title="Situações de OS"
             icon={<Wrench className="h-4 w-4" />}
@@ -131,6 +135,15 @@ export default function ProductExplorerConfigPage() {
             onToggle={(id) => toggle('orcSituacaoIds', id)}
             onAll={() => selectAll('orcSituacaoIds', orcList)}
             onNone={() => clearAll('orcSituacaoIds')}
+          />
+          <SitGroup
+            title="Situações de Vendas"
+            icon={<Receipt className="h-4 w-4" />}
+            options={vendaList}
+            selected={cfg.vendaSituacaoIds}
+            onToggle={(id) => toggle('vendaSituacaoIds', id)}
+            onAll={() => selectAll('vendaSituacaoIds', vendaList)}
+            onNone={() => clearAll('vendaSituacaoIds')}
           />
           <SitGroup
             title="Situações de Pedidos de Compra"

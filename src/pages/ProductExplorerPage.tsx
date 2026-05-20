@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Search, RefreshCw, Package, AlertTriangle, CheckCircle2, ShoppingCart, FileText, Wrench, Settings } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Package, AlertTriangle, CheckCircle2, ShoppingCart, FileText, Wrench, Settings, Receipt } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -245,10 +245,11 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
   return (
     <div className="space-y-5">
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <Kpi label="Estoque atual" value={fmtQty(data.estoque)} icon={<Package className="h-3 w-3" />} />
         <Kpi label="Demanda OS" value={fmtQty(data.qtd_demanda_os)} icon={<Wrench className="h-3 w-3" />} />
         <Kpi label="Demanda Orçamentos" value={fmtQty(data.qtd_demanda_orcamentos)} icon={<FileText className="h-3 w-3" />} />
+        <Kpi label="Demanda Vendas" value={fmtQty(data.qtd_demanda_vendas)} icon={<Receipt className="h-3 w-3" />} />
         <Kpi label="Em Pedido de Compra" value={fmtQty(data.qtd_em_compra)} icon={<ShoppingCart className="h-3 w-3" />} />
         <Kpi label="Saldo Projetado" value={fmtQty(data.saldo_projetado)} icon={<AlertTriangle className="h-3 w-3" />} />
       </div>
@@ -269,6 +270,7 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
         <TabsList>
           <TabsTrigger value="os">OS ({data.oss.length})</TabsTrigger>
           <TabsTrigger value="orc">Orçamentos ({data.orcamentos.length})</TabsTrigger>
+          <TabsTrigger value="vendas">Vendas ({data.vendas.length})</TabsTrigger>
           <TabsTrigger value="compras">Pedidos de Compra ({data.compras.length})</TabsTrigger>
         </TabsList>
 
@@ -333,6 +335,38 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
             </div>
           )}
         </TabsContent>
+
+        <TabsContent value="vendas">
+          {data.vendas.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Nenhuma venda encontrada com essa peça.</p>
+          ) : (
+            <div className="border rounded-md overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Situação</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead className="text-right">Qtd</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.vendas.map(v => (
+                    <TableRow key={v.id}>
+                      <TableCell className="font-medium">#{v.codigo}</TableCell>
+                      <TableCell>{v.nome_cliente || '—'}</TableCell>
+                      <TableCell><Badge variant="outline">{v.nome_situacao || '—'}</Badge></TableCell>
+                      <TableCell>{fmtDate(v.data)}</TableCell>
+                      <TableCell className="text-right">{fmtQty(v.qtd)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
 
         <TabsContent value="compras">
           {data.compras.length === 0 ? (

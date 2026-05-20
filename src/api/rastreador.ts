@@ -14,6 +14,7 @@ export interface OrcamentoReadiness {
     qtd_necessaria: number;
     estoque_total: number;      // real stock from ERP (never reduced)
     estoque_disponivel: number;  // same as estoque_total (real stock)
+    qtd_comprometida: number;    // total demand for this SKU across tracked budgets + pending OS reservations
     pronto: boolean;             // real stock >= needed
     comprometido: boolean;       // true if this item is disputed by other budgets/OSs
     qtd_em_compra?: number;
@@ -399,10 +400,12 @@ export async function rastrearOrcamentos(
 
   // Detect conflicts: products where total demand > available stock (after OS reserved subtraction)
   const conflitos: ConflictInfo[] = [];
+  const committedQtyMap = new Map<string, number>();
   for (const [key, demand] of demandMap) {
     const realStock = stockMapOriginal.get(key) ?? 0;
     const reserved = reservedDemand[key];
     const totalDemand = demand.total + (reserved?.qty ?? 0);
+    committedQtyMap.set(key, totalDemand);
 
     // Conflict = total demand (all budgets + OS reservations) exceeds real stock
     if (totalDemand > realStock) {
@@ -454,6 +457,7 @@ export async function rastrearOrcamentos(
         qtd_necessaria: qtd,
         estoque_total: stockTotal,
         estoque_disponivel: stockTotal, // real stock, never reduced
+        qtd_comprometida: committedQtyMap.get(key) ?? qtd,
         pronto: stockTotal >= qtd,
         comprometido: conflictKeys.has(key),
         qtd_em_compra: compraInfo.qtd_em_compra,
@@ -504,6 +508,7 @@ export async function rastrearOrcamentos(
         qtd_necessaria: qtd,
         estoque_total: stockTotal,
         estoque_disponivel: stockTotal,
+        qtd_comprometida: committedQtyMap.get(key) ?? qtd,
         pronto: stockTotal >= qtd,
         comprometido: conflictKeys.has(key),
         qtd_em_compra: compraInfo.qtd_em_compra,

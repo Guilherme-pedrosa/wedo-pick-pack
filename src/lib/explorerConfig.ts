@@ -5,6 +5,7 @@ export interface ExplorerConfig {
   osSituacaoIds: string[];
   orcSituacaoIds: string[];
   compraSituacaoIds: string[];
+  vendaSituacaoIds: string[];
 }
 
 const STORAGE_KEY = 'wedo-product-explorer-config-v1';
@@ -12,15 +13,16 @@ const STORAGE_KEY = 'wedo-product-explorer-config-v1';
 export function getExplorerConfig(): ExplorerConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { osSituacaoIds: [], orcSituacaoIds: [], compraSituacaoIds: [] };
+    if (!raw) return { osSituacaoIds: [], orcSituacaoIds: [], compraSituacaoIds: [], vendaSituacaoIds: [] };
     const parsed = JSON.parse(raw);
     return {
       osSituacaoIds: Array.isArray(parsed.osSituacaoIds) ? parsed.osSituacaoIds.map(String) : [],
       orcSituacaoIds: Array.isArray(parsed.orcSituacaoIds) ? parsed.orcSituacaoIds.map(String) : [],
       compraSituacaoIds: Array.isArray(parsed.compraSituacaoIds) ? parsed.compraSituacaoIds.map(String) : [],
+      vendaSituacaoIds: Array.isArray(parsed.vendaSituacaoIds) ? parsed.vendaSituacaoIds.map(String) : [],
     };
   } catch {
-    return { osSituacaoIds: [], orcSituacaoIds: [], compraSituacaoIds: [] };
+    return { osSituacaoIds: [], orcSituacaoIds: [], compraSituacaoIds: [], vendaSituacaoIds: [] };
   }
 }
 

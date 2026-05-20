@@ -444,9 +444,27 @@ export default function PurchaseTrackerPage() {
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Situação atual</TableHead>
                 <TableHead className="w-[110px]">Pedido em</TableHead>
-                <TableHead className="w-[160px]">Última alteração</TableHead>
+                <TableHead
+                  className={cn(
+                    'w-[160px] cursor-pointer select-none hover:text-primary transition-colors',
+                    filter === 'stuck' && 'text-primary underline underline-offset-4',
+                  )}
+                  onClick={() => setFilter(filter === 'stuck' ? 'all' : 'stuck')}
+                  title="Clique para filtrar pedidos parados +15 dias"
+                >
+                  Última alteração
+                </TableHead>
                 <TableHead className="w-[120px] text-right">Dias parado</TableHead>
-                <TableHead className="w-[120px]">Previsão chegada</TableHead>
+                <TableHead
+                  className={cn(
+                    'w-[120px] cursor-pointer select-none hover:text-primary transition-colors',
+                    filter === 'arr' && 'text-primary underline underline-offset-4',
+                  )}
+                  onClick={() => setFilter(filter === 'arr' ? 'all' : 'arr')}
+                  title="Clique para filtrar pedidos com chegada atrasada"
+                >
+                  Previsão chegada
+                </TableHead>
                 <TableHead className="w-[140px] text-right">Atraso chegada</TableHead>
                 <TableHead className="w-[110px] text-right">Valor</TableHead>
               </TableRow>

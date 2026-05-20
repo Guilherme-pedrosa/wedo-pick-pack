@@ -340,21 +340,55 @@ export default function PurchaseTrackerPage() {
 
       {rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Badge variant="secondary">{rows.length} pedido(s)</Badge>
+          <Badge
+            variant={filter === 'all' ? 'default' : 'secondary'}
+            className="cursor-pointer"
+            onClick={() => setFilter('all')}
+          >
+            {rows.length} pedido(s)
+          </Badge>
           {summary.warn > 0 && (
-            <Badge className="bg-red-200 text-red-900 hover:bg-red-200 border-red-300 gap-1">
+            <Badge
+              onClick={() => setFilter(filter === 'warn' ? 'all' : 'warn')}
+              className={cn(
+                'bg-red-200 text-red-900 hover:bg-red-300 border-red-300 gap-1 cursor-pointer',
+                filter === 'warn' && 'ring-2 ring-red-500 ring-offset-1',
+              )}
+            >
               <AlertTriangle className="h-3 w-3" /> {summary.warn} parados +15 dias
             </Badge>
           )}
           {summary.crit > 0 && (
-            <Badge className="bg-red-500 text-white hover:bg-red-500 gap-1">
+            <Badge
+              onClick={() => setFilter(filter === 'crit' ? 'all' : 'crit')}
+              className={cn(
+                'bg-red-500 text-white hover:bg-red-600 gap-1 cursor-pointer',
+                filter === 'crit' && 'ring-2 ring-red-700 ring-offset-1',
+              )}
+            >
               <Flame className="h-3 w-3" /> {summary.crit} parados +30 dias
             </Badge>
           )}
           {summary.atrasoChegada > 0 && (
-            <Badge className="bg-amber-500 text-white hover:bg-amber-500 gap-1">
+            <Badge
+              onClick={() => setFilter(filter === 'arr' ? 'all' : 'arr')}
+              className={cn(
+                'bg-amber-500 text-white hover:bg-amber-600 gap-1 cursor-pointer',
+                filter === 'arr' && 'ring-2 ring-amber-700 ring-offset-1',
+              )}
+            >
               <AlertTriangle className="h-3 w-3" /> {summary.atrasoChegada} com chegada atrasada
             </Badge>
+          )}
+          {filter !== 'all' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setFilter('all')}
+            >
+              Limpar filtro
+            </Button>
           )}
           {lastScanAt && (
             <span className="text-xs text-muted-foreground ml-auto">
@@ -363,6 +397,7 @@ export default function PurchaseTrackerPage() {
           )}
         </div>
       )}
+
 
       <Card>
         <CardContent className="p-0">

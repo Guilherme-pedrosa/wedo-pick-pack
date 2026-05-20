@@ -1025,10 +1025,14 @@ export default function RastreadorPage() {
                                       )}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
-                                      <span>Precisa: {item.qtd_necessaria}</span>
+                                       <span>Precisa: {formatQty(item.qtd_necessaria)}</span>
                                       <span>|</span>
                                       <span className={`font-medium ${item.pronto ? (item.comprometido ? 'text-amber-600' : 'text-green-600') : 'text-red-500'}`}>
-                                        Disp: {item.estoque_disponivel}
+                                         Saldo: {formatQty(item.estoque_disponivel)}
+                                       </span>
+                                       <span>|</span>
+                                       <span className={item.comprometido ? 'font-medium text-amber-600' : 'font-medium'}>
+                                         Comp.: {formatQty(item.qtd_comprometida ?? item.qtd_necessaria)}
                                       </span>
                                     </div>
                                   </div>
@@ -1045,8 +1049,8 @@ export default function RastreadorPage() {
                                             const falta = item.qtd_necessaria - item.estoque_disponivel;
                                             const cobertura = (item.qtd_em_compra ?? 0) >= falta;
                                             return cobertura
-                                              ? <span className="ml-1 text-green-600 font-medium">✓ Cobre falta de {falta}</span>
-                                              : <span className="ml-1 text-red-500 font-medium">✗ Cobre só {item.qtd_em_compra}/{falta}</span>;
+                                              ? <span className="ml-1 text-green-600 font-medium">✓ Cobre falta de {formatQty(falta)}</span>
+                                              : <span className="ml-1 text-red-500 font-medium">✗ Cobre só {formatQty(item.qtd_em_compra)}/{formatQty(falta)}</span>;
                                           })()}
                                         </span>
                                       ) : (

@@ -449,17 +449,9 @@ export default function InventoryAnalysisPage() {
         : null;
       let qtyAComprar: number | null = baseNeed;
 
-      // Produtos ESPECÍFICOS: entram via orçamento OU quando há recorrência real
-      // de saída (≥2 documentos no período). Sem recorrência e sem orçamento, zera.
-      if (isSpecificItem) {
-        const isRecurringSpec = (r.source_count ?? 0) >= 2;
-        if (orcQty > 0) {
-          qtyAComprar = Math.max(0, Math.ceil(orcQty - estoquePositivo));
-        } else if (!isRecurringSpec) {
-          qtyAComprar = 0;
-        }
-        // Se recorrente sem orçamento, mantém baseNeed (cobertura de 1 mês - estoque).
-      }
+      // Regra unificada: qualquer grupo segue baseNeed (cobertura mensal ponderada
+      // + orçamentos − estoque). Salvaguarda abaixo trata casos sem demanda real.
+
 
       // Salvaguarda final: se não há orçamento e a média ponderada mensal é zero,
       // não sugerir compra por histórico antigo. Evita pedir 15 peças com 4 saídas

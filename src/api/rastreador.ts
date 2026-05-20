@@ -1,5 +1,7 @@
 import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning, GCOrdemCompra } from './types';
 import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra } from './compras';
+import { getOS } from './gestaoclick';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;
@@ -51,6 +53,8 @@ export interface RastreadorResult {
   totalBloqueados: number;
   scannedAt: string;
 }
+
+type LinkedOSInfo = { os_codigo: string; os_id: string; nome_situacao: string; nome_cliente?: string };
 
 function normalizeId(value: string | number | null | undefined): string {
   if (value == null) return '';

@@ -336,6 +336,38 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
           )}
         </TabsContent>
 
+        <TabsContent value="vendas">
+          {data.vendas.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">Nenhuma venda encontrada com essa peça.</p>
+          ) : (
+            <div className="border rounded-md overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Código</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Situação</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead className="text-right">Qtd</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.vendas.map(v => (
+                    <TableRow key={v.id}>
+                      <TableCell className="font-medium">#{v.codigo}</TableCell>
+                      <TableCell>{v.nome_cliente || '—'}</TableCell>
+                      <TableCell><Badge variant="outline">{v.nome_situacao || '—'}</Badge></TableCell>
+                      <TableCell>{fmtDate(v.data)}</TableCell>
+                      <TableCell className="text-right">{fmtQty(v.qtd)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+
         <TabsContent value="compras">
           {data.compras.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4">Nenhum pedido de compra encontrado para essa peça.</p>

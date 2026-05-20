@@ -54,7 +54,7 @@ export interface RastreadorResult {
   scannedAt: string;
 }
 
-type LinkedOSInfo = { os_codigo: string; os_id: string; nome_situacao: string; nome_cliente?: string };
+type LinkedOSInfo = { os_codigo: string; os_id: string; nome_situacao: string; nome_cliente: string };
 
 function normalizeId(value: string | number | null | undefined): string {
   if (value == null) return '';
@@ -176,13 +176,14 @@ export async function rastrearOrcamentos(
   // Se a OS vinculada estiver em uma das situações marcadas, o orçamento volta ao rastreio normal.
   const osIgnoreActive = situacaoOSNomes !== undefined && situacaoOSNomes.length > 0;
   const osIgnoreSet = new Set((situacaoOSNomes || []).map(normalizeSituacaoNome));
+  const generatedOSFallback = await fetchGeneratedOSFallback(filteredOrcamentos);
 
   for (const o of filteredOrcamentos) {
     const flagFin = String(o.situacao_financeiro ?? '');
     const flagEst = String(o.situacao_estoque ?? '');
     const byFlags = ['1', 'true', 'sim'].includes(flagFin.toLowerCase()) ||
                     ['1', 'true', 'sim'].includes(flagEst.toLowerCase());
-    const osMatch = osIndex[String(o.codigo)];
+    const osMatch = osIndex[String(o.codigo)] ?? generatedOSFallback.get(o.id);
 
     // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo (para fins de bloqueio).
     const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(normalizeSituacaoNome(osMatch.nome_situacao));

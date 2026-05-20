@@ -245,10 +245,11 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
   return (
     <div className="space-y-5">
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <Kpi label="Estoque atual" value={fmtQty(data.estoque)} icon={<Package className="h-3 w-3" />} />
         <Kpi label="Demanda OS" value={fmtQty(data.qtd_demanda_os)} icon={<Wrench className="h-3 w-3" />} />
         <Kpi label="Demanda Orçamentos" value={fmtQty(data.qtd_demanda_orcamentos)} icon={<FileText className="h-3 w-3" />} />
+        <Kpi label="Demanda Vendas" value={fmtQty(data.qtd_demanda_vendas)} icon={<Receipt className="h-3 w-3" />} />
         <Kpi label="Em Pedido de Compra" value={fmtQty(data.qtd_em_compra)} icon={<ShoppingCart className="h-3 w-3" />} />
         <Kpi label="Saldo Projetado" value={fmtQty(data.saldo_projetado)} icon={<AlertTriangle className="h-3 w-3" />} />
       </div>

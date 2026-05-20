@@ -278,6 +278,7 @@ export default function PurchaseTrackerPage() {
       const overdue = prevDate ? daysBetween(prevDate, today0) : null;
       if (filter === 'crit') return days !== null && days > 30;
       if (filter === 'warn') return days !== null && days > 15 && days <= 30;
+      if (filter === 'stuck') return days !== null && days > 15;
       if (filter === 'arr') return overdue !== null && overdue > 0;
       return true;
     });

@@ -229,6 +229,36 @@
     50% { transform: scale(1.03); }
   }
 
+  /* Delay warning (>15 days): static light red row */
+  .row-delay-warn {
+    background-color: hsl(0 85% 92%);
+  }
+  .row-delay-warn:hover {
+    background-color: hsl(0 85% 88%) !important;
+  }
+  .dark .row-delay-warn {
+    background-color: hsl(0 60% 25%);
+  }
+  .dark .row-delay-warn:hover {
+    background-color: hsl(0 60% 30%) !important;
+  }
+
+  /* Delay critical (>30 days): scintillating red */
+  .row-delay-crit {
+    animation: delay-blink 1.1s ease-in-out infinite;
+  }
+  @keyframes delay-blink {
+    0%, 100% { background-color: hsl(0 85% 88%); }
+    50%      { background-color: hsl(0 90% 70%); }
+  }
+  .dark .row-delay-crit {
+    animation: delay-blink-dark 1.1s ease-in-out infinite;
+  }
+  @keyframes delay-blink-dark {
+    0%, 100% { background-color: hsl(0 70% 30%); }
+    50%      { background-color: hsl(0 80% 45%); }
+  }
+
   /* Safe-area helpers for notched devices / installed PWA */
   .pt-safe { padding-top: env(safe-area-inset-top); }
   .pb-safe { padding-bottom: env(safe-area-inset-bottom); }

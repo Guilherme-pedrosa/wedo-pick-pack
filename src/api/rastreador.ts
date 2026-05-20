@@ -8,6 +8,7 @@ export interface OrcamentoReadiness {
     variacao_id: string;
     nome_produto: string;
     codigo_produto: string;
+    grupo?: string;
     qtd_necessaria: number;
     estoque_total: number;      // real stock from ERP (never reduced)
     estoque_disponivel: number;  // same as estoque_total (real stock)

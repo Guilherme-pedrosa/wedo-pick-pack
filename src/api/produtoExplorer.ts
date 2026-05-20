@@ -259,10 +259,10 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const detalhe = await getProdutoDetalhe(produtoId);
   const estoque = parseDec(detalhe?.estoque);
 
-  const oss = (idx.oss.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
-  const orcamentos = (idx.orcamentos.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
-  const compras = (idx.compras.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
-  const vendas = (idx.vendas.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
+  const allOss = (idx.oss.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
+  const allOrcamentos = (idx.orcamentos.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
+  const allCompras = (idx.compras.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
+  const allVendas = (idx.vendas.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
 
   const cfg = getExplorerConfig();
   const osSet = new Set(cfg.osSituacaoIds);
@@ -280,10 +280,15 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const matchVenda = (v: ExplorerVendaRef) =>
     vendaSet.size > 0 ? vendaSet.has(v.situacao_id) : false;
 
-  const qtd_demanda_os = oss.filter(matchOS).reduce((s, o) => s + o.qtd, 0);
-  const qtd_demanda_orcamentos = orcamentos.filter(matchOrc).reduce((s, o) => s + o.qtd, 0);
-  const qtd_demanda_vendas = vendas.filter(matchVenda).reduce((s, v) => s + v.qtd, 0);
-  const qtd_em_compra = compras.filter(matchCompra).reduce((s, c) => s + c.qtd, 0);
+  const oss = allOss.filter(matchOS);
+  const orcamentos = allOrcamentos.filter(matchOrc);
+  const compras = allCompras.filter(matchCompra);
+  const vendas = allVendas.filter(matchVenda);
+
+  const qtd_demanda_os = oss.reduce((s, o) => s + o.qtd, 0);
+  const qtd_demanda_orcamentos = orcamentos.reduce((s, o) => s + o.qtd, 0);
+  const qtd_demanda_vendas = vendas.reduce((s, v) => s + v.qtd, 0);
+  const qtd_em_compra = compras.reduce((s, c) => s + c.qtd, 0);
 
   const demanda = qtd_demanda_os + qtd_demanda_orcamentos + qtd_demanda_vendas;
   const saldo_projetado = estoque + qtd_em_compra - demanda;

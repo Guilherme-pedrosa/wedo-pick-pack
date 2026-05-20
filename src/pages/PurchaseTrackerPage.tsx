@@ -29,7 +29,20 @@ interface CompraRow {
   data_emissao: string;
   valor_total: string;
   ultima_alteracao: string | null; // ISO/GC date string
+  previsao_chegada: string | null; // dd/mm/yyyy from campos_extras
   historico: SituacaoHist[];
+}
+
+/** Accepts "dd/mm/yyyy" or "yyyy-mm-dd" → Date at local midnight */
+function parseFlexibleDate(s: string): Date | null {
+  if (!s) return null;
+  const t = s.trim();
+  const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]));
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  const d = new Date(t);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function parseGCDate(s: string): Date | null {
@@ -91,6 +104,18 @@ function extractRow(raw: any): CompraRow {
 
   const ultima = historico[0]?.data ?? null;
 
+  // Extract "DATA DA CHEGADA DAS PEÇAS" from campos_extras
+  let previsao: string | null = null;
+  const extras = c?.campos_extras || [];
+  for (const w of extras) {
+    const e = w?.extras ?? w;
+    const desc = String(e?.descricao ?? '').toUpperCase();
+    if (desc.includes('CHEGADA') && desc.includes('PE')) {
+      const v = String(e?.conteudo ?? '').trim();
+      if (v) { previsao = v; break; }
+    }
+  }
+
   return {
     id: String(c?.id ?? ''),
     codigo: String(c?.codigo ?? ''),
@@ -100,6 +125,7 @@ function extractRow(raw: any): CompraRow {
     data_emissao: String(c?.data_emissao ?? ''),
     valor_total: String(c?.valor_total ?? '0'),
     ultima_alteracao: ultima,
+    previsao_chegada: previsao,
     historico,
   };
 }
@@ -173,13 +199,18 @@ export default function PurchaseTrackerPage() {
       for (const r of collected) map.set(r.id, r);
       const final = [...map.values()];
 
-      // Sort by days-in-current-status DESC (most delayed first)
+      // Sort by arrival overdue DESC, then by days-in-current-status DESC
       const now = new Date();
-      final.sort((a, b) => {
-        const da = a.ultima_alteracao ? daysBetween(parseGCDate(a.ultima_alteracao)!, now) : -1;
-        const db = b.ultima_alteracao ? daysBetween(parseGCDate(b.ultima_alteracao)!, now) : -1;
-        return db - da;
-      });
+      const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const arrOverdue = (r: CompraRow): number => {
+        const p = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;
+        return p ? daysBetween(p, today0) : -Infinity;
+      };
+      const stuckDays = (r: CompraRow): number => {
+        const d = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
+        return d ? daysBetween(d, now) : -1;
+      };
+      final.sort((a, b) => (arrOverdue(b) - arrOverdue(a)) || (stuckDays(b) - stuckDays(a)));
 
       setRows(final);
       setLastScanAt(new Date());
@@ -193,19 +224,29 @@ export default function PurchaseTrackerPage() {
   };
 
   const now = useMemo(() => new Date(), [rows]);
+  const today0 = useMemo(() => new Date(now.getFullYear(), now.getMonth(), now.getDate()), [now]);
 
   const summary = useMemo(() => {
-    let warn = 0, crit = 0;
+    let warn = 0, crit = 0, atrasoChegada = 0;
     for (const r of rows) {
-      if (!r.ultima_alteracao) continue;
-      const d = parseGCDate(r.ultima_alteracao);
-      if (!d) continue;
-      const days = daysBetween(d, now);
-      if (days > 30) crit++;
-      else if (days > 15) warn++;
+      // Stuck-in-status signal
+      if (r.ultima_alteracao) {
+        const d = parseGCDate(r.ultima_alteracao);
+        if (d) {
+          const days = daysBetween(d, now);
+          if (days > 30) crit++;
+          else if (days > 15) warn++;
+        }
+      }
+      // Arrival overdue signal
+      if (r.previsao_chegada) {
+        const p = parseFlexibleDate(r.previsao_chegada);
+        if (p && daysBetween(p, today0) > 0) atrasoChegada++;
+      }
     }
-    return { warn, crit };
-  }, [rows, now]);
+    return { warn, crit, atrasoChegada };
+  }, [rows, now, today0]);
+
 
   const selectedLabels = selected
     .map(id => statuses.find(s => s.id === id)?.nome)
@@ -301,12 +342,17 @@ export default function PurchaseTrackerPage() {
           <Badge variant="secondary">{rows.length} pedido(s)</Badge>
           {summary.warn > 0 && (
             <Badge className="bg-red-200 text-red-900 hover:bg-red-200 border-red-300 gap-1">
-              <AlertTriangle className="h-3 w-3" /> {summary.warn} acima de 15 dias
+              <AlertTriangle className="h-3 w-3" /> {summary.warn} parados +15 dias
             </Badge>
           )}
           {summary.crit > 0 && (
             <Badge className="bg-red-500 text-white hover:bg-red-500 gap-1">
-              <Flame className="h-3 w-3" /> {summary.crit} acima de 30 dias
+              <Flame className="h-3 w-3" /> {summary.crit} parados +30 dias
+            </Badge>
+          )}
+          {summary.atrasoChegada > 0 && (
+            <Badge className="bg-amber-500 text-white hover:bg-amber-500 gap-1">
+              <AlertTriangle className="h-3 w-3" /> {summary.atrasoChegada} com chegada atrasada
             </Badge>
           )}
           {lastScanAt && (
@@ -325,16 +371,18 @@ export default function PurchaseTrackerPage() {
                 <TableHead className="w-[90px]">Código</TableHead>
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Situação atual</TableHead>
-                <TableHead className="w-[120px]">Pedido em</TableHead>
-                <TableHead className="w-[170px]">Última alteração</TableHead>
-                <TableHead className="w-[140px] text-right">Dias parado</TableHead>
-                <TableHead className="w-[120px] text-right">Valor</TableHead>
+                <TableHead className="w-[110px]">Pedido em</TableHead>
+                <TableHead className="w-[160px]">Última alteração</TableHead>
+                <TableHead className="w-[120px] text-right">Dias parado</TableHead>
+                <TableHead className="w-[120px]">Previsão chegada</TableHead>
+                <TableHead className="w-[140px] text-right">Atraso chegada</TableHead>
+                <TableHead className="w-[110px] text-right">Valor</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 && !scanning && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     {selected.length === 0
                       ? 'Selecione as situações e clique em "Atualizar" para começar.'
                       : 'Nenhum pedido encontrado para as situações selecionadas.'}
@@ -344,8 +392,14 @@ export default function PurchaseTrackerPage() {
               {rows.map(r => {
                 const lastDate = r.ultima_alteracao ? parseGCDate(r.ultima_alteracao) : null;
                 const days = lastDate ? daysBetween(lastDate, now) : null;
-                const isCrit = days !== null && days > 30;
-                const isWarn = days !== null && days > 15 && !isCrit;
+                const prevDate = r.previsao_chegada ? parseFlexibleDate(r.previsao_chegada) : null;
+                const overdueDays = prevDate ? daysBetween(prevDate, today0) : null; // >0 = atrasado
+                const isArrCrit = overdueDays !== null && overdueDays > 30;
+                const isArrWarn = overdueDays !== null && overdueDays > 0 && !isArrCrit;
+                const isStuckCrit = days !== null && days > 30;
+                const isStuckWarn = days !== null && days > 15 && !isStuckCrit;
+                const isCrit = isArrCrit || isStuckCrit;
+                const isWarn = !isCrit && (isArrWarn || isStuckWarn);
                 return (
                   <TableRow
                     key={r.id}
@@ -368,12 +422,28 @@ export default function PurchaseTrackerPage() {
                         <span
                           className={cn(
                             'font-semibold tabular-nums',
-                            isCrit && 'text-red-900',
-                            isWarn && 'text-red-800',
+                            isStuckCrit && 'text-red-900',
+                            isStuckWarn && 'text-red-800',
                           )}
                         >
                           {days} {days === 1 ? 'dia' : 'dias'}
                         </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm tabular-nums">
+                      {prevDate ? prevDate.toLocaleDateString('pt-BR') : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {overdueDays === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : overdueDays > 0 ? (
+                        <span className={cn('font-semibold tabular-nums', isArrCrit ? 'text-red-900' : 'text-red-800')}>
+                          +{overdueDays} {overdueDays === 1 ? 'dia' : 'dias'}
+                        </span>
+                      ) : overdueDays === 0 ? (
+                        <span className="font-medium text-amber-700 tabular-nums">hoje</span>
+                      ) : (
+                        <span className="text-muted-foreground tabular-nums">em {Math.abs(overdueDays)}d</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(r.valor_total)}</TableCell>

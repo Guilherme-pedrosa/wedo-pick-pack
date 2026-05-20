@@ -414,20 +414,10 @@ function setPagamentoValor(p: any, newValor: string): any {
 /**
  * Compute the order total the way GestãoClick's PUT validator does.
  *
- * EMPIRICAL FINDING (OS 9271, simulação real 2026-04-17):
- * O validador de PUT do GC NÃO soma os `valor_total` já arredondados de cada
- * linha. Ele recalcula `qty × valor_venda` em precisão total e arredonda
- * UMA ÚNICA VEZ no final.
- *
- * Exemplo da OS 9271 (com qty fracionária):
- *   linha A: 0.600 × 280.57 = 168.342
- *   linha B: 0.900 × 280.57 = 252.513
- *   Soma raw = 420.855 → arredonda para 420.86 ✅ (que o validador exige)
- *   Soma dos `valor_total` armazenados = 168.34 + 252.51 = 420.85 ❌
- *   Diferença = R$ 0,01 → o exato erro "faltando 0.01" reportado pelo GC.
- *
- * Por isso, somamos qty × unit (com desconto) para CADA linha em precisão
- * total, somamos tudo, e arredondamos uma única vez no final.
+ * O GC valida dinheiro em centavos. Portanto, se a linha já trouxe
+ * `valor_total`, ela é a fonte de verdade com 2 casas; quando não trouxe,
+ * calculamos a linha e arredondamos imediatamente para centavos antes de somar.
+ * Isso evita que frações invisíveis depois da vírgula alterem o total das parcelas.
  */
 function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
   const lineSumCents = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {

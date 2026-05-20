@@ -390,7 +390,7 @@ export default function InventoryAnalysisPage() {
       const supplierLT = fornecedorId ? supplierLTMap.get(fornecedorId) : null;
       const leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : fallbackLeadTime;
       const fornecedorNome = supplierLT?.fornecedor_nome || null;
-      const isSpecificItem = isSpecificProductGroup(info?.grupo);
+      // (grupo ESPECÍFICO segue mesma regra dos demais — sem distinção)
 
       // ============================================================
       // MÉDIA PONDERADA MENSAL — últimos 3 meses, mais recente pesa mais.
@@ -449,17 +449,9 @@ export default function InventoryAnalysisPage() {
         : null;
       let qtyAComprar: number | null = baseNeed;
 
-      // Produtos ESPECÍFICOS: entram via orçamento OU quando há recorrência real
-      // de saída (≥2 documentos no período). Sem recorrência e sem orçamento, zera.
-      if (isSpecificItem) {
-        const isRecurringSpec = (r.source_count ?? 0) >= 2;
-        if (orcQty > 0) {
-          qtyAComprar = Math.max(0, Math.ceil(orcQty - estoquePositivo));
-        } else if (!isRecurringSpec) {
-          qtyAComprar = 0;
-        }
-        // Se recorrente sem orçamento, mantém baseNeed (cobertura de 1 mês - estoque).
-      }
+      // Regra unificada: qualquer grupo segue baseNeed (cobertura mensal ponderada
+      // + orçamentos − estoque). Salvaguarda abaixo trata casos sem demanda real.
+
 
       // Salvaguarda final: se não há orçamento e a média ponderada mensal é zero,
       // não sugerir compra por histórico antigo. Evita pedir 15 peças com 4 saídas
@@ -582,43 +574,32 @@ export default function InventoryAnalysisPage() {
 
       const i = item;
       // Se a PC ativa já cobre a demanda, não entra na lista de compras.
-      // Item com compra líquida 0 pode continuar na análise, mas não como sugestão.
       if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
+
+      // Regra unificada: olhar Vendas + OS de qualquer grupo (sem distinção
+      // para ESPECÍFICO). Item entra na sugestão se atender qualquer um:
+      //  (a) há orçamento pendente cruzado puxando demanda,
+      //  (b) saída recorrente (≥2 docs) + estoque zerado/negativo,
+      //  (c) saída recorrente + cobertura < lead time (vai zerar antes da PC),
+      //  (d) saída recorrente + estoque < ROP,
+      //  (e) gates de alcance: clientes únicos (>=2 ou >=3 para itens >R$1k)
+      //      OU volume de documentos únicos (>=2).
+      if (i.orc_qty > 0) return true;
+
+      const isRecurring = (i.source_count ?? 0) >= 2;
+      const isOutOfStock = i.estoque_atual !== null && i.estoque_atual <= 0;
+      if (isRecurring && isOutOfStock) return true;
+
+      const coverageBelowLT = i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days;
+      if (isRecurring && coverageBelowLT) return true;
+
+      const belowROP = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
+      if (isRecurring && belowROP) return true;
 
       const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
       const minClients = avgUnitCost >= 1000 ? 3 : 2;
       const passesClientGate = i.event_count >= minClients;
       const passesVolumeGate = (i.source_count ?? 0) >= 2;
-      const isSpecificItem = isSpecificProductGroup(i.grupo);
-
-      // Item ESPECÍFICO entra na sugestão quando:
-      //  (a) há orçamento pendente cruzado, OU
-      //  (b) há recorrência real de saída (≥2 documentos) com estoque insuficiente.
-      if (isSpecificItem) {
-        if (i.orc_qty > 0) return true;
-        const isRecurringSpec = (i.source_count ?? 0) >= 2;
-        const isOutOfStockSpec = i.estoque_atual !== null && i.estoque_atual <= 0;
-        const belowROPSpec = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
-        const coverageBelowLTSpec = i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days;
-        return isRecurringSpec && (isOutOfStockSpec || belowROPSpec || coverageBelowLTSpec);
-      }
-
-      // Override 1: saída recorrente (>=2 docs) + estoque zerado/negativo
-      // → reportar apenas se ainda houver compra líquida após abater PC ativa.
-      const isRecurring = (i.source_count ?? 0) >= 2;
-      const isOutOfStock = i.estoque_atual !== null && i.estoque_atual <= 0;
-      if (isRecurring && isOutOfStock) return true;
-
-      // Override 2: saída recorrente + cobertura insuficiente para o lead time
-      // → vai zerar antes da PC chegar. Cobre consignado Ecolab onde tem 1-3 peças
-      // em estoque mas a cadência de saída esvazia antes da reposição.
-      const coverageBelowLT = i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days;
-      if (isRecurring && coverageBelowLT) return true;
-
-      // Override 3: saída recorrente + estoque < ROP (ponto de reposição atingido)
-      // → sinalizar que cruzou o gatilho somente se a compra líquida for positiva.
-      const belowROP = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
-      if (isRecurring && belowROP) return true;
 
       return passesClientGate || passesVolumeGate;
     });

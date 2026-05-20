@@ -69,6 +69,14 @@ function parseDecimal(value: string | number | null | undefined): number {
   return parseFloat(raw) || 0;
 }
 
+function normalizeSituacaoNome(value: string | null | undefined): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 export { getStatusOrcamentos };
 
 export async function rastrearOrcamentos(
@@ -124,7 +132,7 @@ export async function rastrearOrcamentos(
   // situacaoOSNomes = situações de OS a IGNORAR (não tratar como bloqueio).
   // Se a OS vinculada estiver em uma das situações marcadas, o orçamento volta ao rastreio normal.
   const osIgnoreActive = situacaoOSNomes !== undefined && situacaoOSNomes.length > 0;
-  const osIgnoreSet = new Set((situacaoOSNomes || []).map(n => n.trim().toLowerCase()));
+  const osIgnoreSet = new Set((situacaoOSNomes || []).map(normalizeSituacaoNome));
 
   for (const o of filteredOrcamentos) {
     const flagFin = String(o.situacao_financeiro ?? '');
@@ -134,8 +142,16 @@ export async function rastrearOrcamentos(
     const osMatch = osIndex[String(o.codigo)];
 
     // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo (para fins de bloqueio).
-    const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(String(osMatch.nome_situacao || '').trim().toLowerCase());
+    const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(normalizeSituacaoNome(osMatch.nome_situacao));
     const osMatchPasses = osMatch && !osMatchIgnored;
+
+    // Se a OS vinculada está numa situação marcada para ocultar, oculta TUDO antes
+    // de qualquer outro bloqueio por flag. Assim não aparece nem em prontos,
+    // nem em pendentes, nem em bloqueados.
+    if (osMatchIgnored) {
+      console.info(`[RASTREADOR] Ocultando orçamento #${o.codigo} → OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}] (situação OS ocultada)`);
+      continue;
+    }
 
     if (byFlags || osMatchPasses) {
       const reason = byFlags ? 'flag' as const : 'os_index' as const;
@@ -159,12 +175,6 @@ export async function rastrearOrcamentos(
       });
       console.warn(`[RASTREADOR] ${warning}`);
     } else {
-      // Se a OS vinculada está numa situação marcada para ignorar, oculta TUDO
-      // (nem orçamento nem OS aparecem na lista).
-      if (osMatchIgnored) {
-        console.info(`[RASTREADOR] Ocultando orçamento #${o.codigo} → OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}] (situação OS ignorada)`);
-        continue;
-      }
       uniqueOrcamentos.push(o);
     }
   }

@@ -153,7 +153,7 @@ export default function PurchaseTrackerPage() {
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [rows, setRows] = useState<CompraRow[]>([]);
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
-  const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr'>('all');
+  const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr' | 'stuck'>('all');
 
   // Load statuses + persisted selection
   useEffect(() => {

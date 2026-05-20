@@ -68,7 +68,7 @@ export function PurchaseTrackerAlertWatcher() {
   const goToTracker = () => {
     if (snap) localStorage.setItem(LS_KEY, snap.id);
     setOpen(false);
-    navigate("/purchase-tracker");
+    navigate("/compras/acompanhamento");
   };
 
   if (!snap) return null;

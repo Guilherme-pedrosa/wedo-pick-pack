@@ -175,13 +175,15 @@ export async function buildExplorerIndex(
       'Indexando Orçamentos',
     );
     for (const o of orcList) {
+      const dataStr = String(o.data ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(o.id),
         codigo: String(o.codigo ?? o.id),
         nome_cliente: String(o.nome_cliente ?? ''),
         situacao_id: String((o as any).situacao_id ?? ''),
         nome_situacao: String(o.nome_situacao ?? ''),
-        data: String(o.data ?? ''),
+        data: dataStr,
       };
       for (const w of o.produtos || []) {
         const pid = normId(w.produto?.produto_id);

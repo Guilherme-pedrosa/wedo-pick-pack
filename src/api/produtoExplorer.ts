@@ -118,6 +118,7 @@ export async function buildExplorerIndex(
         id: String(os.id),
         codigo: String(os.codigo ?? os.id),
         nome_cliente: String(os.nome_cliente ?? ''),
+        situacao_id: String((os as any).situacao_id ?? ''),
         nome_situacao: String(os.nome_situacao ?? ''),
         data: String(os.data ?? ''),
       };
@@ -141,6 +142,7 @@ export async function buildExplorerIndex(
         id: String(o.id),
         codigo: String(o.codigo ?? o.id),
         nome_cliente: String(o.nome_cliente ?? ''),
+        situacao_id: String((o as any).situacao_id ?? ''),
         nome_situacao: String(o.nome_situacao ?? ''),
         data: String(o.data ?? ''),
       };
@@ -164,6 +166,7 @@ export async function buildExplorerIndex(
         id: String(c.id),
         codigo: String(c.codigo ?? c.id),
         nome_fornecedor: String(c.nome_fornecedor ?? ''),
+        situacao_id: String((c as any).situacao_id ?? ''),
         nome_situacao: String(c.nome_situacao ?? ''),
         data: String(c.data_emissao ?? ''),
       };

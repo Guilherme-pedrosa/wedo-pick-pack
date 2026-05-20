@@ -104,6 +104,17 @@ const DashboardPage = () => {
         .maybeSingle();
 
       if (snapshot) setComprasSnapshot(snapshot as any);
+
+      // Fetch latest purchase tracker snapshot
+      const { data: tracker } = await supabase
+        .from("purchase_tracker_snapshots")
+        .select("crit_count, arrival_overdue_count, warn_count, created_at")
+        .eq("status", "success")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (tracker) setTrackerSnapshot(tracker as any);
     } catch (e) {
       console.error("Dashboard load error:", e);
     } finally {

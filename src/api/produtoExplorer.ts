@@ -107,12 +107,34 @@ async function paginate<T>(
   return out;
 }
 
+/** Normalize a GC/Auvo date string to YYYY-MM-DD for lexicographic compare. */
+function toIsoDate(s: string): string {
+  if (!s) return '';
+  const t = s.trim();
+  // YYYY-MM-DD[...]
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // DD/MM/YYYY
+  const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  return '';
+}
+
 export async function buildExplorerIndex(
   onProgress?: (step: string, page: number, total: number) => void,
   force = false,
 ): Promise<ExplorerIndex> {
   if (!force && cache && Date.now() - cache.builtAt < TTL) return cache;
   if (building) return building;
+
+  const cfg = getExplorerConfig();
+  const fromDate = cfg.fromDate || '';
+  const afterFrom = (raw: string) => {
+    if (!fromDate) return true;
+    const iso = toIsoDate(raw);
+    if (!iso) return true; // keep records with unknown dates
+    return iso >= fromDate;
+  };
 
   building = (async () => {
     const oss = new Map<string, ExplorerOSRef[]>();
@@ -127,13 +149,15 @@ export async function buildExplorerIndex(
       'Indexando OS',
     );
     for (const os of osList) {
+      const dataStr = String(os.data ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(os.id),
         codigo: String(os.codigo ?? os.id),
         nome_cliente: String(os.nome_cliente ?? ''),
         situacao_id: String((os as any).situacao_id ?? ''),
         nome_situacao: String(os.nome_situacao ?? ''),
-        data: String(os.data ?? ''),
+        data: dataStr,
       };
       for (const w of os.produtos || []) {
         const pid = normId((w as any)?.produto?.produto_id);
@@ -151,13 +175,15 @@ export async function buildExplorerIndex(
       'Indexando Orçamentos',
     );
     for (const o of orcList) {
+      const dataStr = String(o.data ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(o.id),
         codigo: String(o.codigo ?? o.id),
         nome_cliente: String(o.nome_cliente ?? ''),
         situacao_id: String((o as any).situacao_id ?? ''),
         nome_situacao: String(o.nome_situacao ?? ''),
-        data: String(o.data ?? ''),
+        data: dataStr,
       };
       for (const w of o.produtos || []) {
         const pid = normId(w.produto?.produto_id);
@@ -175,13 +201,15 @@ export async function buildExplorerIndex(
       'Indexando Pedidos de Compra',
     );
     for (const c of compList) {
+      const dataStr = String(c.data_emissao ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(c.id),
         codigo: String(c.codigo ?? c.id),
         nome_fornecedor: String(c.nome_fornecedor ?? ''),
         situacao_id: String((c as any).situacao_id ?? ''),
         nome_situacao: String(c.nome_situacao ?? ''),
-        data: String(c.data_emissao ?? ''),
+        data: dataStr,
       };
       for (const w of c.produtos || []) {
         const pid = normId(w.produto?.produto_id);
@@ -199,13 +227,15 @@ export async function buildExplorerIndex(
       'Indexando Vendas',
     );
     for (const v of vendaList) {
+      const dataStr = String(v.data ?? '');
+      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(v.id),
         codigo: String(v.codigo ?? v.id),
         nome_cliente: String(v.nome_cliente ?? ''),
         situacao_id: String(v.situacao_id ?? ''),
         nome_situacao: String(v.nome_situacao ?? ''),
-        data: String(v.data ?? ''),
+        data: dataStr,
       };
       for (const w of v.produtos || []) {
         const pid = normId((w as any)?.produto?.produto_id);

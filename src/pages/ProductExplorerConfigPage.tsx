@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, ArrowLeft, Wrench, FileText, ShoppingCart, Receipt } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Loader2, Save, ArrowLeft, Wrench, FileText, ShoppingCart, Receipt, CalendarRange } from 'lucide-react';
 import { toast } from 'sonner';
 import { getStatusOS, getStatusVendas } from '@/api/gestaoclick';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
@@ -109,6 +111,35 @@ export default function ProductExplorerConfigPage() {
           Salvar
         </Button>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CalendarRange className="h-4 w-4" /> Considerar registros a partir de
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1">
+              <Label htmlFor="fromDate" className="text-xs text-muted-foreground">
+                Data inicial (OS, orçamentos, vendas e pedidos de compra com data anterior serão ignorados na sincronização)
+              </Label>
+              <Input
+                id="fromDate"
+                type="date"
+                value={cfg.fromDate}
+                onChange={(e) => setCfg(prev => ({ ...prev, fromDate: e.target.value }))}
+                className="mt-1 max-w-xs"
+              />
+            </div>
+            {cfg.fromDate && (
+              <Button variant="outline" size="sm" onClick={() => setCfg(prev => ({ ...prev, fromDate: '' }))}>
+                Limpar (sem limite)
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
         <Card>

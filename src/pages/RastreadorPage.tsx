@@ -523,9 +523,9 @@ export default function RastreadorPage() {
                   <div className="ml-4 mt-0.5 text-[10px]">
                     {(item.qtd_em_compra ?? 0) > 0 ? (
                       <span className="text-blue-600">
-                        🛒 Em compra: {item.qtd_em_compra} {item.ordens_compra && item.ordens_compra.length > 0 && (
+                        🛒 Em compra: {formatQty(item.qtd_em_compra)} {item.ordens_compra && item.ordens_compra.length > 0 && (
                           <span className="text-muted-foreground">
-                            ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${o.qtd}`).join(' • ')})
+                            ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')})
                           </span>
                         )}
                         {(() => {
@@ -1040,9 +1040,9 @@ export default function RastreadorPage() {
                                     <div className="ml-4 mt-0.5 text-[10px]">
                                       {(item.qtd_em_compra ?? 0) > 0 ? (
                                         <span className="text-blue-600">
-                                          🛒 Em compra: {item.qtd_em_compra} {item.ordens_compra && item.ordens_compra.length > 0 && (
+                                          🛒 Em compra: {formatQty(item.qtd_em_compra)} {item.ordens_compra && item.ordens_compra.length > 0 && (
                                             <span className="text-muted-foreground">
-                                              ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${o.qtd}`).join(' • ')})
+                                              ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')})
                                             </span>
                                           )}
                                           {(() => {
@@ -1189,7 +1189,7 @@ export default function RastreadorPage() {
                   <div className="text-xs space-y-0.5">
                     {confirmEntry.itens.filter(i => i.comprometido).map((item, idx) => (
                       <div key={idx} className="text-red-600">
-                        ⚠ {item.codigo_produto && `[${item.codigo_produto}] `}{item.nome_produto} — Precisa: {item.qtd_necessaria}, Estoque: {item.estoque_total}
+                        ⚠ {item.codigo_produto && `[${item.codigo_produto}] `}{item.nome_produto} — Precisa: {formatQty(item.qtd_necessaria)}, Saldo: {formatQty(item.estoque_disponivel)}, Comprometida: {formatQty(item.qtd_comprometida ?? item.qtd_necessaria)}
                       </div>
                     ))}
                   </div>

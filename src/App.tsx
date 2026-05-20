@@ -24,6 +24,7 @@ import InventoryAnalysisPage from "./pages/InventoryAnalysisPage";
 import ComprasPage from "./pages/ComprasPage";
 import PurchaseTrackerPage from "./pages/PurchaseTrackerPage";
 import RastreadorPage from "./pages/RastreadorPage";
+import ProductExplorerPage from "./pages/ProductExplorerPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
@@ -117,6 +118,7 @@ function AuthenticatedApp() {
         <Route path="/controle/vinculacoes" element={<HandoffHistoryPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
+        <Route path="/produtos/explorar" element={<ProductExplorerPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route path="/config/estoque" element={<InventoryPolicyPage />} />
         <Route path="/analise-estoque" element={<InventoryAnalysisPage />} />

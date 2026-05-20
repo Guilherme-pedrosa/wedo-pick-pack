@@ -164,14 +164,18 @@ const DashboardPage = () => {
       href: "/separations",
     },
     {
-      title: "Índice de Produtos",
-      value: syncStatus ? (syncStatus.status === "success" ? "✓ Sincronizado" : syncStatus.status) : "—",
-      subtitle: syncStatus?.finished_at
-        ? `Último sync: ${new Date(syncStatus.finished_at).toLocaleString("pt-BR")}`
-        : "Nenhum sync executado",
-      icon: RefreshCw,
-      color: "text-muted-foreground",
-      href: "/config",
+      title: "Compras Atrasadas",
+      value: trackerSnapshot
+        ? (trackerSnapshot.crit_count ?? 0) + (trackerSnapshot.arrival_overdue_count ?? 0)
+        : "—",
+      subtitle: trackerSnapshot
+        ? `${trackerSnapshot.crit_count ?? 0} parados +30d · ${trackerSnapshot.arrival_overdue_count ?? 0} c/ chegada atrasada — ${new Date(trackerSnapshot.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`
+        : "Nenhum snapshot ainda",
+      icon: AlertTriangle,
+      color: (trackerSnapshot && ((trackerSnapshot.crit_count ?? 0) > 0 || (trackerSnapshot.arrival_overdue_count ?? 0) > 0))
+        ? "text-red-500"
+        : "text-muted-foreground",
+      href: "/compras/acompanhamento",
     },
   ];
 

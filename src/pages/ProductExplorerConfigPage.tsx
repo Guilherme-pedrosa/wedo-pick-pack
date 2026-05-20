@@ -21,20 +21,23 @@ export default function ProductExplorerConfigPage() {
   const [osList, setOsList] = useState<SitOption[]>([]);
   const [orcList, setOrcList] = useState<SitOption[]>([]);
   const [compraList, setCompraList] = useState<SitOption[]>([]);
+  const [vendaList, setVendaList] = useState<SitOption[]>([]);
   const [cfg, setCfg] = useState<ExplorerConfig>(getExplorerConfig());
 
   useEffect(() => {
     logSystemAction({ module: 'compras', action: 'Acessou Configuração do Explorador de Peças' });
     (async () => {
       try {
-        const [os, orc, comp] = await Promise.all([
+        const [os, orc, comp, vend] = await Promise.all([
           getStatusOS(),
           getStatusOrcamentos(),
           getStatusCompras(),
+          getStatusVendas(),
         ]);
         setOsList(os.map(s => ({ id: String(s.id), nome: String(s.nome) })));
         setOrcList(orc.map(s => ({ id: String(s.id), nome: String(s.nome) })));
         setCompraList(comp.map(s => ({ id: String(s.id), nome: String(s.nome) })));
+        setVendaList(vend.map(s => ({ id: String(s.id), nome: String(s.nome) })));
       } catch (e) {
         toast.error('Falha ao carregar situações');
       } finally {
@@ -71,6 +74,7 @@ export default function ProductExplorerConfigPage() {
           os: cfg.osSituacaoIds.length,
           orc: cfg.orcSituacaoIds.length,
           compra: cfg.compraSituacaoIds.length,
+          venda: cfg.vendaSituacaoIds.length,
         },
       });
       navigate('/produtos/explorar');

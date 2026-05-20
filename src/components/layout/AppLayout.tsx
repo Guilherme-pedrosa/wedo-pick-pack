@@ -46,6 +46,7 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
         '/admin/logs': 'admin',
         '/rastreador/logs': 'rastreador',
         '/produtos/explorar': 'compras',
+      };
       const module = ROUTE_MODULES[location.pathname] || 'navigation';
       logSystemAction({ module, action: `Acessou ${location.pathname}` });
     }

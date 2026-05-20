@@ -49,6 +49,12 @@ const DashboardPage = () => {
     created_at: string;
     status: string;
   } | null>(null);
+  const [trackerSnapshot, setTrackerSnapshot] = useState<{
+    crit_count: number;
+    arrival_overdue_count: number;
+    warn_count: number;
+    created_at: string;
+  } | null>(null);
   const comprasResult = useComprasStore((s) => s.result);
   const checkoutSession = useCheckoutStore((s) => s.session);
   const [comprasDialogOpen, setComprasDialogOpen] = useState(false);

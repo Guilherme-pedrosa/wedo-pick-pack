@@ -492,6 +492,7 @@ function SeparationCard({
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
   const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
+  const [receiptServiceLocation, setReceiptServiceLocation] = useState<string | undefined>(undefined);
 
   // Technician link state
   const [techDialogOpen, setTechDialogOpen] = useState(false);

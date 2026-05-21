@@ -115,12 +115,14 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
       const durationMins = Math.floor(diffMs / 60000);
       const durationSecs = Math.floor((diffMs % 60000) / 1000);
 
+      const { extractServiceLocation } = await import('./SeparationReceipt');
       const receiptData: ReceiptData = {
         orderType: session.tipo,
         orderCode: session.codigo,
         clientName: session.nomeCliente,
         operatorName: config.operatorName,
         equipmentName: session.equipmentName,
+        serviceLocation: extractServiceLocation(session.rawOrder),
         items: [...session.items],
         startedAt: session.startedAt,
         concludedAt,

@@ -419,8 +419,16 @@ const BoxesPage = () => {
       minute: "2-digit",
     });
 
-  const inOperationBoxes = boxes.filter((b) => b.technician_name);
-  const standByBoxes = boxes.filter((b) => !b.technician_name);
+  const boxDateKey = (b: BoxData, isOp: boolean) =>
+    new Date((isOp && b.last_linked_at ? b.last_linked_at : b.created_at) || 0).getTime();
+  const inOperationBoxes = boxes
+    .filter((b) => b.technician_name)
+    .slice()
+    .sort((a, b) => boxDateKey(b, true) - boxDateKey(a, true));
+  const standByBoxes = boxes
+    .filter((b) => !b.technician_name)
+    .slice()
+    .sort((a, b) => boxDateKey(b, false) - boxDateKey(a, false));
 
   const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 

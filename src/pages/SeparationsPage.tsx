@@ -679,6 +679,7 @@ function SeparationCard({
           .join(', ');
         if (eqName) setReceiptEquipment(eqName);
       }
+      setReceiptServiceLocation(extractServiceLocation(order));
       setReceiptOpen(true);
     } catch (err) {
       console.error('Error fetching order for reprint:', err);

@@ -242,19 +242,22 @@ export default function QuickWriteOffDialog({ open, box, onClose, onCompleted }:
         }
       }
 
-      // Product validation + quantity check
+      // Product validation + quantity check (sum across all matching lines)
       const produtos = orderData?.produtos || [];
-      const productInOrder = produtos.find(
+      const matchingLines = produtos.filter(
         (p: any) =>
           p?.produto?.produto_id === matchedItem.produto_id ||
           String(p?.produto?.produto_id) === matchedItem.produto_id
       );
-      if (!productInOrder) {
+      if (matchingLines.length === 0) {
         toast.warning(`Produto "${matchedItem.nome_produto}" não encontrado na ${label} #${ref}`);
         return;
       }
 
-      const orderQty = parseFloat(productInOrder.quantidade) || 1;
+      const orderQty = matchingLines.reduce(
+        (sum: number, p: any) => sum + (parseFloat(p?.produto?.quantidade) || 0),
+        0
+      ) || 1;
 
       // Check how many units of this product were already used with this ref
       const { data: existingLogs } = await supabase

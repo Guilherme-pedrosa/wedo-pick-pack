@@ -20,6 +20,7 @@ export interface ReceiptData {
   clientName: string;
   operatorName: string;
   equipmentName?: string;
+  serviceLocation?: string;
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;

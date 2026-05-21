@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'; // util
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
-import SeparationReceipt from '@/components/checkout/SeparationReceipt';
+import SeparationReceipt, { extractServiceLocation } from '@/components/checkout/SeparationReceipt';
 import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 
@@ -492,6 +492,7 @@ function SeparationCard({
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [receiptItems, setReceiptItems] = useState<PickingItem[]>([]);
   const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
+  const [receiptServiceLocation, setReceiptServiceLocation] = useState<string | undefined>(undefined);
 
   // Technician link state
   const [techDialogOpen, setTechDialogOpen] = useState(false);
@@ -678,6 +679,7 @@ function SeparationCard({
           .join(', ');
         if (eqName) setReceiptEquipment(eqName);
       }
+      setReceiptServiceLocation(extractServiceLocation(order));
       setReceiptOpen(true);
     } catch (err) {
       console.error('Error fetching order for reprint:', err);
@@ -876,6 +878,7 @@ function SeparationCard({
           clientName={sep.client_name}
           operatorName={sep.operator_name}
           equipmentName={receiptEquipment}
+          serviceLocation={receiptServiceLocation}
           technicianName={sep.technician_name || undefined}
           items={receiptItems}
           startedAt={sep.started_at}

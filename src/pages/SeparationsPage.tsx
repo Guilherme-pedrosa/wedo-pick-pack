@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils'; // util
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
-import SeparationReceipt from '@/components/checkout/SeparationReceipt';
+import SeparationReceipt, { extractServiceLocation } from '@/components/checkout/SeparationReceipt';
 import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 

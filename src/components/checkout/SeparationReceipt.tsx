@@ -140,6 +140,14 @@ export default function SeparationReceipt({
             {technicianName && (
               <div style={{ gridColumn: '1 / -1' }}><strong>Técnico:</strong> {technicianName}</div>
             )}
+            {serviceLocation && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <strong>Local do conserto:</strong>{' '}
+                <span style={{ padding: '2px 6px', border: '1px solid #111', fontWeight: 'bold' }}>
+                  {serviceLocation}
+                </span>
+              </div>
+            )}
             <div><strong>Início:</strong> {formatDateTime(startDate)}</div>
             <div><strong>Conclusão:</strong> {formatDateTime(endDate)}</div>
             <div><strong>Duração:</strong> {duration}</div>

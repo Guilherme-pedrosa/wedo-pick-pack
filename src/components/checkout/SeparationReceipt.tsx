@@ -14,10 +14,26 @@ interface Props {
   operatorName: string;
   equipmentName?: string;
   technicianName?: string;
+  serviceLocation?: string;
   items: PickingItem[];
   startedAt: string;
   concludedAt: string;
   observations?: string;
+}
+
+/** Extract custom attribute 68658 ("Local do conserto") from a GC order. */
+export function extractServiceLocation(order: unknown): string | undefined {
+  const atributos = (order as { atributos?: unknown[] })?.atributos;
+  if (!Array.isArray(atributos)) return undefined;
+  for (const wrapper of atributos) {
+    const attr = (wrapper as { atributo?: { atributo_id?: string; id?: string; conteudo?: string } })?.atributo;
+    if (!attr) continue;
+    if (String(attr.atributo_id) === '68658' || String(attr.id) === '68658') {
+      const v = (attr.conteudo || '').trim();
+      if (v) return v;
+    }
+  }
+  return undefined;
 }
 
 export default function SeparationReceipt({

@@ -45,6 +45,7 @@ export default function SeparationReceipt({
   operatorName,
   equipmentName,
   technicianName,
+  serviceLocation,
   items,
   startedAt,
   concludedAt,

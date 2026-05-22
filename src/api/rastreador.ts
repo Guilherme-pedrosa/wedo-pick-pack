@@ -235,6 +235,10 @@ export async function rastrearOrcamentos(
 
   // Phase 2: Collect unique product IDs (from BOTH unique budgets AND blocked budgets,
   // so we can also show stock/conflict info for blocked ones)
+  console.info(`[RASTREADOR] 🧮 uniqueOrcamentos (pós filtro OS/flags)=${uniqueOrcamentos.length} | bloqueados=${bloqueados.length} | osIgnoreActive=${osIgnoreActive} | ignoreSet=${[...osIgnoreSet].join('|')}`);
+
+  // Phase 2: Collect unique product IDs (from BOTH unique budgets AND blocked budgets,
+  // so we can also show stock/conflict info for blocked ones)
   const orcamentosForStock: GCOrcamento[] = [...uniqueOrcamentos, ...filteredOrcamentos.filter(o => bloqueados.some(b => b.orcamento_id === o.id))];
   const uniqueProductIds = new Set<string>();
   for (const orc of orcamentosForStock) {

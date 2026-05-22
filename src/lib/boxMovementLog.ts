@@ -24,6 +24,13 @@ interface LogMovementParams {
   details?: string;
   saldoAntes?: number;
   saldoDepois?: number;
+  itemsSnapshot?: Array<{
+    produto_id: string;
+    nome_produto: string;
+    codigo_interno?: string;
+    quantidade: number;
+    preco_unitario?: number;
+  }>;
 }
 
 export async function logBoxMovement(params: LogMovementParams) {

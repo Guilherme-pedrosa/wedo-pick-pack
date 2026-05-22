@@ -177,7 +177,7 @@ export default function OrcamentosPanel() {
           Marque todos os status de compra em andamento (Ex: Em Cotação, Comprado Ag. Chegada). Desmarque apenas finalizados ou cancelados. Selecionados: {selectedCompra.length}.
         </p>
 
-        {statusCompraQuery.isLoading ? (
+        {statusCompraQuery.isLoading && !statusCompraQuery.data ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> Carregando…
           </div>

@@ -58,11 +58,64 @@ export default function HandoffLogsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("all");
   const [searchText, setSearchText] = useState("");
+  const [detailLog, setDetailLog] = useState<MovementLog | null>(null);
+  const [detailItems, setDetailItems] = useState<SnapshotItem[] | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const navigate = useNavigate();
+
+  const openDetails = async (log: MovementLog) => {
+    setDetailLog(log);
+    if (log.items_snapshot && Array.isArray(log.items_snapshot) && log.items_snapshot.length > 0) {
+      setDetailItems(log.items_snapshot);
+      return;
+    }
+    // Fallback for legacy "entrada" logs: look up the closest check-in record
+    if (log.action === "entrada") {
+      setDetailLoading(true);
+      try {
+        const logTime = new Date(log.created_at).getTime();
+        const { data: recs } = await supabase
+          .from("box_checkin_records")
+          .select("id, completed_at, created_at")
+          .eq("box_id", log.box_id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+        const match = (recs || []).find((r) => {
+          const t = new Date(r.completed_at || r.created_at).getTime();
+          return Math.abs(t - logTime) < 1000 * 60 * 60; // within 1h
+        });
+        if (match) {
+          const { data: items } = await supabase
+            .from("box_checkin_items")
+            .select("produto_id, nome_produto, quantidade_devolvida")
+            .eq("checkin_id", match.id);
+          setDetailItems(
+            (items || []).map((i) => ({
+              produto_id: i.produto_id,
+              nome_produto: i.nome_produto,
+              quantidade: i.quantidade_devolvida,
+            }))
+          );
+        } else {
+          setDetailItems([]);
+        }
+      } finally {
+        setDetailLoading(false);
+      }
+      return;
+    }
+    setDetailItems([]);
+  };
+
+  const closeDetails = () => {
+    setDetailLog(null);
+    setDetailItems(null);
+  };
 
   useEffect(() => {
     loadLogs();
   }, []);
+
 
   const loadLogs = async () => {
     setLoading(true);

@@ -282,6 +282,13 @@ export default function TechnicianLinkDialog({ box, onClose, onLinked }: Props) 
           technicianName: tech.name,
           technicianGcId: tech.gc_id,
           details: `Caixa entregue ao técnico ${tech.name} com ${totalItems} itens (${totalValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`,
+          itemsSnapshot: receiptItems.map((i) => ({
+            produto_id: i.produto_id,
+            nome_produto: i.nome_produto,
+            codigo_interno: i.codigo_interno,
+            quantidade: i.quantidade,
+            preco_unitario: Number(i.preco_unitario) || 0,
+          })),
         });
       } catch (secondaryError) {
         console.error("[TechLink] Erro secundário (recibo/log):", secondaryError);

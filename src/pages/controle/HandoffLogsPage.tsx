@@ -73,7 +73,7 @@ export default function HandoffLogsPage() {
       .limit(500);
 
     if (!error && data) {
-      setLogs(data as MovementLog[]);
+      setLogs(data as unknown as MovementLog[]);
     }
     setLoading(false);
   };

@@ -147,7 +147,7 @@ export default function OrcamentosPanel() {
         </div>
         <p className="text-xs text-muted-foreground">Selecione as situações aprovadas</p>
 
-        {statusQuery.isLoading ? (
+        {statusQuery.isLoading && !statusQuery.data ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> Carregando…
           </div>

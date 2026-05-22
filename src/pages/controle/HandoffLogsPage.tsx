@@ -238,6 +238,7 @@ export default function HandoffLogsPage() {
                 <TableHead>Técnico</TableHead>
                 <TableHead>Operador</TableHead>
                 <TableHead>Detalhes</TableHead>
+                <TableHead className="text-right">Peças</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -217,6 +217,7 @@ export type Database = {
           created_at: string
           details: string | null
           id: string
+          items_snapshot: Json | null
           operator_id: string
           operator_name: string
           preco_unitario: number | null
@@ -237,6 +238,7 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: string
+          items_snapshot?: Json | null
           operator_id: string
           operator_name?: string
           preco_unitario?: number | null
@@ -257,6 +259,7 @@ export type Database = {
           created_at?: string
           details?: string | null
           id?: string
+          items_snapshot?: Json | null
           operator_id?: string
           operator_name?: string
           preco_unitario?: number | null

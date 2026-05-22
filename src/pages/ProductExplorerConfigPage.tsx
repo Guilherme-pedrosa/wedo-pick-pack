@@ -28,23 +28,51 @@ export default function ProductExplorerConfigPage() {
 
   useEffect(() => {
     logSystemAction({ module: 'compras', action: 'Acessou Configuração do Explorador de Peças' });
+    const CACHE_KEYS = {
+      os: 'wedo-cache-status-os',
+      orc: 'wedo-cache-status-orcamentos',
+      comp: 'wedo-cache-status-compras',
+      vend: 'wedo-cache-status-vendas',
+    };
+    const readCache = (k: string): SitOption[] => {
+      try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : []; } catch { return []; }
+    };
+    // Hidrata da cache local primeiro para evitar tela vazia
+    setOsList(readCache(CACHE_KEYS.os));
+    setOrcList(readCache(CACHE_KEYS.orc));
+    setCompraList(readCache(CACHE_KEYS.comp));
+    setVendaList(readCache(CACHE_KEYS.vend));
+
     (async () => {
-      try {
-        const [os, orc, comp, vend] = await Promise.all([
-          getStatusOS(),
-          getStatusOrcamentos(),
-          getStatusCompras(),
-          getStatusVendas(),
-        ]);
-        setOsList(os.map(s => ({ id: String(s.id), nome: String(s.nome) })));
-        setOrcList(orc.map(s => ({ id: String(s.id), nome: String(s.nome) })));
-        setCompraList(comp.map(s => ({ id: String(s.id), nome: String(s.nome) })));
-        setVendaList(vend.map(s => ({ id: String(s.id), nome: String(s.nome) })));
-      } catch (e) {
-        toast.error('Falha ao carregar situações');
-      } finally {
-        setLoading(false);
-      }
+      const results = await Promise.allSettled([
+        getStatusOS(),
+        getStatusOrcamentos(),
+        getStatusCompras(),
+        getStatusVendas(),
+      ]);
+      const [os, orc, comp, vend] = results;
+      let anyFail = false;
+      const apply = (
+        r: PromiseSettledResult<any[]>,
+        setter: (v: SitOption[]) => void,
+        cacheKey: string,
+        label: string,
+      ) => {
+        if (r.status === 'fulfilled') {
+          const mapped = r.value.map((s: any) => ({ id: String(s.id), nome: String(s.nome) }));
+          setter(mapped);
+          try { localStorage.setItem(cacheKey, JSON.stringify(mapped)); } catch {}
+        } else {
+          anyFail = true;
+          console.warn(`[ExplorerConfig] falha ao carregar ${label}`, r.reason);
+        }
+      };
+      apply(os, setOsList, CACHE_KEYS.os, 'OS');
+      apply(orc, setOrcList, CACHE_KEYS.orc, 'Orçamentos');
+      apply(comp, setCompraList, CACHE_KEYS.comp, 'Compras');
+      apply(vend, setVendaList, CACHE_KEYS.vend, 'Vendas');
+      if (anyFail) toast.warning('Algumas situações falharam ao carregar. Usando cache local quando disponível.');
+      setLoading(false);
     })();
   }, []);
 

@@ -21,14 +21,32 @@ export default function OrcamentosPanel() {
   const [loadingOrc, setLoadingOrc] = useState(false);
   const [hydrated, setHydrated] = useState(useComprasStore.persist.hasHydrated());
 
+  const STATUS_ORC_CACHE = 'wedo-cache-status-orcamentos';
+  const STATUS_COMP_CACHE = 'wedo-cache-status-compras';
+  const readCache = <T,>(k: string): T | undefined => {
+    try { const r = localStorage.getItem(k); return r ? JSON.parse(r) as T : undefined; } catch { return undefined; }
+  };
+
   const statusQuery = useQuery({
     queryKey: ['status-orcamentos'],
-    queryFn: getStatusOrcamentos,
+    queryFn: async () => {
+      const data = await getStatusOrcamentos();
+      try { localStorage.setItem(STATUS_ORC_CACHE, JSON.stringify(data)); } catch {}
+      return data;
+    },
+    initialData: readCache<Awaited<ReturnType<typeof getStatusOrcamentos>>>(STATUS_ORC_CACHE),
+    staleTime: 5 * 60 * 1000,
   });
 
   const statusCompraQuery = useQuery({
     queryKey: ['status-compras'],
-    queryFn: getStatusCompras,
+    queryFn: async () => {
+      const data = await getStatusCompras();
+      try { localStorage.setItem(STATUS_COMP_CACHE, JSON.stringify(data)); } catch {}
+      return data;
+    },
+    initialData: readCache<Awaited<ReturnType<typeof getStatusCompras>>>(STATUS_COMP_CACHE),
+    staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
@@ -129,7 +147,7 @@ export default function OrcamentosPanel() {
         </div>
         <p className="text-xs text-muted-foreground">Selecione as situações aprovadas</p>
 
-        {statusQuery.isLoading ? (
+        {statusQuery.isLoading && !statusQuery.data ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> Carregando…
           </div>
@@ -159,7 +177,7 @@ export default function OrcamentosPanel() {
           Marque todos os status de compra em andamento (Ex: Em Cotação, Comprado Ag. Chegada). Desmarque apenas finalizados ou cancelados. Selecionados: {selectedCompra.length}.
         </p>
 
-        {statusCompraQuery.isLoading ? (
+        {statusCompraQuery.isLoading && !statusCompraQuery.data ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" /> Carregando…
           </div>

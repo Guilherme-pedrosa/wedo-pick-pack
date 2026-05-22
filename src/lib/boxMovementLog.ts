@@ -63,6 +63,7 @@ export async function logBoxMovement(params: LogMovementParams) {
       details: params.details || null,
       saldo_antes: params.saldoAntes ?? null,
       saldo_depois: params.saldoDepois ?? null,
+      items_snapshot: params.itemsSnapshot ?? null,
     });
   } catch (e) {
     console.error("Failed to log box movement:", e);

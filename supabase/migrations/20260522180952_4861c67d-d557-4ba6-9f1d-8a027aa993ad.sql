@@ -1,0 +1,1 @@
+ALTER TABLE public.box_movement_logs ADD COLUMN IF NOT EXISTS items_snapshot jsonb;

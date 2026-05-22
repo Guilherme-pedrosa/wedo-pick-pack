@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Loader2, ClipboardList, ArrowLeft, LogOut, LogIn,
-  RefreshCw, PackagePlus, PackageMinus, FileText, UserX, Search,
+  RefreshCw, PackagePlus, PackageMinus, FileText, UserX, Search, Package,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,22 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
+
+interface SnapshotItem {
+  produto_id: string;
+  nome_produto: string;
+  codigo_interno?: string;
+  quantidade: number;
+  preco_unitario?: number;
+}
 
 interface MovementLog {
   id: string;
+  box_id: string;
   action: string;
   box_name: string;
   produto_id: string | null;
@@ -27,6 +39,7 @@ interface MovementLog {
   operator_name: string;
   details: string | null;
   created_at: string;
+  items_snapshot: SnapshotItem[] | null;
 }
 
 const ACTION_CONFIG: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {
@@ -45,11 +58,64 @@ export default function HandoffLogsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("all");
   const [searchText, setSearchText] = useState("");
+  const [detailLog, setDetailLog] = useState<MovementLog | null>(null);
+  const [detailItems, setDetailItems] = useState<SnapshotItem[] | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const navigate = useNavigate();
+
+  const openDetails = async (log: MovementLog) => {
+    setDetailLog(log);
+    if (log.items_snapshot && Array.isArray(log.items_snapshot) && log.items_snapshot.length > 0) {
+      setDetailItems(log.items_snapshot);
+      return;
+    }
+    // Fallback for legacy "entrada" logs: look up the closest check-in record
+    if (log.action === "entrada") {
+      setDetailLoading(true);
+      try {
+        const logTime = new Date(log.created_at).getTime();
+        const { data: recs } = await supabase
+          .from("box_checkin_records")
+          .select("id, completed_at, created_at")
+          .eq("box_id", log.box_id)
+          .order("created_at", { ascending: false })
+          .limit(20);
+        const match = (recs || []).find((r) => {
+          const t = new Date(r.completed_at || r.created_at).getTime();
+          return Math.abs(t - logTime) < 1000 * 60 * 60; // within 1h
+        });
+        if (match) {
+          const { data: items } = await supabase
+            .from("box_checkin_items")
+            .select("produto_id, nome_produto, quantidade_devolvida")
+            .eq("checkin_id", match.id);
+          setDetailItems(
+            (items || []).map((i) => ({
+              produto_id: i.produto_id,
+              nome_produto: i.nome_produto,
+              quantidade: i.quantidade_devolvida,
+            }))
+          );
+        } else {
+          setDetailItems([]);
+        }
+      } finally {
+        setDetailLoading(false);
+      }
+      return;
+    }
+    setDetailItems([]);
+  };
+
+  const closeDetails = () => {
+    setDetailLog(null);
+    setDetailItems(null);
+  };
 
   useEffect(() => {
     loadLogs();
   }, []);
+
 
   const loadLogs = async () => {
     setLoading(true);
@@ -60,7 +126,7 @@ export default function HandoffLogsPage() {
       .limit(500);
 
     if (!error && data) {
-      setLogs(data as MovementLog[]);
+      setLogs(data as unknown as MovementLog[]);
     }
     setLoading(false);
   };
@@ -172,6 +238,7 @@ export default function HandoffLogsPage() {
                 <TableHead>Técnico</TableHead>
                 <TableHead>Operador</TableHead>
                 <TableHead>Detalhes</TableHead>
+                <TableHead className="text-right">Peças</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -236,6 +303,21 @@ export default function HandoffLogsPage() {
                         </p>
                       ) : "—"}
                     </TableCell>
+                    <TableCell className="text-right">
+                      {(log.action === "saida" || log.action === "entrada") ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openDetails(log)}
+                          className="gap-1"
+                        >
+                          <Package className="h-3 w-3" />
+                          Ver peças
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -243,6 +325,87 @@ export default function HandoffLogsPage() {
           </Table>
         </div>
       )}
+
+      <Dialog open={!!detailLog} onOpenChange={(o) => !o && closeDetails()}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-primary" />
+              Peças da caixa — {detailLog?.box_name}
+            </DialogTitle>
+            <DialogDescription>
+              {detailLog && (
+                <>
+                  {ACTION_CONFIG[detailLog.action]?.label || detailLog.action} em {formatDate(detailLog.created_at)}
+                  {detailLog.technician_name ? ` · Técnico: ${detailLog.technician_name}` : ""}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !detailItems || detailItems.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Snapshot de peças não disponível para este registro.
+              {detailLog?.action === "saida" && (
+                <p className="mt-2 text-xs">
+                  Registros antigos (anteriores a esta atualização) não contêm a lista detalhada. Novas saídas e entradas serão registradas com a relação completa de peças.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Código</TableHead>
+                    <TableHead className="text-center">Qtd</TableHead>
+                    <TableHead className="text-right">Preço Unit.</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detailItems.map((it, idx) => (
+                    <TableRow key={`${it.produto_id}-${idx}`}>
+                      <TableCell className="font-medium">
+                        {it.codigo_interno ? `[${it.codigo_interno}] ` : ""}
+                        {it.nome_produto}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">
+                        {it.produto_id}
+                      </TableCell>
+                      <TableCell className="text-center">{it.quantidade}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        {it.preco_unitario != null ? formatCurrency(Number(it.preco_unitario)) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-sm font-medium">
+                        {it.preco_unitario != null
+                          ? formatCurrency(it.quantidade * Number(it.preco_unitario))
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="bg-muted/50 px-4 py-2 text-sm flex justify-between font-medium">
+                <span>{detailItems.reduce((s, i) => s + i.quantidade, 0)} itens</span>
+                <span>
+                  {formatCurrency(
+                    detailItems.reduce(
+                      (s, i) => s + i.quantidade * (Number(i.preco_unitario) || 0),
+                      0
+                    )
+                  )}
+                </span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

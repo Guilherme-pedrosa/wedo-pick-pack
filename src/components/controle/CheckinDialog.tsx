@@ -398,6 +398,12 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         technicianName: box.technician_name || undefined,
         technicianGcId: box.technician_gc_id || undefined,
         details: `Check-in concluído. Esperado: ${totalEsperado}, Devolvido: ${totalDevolvido}, Divergências: ${totalDivergencia}${totalReposto > 0 ? `, Repostos: ${totalReposto}` : ""}`,
+        itemsSnapshot: checkinItems.map((ci) => ({
+          produto_id: ci.item.produto_id,
+          nome_produto: ci.item.nome_produto,
+          quantidade: ci.devolvido,
+          preco_unitario: Number(ci.item.preco_unitario) || 0,
+        })),
       });
 
       toast.success("Check-in concluído! Caixa retornou para Stand By.");

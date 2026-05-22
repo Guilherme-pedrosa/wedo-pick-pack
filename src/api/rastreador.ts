@@ -132,6 +132,7 @@ export async function rastrearOrcamentos(
   situacaoCompraIds?: string[], // if empty/undefined, skip purchase-order coverage analysis
   situacaoOSNomes?: string[], // OS situation NAMES that count as "blocked". If undefined, all OS-linked budgets are blocked (current default). If empty array, no OS-linked budgets are blocked (everything goes back to normal tracking).
 ): Promise<RastreadorResult> {
+  console.info('[RASTREADOR] ▶️ Iniciando', { situacaoIds, nomeCliente, dataInicio, situacaoCompraIds, situacaoOSNomes });
   // Phase 1: Fetch budgets
   onProgress?.('Buscando orçamentos…', 0, 1);
   const allOrcamentos: GCOrcamento[] = [];
@@ -148,18 +149,24 @@ export async function rastrearOrcamentos(
       await new Promise(r => setTimeout(r, 400));
     }
   }
+  console.info('[RASTREADOR] 📦 Total bruto coletado:', allOrcamentos.length);
 
   // Deduplicate
   const deduped = [...new Map(allOrcamentos.map(o => [o.id, o])).values()];
+  console.info('[RASTREADOR] 📦 Após dedupe:', deduped.length);
 
   // Client-side fallback filter (in case API ignores nome param)
   let filteredOrcamentos = nomeCliente
     ? deduped.filter(o => o.nome_cliente.toLowerCase().includes(nomeCliente.toLowerCase()))
     : deduped;
+  console.info('[RASTREADOR] 📦 Após filtro nome:', filteredOrcamentos.length);
 
   // Date filter (data >= dataInicio). GC dates come as YYYY-MM-DD, so string compare works.
   if (dataInicio) {
+    const before = filteredOrcamentos.length;
+    const sample = filteredOrcamentos.slice(0, 5).map(o => ({ codigo: o.codigo, data: o.data }));
     filteredOrcamentos = filteredOrcamentos.filter(o => String(o.data || '') >= dataInicio);
+    console.info(`[RASTREADOR] 📅 Filtro data dataInicio=${dataInicio} | antes=${before} depois=${filteredOrcamentos.length} | amostra(antes):`, sample);
   }
 
   // Phase 1b: Build OS index and filter out converted budgets
@@ -225,6 +232,10 @@ export async function rastrearOrcamentos(
       uniqueOrcamentos.push(o);
     }
   }
+
+  // Phase 2: Collect unique product IDs (from BOTH unique budgets AND blocked budgets,
+  // so we can also show stock/conflict info for blocked ones)
+  console.info(`[RASTREADOR] 🧮 uniqueOrcamentos (pós filtro OS/flags)=${uniqueOrcamentos.length} | bloqueados=${bloqueados.length} | osIgnoreActive=${osIgnoreActive} | ignoreSet=${[...osIgnoreSet].join('|')}`);
 
   // Phase 2: Collect unique product IDs (from BOTH unique budgets AND blocked budgets,
   // so we can also show stock/conflict info for blocked ones)

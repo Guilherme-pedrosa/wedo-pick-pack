@@ -321,11 +321,49 @@ export async function getFornecedor(fornecedorId: string): Promise<GCFornecedor 
   } catch { return null; }
 }
 
+let statusComprasFallbackCache: GCSituacaoCompra[] | null = null;
+
+function unwrapCompraRecord(row: any): any {
+  return row?.Compra ?? row?.compra ?? row;
+}
+
+async function deriveStatusComprasFromPedidos(): Promise<GCSituacaoCompra[]> {
+  if (statusComprasFallbackCache) return statusComprasFallbackCache;
+
+  const byId = new Map<string, GCSituacaoCompra>();
+  let page = 1;
+  let totalPages = 1;
+
+  while (page <= totalPages) {
+    const res = await apiRequest<{ data: any[]; meta: GCMeta }>(`/api/compras?limite=100&pagina=${page}`);
+    totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+
+    for (const row of res.data || []) {
+      const compra = unwrapCompraRecord(row);
+      const id = normalizeId(compra?.situacao_id);
+      const nome = String(compra?.nome_situacao ?? '').trim();
+      if (!id || !nome || byId.has(id)) continue;
+      byId.set(id, { id, nome, padrao: '0', tipo_lancamento: '' });
+    }
+
+    page++;
+    if (page <= totalPages && !isUsingMock()) await new Promise(r => setTimeout(r, 250));
+  }
+
+  statusComprasFallbackCache = [...byId.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return statusComprasFallbackCache;
+}
+
 // --- STATUS COMPRAS ---
 export async function getStatusCompras(): Promise<GCSituacaoCompra[]> {
   if (isUsingMock()) { await mockDelay(); return [...MOCK_STATUS_COMPRA]; }
-  const res = await apiRequest<{ data: GCSituacaoCompra[] }>('/api/situacoes_compras');
-  return res.data;
+  try {
+    const res = await apiRequest<{ data: GCSituacaoCompra[] }>('/api/situacoes_compras');
+    return res.data;
+  } catch (error) {
+    console.warn('[COMPRAS] Falha no endpoint de situações; derivando pelos pedidos de compra.', error);
+    return deriveStatusComprasFromPedidos();
+  }
 }
 
 // --- LIST ORDENS COMPRA ---
@@ -343,7 +381,7 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
   const raw = await apiRequest<{ data: any[]; meta: GCMeta }>(path);
 
   const data: GCOrdemCompra[] = (raw.data || []).map((row: any) => {
-    const compra = row?.Compra ?? row;
+    const compra = unwrapCompraRecord(row);
     return {
       id: String(compra?.id ?? ''),
       codigo: String(compra?.codigo ?? ''),

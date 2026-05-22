@@ -126,7 +126,61 @@ export default function HandoffLogsPage() {
       .limit(500);
 
     if (!error && data) {
-      setLogs(data as unknown as MovementLog[]);
+      const baseLogs = data as unknown as MovementLog[];
+
+      // Enrich legacy "entrada" logs (sem items_snapshot) buscando box_checkin_records
+      const legacyEntradas = baseLogs.filter(
+        (l) =>
+          l.action === "entrada" &&
+          (!l.items_snapshot ||
+            (Array.isArray(l.items_snapshot) && l.items_snapshot.length === 0))
+      );
+      if (legacyEntradas.length > 0) {
+        const boxIds = Array.from(new Set(legacyEntradas.map((l) => l.box_id)));
+        const oldest = legacyEntradas.reduce(
+          (acc, l) => Math.min(acc, new Date(l.created_at).getTime()),
+          Date.now()
+        );
+        const since = new Date(oldest - 1000 * 60 * 60 * 2).toISOString();
+
+        const { data: recs } = await supabase
+          .from("box_checkin_records")
+          .select("id, box_id, completed_at, created_at")
+          .in("box_id", boxIds)
+          .gte("created_at", since);
+
+        const recIds = (recs || []).map((r) => r.id);
+        const itemsByRec: Record<string, SnapshotItem[]> = {};
+        if (recIds.length > 0) {
+          const { data: items } = await supabase
+            .from("box_checkin_items")
+            .select("checkin_id, produto_id, nome_produto, quantidade_devolvida")
+            .in("checkin_id", recIds);
+          (items || []).forEach((i) => {
+            const arr = itemsByRec[i.checkin_id] || (itemsByRec[i.checkin_id] = []);
+            arr.push({
+              produto_id: i.produto_id,
+              nome_produto: i.nome_produto,
+              quantidade: i.quantidade_devolvida,
+            });
+          });
+        }
+
+        legacyEntradas.forEach((log) => {
+          const logTime = new Date(log.created_at).getTime();
+          const match = (recs || [])
+            .filter((r) => r.box_id === log.box_id)
+            .find((r) => {
+              const t = new Date(r.completed_at || r.created_at).getTime();
+              return Math.abs(t - logTime) < 1000 * 60 * 60;
+            });
+          if (match && itemsByRec[match.id]) {
+            log.items_snapshot = itemsByRec[match.id];
+          }
+        });
+      }
+
+      setLogs(baseLogs);
     }
     setLoading(false);
   };

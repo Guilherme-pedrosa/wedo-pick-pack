@@ -205,7 +205,7 @@ export default function HandoffLogsPage() {
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar caixa, produto, técnico, operador..."
+            placeholder="Buscar caixa, peça, técnico, operador, OS..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             className="pl-9"

@@ -143,13 +143,22 @@ export default function HandoffLogsPage() {
     if (filter !== "all" && l.action !== filter) return false;
     if (searchText.trim()) {
       const q = searchText.toLowerCase();
+      const snapshotMatch = Array.isArray(l.items_snapshot)
+        ? l.items_snapshot.some(
+            (it) =>
+              it?.nome_produto?.toLowerCase().includes(q) ||
+              it?.codigo_interno?.toLowerCase().includes(q) ||
+              it?.produto_id?.toLowerCase().includes(q)
+          )
+        : false;
       return (
         l.box_name?.toLowerCase().includes(q) ||
         l.produto_nome?.toLowerCase().includes(q) ||
         l.technician_name?.toLowerCase().includes(q) ||
         l.operator_name?.toLowerCase().includes(q) ||
         l.details?.toLowerCase().includes(q) ||
-        l.ref_numero?.toLowerCase().includes(q)
+        l.ref_numero?.toLowerCase().includes(q) ||
+        snapshotMatch
       );
     }
     return true;

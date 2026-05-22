@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Loader2, ClipboardList, ArrowLeft, LogOut, LogIn,
-  RefreshCw, PackagePlus, PackageMinus, FileText, UserX, Search,
+  RefreshCw, PackagePlus, PackageMinus, FileText, UserX, Search, Package,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,22 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
+
+interface SnapshotItem {
+  produto_id: string;
+  nome_produto: string;
+  codigo_interno?: string;
+  quantidade: number;
+  preco_unitario?: number;
+}
 
 interface MovementLog {
   id: string;
+  box_id: string;
   action: string;
   box_name: string;
   produto_id: string | null;
@@ -27,6 +39,7 @@ interface MovementLog {
   operator_name: string;
   details: string | null;
   created_at: string;
+  items_snapshot: SnapshotItem[] | null;
 }
 
 const ACTION_CONFIG: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string }> = {

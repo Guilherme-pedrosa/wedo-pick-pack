@@ -269,7 +269,7 @@ export default function RelatorioPedidosPage() {
       .right{text-align:right}
       .vinc{font-size:9px;color:#444}
       .tag{display:inline-block;background:#eef;border-radius:3px;padding:0 4px;margin:1px 2px 1px 0}
-      @media print{body{margin:8px}@page{size:landscape;margin:8mm}}
+      @media print{body{margin:8px}@page{size:portrait;margin:8mm}}
     </style></head><body>`;
     html += `<h1>Relatório de Pedidos por Fornecedor</h1>`;
     html += `<div class="meta">${new Date().toLocaleString('pt-BR')} · ${fornecedorLabel}${

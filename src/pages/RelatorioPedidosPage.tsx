@@ -67,10 +67,15 @@ export default function RelatorioPedidosPage() {
         const pedidos = await loadPedidosFromDB();
         if (pedidos.length) {
           setAllPedidos(pedidos);
+          setProgress('Indexando vínculos como no Explorar Peças…');
+          const idx = await buildDemandIndex((step) => setProgress(step));
+          setDemandIndex(idx);
           setLoaded(true);
         }
       } catch (e: any) {
         console.warn('[RELATORIO] Falha ao carregar pedidos do banco', e);
+      } finally {
+        setProgress('');
       }
     })();
   }, []);
@@ -95,7 +100,7 @@ export default function RelatorioPedidosPage() {
       const result = await syncPedidos((step) => setProgress(step), full);
       const pedidos = await loadPedidosFromDB();
       setAllPedidos(pedidos);
-      const idx = await buildDemandIndex((step) => setProgress(step));
+      const idx = await buildDemandIndex((step) => setProgress(step), true);
       setDemandIndex(idx);
       setLoaded(true);
       toast.success(

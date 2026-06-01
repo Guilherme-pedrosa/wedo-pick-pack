@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { buildOSIndex, listOrcamentos } from './compras';
+import { buildOSIndex, listOrcamentos, getStatusCompras } from './compras';
 import { listVendas } from './gestaoclick';
 
 // ---------------------------------------------------------------------------
@@ -211,7 +211,14 @@ function mapPedido(row: any): PedidoCompra {
 let comprasCache: { rows: PedidoCompra[]; builtAt: number } | null = null;
 const COMPRAS_TTL = 5 * 60 * 1000;
 
-/** Busca todos os pedidos de compra (paginado). Cache de 5 min. */
+/**
+ * Busca todos os pedidos de compra (paginado). Cache de 5 min.
+ *
+ * IMPORTANTE: o endpoint padrão `/api/compras` do GestãoClick NÃO retorna
+ * os pedidos finalizados/cancelados. Por isso varremos UMA situação por vez
+ * (situacao_id), garantindo que TODAS as situações venham — inclusive
+ * "Finalizado (mercadoria chegou)" e "Cancelada".
+ */
 export async function fetchAllPedidos(
   onProgress?: (step: string, page: number, total: number) => void,
   forceReload = false,
@@ -220,17 +227,30 @@ export async function fetchAllPedidos(
     return comprasCache.rows;
   }
 
-  const rows: PedidoCompra[] = [];
-  let page = 1;
-  let totalPages = 1;
+  const situacoes = await getStatusCompras();
+  const sitIds = situacoes.map((s) => String(s.id)).filter(Boolean);
 
-  while (page <= totalPages) {
-    onProgress?.(`Buscando pedidos de compra — página ${page}`, page, totalPages);
-    const res = await fetchComprasPage(page);
-    totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
-    for (const item of res.data || []) rows.push(mapPedido(item));
-    page++;
-    if (page <= totalPages) await new Promise((r) => setTimeout(r, 400));
+  const seen = new Set<string>();
+  const rows: PedidoCompra[] = [];
+
+  for (let s = 0; s < sitIds.length; s++) {
+    const sid = sitIds[s];
+    const nome = situacoes[s]?.nome ?? sid;
+    let page = 1;
+    let totalPages = 1;
+    while (page <= totalPages) {
+      onProgress?.(`Buscando "${nome}" — página ${page}`, s + 1, sitIds.length);
+      const res = await fetchComprasPage(page, sid);
+      totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+      for (const item of res.data || []) {
+        const p = mapPedido(item);
+        if (!p.id || seen.has(p.id)) continue;
+        seen.add(p.id);
+        rows.push(p);
+      }
+      page++;
+      if (page <= totalPages) await new Promise((r) => setTimeout(r, 350));
+    }
   }
 
   comprasCache = { rows, builtAt: Date.now() };
@@ -339,47 +359,60 @@ export async function syncPedidos(
     }
   }
 
+  // 2) Varre cada situação separadamente — o endpoint padrão do GC NÃO
+  //    retorna pedidos finalizados/cancelados, então precisamos filtrar por
+  //    situacao_id para capturar TODAS as situações.
+  const situacoes = await getStatusCompras();
+  const sitIds = situacoes.map((s) => String(s.id)).filter(Boolean);
+
   let novos = 0;
   let atualizados = 0;
-  let page = 1;
-  let totalPages = 1;
-  let emptyStreak = 0; // páginas consecutivas sem mudança
 
-  while (page <= totalPages) {
-    onProgress?.(`Sincronizando — página ${page}`, page, totalPages);
-    const res = await fetchComprasPage(page);
-    totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+  for (let s = 0; s < sitIds.length; s++) {
+    const sid = sitIds[s];
+    const nome = situacoes[s]?.nome ?? sid;
+    let page = 1;
+    let totalPages = 1;
+    let emptyStreak = 0; // páginas consecutivas sem mudança nesta situação
 
-    const toUpsert: ReturnType<typeof pedidoToRow>[] = [];
-    for (const item of res.data || []) {
-      const p = mapPedido(item);
-      if (!p.id) continue;
-      const row = pedidoToRow(p);
-      const prev = existing.get(p.id);
-      if (prev === undefined) {
-        novos++;
-        toUpsert.push(row);
-      } else if (prev !== row.content_hash) {
-        atualizados++;
-        toUpsert.push(row);
+    while (page <= totalPages) {
+      onProgress?.(`Sincronizando "${nome}" — página ${page}`, s + 1, sitIds.length);
+      const res = await fetchComprasPage(page, sid);
+      totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+
+      const toUpsert: ReturnType<typeof pedidoToRow>[] = [];
+      for (const item of res.data || []) {
+        const p = mapPedido(item);
+        if (!p.id) continue;
+        const row = pedidoToRow(p);
+        const prev = existing.get(p.id);
+        if (prev === undefined) {
+          novos++;
+          existing.set(p.id, row.content_hash);
+          toUpsert.push(row);
+        } else if (prev !== row.content_hash) {
+          atualizados++;
+          existing.set(p.id, row.content_hash);
+          toUpsert.push(row);
+        }
       }
+
+      if (toUpsert.length) {
+        const { error } = await supabase
+          .from('pedidos_compra')
+          .upsert(toUpsert as any, { onConflict: 'gc_id' });
+        if (error) throw new Error(error.message);
+        emptyStreak = 0;
+      } else {
+        emptyStreak++;
+      }
+
+      // Modo incremental: para esta situação após 2 páginas seguidas sem mudança.
+      if (!full && emptyStreak >= 2) break;
+
+      page++;
+      if (page <= totalPages) await new Promise((r) => setTimeout(r, 300));
     }
-
-    if (toUpsert.length) {
-      const { error } = await supabase
-        .from('pedidos_compra')
-        .upsert(toUpsert as any, { onConflict: 'gc_id' });
-      if (error) throw new Error(error.message);
-      emptyStreak = 0;
-    } else {
-      emptyStreak++;
-    }
-
-    // Modo incremental: para após 2 páginas seguidas sem nenhuma mudança.
-    if (!full && emptyStreak >= 2) break;
-
-    page++;
-    if (page <= totalPages) await new Promise((r) => setTimeout(r, 350));
   }
 
   // Invalida o cache em memória para forçar releitura do banco

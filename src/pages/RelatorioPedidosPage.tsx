@@ -52,6 +52,7 @@ export default function RelatorioPedidosPage() {
   const [progress, setProgress] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getStatusCompras()
@@ -132,6 +133,43 @@ export default function RelatorioPedidosPage() {
       return next;
     });
 
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  // Pedidos efetivamente exportados: os marcados; se nenhum marcado, todos os filtrados.
+  const exportPedidos: PedidoComVinculos[] = useMemo(() => {
+    const sel = filtered.filter((p) => selected.has(p.id));
+    return sel.length ? sel : filtered;
+  }, [filtered, selected]);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+  const toggleSelectAll = () =>
+    setSelected((prev) => {
+      if (filtered.length > 0 && filtered.every((p) => prev.has(p.id))) return new Set();
+      return new Set(filtered.map((p) => p.id));
+    });
+
+  // Impacto financeiro: soma das parcelas por data de vencimento (mesmo dia somado) + total geral.
+  const impactoFinanceiro = useMemo(() => {
+    const byDate = new Map<string, number>();
+    let total = 0;
+    for (const p of exportPedidos) {
+      for (const f of p.financeiro) {
+        const d = (f.data_vencimento || '').slice(0, 10) || 'sem-data';
+        byDate.set(d, (byDate.get(d) || 0) + (Number(f.valor) || 0));
+        total += Number(f.valor) || 0;
+      }
+    }
+    const linhas = [...byDate.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([data, valor]) => ({ data, valor }));
+    return { linhas, total };
+  }, [exportPedidos]);
+
   const fornecedorLabel = fornecedor
     ? fornecedores.find((f) => f.id === fornecedor)?.nome ?? 'Fornecedor'
     : 'Todos os fornecedores';
@@ -159,7 +197,7 @@ export default function RelatorioPedidosPage() {
     v.map((d) => `${VINCULO_LABEL[d.tipo]} #${d.codigo} — ${d.nome_cliente}${d.equipamento ? ` (${d.equipamento})` : ''} [${d.situacao}] ${d.qtd}×`).join(sep);
 
   const exportXLSX = () => {
-    if (!filtered.length) return;
+    if (!exportPedidos.length) return;
     const wb = XLSX.utils.book_new();
 
     const headers = [
@@ -168,7 +206,7 @@ export default function RelatorioPedidosPage() {
       'Financeiro (parcelas)', 'Peça', 'Qtd', 'Vínculos (OS/Venda/Orçamento)',
     ];
     const rows: (string | number)[][] = [];
-    for (const p of filtered) {
+    for (const p of exportPedidos) {
       const fin = p.financeiro
         .map((f) => `${fmtDate(f.data_vencimento)} ${f.nome_forma_pagamento} ${fmtCurrency(f.valor)}`)
         .join('\n');
@@ -194,12 +232,24 @@ export default function RelatorioPedidosPage() {
       { wch: 40 }, { wch: 42 }, { wch: 8 }, { wch: 60 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
+
+    // Aba de Impacto Financeiro (parcelas somadas por vencimento + total)
+    const impHeaders = ['Vencimento', 'Valor do dia (R$)'];
+    const impRows: (string | number)[][] = impactoFinanceiro.linhas.map((l) => [
+      l.data === 'sem-data' ? 'Sem data' : fmtDate(l.data),
+      l.valor,
+    ]);
+    impRows.push(['TOTAL', impactoFinanceiro.total]);
+    const wsImp = XLSX.utils.aoa_to_sheet([impHeaders, ...impRows]);
+    wsImp['!cols'] = [{ wch: 16 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, wsImp, 'Impacto Financeiro');
+
     const slug = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `relatorio_pedidos_${slug}.xlsx`);
   };
 
   const exportPDF = () => {
-    if (!filtered.length) return;
+    if (!exportPedidos.length) return;
     const escapeHtml = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let html = `<html><head><meta charset="utf-8"><title>Relatório de Pedidos por Fornecedor</title><style>
@@ -225,13 +275,15 @@ export default function RelatorioPedidosPage() {
     html += `<div class="meta">${new Date().toLocaleString('pt-BR')} · ${fornecedorLabel}${
       dataInicial || dataFinal ? ` · ${fmtDate(dataInicial)} a ${fmtDate(dataFinal)}` : ''
     }</div>`;
+    const expValor = exportPedidos.reduce((s, p) => s + p.valor_total, 0);
+    const expIcms = exportPedidos.reduce((s, p) => s + p.icms, 0);
     html += `<div class="summary">
-      <div class="card"><div class="val">${totals.count}</div><div class="lab">Pedidos</div></div>
-      <div class="card"><div class="val">${fmtCurrency(totals.valor)}</div><div class="lab">Valor total</div></div>
-      <div class="card"><div class="val">${fmtCurrency(totals.icms)}</div><div class="lab">ICMS/Imposto</div></div>
+      <div class="card"><div class="val">${exportPedidos.length}</div><div class="lab">Pedidos</div></div>
+      <div class="card"><div class="val">${fmtCurrency(expValor)}</div><div class="lab">Valor total</div></div>
+      <div class="card"><div class="val">${fmtCurrency(expIcms)}</div><div class="lab">ICMS/Imposto</div></div>
     </div>`;
 
-    for (const p of filtered) {
+    for (const p of exportPedidos) {
       html += `<div class="pedido">`;
       html += `<div class="ptitle">Pedido #${escapeHtml(p.codigo)} — ${escapeHtml(p.nome_fornecedor)}</div>`;
       html += `<div class="pmeta">Emissão: ${fmtDate(p.data_emissao)} · Situação: ${escapeHtml(p.nome_situacao)} · NF-e: ${escapeHtml(p.numero_nfe || '—')} · Produtos: ${fmtCurrency(p.valor_produtos)} · Frete: ${fmtCurrency(p.valor_frete)} · ICMS: ${fmtCurrency(p.icms)} · <b>Total: ${fmtCurrency(p.valor_total)}</b></div>`;
@@ -255,6 +307,16 @@ export default function RelatorioPedidosPage() {
       }
       html += `</tbody></table></div>`;
     }
+
+    // Impacto financeiro: parcelas somadas por vencimento + total geral
+    html += `<div class="pedido"><div class="ptitle">Impacto financeiro (parcelas por vencimento)</div>`;
+    html += `<table><thead><tr><th>Vencimento</th><th class="right">Valor do dia</th></tr></thead><tbody>`;
+    for (const l of impactoFinanceiro.linhas) {
+      html += `<tr><td>${l.data === 'sem-data' ? 'Sem data' : fmtDate(l.data)}</td><td class="right">${fmtCurrency(l.valor)}</td></tr>`;
+    }
+    html += `<tr><td><b>TOTAL</b></td><td class="right"><b>${fmtCurrency(impactoFinanceiro.total)}</b></td></tr>`;
+    html += `</tbody></table></div>`;
+
     html += `</body></html>`;
     const w = window.open('', '_blank');
     if (w) {
@@ -387,12 +449,17 @@ export default function RelatorioPedidosPage() {
             )}
             {loaded && (
               <>
-                <Button variant="outline" onClick={exportXLSX} disabled={!filtered.length} className="gap-1.5">
+                <Button variant="outline" onClick={exportXLSX} disabled={!exportPedidos.length} className="gap-1.5">
                   <FileSpreadsheet className="h-4 w-4" /> Excel
                 </Button>
-                <Button variant="outline" onClick={exportPDF} disabled={!filtered.length} className="gap-1.5">
+                <Button variant="outline" onClick={exportPDF} disabled={!exportPedidos.length} className="gap-1.5">
                   <FileDown className="h-4 w-4" /> PDF
                 </Button>
+                {selected.size > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {selected.size} selecionado(s) — exportando apenas os marcados
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -403,8 +470,12 @@ export default function RelatorioPedidosPage() {
         </CardContent>
       </Card>
 
-      {loaded && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+      {loaded && filtered.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={allFilteredSelected} onCheckedChange={toggleSelectAll} />
+            <span>Selecionar todos</span>
+          </label>
           <Badge variant="secondary">{totals.count} pedido(s)</Badge>
           <Badge variant="secondary">Total: {fmtCurrency(totals.valor)}</Badge>
           <Badge variant="secondary">ICMS/Imposto: {fmtCurrency(totals.icms)}</Badge>
@@ -422,11 +493,15 @@ export default function RelatorioPedidosPage() {
           const isOpen = expanded.has(p.id);
           const totalVinc = p.itens.reduce((s, i) => s + i.vinculos.length, 0);
           return (
-            <Card key={p.id}>
-              <button
-                className="w-full text-left p-4 flex items-start gap-3"
-                onClick={() => toggleExpand(p.id)}
-              >
+            <Card key={p.id} className={cn(selected.has(p.id) && 'ring-2 ring-primary/40')}>
+              <div className="w-full flex items-start gap-3 p-4">
+                <div className="pt-1" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} />
+                </div>
+                <button
+                  className="flex-1 text-left flex items-start gap-3 min-w-0"
+                  onClick={() => toggleExpand(p.id)}
+                >
                 {isOpen ? <ChevronDown className="h-4 w-4 mt-1 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 mt-1 flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -448,7 +523,8 @@ export default function RelatorioPedidosPage() {
                   <div className="font-bold">{fmtCurrency(p.valor_total)}</div>
                   <div className="text-xs text-muted-foreground">Produtos {fmtCurrency(p.valor_produtos)}</div>
                 </div>
-              </button>
+                </button>
+              </div>
 
               {isOpen && (
                 <CardContent className="pt-0 space-y-4">
@@ -519,6 +595,46 @@ export default function RelatorioPedidosPage() {
           );
         })}
       </div>
+
+      {loaded && exportPedidos.length > 0 && impactoFinanceiro.linhas.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              Impacto financeiro
+              <span className="text-xs font-normal text-muted-foreground">
+                ({selected.size > 0 ? `${selected.size} pedido(s) selecionado(s)` : 'todos os filtrados'})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground border-b">
+                    <th className="py-1 pr-3">Vencimento</th>
+                    <th className="py-1 text-right">Valor do dia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {impactoFinanceiro.linhas.map((l) => (
+                    <tr key={l.data} className="border-b last:border-0">
+                      <td className="py-1 pr-3">{l.data === 'sem-data' ? 'Sem data' : fmtDate(l.data)}</td>
+                      <td className="py-1 text-right font-medium">{fmtCurrency(l.valor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2">
+                    <td className="py-2 pr-3 font-bold">TOTAL</td>
+                    <td className="py-2 text-right font-bold text-primary">{fmtCurrency(impactoFinanceiro.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

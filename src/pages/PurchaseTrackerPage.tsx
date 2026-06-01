@@ -20,6 +20,12 @@ interface SituacaoHist {
   funcionario?: string;
 }
 
+interface CompraItem {
+  nome_produto: string;
+  quantidade: string;
+  valor_total: string;
+}
+
 interface CompraRow {
   id: string;
   codigo: string;
@@ -31,6 +37,7 @@ interface CompraRow {
   ultima_alteracao: string | null; // ISO/GC date string
   previsao_chegada: string | null; // dd/mm/yyyy from campos_extras
   historico: SituacaoHist[];
+  produtos: CompraItem[];
 }
 
 /** Accepts "dd/mm/yyyy" or "yyyy-mm-dd" → Date at local midnight */

@@ -204,7 +204,7 @@ function mapPedido(row: any): PedidoCompra {
     valor_frete: parseDecimal(c?.valor_frete),
     valor_impostos,
     valor_total: parseDecimal(c?.valor_total),
-    icms,
+    tributos_aprox,
     observacoes,
     produtos,
     financeiro,

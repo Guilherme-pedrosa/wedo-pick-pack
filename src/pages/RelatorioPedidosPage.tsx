@@ -116,9 +116,23 @@ export default function RelatorioPedidosPage() {
     ? fornecedores.find((f) => f.id === fornecedor)?.nome ?? 'Fornecedor'
     : 'Todos os fornecedores';
 
-  const filteredForList = fornecedores.filter((f) =>
-    f.nome.toLowerCase().includes(forSearch.toLowerCase()),
-  );
+  const norm = (s: string) =>
+    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const isSubsequence = (needle: string, hay: string) => {
+    let i = 0;
+    for (let j = 0; j < hay.length && i < needle.length; j++) {
+      if (hay[j] === needle[i]) i++;
+    }
+    return i === needle.length;
+  };
+  const filteredForList = useMemo(() => {
+    const q = norm(forSearch);
+    if (!q) return fornecedores;
+    return fornecedores.filter((f) => {
+      const n = norm(f.nome);
+      return n.includes(q) || isSubsequence(q, n);
+    });
+  }, [fornecedores, forSearch]);
 
   // ----- Exportações -----
   const vinculosText = (v: VinculoDoc[], sep = ' | '): string =>

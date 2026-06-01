@@ -340,7 +340,7 @@ export default function RelatorioPedidosPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           Filtre os pedidos de compra por fornecedor, período e situação. O relatório inclui valor,
-          tributos aproximados, financeiro e os vínculos de OS, vendas e orçamentos ainda não executados que pedem cada peça.
+          tributos aproximados, financeiro e os vínculos de OS, vendas e orçamentos seguindo a mesma configuração do Explorar Peças.
         </p>
         <p className="text-xs text-amber-600 dark:text-amber-500">
           Observação: a API do GestãoClick não devolve o ICMS real da nota do fornecedor. O valor exibido é o
@@ -473,7 +473,7 @@ export default function RelatorioPedidosPage() {
             )}
           </div>
 
-          {loading && progress && (
+          {progress && (
             <div className="text-sm text-muted-foreground italic">{progress}</div>
           )}
         </CardContent>

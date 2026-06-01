@@ -554,14 +554,21 @@ export default function PurchaseTrackerPage() {
                 const isStuckWarn = days !== null && days > 15 && !isStuckCrit;
                 const isCrit = isArrCrit || isStuckCrit;
                 const isWarn = !isCrit && (isArrWarn || isStuckWarn);
+                const isOpen = expanded.has(r.id);
                 return (
+                  <>
                   <TableRow
                     key={r.id}
+                    onClick={() => toggleExpand(r.id)}
                     className={cn(
+                      'cursor-pointer',
                       isCrit && 'row-delay-crit',
                       isWarn && 'row-delay-warn',
                     )}
                   >
+                    <TableCell className="text-muted-foreground">
+                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </TableCell>
                     <TableCell className="font-mono text-xs font-semibold">{r.codigo || '—'}</TableCell>
                     <TableCell className="text-sm">{r.nome_fornecedor || '—'}</TableCell>
                     <TableCell>
@@ -602,6 +609,43 @@ export default function PurchaseTrackerPage() {
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(r.valor_total)}</TableCell>
                   </TableRow>
+                  {isOpen && (
+                    <TableRow key={`${r.id}-details`} className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={10} className="p-0">
+                        <div className="px-6 py-3">
+                          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                            <Package className="h-4 w-4 text-primary" />
+                            Peças do pedido #{r.codigo}
+                          </div>
+                          {r.produtos.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">Nenhuma peça encontrada neste pedido.</p>
+                          ) : (
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Peça</TableHead>
+                                  <TableHead className="w-[100px] text-right">Qtd</TableHead>
+                                  <TableHead className="w-[140px] text-right">Valor</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {r.produtos.map((it, i) => (
+                                  <TableRow key={i} className="hover:bg-transparent">
+                                    <TableCell className="text-sm">{it.nome_produto || '—'}</TableCell>
+                                    <TableCell className="text-right text-sm tabular-nums">
+                                      {parseFloat(String(it.quantidade).replace(',', '.')) || 0}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(it.valor_total)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </>
                 );
               })}
             </TableBody>

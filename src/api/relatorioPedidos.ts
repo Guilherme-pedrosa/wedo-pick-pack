@@ -106,53 +106,6 @@ function unwrapCompra(row: any): any {
   return row?.Compra ?? row?.compra ?? row;
 }
 
-function extractEquipamento(doc: any): string {
-  const equips = doc?.equipamentos;
-  if (!Array.isArray(equips) || equips.length === 0) return '';
-  const nomes = equips
-    .map((w: any) => {
-      const e = w?.equipamento ?? w;
-      const nome = String(e?.equipamento ?? e?.nome ?? '').trim();
-      const marca = String(e?.marca ?? '').trim();
-      const modelo = String(e?.modelo ?? '').trim();
-      return [nome, marca, modelo].filter(Boolean).join(' ');
-    })
-    .filter(Boolean);
-  return nomes.join(' / ');
-}
-
-function toIsoDate(s: string): string {
-  if (!s) return '';
-  const t = s.trim();
-  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
-  return '';
-}
-
-// ---------------------------------------------------------------------------
-// Status considerados "finalizados / cancelados" (não devem entrar no vínculo)
-// ---------------------------------------------------------------------------
-
-const TERMINAL_STATUS_TOKENS = [
-  'CANCEL',
-  'FINALIZ',
-  'CONCLU',
-  'ENTREGUE',
-  'FATURAD',
-  'EXECUTAD',
-  'BAIXAD',
-  'RECUSAD',
-  'PERDID',
-  'DEVOLVID',
-];
-
-function isTerminalStatus(situacao: string): boolean {
-  const n = normalizeName(situacao);
-  return TERMINAL_STATUS_TOKENS.some((t) => n.includes(t));
-}
-
 // ---------------------------------------------------------------------------
 // Busca dos pedidos de compra
 // ---------------------------------------------------------------------------

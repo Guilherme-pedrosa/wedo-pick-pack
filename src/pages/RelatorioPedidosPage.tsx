@@ -595,6 +595,46 @@ export default function RelatorioPedidosPage() {
           );
         })}
       </div>
+
+      {loaded && exportPedidos.length > 0 && impactoFinanceiro.linhas.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              Impacto financeiro
+              <span className="text-xs font-normal text-muted-foreground">
+                ({selected.size > 0 ? `${selected.size} pedido(s) selecionado(s)` : 'todos os filtrados'})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground border-b">
+                    <th className="py-1 pr-3">Vencimento</th>
+                    <th className="py-1 text-right">Valor do dia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {impactoFinanceiro.linhas.map((l) => (
+                    <tr key={l.data} className="border-b last:border-0">
+                      <td className="py-1 pr-3">{l.data === 'sem-data' ? 'Sem data' : fmtDate(l.data)}</td>
+                      <td className="py-1 text-right font-medium">{fmtCurrency(l.valor)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2">
+                    <td className="py-2 pr-3 font-bold">TOTAL</td>
+                    <td className="py-2 text-right font-bold text-primary">{fmtCurrency(impactoFinanceiro.total)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

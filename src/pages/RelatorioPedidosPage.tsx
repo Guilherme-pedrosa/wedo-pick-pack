@@ -212,7 +212,7 @@ export default function RelatorioPedidosPage() {
         .join('\n');
       if (p.itens.length === 0) {
         rows.push([p.codigo, p.nome_fornecedor, fmtDate(p.data_emissao), p.nome_situacao, p.numero_nfe || '—',
-          p.valor_produtos, p.valor_frete, p.icms, p.valor_total, fin, '', '', '']);
+          p.valor_produtos, p.valor_frete, p.tributos_aprox, p.valor_total, fin, '', '', '']);
       } else {
         p.itens.forEach((item, i) => {
           rows.push([

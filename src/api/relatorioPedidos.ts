@@ -242,6 +242,158 @@ export function clearPedidosCache() {
 }
 
 // ---------------------------------------------------------------------------
+// Persistência no banco (cache incremental)
+// ---------------------------------------------------------------------------
+
+/** Hash estável (djb2) do conteúdo do pedido para detectar mudanças. */
+function hashPedido(p: PedidoCompra): string {
+  const str = JSON.stringify([
+    p.codigo, p.fornecedor_id, p.nome_fornecedor, p.data_emissao,
+    p.situacao_id, p.nome_situacao, p.numero_nfe, p.valor_produtos,
+    p.valor_frete, p.valor_impostos, p.valor_total, p.icms, p.observacoes,
+    p.produtos, p.financeiro,
+  ]);
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+function pedidoToRow(p: PedidoCompra) {
+  return {
+    gc_id: p.id,
+    codigo: p.codigo,
+    fornecedor_id: p.fornecedor_id,
+    nome_fornecedor: p.nome_fornecedor,
+    data_emissao: p.data_emissao,
+    situacao_id: p.situacao_id,
+    nome_situacao: p.nome_situacao,
+    numero_nfe: p.numero_nfe,
+    valor_total: p.valor_total,
+    icms: p.icms,
+    payload: p as unknown as Record<string, unknown>,
+    content_hash: hashPedido(p),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+/** Carrega os pedidos já persistidos no banco (instantâneo, sem chamar o GC). */
+export async function loadPedidosFromDB(): Promise<PedidoCompra[]> {
+  const rows: PedidoCompra[] = [];
+  const PAGE = 1000;
+  let from = 0;
+  // Paginação do PostgREST (limite padrão de 1000 linhas)
+  for (;;) {
+    const { data, error } = await supabase
+      .from('pedidos_compra')
+      .select('payload')
+      .order('data_emissao', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const batch = data || [];
+    for (const r of batch) {
+      if (r.payload) rows.push(r.payload as unknown as PedidoCompra);
+    }
+    if (batch.length < PAGE) break;
+    from += PAGE;
+  }
+  comprasCache = { rows, builtAt: Date.now() };
+  return rows;
+}
+
+export interface SyncResult {
+  novos: number;
+  atualizados: number;
+  inalterados: number;
+  total: number;
+}
+
+/**
+ * Sincroniza os pedidos do GestãoClick com o banco.
+ * - Insere apenas os pedidos novos.
+ * - Atualiza apenas os que tiveram alguma informação alterada (hash diferente).
+ *
+ * Modo incremental (padrão): como o GC retorna os mais recentes primeiro,
+ * a varredura para após algumas páginas sem nenhuma mudança.
+ * Modo completo (full=true): varre todas as páginas.
+ */
+export async function syncPedidos(
+  onProgress?: (step: string, page: number, total: number) => void,
+  full = false,
+): Promise<SyncResult> {
+  // 1) Mapa de hashes já existentes no banco
+  onProgress?.('Lendo pedidos já salvos…', 0, 1);
+  const existing = new Map<string, string>();
+  {
+    const PAGE = 1000;
+    let from = 0;
+    for (;;) {
+      const { data, error } = await supabase
+        .from('pedidos_compra')
+        .select('gc_id, content_hash')
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(error.message);
+      const batch = data || [];
+      for (const r of batch) existing.set(String(r.gc_id), String(r.content_hash));
+      if (batch.length < PAGE) break;
+      from += PAGE;
+    }
+  }
+
+  let novos = 0;
+  let atualizados = 0;
+  let page = 1;
+  let totalPages = 1;
+  let emptyStreak = 0; // páginas consecutivas sem mudança
+
+  while (page <= totalPages) {
+    onProgress?.(`Sincronizando — página ${page}`, page, totalPages);
+    const res = await fetchComprasPage(page);
+    totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+
+    const toUpsert: ReturnType<typeof pedidoToRow>[] = [];
+    for (const item of res.data || []) {
+      const p = mapPedido(item);
+      if (!p.id) continue;
+      const row = pedidoToRow(p);
+      const prev = existing.get(p.id);
+      if (prev === undefined) {
+        novos++;
+        toUpsert.push(row);
+      } else if (prev !== row.content_hash) {
+        atualizados++;
+        toUpsert.push(row);
+      }
+    }
+
+    if (toUpsert.length) {
+      const { error } = await supabase
+        .from('pedidos_compra')
+        .upsert(toUpsert, { onConflict: 'gc_id' });
+      if (error) throw new Error(error.message);
+      emptyStreak = 0;
+    } else {
+      emptyStreak++;
+    }
+
+    // Modo incremental: para após 2 páginas seguidas sem nenhuma mudança.
+    if (!full && emptyStreak >= 2) break;
+
+    page++;
+    if (page <= totalPages) await new Promise((r) => setTimeout(r, 350));
+  }
+
+  // Invalida o cache em memória para forçar releitura do banco
+  comprasCache = null;
+
+  return {
+    novos,
+    atualizados,
+    inalterados: existing.size - atualizados,
+    total: existing.size + novos,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Índice de demanda (vínculos por peça)
 // ---------------------------------------------------------------------------
 

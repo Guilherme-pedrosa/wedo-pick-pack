@@ -556,9 +556,8 @@ export default function PurchaseTrackerPage() {
                 const isWarn = !isCrit && (isArrWarn || isStuckWarn);
                 const isOpen = expanded.has(r.id);
                 return (
-                  <>
+                  <Fragment key={r.id}>
                   <TableRow
-                    key={r.id}
                     onClick={() => toggleExpand(r.id)}
                     className={cn(
                       'cursor-pointer',

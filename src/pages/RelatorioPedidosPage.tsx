@@ -478,7 +478,7 @@ export default function RelatorioPedidosPage() {
           </label>
           <Badge variant="secondary">{totals.count} pedido(s)</Badge>
           <Badge variant="secondary">Total: {fmtCurrency(totals.valor)}</Badge>
-          <Badge variant="secondary">ICMS/Imposto: {fmtCurrency(totals.icms)}</Badge>
+          <Badge variant="secondary" title="Total aproximado de tributos informado pelo fornecedor (não é o ICMS do DANFE)">Tributos aprox.: {fmtCurrency(totals.tributos)}</Badge>
         </div>
       )}
 

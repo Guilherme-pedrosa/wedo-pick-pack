@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, RefreshCw, ChevronDown, ShoppingCart, AlertTriangle, Flame } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronDown, ChevronRight, ShoppingCart, AlertTriangle, Flame, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 

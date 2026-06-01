@@ -647,6 +647,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
+        doc_kind: docKind,
         auvo_task_id: auvoTaskId,
         os_id: osId,
         os_codigo: osCodigo,

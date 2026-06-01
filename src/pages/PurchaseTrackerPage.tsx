@@ -138,6 +138,15 @@ function extractRow(raw: any): CompraRow {
     }
   }
 
+  const produtos: CompraItem[] = (c?.produtos || []).map((w: any) => {
+    const p = w?.produto ?? w;
+    return {
+      nome_produto: String(p?.nome_produto ?? ''),
+      quantidade: String(p?.quantidade ?? ''),
+      valor_total: String(p?.valor_total ?? '0'),
+    };
+  });
+
   return {
     id: String(c?.id ?? ''),
     codigo: String(c?.codigo ?? ''),
@@ -149,6 +158,7 @@ function extractRow(raw: any): CompraRow {
     ultima_alteracao: ultima,
     previsao_chegada: previsao,
     historico,
+    produtos,
   };
 }
 

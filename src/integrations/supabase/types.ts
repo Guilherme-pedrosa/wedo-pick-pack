@@ -541,6 +541,57 @@ export type Database = {
         }
         Relationships: []
       }
+      pedidos_compra: {
+        Row: {
+          codigo: string
+          content_hash: string
+          created_at: string
+          data_emissao: string
+          fornecedor_id: string
+          gc_id: string
+          icms: number
+          nome_fornecedor: string
+          nome_situacao: string
+          numero_nfe: string
+          payload: Json
+          situacao_id: string
+          updated_at: string
+          valor_total: number
+        }
+        Insert: {
+          codigo?: string
+          content_hash?: string
+          created_at?: string
+          data_emissao?: string
+          fornecedor_id?: string
+          gc_id: string
+          icms?: number
+          nome_fornecedor?: string
+          nome_situacao?: string
+          numero_nfe?: string
+          payload?: Json
+          situacao_id?: string
+          updated_at?: string
+          valor_total?: number
+        }
+        Update: {
+          codigo?: string
+          content_hash?: string
+          created_at?: string
+          data_emissao?: string
+          fornecedor_id?: string
+          gc_id?: string
+          icms?: number
+          nome_fornecedor?: string
+          nome_situacao?: string
+          numero_nfe?: string
+          payload?: Json
+          situacao_id?: string
+          updated_at?: string
+          valor_total?: number
+        }
+        Relationships: []
+      }
       product_queries: {
         Row: {
           created_at: string

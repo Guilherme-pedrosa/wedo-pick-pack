@@ -202,7 +202,7 @@ export default function RelatorioPedidosPage() {
 
     const headers = [
       'Pedido', 'Fornecedor', 'Emissão', 'Situação', 'NF-e',
-      'Valor Produtos (R$)', 'Frete (R$)', 'ICMS/Imposto (R$)', 'Valor Total (R$)',
+      'Valor Produtos (R$)', 'Frete (R$)', 'Tributos aprox. (R$)', 'Valor Total (R$)',
       'Financeiro (parcelas)', 'Peça', 'Qtd', 'Vínculos (OS/Venda/Orçamento)',
     ];
     const rows: (string | number)[][] = [];

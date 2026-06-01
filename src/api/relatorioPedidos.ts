@@ -368,7 +368,7 @@ export async function syncPedidos(
     if (toUpsert.length) {
       const { error } = await supabase
         .from('pedidos_compra')
-        .upsert(toUpsert, { onConflict: 'gc_id' });
+        .upsert(toUpsert as any, { onConflict: 'gc_id' });
       if (error) throw new Error(error.message);
       emptyStreak = 0;
     } else {

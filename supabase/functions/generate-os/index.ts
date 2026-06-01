@@ -215,7 +215,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente}`);
+    // Detect budget type: a budget with any service => OS; product-only => Venda
+    const isServico =
+      (Array.isArray(orcamento.servicos) && orcamento.servicos.length > 0) ||
+      parseMoney(orcamento.valor_servicos) > 0;
+    const docKind: 'os' | 'venda' = isServico ? 'os' : 'venda';
+
+    console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente} - tipo: ${docKind.toUpperCase()}`);
 
     // ============================================
     // GUARD: Check for existing successful generation
@@ -447,102 +453,154 @@ Deno.serve(async (req: Request) => {
     await wait(500); // small pause between APIs
 
     // ============================================
-    // STEP 4: Discover OS attribute IDs in GC
+    // STEP 4/5: Create document in GestãoClick
+    //   - Serviço  → Ordem de Serviço (/api/ordens_servicos)
+    //   - Produto  → Venda (/api/vendas)
     // ============================================
-    console.log('[generate-os] Step 3: Discovering OS attribute IDs...');
-    const attrIds = await getOSAtributoIds();
-    console.log(`[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}, tarefaOS=${attrIds.tarefaOs}, localReparo=${attrIds.localReparo}, horasTecnicas=${attrIds.horasTecnicas}`);
+    let gcResult: any;
+    let osId: string | undefined;
+    let osCodigo: string | undefined;
 
-    // ============================================
-    // STEP 5: Create OS in GestãoClick
-    // ============================================
-    console.log('[generate-os] Step 4: Creating GC OS...');
+    if (isServico) {
+      // ----- OS (orçamento de serviço) -----
+      console.log('[generate-os] Step 3: Discovering OS attribute IDs...');
+      const attrIds = await getOSAtributoIds();
+      console.log(`[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}, tarefaOS=${attrIds.tarefaOs}, localReparo=${attrIds.localReparo}, horasTecnicas=${attrIds.horasTecnicas}`);
 
-    // Copy atributos exactly from orçamento
-    const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-    if (orcamento.atributos?.length) {
-      for (const a of orcamento.atributos) {
-        const attr = a?.atributo || a;
-        const attrId = attr?.atributo_id || attr?.id;
-        if (!attrId) continue;
-        atributos.push({
-          atributo: {
-            atributo_id: String(attrId),
-            conteudo: String(attr?.conteudo ?? ''),
-          },
+      console.log('[generate-os] Step 4: Creating GC OS...');
+
+      // Copy atributos exactly from orçamento
+      const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+      if (orcamento.atributos?.length) {
+        for (const a of orcamento.atributos) {
+          const attr = a?.atributo || a;
+          const attrId = attr?.atributo_id || attr?.id;
+          if (!attrId) continue;
+          atributos.push({
+            atributo: {
+              atributo_id: String(attrId),
+              conteudo: String(attr?.conteudo ?? ''),
+            },
+          });
+        }
+      }
+
+      // Override only the two required link attributes
+      const upsertAttr = (atributo_id: string | null, conteudo: string) => {
+        if (!atributo_id) return;
+        const idx = atributos.findIndex((a) => a.atributo.atributo_id === atributo_id);
+        if (idx >= 0) {
+          atributos[idx] = { atributo: { atributo_id, conteudo } };
+        } else {
+          atributos.push({ atributo: { atributo_id, conteudo } });
+        }
+      };
+
+      upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
+      upsertAttr(attrIds.tarefaExecucao, String(auvoTaskId));
+
+      // Map orçamento attribute values to OS mandatory attribute IDs
+      // Orçamento attrs have different IDs than OS attrs, so we find by name/content
+      const findOrcAttrValue = (orcAttrId: string): string => {
+        if (!orcamento.atributos?.length) return '';
+        const found = orcamento.atributos.find((a: any) => {
+          const attr = a?.atributo || a;
+          return String(attr?.atributo_id || attr?.id) === orcAttrId;
         });
+        if (found) {
+          const attr = found?.atributo || found;
+          return String(attr?.conteudo ?? '');
+        }
+        return '';
+      };
+
+      // OS mandatory attr IDs (from GC) ← orçamento attr IDs
+      // 73341 = Tarefa OS, 73350 = Local do Reparo, 67350 = Horas Técnicas
+      const ORC_TAREFA_OS = '73341';
+      const ORC_LOCAL_REPARO = '73350';
+      const ORC_HORAS_TECNICAS = '67350';
+
+      upsertAttr(attrIds.tarefaOs, findOrcAttrValue(ORC_TAREFA_OS) || String(auvoTaskId));
+      upsertAttr(attrIds.localReparo, findOrcAttrValue(ORC_LOCAL_REPARO));
+      upsertAttr(attrIds.horasTecnicas, findOrcAttrValue(ORC_HORAS_TECNICAS));
+
+      // Copy OS payload from orçamento as-is (to preserve values)
+      const osPayload: Record<string, any> = {
+        cliente_id: orcamento.cliente_id,
+        data: orcamento.data || new Date().toISOString().split('T')[0],
+        valor_frete: orcamento.valor_frete ?? '0.00',
+        condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
+        produtos: orcamento.produtos || [],
+        servicos: orcamento.servicos || [],
+        equipamentos: orcamento.equipamentos || [],
+        atributos,
+        // Always: Centro de custo "OPERAÇÕES COZINHAS" + Situação "Pedido em Conferência"
+        centro_custo_id: orcamento.centro_custo_id || '501357',
+        situacao_id: '7063581',
+      };
+
+      // Preserve optional fields from orçamento when available
+      if (orcamento.vendedor_id) osPayload.vendedor_id = orcamento.vendedor_id;
+      if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
+      if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
+      if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
+      if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
+      if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
+
+      console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
+
+      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(osPayload));
+      osId = gcResult?.data?.id;
+      osCodigo = gcResult?.data?.codigo;
+      console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
+    } else {
+      // ----- VENDA (orçamento de produto) -----
+      console.log('[generate-os] Step 4: Creating GC Venda...');
+
+      // Copy atributos from orçamento (vendas accept custom atributos as-is)
+      const vendaAtributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+      if (orcamento.atributos?.length) {
+        for (const a of orcamento.atributos) {
+          const attr = a?.atributo || a;
+          const attrId = attr?.atributo_id || attr?.id;
+          if (!attrId) continue;
+          vendaAtributos.push({
+            atributo: {
+              atributo_id: String(attrId),
+              conteudo: String(attr?.conteudo ?? ''),
+            },
+          });
+        }
       }
+
+      // Situação "SEPARADO - AGUARDANDO ENTREGA / DESPACHO"
+      const VENDA_SITUACAO_ID = '8955109';
+
+      const vendaPayload: Record<string, any> = {
+        tipo: 'produto',
+        cliente_id: orcamento.cliente_id,
+        data: orcamento.data || new Date().toISOString().split('T')[0],
+        valor_frete: orcamento.valor_frete ?? '0.00',
+        condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
+        produtos: orcamento.produtos || [],
+        centro_custo_id: orcamento.centro_custo_id || '501357',
+        situacao_id: VENDA_SITUACAO_ID,
+      };
+      if (vendaAtributos.length) vendaPayload.atributos = vendaAtributos;
+      if (orcamento.vendedor_id) vendaPayload.vendedor_id = orcamento.vendedor_id;
+      if (orcamento.observacoes) vendaPayload.observacoes = orcamento.observacoes;
+      if (orcamento.observacoes_interna) vendaPayload.observacoes_interna = orcamento.observacoes_interna;
+      if (orcamento.valor_total) vendaPayload.valor_total = orcamento.valor_total;
+      if (orcamento.pagamentos?.length) vendaPayload.pagamentos = orcamento.pagamentos;
+      if (gc_usuario_id) vendaPayload.usuario_id = gc_usuario_id;
+
+      console.log(`[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? 'n/a'}, situacao=${VENDA_SITUACAO_ID}`);
+
+      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(vendaPayload));
+      osId = gcResult?.data?.id;
+      osCodigo = gcResult?.data?.codigo;
+      console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);
     }
-
-    // Override only the two required link attributes
-    const upsertAttr = (atributo_id: string | null, conteudo: string) => {
-      if (!atributo_id) return;
-      const idx = atributos.findIndex((a) => a.atributo.atributo_id === atributo_id);
-      if (idx >= 0) {
-        atributos[idx] = { atributo: { atributo_id, conteudo } };
-      } else {
-        atributos.push({ atributo: { atributo_id, conteudo } });
-      }
-    };
-
-    upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
-    upsertAttr(attrIds.tarefaExecucao, String(auvoTaskId));
-
-    // Map orçamento attribute values to OS mandatory attribute IDs
-    // Orçamento attrs have different IDs than OS attrs, so we find by name/content
-    const findOrcAttrValue = (orcAttrId: string): string => {
-      if (!orcamento.atributos?.length) return '';
-      const found = orcamento.atributos.find((a: any) => {
-        const attr = a?.atributo || a;
-        return String(attr?.atributo_id || attr?.id) === orcAttrId;
-      });
-      if (found) {
-        const attr = found?.atributo || found;
-        return String(attr?.conteudo ?? '');
-      }
-      return '';
-    };
-
-    // OS mandatory attr IDs (from GC) ← orçamento attr IDs
-    // 73341 = Tarefa OS, 73350 = Local do Reparo, 67350 = Horas Técnicas
-    const ORC_TAREFA_OS = '73341';
-    const ORC_LOCAL_REPARO = '73350';
-    const ORC_HORAS_TECNICAS = '67350';
-
-    upsertAttr(attrIds.tarefaOs, findOrcAttrValue(ORC_TAREFA_OS) || String(auvoTaskId));
-    upsertAttr(attrIds.localReparo, findOrcAttrValue(ORC_LOCAL_REPARO));
-    upsertAttr(attrIds.horasTecnicas, findOrcAttrValue(ORC_HORAS_TECNICAS));
-
-    // Copy OS payload from orçamento as-is (to preserve values)
-    const osPayload: Record<string, any> = {
-      cliente_id: orcamento.cliente_id,
-      data: orcamento.data || new Date().toISOString().split('T')[0],
-      valor_frete: orcamento.valor_frete ?? '0.00',
-      condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
-      produtos: orcamento.produtos || [],
-      servicos: orcamento.servicos || [],
-      equipamentos: orcamento.equipamentos || [],
-      atributos,
-      // Always: Centro de custo "OPERAÇÕES COZINHAS" + Situação "Pedido em Conferência"
-      centro_custo_id: orcamento.centro_custo_id || '501357',
-      situacao_id: '7063581',
-    };
-
-    // Preserve optional fields from orçamento when available
-    if (orcamento.vendedor_id) osPayload.vendedor_id = orcamento.vendedor_id;
-    if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
-    if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
-    if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
-    if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
-    if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
-
-    console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
-
-    const gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(osPayload));
-
-    const osId = gcResult?.data?.id;
-    const osCodigo = gcResult?.data?.codigo;
-    console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
 
     // ============================================
     // STEP 6: Update orçamento status to "OS Gerada" (7109779)
@@ -589,6 +647,7 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
+        doc_kind: docKind,
         auvo_task_id: auvoTaskId,
         os_id: osId,
         os_codigo: osCodigo,

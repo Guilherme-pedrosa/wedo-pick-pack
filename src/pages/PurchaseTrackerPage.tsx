@@ -171,6 +171,15 @@ export default function PurchaseTrackerPage() {
   const [rows, setRows] = useState<CompraRow[]>([]);
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr' | 'stuck'>('all');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
 
   // Load statuses + persisted selection (DB first, fallback localStorage)
   useEffect(() => {

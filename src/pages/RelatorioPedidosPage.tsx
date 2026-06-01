@@ -493,11 +493,15 @@ export default function RelatorioPedidosPage() {
           const isOpen = expanded.has(p.id);
           const totalVinc = p.itens.reduce((s, i) => s + i.vinculos.length, 0);
           return (
-            <Card key={p.id}>
-              <button
-                className="w-full text-left p-4 flex items-start gap-3"
-                onClick={() => toggleExpand(p.id)}
-              >
+            <Card key={p.id} className={cn(selected.has(p.id) && 'ring-2 ring-primary/40')}>
+              <div className="w-full flex items-start gap-3 p-4">
+                <div className="pt-1" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggleSelect(p.id)} />
+                </div>
+                <button
+                  className="flex-1 text-left flex items-start gap-3 min-w-0"
+                  onClick={() => toggleExpand(p.id)}
+                >
                 {isOpen ? <ChevronDown className="h-4 w-4 mt-1 flex-shrink-0" /> : <ChevronRight className="h-4 w-4 mt-1 flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">

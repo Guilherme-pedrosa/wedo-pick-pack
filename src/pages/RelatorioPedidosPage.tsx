@@ -5,6 +5,8 @@ import {
   fetchAllPedidos,
   buildDemandIndex,
   attachVinculos,
+  loadPedidosFromDB,
+  syncPedidos,
   type PedidoCompra,
   type DemandIndex,
   type PedidoComVinculos,

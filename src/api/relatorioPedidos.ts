@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
-import { buildOSIndex, listOrcamentos, getStatusCompras } from './compras';
-import { listVendas } from './gestaoclick';
+import { getStatusCompras } from './compras';
+import { buildExplorerIndex } from './produtoExplorer';
+import { getExplorerConfig } from '@/lib/explorerConfig';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -118,6 +119,16 @@ function extractEquipamento(doc: any): string {
     })
     .filter(Boolean);
   return nomes.join(' / ');
+}
+
+function toIsoDate(s: string): string {
+  if (!s) return '';
+  const t = s.trim();
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const br = t.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return `${br[3]}-${br[2]}-${br[1]}`;
+  return '';
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +446,29 @@ export async function syncPedidos(
 
 let demandCache: { index: DemandIndex; builtAt: number } | null = null;
 const DEMAND_TTL = 5 * 60 * 1000;
+
+const FINISHED_OS = ['FINALIZADA', 'FINALIZADO', 'CANCELADA', 'CANCELADO', 'ENTREGUE'];
+const FINISHED_ORC = ['CANCELADO', 'CANCELADA', 'REJEITADO', 'RECUSADO'];
+
+function isOpenOS(s: string) {
+  const u = normalizeName(s);
+  return !FINISHED_OS.some((x) => u.includes(x));
+}
+
+function isOpenOrc(s: string) {
+  const u = normalizeName(s);
+  return !FINISHED_ORC.some((x) => u.includes(x));
+}
+
+function demandConfigSignature(): string {
+  const cfg = getExplorerConfig();
+  return JSON.stringify({
+    os: [...cfg.osSituacaoIds].sort(),
+    orc: [...cfg.orcSituacaoIds].sort(),
+    venda: [...cfg.vendaSituacaoIds].sort(),
+    fromDate: cfg.fromDate || '',
+  });
+}
 
 function pushVinculo(index: DemandIndex, pid: string, doc: VinculoDoc) {
   if (!pid) return;

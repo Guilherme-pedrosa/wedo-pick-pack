@@ -121,9 +121,9 @@ export default function RelatorioPedidosPage() {
   }, [allPedidos, demandIndex, fornecedor, selectedSit, dataInicial, dataFinal]);
 
   const totals = useMemo(() => {
-    let valor = 0, icms = 0;
-    for (const p of filtered) { valor += p.valor_total; icms += p.icms; }
-    return { count: filtered.length, valor, icms };
+    let valor = 0, tributos = 0;
+    for (const p of filtered) { valor += p.valor_total; tributos += p.tributos_aprox; }
+    return { count: filtered.length, valor, tributos };
   }, [filtered]);
 
   const toggleExpand = (id: string) =>

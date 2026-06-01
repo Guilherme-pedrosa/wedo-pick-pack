@@ -286,7 +286,7 @@ export default function RelatorioPedidosPage() {
     for (const p of exportPedidos) {
       html += `<div class="pedido">`;
       html += `<div class="ptitle">Pedido #${escapeHtml(p.codigo)} — ${escapeHtml(p.nome_fornecedor)}</div>`;
-      html += `<div class="pmeta">Emissão: ${fmtDate(p.data_emissao)} · Situação: ${escapeHtml(p.nome_situacao)} · NF-e: ${escapeHtml(p.numero_nfe || '—')} · Produtos: ${fmtCurrency(p.valor_produtos)} · Frete: ${fmtCurrency(p.valor_frete)} · ICMS: ${fmtCurrency(p.icms)} · <b>Total: ${fmtCurrency(p.valor_total)}</b></div>`;
+      html += `<div class="pmeta">Emissão: ${fmtDate(p.data_emissao)} · Situação: ${escapeHtml(p.nome_situacao)} · NF-e: ${escapeHtml(p.numero_nfe || '—')} · Produtos: ${fmtCurrency(p.valor_produtos)} · Frete: ${fmtCurrency(p.valor_frete)} · Tributos aprox.: ${fmtCurrency(p.tributos_aprox)} · <b>Total: ${fmtCurrency(p.valor_total)}</b></div>`;
 
       if (p.financeiro.length) {
         html += `<table><thead><tr><th>Vencimento</th><th>Forma</th><th>Plano de contas</th><th class="right">Valor</th></tr></thead><tbody>`;

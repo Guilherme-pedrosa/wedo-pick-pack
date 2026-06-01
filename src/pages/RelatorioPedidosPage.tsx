@@ -133,6 +133,43 @@ export default function RelatorioPedidosPage() {
       return next;
     });
 
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  // Pedidos efetivamente exportados: os marcados; se nenhum marcado, todos os filtrados.
+  const exportPedidos: PedidoComVinculos[] = useMemo(() => {
+    const sel = filtered.filter((p) => selected.has(p.id));
+    return sel.length ? sel : filtered;
+  }, [filtered, selected]);
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selected.has(p.id));
+  const toggleSelectAll = () =>
+    setSelected((prev) => {
+      if (filtered.length > 0 && filtered.every((p) => prev.has(p.id))) return new Set();
+      return new Set(filtered.map((p) => p.id));
+    });
+
+  // Impacto financeiro: soma das parcelas por data de vencimento (mesmo dia somado) + total geral.
+  const impactoFinanceiro = useMemo(() => {
+    const byDate = new Map<string, number>();
+    let total = 0;
+    for (const p of exportPedidos) {
+      for (const f of p.financeiro) {
+        const d = (f.data_vencimento || '').slice(0, 10) || 'sem-data';
+        byDate.set(d, (byDate.get(d) || 0) + (Number(f.valor) || 0));
+        total += Number(f.valor) || 0;
+      }
+    }
+    const linhas = [...byDate.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([data, valor]) => ({ data, valor }));
+    return { linhas, total };
+  }, [exportPedidos]);
+
   const fornecedorLabel = fornecedor
     ? fornecedores.find((f) => f.id === fornecedor)?.nome ?? 'Fornecedor'
     : 'Todos os fornecedores';

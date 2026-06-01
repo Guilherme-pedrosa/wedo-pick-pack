@@ -35,8 +35,12 @@ export interface PedidoCompra {
   valor_frete: number;
   valor_impostos: number;
   valor_total: number;
-  /** ICMS/imposto a exibir conforme regra (só se houver NF-e amarrada) */
-  icms: number;
+  /**
+   * ATENÇÃO: a API de compras do GestãoClick NÃO devolve o ICMS real da nota.
+   * Este campo é o "Valor Aproximado dos Tributos" (TODOS os tributos somados,
+   * informado pelo fornecedor) extraído das observações. NÃO é o ICMS do DANFE.
+   */
+  tributos_aprox: number;
   observacoes: string;
   produtos: PedidoItem[];
   financeiro: PedidoFinanceiro[];

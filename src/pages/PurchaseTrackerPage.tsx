@@ -501,6 +501,7 @@ export default function PurchaseTrackerPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[36px]" />
                 <TableHead className="w-[90px]">Código</TableHead>
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Situação atual</TableHead>

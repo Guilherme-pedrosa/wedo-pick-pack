@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { buildOSIndex, listOrcamentos } from './compras';
+import { buildOSIndex, listOrcamentos, getStatusCompras } from './compras';
 import { listVendas } from './gestaoclick';
 
 // ---------------------------------------------------------------------------

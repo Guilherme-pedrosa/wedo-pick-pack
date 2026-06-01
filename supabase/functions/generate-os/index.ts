@@ -215,7 +215,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente}`);
+    // Detect budget type: a budget with any service => OS; product-only => Venda
+    const isServico =
+      (Array.isArray(orcamento.servicos) && orcamento.servicos.length > 0) ||
+      parseMoney(orcamento.valor_servicos) > 0;
+    const docKind: 'os' | 'venda' = isServico ? 'os' : 'venda';
+
+    console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente} - tipo: ${docKind.toUpperCase()}`);
 
     // ============================================
     // GUARD: Check for existing successful generation

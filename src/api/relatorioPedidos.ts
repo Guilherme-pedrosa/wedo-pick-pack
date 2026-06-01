@@ -273,7 +273,7 @@ function hashPedido(p: PedidoCompra): string {
   const str = JSON.stringify([
     p.codigo, p.fornecedor_id, p.nome_fornecedor, p.data_emissao,
     p.situacao_id, p.nome_situacao, p.numero_nfe, p.valor_produtos,
-    p.valor_frete, p.valor_impostos, p.valor_total, p.icms, p.observacoes,
+    p.valor_frete, p.valor_impostos, p.valor_total, p.tributos_aprox, p.observacoes,
     p.produtos, p.financeiro,
   ]);
   let h = 5381;

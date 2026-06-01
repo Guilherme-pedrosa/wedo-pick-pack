@@ -121,9 +121,9 @@ export default function RelatorioPedidosPage() {
   }, [allPedidos, demandIndex, fornecedor, selectedSit, dataInicial, dataFinal]);
 
   const totals = useMemo(() => {
-    let valor = 0, icms = 0;
-    for (const p of filtered) { valor += p.valor_total; icms += p.icms; }
-    return { count: filtered.length, valor, icms };
+    let valor = 0, tributos = 0;
+    for (const p of filtered) { valor += p.valor_total; tributos += p.tributos_aprox; }
+    return { count: filtered.length, valor, tributos };
   }, [filtered]);
 
   const toggleExpand = (id: string) =>
@@ -202,7 +202,7 @@ export default function RelatorioPedidosPage() {
 
     const headers = [
       'Pedido', 'Fornecedor', 'Emissão', 'Situação', 'NF-e',
-      'Valor Produtos (R$)', 'Frete (R$)', 'ICMS/Imposto (R$)', 'Valor Total (R$)',
+      'Valor Produtos (R$)', 'Frete (R$)', 'Tributos aprox. (R$)', 'Valor Total (R$)',
       'Financeiro (parcelas)', 'Peça', 'Qtd', 'Vínculos (OS/Venda/Orçamento)',
     ];
     const rows: (string | number)[][] = [];
@@ -212,13 +212,13 @@ export default function RelatorioPedidosPage() {
         .join('\n');
       if (p.itens.length === 0) {
         rows.push([p.codigo, p.nome_fornecedor, fmtDate(p.data_emissao), p.nome_situacao, p.numero_nfe || '—',
-          p.valor_produtos, p.valor_frete, p.icms, p.valor_total, fin, '', '', '']);
+          p.valor_produtos, p.valor_frete, p.tributos_aprox, p.valor_total, fin, '', '', '']);
       } else {
         p.itens.forEach((item, i) => {
           rows.push([
             i === 0 ? p.codigo : '', i === 0 ? p.nome_fornecedor : '', i === 0 ? fmtDate(p.data_emissao) : '',
             i === 0 ? p.nome_situacao : '', i === 0 ? (p.numero_nfe || '—') : '',
-            i === 0 ? p.valor_produtos : '', i === 0 ? p.valor_frete : '', i === 0 ? p.icms : '', i === 0 ? p.valor_total : '',
+            i === 0 ? p.valor_produtos : '', i === 0 ? p.valor_frete : '', i === 0 ? p.tributos_aprox : '', i === 0 ? p.valor_total : '',
             i === 0 ? fin : '',
             item.nome_produto, item.quantidade, vinculosText(item.vinculos, ' || ') || '—',
           ]);
@@ -276,17 +276,17 @@ export default function RelatorioPedidosPage() {
       dataInicial || dataFinal ? ` · ${fmtDate(dataInicial)} a ${fmtDate(dataFinal)}` : ''
     }</div>`;
     const expValor = exportPedidos.reduce((s, p) => s + p.valor_total, 0);
-    const expIcms = exportPedidos.reduce((s, p) => s + p.icms, 0);
+    const expTributos = exportPedidos.reduce((s, p) => s + p.tributos_aprox, 0);
     html += `<div class="summary">
       <div class="card"><div class="val">${exportPedidos.length}</div><div class="lab">Pedidos</div></div>
       <div class="card"><div class="val">${fmtCurrency(expValor)}</div><div class="lab">Valor total</div></div>
-      <div class="card"><div class="val">${fmtCurrency(expIcms)}</div><div class="lab">ICMS/Imposto</div></div>
+      <div class="card"><div class="val">${fmtCurrency(expTributos)}</div><div class="lab">Tributos aprox.</div></div>
     </div>`;
 
     for (const p of exportPedidos) {
       html += `<div class="pedido">`;
       html += `<div class="ptitle">Pedido #${escapeHtml(p.codigo)} — ${escapeHtml(p.nome_fornecedor)}</div>`;
-      html += `<div class="pmeta">Emissão: ${fmtDate(p.data_emissao)} · Situação: ${escapeHtml(p.nome_situacao)} · NF-e: ${escapeHtml(p.numero_nfe || '—')} · Produtos: ${fmtCurrency(p.valor_produtos)} · Frete: ${fmtCurrency(p.valor_frete)} · ICMS: ${fmtCurrency(p.icms)} · <b>Total: ${fmtCurrency(p.valor_total)}</b></div>`;
+      html += `<div class="pmeta">Emissão: ${fmtDate(p.data_emissao)} · Situação: ${escapeHtml(p.nome_situacao)} · NF-e: ${escapeHtml(p.numero_nfe || '—')} · Produtos: ${fmtCurrency(p.valor_produtos)} · Frete: ${fmtCurrency(p.valor_frete)} · Tributos aprox.: ${fmtCurrency(p.tributos_aprox)} · <b>Total: ${fmtCurrency(p.valor_total)}</b></div>`;
 
       if (p.financeiro.length) {
         html += `<table><thead><tr><th>Vencimento</th><th>Forma</th><th>Plano de contas</th><th class="right">Valor</th></tr></thead><tbody>`;
@@ -334,8 +334,12 @@ export default function RelatorioPedidosPage() {
           Relatório de Pedidos por Fornecedor
         </h1>
         <p className="text-sm text-muted-foreground">
-          Filtre os pedidos de compra por fornecedor, período e situação. O relatório inclui valor, ICMS,
-          financeiro e os vínculos de OS, vendas e orçamentos ainda não executados que pedem cada peça.
+          Filtre os pedidos de compra por fornecedor, período e situação. O relatório inclui valor,
+          tributos aproximados, financeiro e os vínculos de OS, vendas e orçamentos ainda não executados que pedem cada peça.
+        </p>
+        <p className="text-xs text-amber-600 dark:text-amber-500">
+          Observação: a API do GestãoClick não devolve o ICMS real da nota do fornecedor. O valor exibido é o
+          “Valor Aproximado dos Tributos” (total de todos os tributos), não o ICMS do DANFE.
         </p>
       </div>
 
@@ -478,7 +482,7 @@ export default function RelatorioPedidosPage() {
           </label>
           <Badge variant="secondary">{totals.count} pedido(s)</Badge>
           <Badge variant="secondary">Total: {fmtCurrency(totals.valor)}</Badge>
-          <Badge variant="secondary">ICMS/Imposto: {fmtCurrency(totals.icms)}</Badge>
+          <Badge variant="secondary" title="Total aproximado de tributos informado pelo fornecedor (não é o ICMS do DANFE)">Tributos aprox.: {fmtCurrency(totals.tributos)}</Badge>
         </div>
       )}
 
@@ -516,7 +520,7 @@ export default function RelatorioPedidosPage() {
                   </div>
                   <div className="text-sm text-muted-foreground truncate">{p.nome_fornecedor}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Emissão {fmtDate(p.data_emissao)} · ICMS {fmtCurrency(p.icms)}
+                    Emissão {fmtDate(p.data_emissao)} · Tributos aprox. {fmtCurrency(p.tributos_aprox)}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">

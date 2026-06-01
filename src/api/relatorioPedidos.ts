@@ -35,8 +35,12 @@ export interface PedidoCompra {
   valor_frete: number;
   valor_impostos: number;
   valor_total: number;
-  /** ICMS/imposto a exibir conforme regra (só se houver NF-e amarrada) */
-  icms: number;
+  /**
+   * ATENÇÃO: a API de compras do GestãoClick NÃO devolve o ICMS real da nota.
+   * Este campo é o "Valor Aproximado dos Tributos" (TODOS os tributos somados,
+   * informado pelo fornecedor) extraído das observações. NÃO é o ICMS do DANFE.
+   */
+  tributos_aprox: number;
   observacoes: string;
   produtos: PedidoItem[];
   financeiro: PedidoFinanceiro[];
@@ -160,11 +164,10 @@ function mapPedido(row: any): PedidoCompra {
   const valor_impostos = parseDecimal(c?.valor_impostos);
   const observacoes = String(c?.observacoes ?? '');
 
-  // Regra ICMS: só puxa imposto se houver NF-e amarrada.
-  let icms = 0;
-  if (numero_nfe) {
-    icms = valor_impostos > 0 ? valor_impostos : parseTributoFromObs(observacoes);
-  }
+  // A API de compras NÃO devolve o ICMS real (vem sempre valor_impostos=0).
+  // O único dado fiscal disponível é o "Valor Aproximado dos Tributos" das
+  // observações — total aproximado de TODOS os tributos, NÃO o ICMS do DANFE.
+  const tributos_aprox = parseTributoFromObs(observacoes);
 
   const produtos: PedidoItem[] = (c?.produtos || []).map((w: any) => {
     const p = w?.produto ?? w;
@@ -201,7 +204,7 @@ function mapPedido(row: any): PedidoCompra {
     valor_frete: parseDecimal(c?.valor_frete),
     valor_impostos,
     valor_total: parseDecimal(c?.valor_total),
-    icms,
+    tributos_aprox,
     observacoes,
     produtos,
     financeiro,
@@ -270,7 +273,7 @@ function hashPedido(p: PedidoCompra): string {
   const str = JSON.stringify([
     p.codigo, p.fornecedor_id, p.nome_fornecedor, p.data_emissao,
     p.situacao_id, p.nome_situacao, p.numero_nfe, p.valor_produtos,
-    p.valor_frete, p.valor_impostos, p.valor_total, p.icms, p.observacoes,
+    p.valor_frete, p.valor_impostos, p.valor_total, p.tributos_aprox, p.observacoes,
     p.produtos, p.financeiro,
   ]);
   let h = 5381;
@@ -289,7 +292,7 @@ function pedidoToRow(p: PedidoCompra) {
     nome_situacao: p.nome_situacao,
     numero_nfe: p.numero_nfe,
     valor_total: p.valor_total,
-    icms: p.icms,
+    icms: p.tributos_aprox,
     payload: p as unknown as Record<string, unknown>,
     content_hash: hashPedido(p),
     updated_at: new Date().toISOString(),

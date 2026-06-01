@@ -534,7 +534,7 @@ export default function PurchaseTrackerPage() {
             <TableBody>
               {filteredRows.length === 0 && !scanning && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                     {selected.length === 0
                       ? 'Selecione as situações e clique em "Atualizar" para começar.'
                       : rows.length === 0

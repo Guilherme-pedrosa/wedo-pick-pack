@@ -60,6 +60,21 @@ export default function RelatorioPedidosPage() {
       .catch((e: any) => toast.error('Erro ao carregar situações', { description: e.message }));
   }, []);
 
+  // Carrega os pedidos já salvos no banco assim que a página abre (instantâneo).
+  useEffect(() => {
+    (async () => {
+      try {
+        const pedidos = await loadPedidosFromDB();
+        if (pedidos.length) {
+          setAllPedidos(pedidos);
+          setLoaded(true);
+        }
+      } catch (e: any) {
+        console.warn('[RELATORIO] Falha ao carregar pedidos do banco', e);
+      }
+    })();
+  }, []);
+
   const fornecedores = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of allPedidos) {
@@ -73,18 +88,22 @@ export default function RelatorioPedidosPage() {
   const toggleSit = (id: string) =>
     setSelectedSit((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
-  const handleScan = async () => {
+  // Sincroniza com o GestãoClick: insere os novos e atualiza só os alterados.
+  const handleScan = async (full = false) => {
     setLoading(true);
-    setLoaded(false);
     try {
-      const pedidos = await fetchAllPedidos((step) => setProgress(step));
+      const result = await syncPedidos((step) => setProgress(step), full);
+      const pedidos = await loadPedidosFromDB();
       setAllPedidos(pedidos);
       const idx = await buildDemandIndex((step) => setProgress(step));
       setDemandIndex(idx);
       setLoaded(true);
-      toast.success(`${pedidos.length} pedido(s) carregado(s)`);
+      toast.success(
+        `Sincronizado: ${result.novos} novo(s), ${result.atualizados} atualizado(s)`,
+        { description: `${pedidos.length} pedido(s) no total` },
+      );
     } catch (e: any) {
-      toast.error('Erro ao gerar relatório', { description: e.message });
+      toast.error('Erro ao sincronizar pedidos', { description: e.message });
     } finally {
       setLoading(false);
       setProgress('');

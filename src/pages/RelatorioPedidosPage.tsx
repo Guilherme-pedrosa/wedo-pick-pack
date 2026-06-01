@@ -218,7 +218,7 @@ export default function RelatorioPedidosPage() {
           rows.push([
             i === 0 ? p.codigo : '', i === 0 ? p.nome_fornecedor : '', i === 0 ? fmtDate(p.data_emissao) : '',
             i === 0 ? p.nome_situacao : '', i === 0 ? (p.numero_nfe || '—') : '',
-            i === 0 ? p.valor_produtos : '', i === 0 ? p.valor_frete : '', i === 0 ? p.icms : '', i === 0 ? p.valor_total : '',
+            i === 0 ? p.valor_produtos : '', i === 0 ? p.valor_frete : '', i === 0 ? p.tributos_aprox : '', i === 0 ? p.valor_total : '',
             i === 0 ? fin : '',
             item.nome_produto, item.quantidade, vinculosText(item.vinculos, ' || ') || '—',
           ]);

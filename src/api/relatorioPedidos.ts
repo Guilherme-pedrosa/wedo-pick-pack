@@ -292,7 +292,7 @@ function pedidoToRow(p: PedidoCompra) {
     nome_situacao: p.nome_situacao,
     numero_nfe: p.numero_nfe,
     valor_total: p.valor_total,
-    icms: p.icms,
+    icms: p.tributos_aprox,
     payload: p as unknown as Record<string, unknown>,
     content_hash: hashPedido(p),
     updated_at: new Date().toISOString(),

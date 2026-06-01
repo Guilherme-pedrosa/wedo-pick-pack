@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getStatusCompras } from '@/api/compras';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, RefreshCw, ChevronDown, ShoppingCart, AlertTriangle, Flame } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronDown, ChevronRight, ShoppingCart, AlertTriangle, Flame, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -18,6 +18,12 @@ interface SituacaoHist {
   data: string;
   situacao: string;
   funcionario?: string;
+}
+
+interface CompraItem {
+  nome_produto: string;
+  quantidade: string;
+  valor_total: string;
 }
 
 interface CompraRow {
@@ -31,6 +37,7 @@ interface CompraRow {
   ultima_alteracao: string | null; // ISO/GC date string
   previsao_chegada: string | null; // dd/mm/yyyy from campos_extras
   historico: SituacaoHist[];
+  produtos: CompraItem[];
 }
 
 /** Accepts "dd/mm/yyyy" or "yyyy-mm-dd" → Date at local midnight */
@@ -131,6 +138,15 @@ function extractRow(raw: any): CompraRow {
     }
   }
 
+  const produtos: CompraItem[] = (c?.produtos || []).map((w: any) => {
+    const p = w?.produto ?? w;
+    return {
+      nome_produto: String(p?.nome_produto ?? ''),
+      quantidade: String(p?.quantidade ?? ''),
+      valor_total: String(p?.valor_total ?? '0'),
+    };
+  });
+
   return {
     id: String(c?.id ?? ''),
     codigo: String(c?.codigo ?? ''),
@@ -142,6 +158,7 @@ function extractRow(raw: any): CompraRow {
     ultima_alteracao: ultima,
     previsao_chegada: previsao,
     historico,
+    produtos,
   };
 }
 
@@ -154,6 +171,15 @@ export default function PurchaseTrackerPage() {
   const [rows, setRows] = useState<CompraRow[]>([]);
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr' | 'stuck'>('all');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
 
   // Load statuses + persisted selection (DB first, fallback localStorage)
   useEffect(() => {
@@ -475,6 +501,7 @@ export default function PurchaseTrackerPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[36px]" />
                 <TableHead className="w-[90px]">Código</TableHead>
                 <TableHead>Fornecedor</TableHead>
                 <TableHead>Situação atual</TableHead>
@@ -507,7 +534,7 @@ export default function PurchaseTrackerPage() {
             <TableBody>
               {filteredRows.length === 0 && !scanning && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                     {selected.length === 0
                       ? 'Selecione as situações e clique em "Atualizar" para começar.'
                       : rows.length === 0
@@ -527,14 +554,20 @@ export default function PurchaseTrackerPage() {
                 const isStuckWarn = days !== null && days > 15 && !isStuckCrit;
                 const isCrit = isArrCrit || isStuckCrit;
                 const isWarn = !isCrit && (isArrWarn || isStuckWarn);
+                const isOpen = expanded.has(r.id);
                 return (
+                  <Fragment key={r.id}>
                   <TableRow
-                    key={r.id}
+                    onClick={() => toggleExpand(r.id)}
                     className={cn(
+                      'cursor-pointer',
                       isCrit && 'row-delay-crit',
                       isWarn && 'row-delay-warn',
                     )}
                   >
+                    <TableCell className="text-muted-foreground">
+                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </TableCell>
                     <TableCell className="font-mono text-xs font-semibold">{r.codigo || '—'}</TableCell>
                     <TableCell className="text-sm">{r.nome_fornecedor || '—'}</TableCell>
                     <TableCell>
@@ -575,6 +608,43 @@ export default function PurchaseTrackerPage() {
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(r.valor_total)}</TableCell>
                   </TableRow>
+                  {isOpen && (
+                    <TableRow key={`${r.id}-details`} className="bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={10} className="p-0">
+                        <div className="px-6 py-3">
+                          <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                            <Package className="h-4 w-4 text-primary" />
+                            Peças do pedido #{r.codigo}
+                          </div>
+                          {r.produtos.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">Nenhuma peça encontrada neste pedido.</p>
+                          ) : (
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Peça</TableHead>
+                                  <TableHead className="w-[100px] text-right">Qtd</TableHead>
+                                  <TableHead className="w-[140px] text-right">Valor</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {r.produtos.map((it, i) => (
+                                  <TableRow key={i} className="hover:bg-transparent">
+                                    <TableCell className="text-sm">{it.nome_produto || '—'}</TableCell>
+                                    <TableCell className="text-right text-sm tabular-nums">
+                                      {parseFloat(String(it.quantidade).replace(',', '.')) || 0}
+                                    </TableCell>
+                                    <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(it.valor_total)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </Fragment>
                 );
               })}
             </TableBody>

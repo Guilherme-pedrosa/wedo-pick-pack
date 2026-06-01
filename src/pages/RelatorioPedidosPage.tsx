@@ -470,8 +470,12 @@ export default function RelatorioPedidosPage() {
         </CardContent>
       </Card>
 
-      {loaded && (
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+      {loaded && filtered.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={allFilteredSelected} onCheckedChange={toggleSelectAll} />
+            <span>Selecionar todos</span>
+          </label>
           <Badge variant="secondary">{totals.count} pedido(s)</Badge>
           <Badge variant="secondary">Total: {fmtCurrency(totals.valor)}</Badge>
           <Badge variant="secondary">ICMS/Imposto: {fmtCurrency(totals.icms)}</Badge>

@@ -516,7 +516,7 @@ export default function RelatorioPedidosPage() {
                   </div>
                   <div className="text-sm text-muted-foreground truncate">{p.nome_fornecedor}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    Emissão {fmtDate(p.data_emissao)} · ICMS {fmtCurrency(p.icms)}
+                    Emissão {fmtDate(p.data_emissao)} · Tributos aprox. {fmtCurrency(p.tributos_aprox)}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">

@@ -249,7 +249,7 @@ export default function RelatorioPedidosPage() {
   };
 
   const exportPDF = () => {
-    if (!filtered.length) return;
+    if (!exportPedidos.length) return;
     const escapeHtml = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let html = `<html><head><meta charset="utf-8"><title>Relatório de Pedidos por Fornecedor</title><style>

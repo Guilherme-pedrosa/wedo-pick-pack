@@ -449,12 +449,17 @@ export default function RelatorioPedidosPage() {
             )}
             {loaded && (
               <>
-                <Button variant="outline" onClick={exportXLSX} disabled={!filtered.length} className="gap-1.5">
+                <Button variant="outline" onClick={exportXLSX} disabled={!exportPedidos.length} className="gap-1.5">
                   <FileSpreadsheet className="h-4 w-4" /> Excel
                 </Button>
-                <Button variant="outline" onClick={exportPDF} disabled={!filtered.length} className="gap-1.5">
+                <Button variant="outline" onClick={exportPDF} disabled={!exportPedidos.length} className="gap-1.5">
                   <FileDown className="h-4 w-4" /> PDF
                 </Button>
+                {selected.size > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {selected.size} selecionado(s) — exportando apenas os marcados
+                  </span>
+                )}
               </>
             )}
           </div>

@@ -307,6 +307,16 @@ export default function RelatorioPedidosPage() {
       }
       html += `</tbody></table></div>`;
     }
+
+    // Impacto financeiro: parcelas somadas por vencimento + total geral
+    html += `<div class="pedido"><div class="ptitle">Impacto financeiro (parcelas por vencimento)</div>`;
+    html += `<table><thead><tr><th>Vencimento</th><th class="right">Valor do dia</th></tr></thead><tbody>`;
+    for (const l of impactoFinanceiro.linhas) {
+      html += `<tr><td>${l.data === 'sem-data' ? 'Sem data' : fmtDate(l.data)}</td><td class="right">${fmtCurrency(l.valor)}</td></tr>`;
+    }
+    html += `<tr><td><b>TOTAL</b></td><td class="right"><b>${fmtCurrency(impactoFinanceiro.total)}</b></td></tr>`;
+    html += `</tbody></table></div>`;
+
     html += `</body></html>`;
     const w = window.open('', '_blank');
     if (w) {

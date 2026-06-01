@@ -275,13 +275,15 @@ export default function RelatorioPedidosPage() {
     html += `<div class="meta">${new Date().toLocaleString('pt-BR')} · ${fornecedorLabel}${
       dataInicial || dataFinal ? ` · ${fmtDate(dataInicial)} a ${fmtDate(dataFinal)}` : ''
     }</div>`;
+    const expValor = exportPedidos.reduce((s, p) => s + p.valor_total, 0);
+    const expIcms = exportPedidos.reduce((s, p) => s + p.icms, 0);
     html += `<div class="summary">
-      <div class="card"><div class="val">${totals.count}</div><div class="lab">Pedidos</div></div>
-      <div class="card"><div class="val">${fmtCurrency(totals.valor)}</div><div class="lab">Valor total</div></div>
-      <div class="card"><div class="val">${fmtCurrency(totals.icms)}</div><div class="lab">ICMS/Imposto</div></div>
+      <div class="card"><div class="val">${exportPedidos.length}</div><div class="lab">Pedidos</div></div>
+      <div class="card"><div class="val">${fmtCurrency(expValor)}</div><div class="lab">Valor total</div></div>
+      <div class="card"><div class="val">${fmtCurrency(expIcms)}</div><div class="lab">ICMS/Imposto</div></div>
     </div>`;
 
-    for (const p of filtered) {
+    for (const p of exportPedidos) {
       html += `<div class="pedido">`;
       html += `<div class="ptitle">Pedido #${escapeHtml(p.codigo)} — ${escapeHtml(p.nome_fornecedor)}</div>`;
       html += `<div class="pmeta">Emissão: ${fmtDate(p.data_emissao)} · Situação: ${escapeHtml(p.nome_situacao)} · NF-e: ${escapeHtml(p.numero_nfe || '—')} · Produtos: ${fmtCurrency(p.valor_produtos)} · Frete: ${fmtCurrency(p.valor_frete)} · ICMS: ${fmtCurrency(p.icms)} · <b>Total: ${fmtCurrency(p.valor_total)}</b></div>`;

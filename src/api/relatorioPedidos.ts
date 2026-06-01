@@ -211,7 +211,14 @@ function mapPedido(row: any): PedidoCompra {
 let comprasCache: { rows: PedidoCompra[]; builtAt: number } | null = null;
 const COMPRAS_TTL = 5 * 60 * 1000;
 
-/** Busca todos os pedidos de compra (paginado). Cache de 5 min. */
+/**
+ * Busca todos os pedidos de compra (paginado). Cache de 5 min.
+ *
+ * IMPORTANTE: o endpoint padrão `/api/compras` do GestãoClick NÃO retorna
+ * os pedidos finalizados/cancelados. Por isso varremos UMA situação por vez
+ * (situacao_id), garantindo que TODAS as situações venham — inclusive
+ * "Finalizado (mercadoria chegou)" e "Cancelada".
+ */
 export async function fetchAllPedidos(
   onProgress?: (step: string, page: number, total: number) => void,
   forceReload = false,
@@ -220,17 +227,30 @@ export async function fetchAllPedidos(
     return comprasCache.rows;
   }
 
-  const rows: PedidoCompra[] = [];
-  let page = 1;
-  let totalPages = 1;
+  const situacoes = await getStatusCompras();
+  const sitIds = situacoes.map((s) => String(s.id)).filter(Boolean);
 
-  while (page <= totalPages) {
-    onProgress?.(`Buscando pedidos de compra — página ${page}`, page, totalPages);
-    const res = await fetchComprasPage(page);
-    totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
-    for (const item of res.data || []) rows.push(mapPedido(item));
-    page++;
-    if (page <= totalPages) await new Promise((r) => setTimeout(r, 400));
+  const seen = new Set<string>();
+  const rows: PedidoCompra[] = [];
+
+  for (let s = 0; s < sitIds.length; s++) {
+    const sid = sitIds[s];
+    const nome = situacoes[s]?.nome ?? sid;
+    let page = 1;
+    let totalPages = 1;
+    while (page <= totalPages) {
+      onProgress?.(`Buscando "${nome}" — página ${page}`, s + 1, sitIds.length);
+      const res = await fetchComprasPage(page, sid);
+      totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+      for (const item of res.data || []) {
+        const p = mapPedido(item);
+        if (!p.id || seen.has(p.id)) continue;
+        seen.add(p.id);
+        rows.push(p);
+      }
+      page++;
+      if (page <= totalPages) await new Promise((r) => setTimeout(r, 350));
+    }
   }
 
   comprasCache = { rows, builtAt: Date.now() };

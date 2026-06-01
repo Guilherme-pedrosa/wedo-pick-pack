@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
-import { buildOSIndex, listOrcamentos, getStatusCompras } from './compras';
-import { listVendas } from './gestaoclick';
+import { getStatusCompras } from './compras';
+import { buildExplorerIndex } from './produtoExplorer';
+import { getExplorerConfig } from '@/lib/explorerConfig';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -103,43 +104,6 @@ function parseTributoFromObs(obs: string): number {
 
 function unwrapCompra(row: any): any {
   return row?.Compra ?? row?.compra ?? row;
-}
-
-function extractEquipamento(doc: any): string {
-  const equips = doc?.equipamentos;
-  if (!Array.isArray(equips) || equips.length === 0) return '';
-  const nomes = equips
-    .map((w: any) => {
-      const e = w?.equipamento ?? w;
-      const nome = String(e?.equipamento ?? e?.nome ?? '').trim();
-      const marca = String(e?.marca ?? '').trim();
-      const modelo = String(e?.modelo ?? '').trim();
-      return [nome, marca, modelo].filter(Boolean).join(' ');
-    })
-    .filter(Boolean);
-  return nomes.join(' / ');
-}
-
-// ---------------------------------------------------------------------------
-// Status considerados "finalizados / cancelados" (não devem entrar no vínculo)
-// ---------------------------------------------------------------------------
-
-const TERMINAL_STATUS_TOKENS = [
-  'CANCEL',
-  'FINALIZ',
-  'CONCLU',
-  'ENTREGUE',
-  'FATURAD',
-  'EXECUTAD',
-  'BAIXAD',
-  'RECUSAD',
-  'PERDID',
-  'DEVOLVID',
-];
-
-function isTerminalStatus(situacao: string): boolean {
-  const n = normalizeName(situacao);
-  return TERMINAL_STATUS_TOKENS.some((t) => n.includes(t));
 }
 
 // ---------------------------------------------------------------------------
@@ -433,8 +397,31 @@ export async function syncPedidos(
 // Índice de demanda (vínculos por peça)
 // ---------------------------------------------------------------------------
 
-let demandCache: { index: DemandIndex; builtAt: number } | null = null;
+let demandCache: { index: DemandIndex; builtAt: number; signature: string } | null = null;
 const DEMAND_TTL = 5 * 60 * 1000;
+
+const FINISHED_OS = ['FINALIZADA', 'FINALIZADO', 'CANCELADA', 'CANCELADO', 'ENTREGUE'];
+const FINISHED_ORC = ['CANCELADO', 'CANCELADA', 'REJEITADO', 'RECUSADO'];
+
+function isOpenOS(s: string) {
+  const u = normalizeName(s);
+  return !FINISHED_OS.some((x) => u.includes(x));
+}
+
+function isOpenOrc(s: string) {
+  const u = normalizeName(s);
+  return !FINISHED_ORC.some((x) => u.includes(x));
+}
+
+function demandConfigSignature(): string {
+  const cfg = getExplorerConfig();
+  return JSON.stringify({
+    os: [...cfg.osSituacaoIds].sort(),
+    orc: [...cfg.orcSituacaoIds].sort(),
+    venda: [...cfg.vendaSituacaoIds].sort(),
+    fromDate: cfg.fromDate || '',
+  });
+}
 
 function pushVinculo(index: DemandIndex, pid: string, doc: VinculoDoc) {
   if (!pid) return;
@@ -446,106 +433,71 @@ function pushVinculo(index: DemandIndex, pid: string, doc: VinculoDoc) {
  * Constrói o índice de demanda: para cada produto_id, quais OS / vendas /
  * orçamentos pendentes (não executados / não cancelados) pedem aquela peça.
  *
- * Reaproveita o índice de OS existente (buildOSIndex) e varre vendas e
- * orçamentos uma única vez (com cache de 5 min).
+ * Usa a mesma base e os mesmos filtros configurados no "Explorar Peças".
  */
 export async function buildDemandIndex(
   onProgress?: (step: string, page: number, total: number) => void,
   forceReload = false,
 ): Promise<DemandIndex> {
-  if (!forceReload && demandCache && Date.now() - demandCache.builtAt < DEMAND_TTL) {
+  const signature = demandConfigSignature();
+  if (!forceReload && demandCache && demandCache.signature === signature && Date.now() - demandCache.builtAt < DEMAND_TTL) {
     return demandCache.index;
   }
 
   const index: DemandIndex = {};
+  const cfg = getExplorerConfig();
+  const osSet = new Set(cfg.osSituacaoIds);
+  const orcSet = new Set(cfg.orcSituacaoIds);
+  const vendaSet = new Set(cfg.vendaSituacaoIds);
 
-  // --- OS: reaproveita índice/cache existente (reservedDemand keyed por produto) ---
-  onProgress?.('Indexando OS pendentes…', 0, 1);
-  try {
-    const { reservedDemand } = await buildOSIndex((step, c, t) => onProgress?.(step, c, t));
-    for (const [key, info] of Object.entries(reservedDemand)) {
-      const pid = key.split('::')[0];
-      for (const o of info.orcamentos) {
-        pushVinculo(index, pid, {
-          tipo: 'os',
-          codigo: o.os_codigo,
-          nome_cliente: o.nome_cliente,
-          situacao: 'OS pendente',
-          equipamento: '',
-          qtd: o.qtd,
-        });
-      }
-    }
-  } catch (e) {
-    console.warn('[RELATORIO] Falha ao indexar OS', e);
-  }
+  onProgress?.('Indexando vínculos como no Explorar Peças…', 0, 1);
+  const explorerIndex = await buildExplorerIndex((step, page, total) => onProgress?.(step, page, total), forceReload);
+  const idx = explorerIndex as any;
 
-  // --- Vendas pendentes (não executadas / não canceladas) ---
-  {
-    let page = 1;
-    let totalPages = 1;
-    while (page <= totalPages) {
-      onProgress?.(`Indexando vendas — página ${page}`, page, totalPages);
-      const res = await listVendas(undefined, page);
-      totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
-      for (const v of res.data || []) {
-        if (isTerminalStatus(v.nome_situacao)) continue;
-        const equipamento = extractEquipamento(v as any);
-        for (const w of v.produtos || []) {
-          const p = (w as any)?.produto ?? w;
-          const pid = normalizeId(p?.produto_id);
-          if (!pid) continue;
-          pushVinculo(index, pid, {
-            tipo: 'venda',
-            codigo: String(v.codigo ?? ''),
-            nome_cliente: String(v.nome_cliente ?? ''),
-            situacao: String(v.nome_situacao ?? ''),
-            equipamento,
-            qtd: parseDecimal(p?.quantidade),
-          });
-        }
-      }
-      page++;
-      if (page <= totalPages) await new Promise((r) => setTimeout(r, 350));
+  const matchOS = (o: any) => (osSet.size > 0 ? osSet.has(String(o.situacao_id ?? '')) : isOpenOS(String(o.nome_situacao ?? '')));
+  const matchOrc = (o: any) => (orcSet.size > 0 ? orcSet.has(String(o.situacao_id ?? '')) : isOpenOrc(String(o.nome_situacao ?? '')));
+  const matchVenda = (v: any) => (vendaSet.size > 0 ? vendaSet.has(String(v.situacao_id ?? '')) : false);
+
+  for (const [pid, docs] of (idx.oss as Map<string, any[]>).entries()) {
+    for (const os of docs.filter(matchOS)) {
+      pushVinculo(index, pid, {
+        tipo: 'os',
+        codigo: String(os.codigo ?? ''),
+        nome_cliente: String(os.nome_cliente ?? ''),
+        situacao: String(os.nome_situacao ?? ''),
+        equipamento: '',
+        qtd: parseDecimal(os.qtd),
+      });
     }
   }
 
-  // --- Orçamentos pendentes (não convertidos em OS/venda e não cancelados) ---
-  {
-    let page = 1;
-    let totalPages = 1;
-    while (page <= totalPages) {
-      onProgress?.(`Indexando orçamentos — página ${page}`, page, totalPages);
-      const res = await listOrcamentos(undefined, page);
-      totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
-      for (const o of res.data || []) {
-        if (isTerminalStatus(o.nome_situacao)) continue;
-        // Pula orçamentos já convertidos (flags de financeiro/estoque)
-        const conv =
-          /^(?!0$)\d+$|sim|true/i.test(String(o.situacao_financeiro ?? '')) ||
-          /^(?!0$)\d+$|sim|true/i.test(String(o.situacao_estoque ?? ''));
-        if (conv) continue;
-        const equipamento = extractEquipamento(o as any);
-        for (const w of o.produtos || []) {
-          const p = (w as any)?.produto ?? w;
-          const pid = normalizeId(p?.produto_id);
-          if (!pid) continue;
-          pushVinculo(index, pid, {
-            tipo: 'orcamento',
-            codigo: String(o.codigo ?? ''),
-            nome_cliente: String(o.nome_cliente ?? ''),
-            situacao: String(o.nome_situacao ?? ''),
-            equipamento,
-            qtd: parseDecimal(p?.quantidade),
-          });
-        }
-      }
-      page++;
-      if (page <= totalPages) await new Promise((r) => setTimeout(r, 350));
+  for (const [pid, docs] of (idx.vendas as Map<string, any[]>).entries()) {
+    for (const venda of docs.filter(matchVenda)) {
+      pushVinculo(index, pid, {
+        tipo: 'venda',
+        codigo: String(venda.codigo ?? ''),
+        nome_cliente: String(venda.nome_cliente ?? ''),
+        situacao: String(venda.nome_situacao ?? ''),
+        equipamento: '',
+        qtd: parseDecimal(venda.qtd),
+      });
     }
   }
 
-  demandCache = { index, builtAt: Date.now() };
+  for (const [pid, docs] of (idx.orcamentos as Map<string, any[]>).entries()) {
+    for (const orc of docs.filter(matchOrc)) {
+      pushVinculo(index, pid, {
+        tipo: 'orcamento',
+        codigo: String(orc.codigo ?? ''),
+        nome_cliente: String(orc.nome_cliente ?? ''),
+        situacao: String(orc.nome_situacao ?? ''),
+        equipamento: '',
+        qtd: parseDecimal(orc.qtd),
+      });
+    }
+  }
+
+  demandCache = { index, builtAt: Date.now(), signature };
   return index;
 }
 

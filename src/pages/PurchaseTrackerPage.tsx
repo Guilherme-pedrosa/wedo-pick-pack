@@ -644,7 +644,7 @@ export default function PurchaseTrackerPage() {
                       </TableCell>
                     </TableRow>
                   )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>

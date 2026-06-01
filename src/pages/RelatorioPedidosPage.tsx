@@ -52,6 +52,7 @@ export default function RelatorioPedidosPage() {
   const [progress, setProgress] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getStatusCompras()

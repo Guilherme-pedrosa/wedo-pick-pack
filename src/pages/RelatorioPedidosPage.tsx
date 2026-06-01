@@ -378,9 +378,14 @@ export default function RelatorioPedidosPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={handleScan} disabled={loading}>
-              {loading ? (<><Loader2 className="h-4 w-4 animate-spin" /> Gerando…</>) : (<><RefreshCw className="h-4 w-4" /> {loaded ? 'Recarregar dados' : 'Buscar pedidos'}</>)}
+            <Button onClick={() => handleScan(false)} disabled={loading}>
+              {loading ? (<><Loader2 className="h-4 w-4 animate-spin" /> Sincronizando…</>) : (<><RefreshCw className="h-4 w-4" /> {loaded ? 'Sincronizar (novos/alterados)' : 'Buscar pedidos'}</>)}
             </Button>
+            {loaded && (
+              <Button variant="outline" onClick={() => handleScan(true)} disabled={loading} className="gap-1.5">
+                <RefreshCw className="h-4 w-4" /> Sincronização completa
+              </Button>
+            )}
             {loaded && (
               <>
                 <Button variant="outline" onClick={exportXLSX} disabled={!filtered.length} className="gap-1.5">

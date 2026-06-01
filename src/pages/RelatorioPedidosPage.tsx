@@ -334,8 +334,12 @@ export default function RelatorioPedidosPage() {
           Relatório de Pedidos por Fornecedor
         </h1>
         <p className="text-sm text-muted-foreground">
-          Filtre os pedidos de compra por fornecedor, período e situação. O relatório inclui valor, ICMS,
-          financeiro e os vínculos de OS, vendas e orçamentos ainda não executados que pedem cada peça.
+          Filtre os pedidos de compra por fornecedor, período e situação. O relatório inclui valor,
+          tributos aproximados, financeiro e os vínculos de OS, vendas e orçamentos ainda não executados que pedem cada peça.
+        </p>
+        <p className="text-xs text-amber-600 dark:text-amber-500">
+          Observação: a API do GestãoClick não devolve o ICMS real da nota do fornecedor. O valor exibido é o
+          “Valor Aproximado dos Tributos” (total de todos os tributos), não o ICMS do DANFE.
         </p>
       </div>
 

@@ -276,11 +276,11 @@ export default function RelatorioPedidosPage() {
       dataInicial || dataFinal ? ` · ${fmtDate(dataInicial)} a ${fmtDate(dataFinal)}` : ''
     }</div>`;
     const expValor = exportPedidos.reduce((s, p) => s + p.valor_total, 0);
-    const expIcms = exportPedidos.reduce((s, p) => s + p.icms, 0);
+    const expTributos = exportPedidos.reduce((s, p) => s + p.tributos_aprox, 0);
     html += `<div class="summary">
       <div class="card"><div class="val">${exportPedidos.length}</div><div class="lab">Pedidos</div></div>
       <div class="card"><div class="val">${fmtCurrency(expValor)}</div><div class="lab">Valor total</div></div>
-      <div class="card"><div class="val">${fmtCurrency(expIcms)}</div><div class="lab">ICMS/Imposto</div></div>
+      <div class="card"><div class="val">${fmtCurrency(expTributos)}</div><div class="lab">Tributos aprox.</div></div>
     </div>`;
 
     for (const p of exportPedidos) {

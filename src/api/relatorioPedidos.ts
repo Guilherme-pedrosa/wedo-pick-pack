@@ -359,47 +359,60 @@ export async function syncPedidos(
     }
   }
 
+  // 2) Varre cada situação separadamente — o endpoint padrão do GC NÃO
+  //    retorna pedidos finalizados/cancelados, então precisamos filtrar por
+  //    situacao_id para capturar TODAS as situações.
+  const situacoes = await getStatusCompras();
+  const sitIds = situacoes.map((s) => String(s.id)).filter(Boolean);
+
   let novos = 0;
   let atualizados = 0;
-  let page = 1;
-  let totalPages = 1;
-  let emptyStreak = 0; // páginas consecutivas sem mudança
 
-  while (page <= totalPages) {
-    onProgress?.(`Sincronizando — página ${page}`, page, totalPages);
-    const res = await fetchComprasPage(page);
-    totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+  for (let s = 0; s < sitIds.length; s++) {
+    const sid = sitIds[s];
+    const nome = situacoes[s]?.nome ?? sid;
+    let page = 1;
+    let totalPages = 1;
+    let emptyStreak = 0; // páginas consecutivas sem mudança nesta situação
 
-    const toUpsert: ReturnType<typeof pedidoToRow>[] = [];
-    for (const item of res.data || []) {
-      const p = mapPedido(item);
-      if (!p.id) continue;
-      const row = pedidoToRow(p);
-      const prev = existing.get(p.id);
-      if (prev === undefined) {
-        novos++;
-        toUpsert.push(row);
-      } else if (prev !== row.content_hash) {
-        atualizados++;
-        toUpsert.push(row);
+    while (page <= totalPages) {
+      onProgress?.(`Sincronizando "${nome}" — página ${page}`, s + 1, sitIds.length);
+      const res = await fetchComprasPage(page, sid);
+      totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+
+      const toUpsert: ReturnType<typeof pedidoToRow>[] = [];
+      for (const item of res.data || []) {
+        const p = mapPedido(item);
+        if (!p.id) continue;
+        const row = pedidoToRow(p);
+        const prev = existing.get(p.id);
+        if (prev === undefined) {
+          novos++;
+          existing.set(p.id, row.content_hash);
+          toUpsert.push(row);
+        } else if (prev !== row.content_hash) {
+          atualizados++;
+          existing.set(p.id, row.content_hash);
+          toUpsert.push(row);
+        }
       }
+
+      if (toUpsert.length) {
+        const { error } = await supabase
+          .from('pedidos_compra')
+          .upsert(toUpsert as any, { onConflict: 'gc_id' });
+        if (error) throw new Error(error.message);
+        emptyStreak = 0;
+      } else {
+        emptyStreak++;
+      }
+
+      // Modo incremental: para esta situação após 2 páginas seguidas sem mudança.
+      if (!full && emptyStreak >= 2) break;
+
+      page++;
+      if (page <= totalPages) await new Promise((r) => setTimeout(r, 300));
     }
-
-    if (toUpsert.length) {
-      const { error } = await supabase
-        .from('pedidos_compra')
-        .upsert(toUpsert as any, { onConflict: 'gc_id' });
-      if (error) throw new Error(error.message);
-      emptyStreak = 0;
-    } else {
-      emptyStreak++;
-    }
-
-    // Modo incremental: para após 2 páginas seguidas sem nenhuma mudança.
-    if (!full && emptyStreak >= 2) break;
-
-    page++;
-    if (page <= totalPages) await new Promise((r) => setTimeout(r, 350));
   }
 
   // Invalida o cache em memória para forçar releitura do banco

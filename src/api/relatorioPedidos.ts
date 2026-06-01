@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
-import { buildOSIndex } from './compras';
-import { listVendas, listOrcamentos } from './gestaoclick';
+import { buildOSIndex, listOrcamentos } from './compras';
+import { listVendas } from './gestaoclick';
 
 // ---------------------------------------------------------------------------
 // Tipos

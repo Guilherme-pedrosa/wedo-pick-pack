@@ -232,6 +232,18 @@ export default function RelatorioPedidosPage() {
       { wch: 40 }, { wch: 42 }, { wch: 8 }, { wch: 60 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Pedidos');
+
+    // Aba de Impacto Financeiro (parcelas somadas por vencimento + total)
+    const impHeaders = ['Vencimento', 'Valor do dia (R$)'];
+    const impRows: (string | number)[][] = impactoFinanceiro.linhas.map((l) => [
+      l.data === 'sem-data' ? 'Sem data' : fmtDate(l.data),
+      l.valor,
+    ]);
+    impRows.push(['TOTAL', impactoFinanceiro.total]);
+    const wsImp = XLSX.utils.aoa_to_sheet([impHeaders, ...impRows]);
+    wsImp['!cols'] = [{ wch: 16 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, wsImp, 'Impacto Financeiro');
+
     const slug = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `relatorio_pedidos_${slug}.xlsx`);
   };

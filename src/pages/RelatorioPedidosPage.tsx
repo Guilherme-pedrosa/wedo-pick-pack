@@ -197,7 +197,7 @@ export default function RelatorioPedidosPage() {
     v.map((d) => `${VINCULO_LABEL[d.tipo]} #${d.codigo} — ${d.nome_cliente}${d.equipamento ? ` (${d.equipamento})` : ''} [${d.situacao}] ${d.qtd}×`).join(sep);
 
   const exportXLSX = () => {
-    if (!filtered.length) return;
+    if (!exportPedidos.length) return;
     const wb = XLSX.utils.book_new();
 
     const headers = [
@@ -206,7 +206,7 @@ export default function RelatorioPedidosPage() {
       'Financeiro (parcelas)', 'Peça', 'Qtd', 'Vínculos (OS/Venda/Orçamento)',
     ];
     const rows: (string | number)[][] = [];
-    for (const p of filtered) {
+    for (const p of exportPedidos) {
       const fin = p.financeiro
         .map((f) => `${fmtDate(f.data_vencimento)} ${f.nome_forma_pagamento} ${fmtCurrency(f.valor)}`)
         .join('\n');

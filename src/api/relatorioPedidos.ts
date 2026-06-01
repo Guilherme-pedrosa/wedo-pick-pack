@@ -164,11 +164,10 @@ function mapPedido(row: any): PedidoCompra {
   const valor_impostos = parseDecimal(c?.valor_impostos);
   const observacoes = String(c?.observacoes ?? '');
 
-  // Regra ICMS: só puxa imposto se houver NF-e amarrada.
-  let icms = 0;
-  if (numero_nfe) {
-    icms = valor_impostos > 0 ? valor_impostos : parseTributoFromObs(observacoes);
-  }
+  // A API de compras NÃO devolve o ICMS real (vem sempre valor_impostos=0).
+  // O único dado fiscal disponível é o "Valor Aproximado dos Tributos" das
+  // observações — total aproximado de TODOS os tributos, NÃO o ICMS do DANFE.
+  const tributos_aprox = parseTributoFromObs(observacoes);
 
   const produtos: PedidoItem[] = (c?.produtos || []).map((w: any) => {
     const p = w?.produto ?? w;

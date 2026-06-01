@@ -523,7 +523,8 @@ export default function RelatorioPedidosPage() {
                   <div className="font-bold">{fmtCurrency(p.valor_total)}</div>
                   <div className="text-xs text-muted-foreground">Produtos {fmtCurrency(p.valor_produtos)}</div>
                 </div>
-              </button>
+                </button>
+              </div>
 
               {isOpen && (
                 <CardContent className="pt-0 space-y-4">

@@ -29,6 +29,7 @@ interface TabelaPreco {
 interface GcDetail {
   estoque: number;
   preco_venda: number;
+  valor_custo: number;
   localizacao_fisica: string;
   localizacao_rational: string;
   tabelas_preco: TabelaPreco[];

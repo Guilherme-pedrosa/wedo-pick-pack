@@ -103,6 +103,85 @@ async function fetchGcDetail(
   }
 }
 
+// Atributos (campos personalizados) de localização no GestãoClick
+const ATRIBUTO_LOCALIZACAO_FISICA = 862832;
+const ATRIBUTO_LOCALIZACAO_RATIONAL = 894023;
+
+function normalizeStr(s: unknown): string {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+async function gcGet(path: string, access: string, secret: string): Promise<any | null> {
+  try {
+    const res = await fetch(`${GC_API_URL}${path}`, {
+      headers: {
+        "access-token": access,
+        "secret-access-token": secret,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function gcSend(
+  path: string,
+  method: "POST" | "PUT" | "DELETE",
+  body: unknown,
+  access: string,
+  secret: string,
+): Promise<{ ok: boolean; json: any }> {
+  const res = await fetch(`${GC_API_URL}${path}`, {
+    method,
+    headers: {
+      "access-token": access,
+      "secret-access-token": secret,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
+  }
+  const ok = res.ok && json?.status !== "error";
+  return { ok, json };
+}
+
+async function fetchGrupos(access: string, secret: string): Promise<{ id: string; nome: string }[]> {
+  const out: { id: string; nome: string }[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const j = await gcGet(`/api/grupos_produtos?pagina=${page}`, access, secret);
+    const data: any[] = j?.data ?? [];
+    for (const g of data) out.push({ id: String(g.id), nome: String(g.nome ?? "") });
+    const tp = Number(j?.meta?.total_paginas ?? 1);
+    if (page >= tp) break;
+  }
+  return out;
+}
+
+// As tabelas de preço (tipos de valores) são iguais para todos os produtos da conta.
+// Derivamos a lista canônica a partir de um produto de referência.
+async function fetchTabelasRef(access: string, secret: string): Promise<{ tipo_id: string; nome_tipo: string }[]> {
+  const list = await gcGet(`/api/produtos?pagina=1`, access, secret);
+  const first = list?.data?.[0];
+  if (!first?.id) return [];
+  const det = await gcGet(`/api/produtos/${first.id}`, access, secret);
+  const valores: any[] = det?.data?.valores ?? [];
+  return valores.map((v) => ({ tipo_id: String(v.tipo_id), nome_tipo: String(v.nome_tipo ?? "") }));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -192,6 +271,137 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    const cadastrarProduto = tool({
+      description:
+        "Cadastra um NOVO produto no estoque (GestãoClick). Cria o produto e define o preço de venda em CADA tabela informada (o GestãoClick não preenche os preços sozinho). Use APENAS depois que o usuário confirmar explicitamente todos os dados.",
+      inputSchema: z.object({
+        nome: z.string().describe("Nome do produto."),
+        codigo_interno: z.string().optional().describe("Código interno da peça."),
+        codigo_barra: z.string().optional().describe("Código de barras (opcional)."),
+        grupo: z.string().describe("Nome (ou ID) do grupo/categoria do produto."),
+        valor_custo: z.number().describe("Custo real do produto."),
+        estoque: z.number().optional().describe("Quantidade inicial em estoque (padrão 0)."),
+        ncm: z.string().optional().describe("NCM fiscal (opcional)."),
+        descricao: z.string().optional().describe("Descrição (opcional)."),
+        localizacao_fisica: z.string().optional().describe("Localização física (prateleira/caixa)."),
+        localizacao_rational: z.string().optional().describe("Localização rational."),
+        tabelas_preco: z
+          .array(z.object({ tabela: z.string(), valor: z.number() }))
+          .describe("Preço de venda por tabela: nome da tabela e o valor de venda."),
+      }),
+      execute: async (input) => {
+        if (!GC_ACCESS || !GC_SECRET) {
+          return { success: false, error: "Credenciais do GestãoClick não configuradas." };
+        }
+
+        // 1) Resolver grupo
+        const grupos = await fetchGrupos(GC_ACCESS, GC_SECRET);
+        let grupoId: string | null = null;
+        if (/^\d+$/.test(input.grupo.trim())) {
+          grupoId = input.grupo.trim();
+        } else {
+          const ng = normalizeStr(input.grupo);
+          const exact = grupos.find((g) => normalizeStr(g.nome) === ng);
+          const partial = grupos.filter((g) => normalizeStr(g.nome).includes(ng));
+          if (exact) grupoId = exact.id;
+          else if (partial.length === 1) grupoId = partial[0].id;
+          else {
+            return {
+              success: false,
+              error: `Grupo "${input.grupo}" não encontrado ou ambíguo. Peça ao usuário para escolher um grupo exato.`,
+              grupos_sugeridos: (partial.length ? partial : grupos).slice(0, 15).map((g) => g.nome),
+            };
+          }
+        }
+
+        // 2) Resolver tabelas de preço (nome -> tipo_id)
+        const ref = await fetchTabelasRef(GC_ACCESS, GC_SECRET);
+        const valores: { tipo_id: string; valor_custo: string; valor_venda: string }[] = [];
+        const naoEncontradas: string[] = [];
+        for (const t of input.tabelas_preco) {
+          const nt = normalizeStr(t.tabela);
+          const m =
+            ref.find((r) => normalizeStr(r.nome_tipo) === nt) ||
+            ref.find((r) => normalizeStr(r.nome_tipo).includes(nt)) ||
+            ref.find((r) => nt.split(/\s+/).every((w) => normalizeStr(r.nome_tipo).includes(w)));
+          if (!m) {
+            naoEncontradas.push(t.tabela);
+            continue;
+          }
+          valores.push({
+            tipo_id: m.tipo_id,
+            valor_custo: input.valor_custo.toFixed(2),
+            valor_venda: t.valor.toFixed(2),
+          });
+        }
+        if (naoEncontradas.length) {
+          return {
+            success: false,
+            error: `Tabelas não encontradas: ${naoEncontradas.join(", ")}.`,
+            tabelas_disponiveis: ref.map((r) => r.nome_tipo),
+          };
+        }
+
+        // 3) Atributos de localização
+        const atributos: { atributo_id: number; conteudo: string }[] = [];
+        if (input.localizacao_fisica)
+          atributos.push({ atributo_id: ATRIBUTO_LOCALIZACAO_FISICA, conteudo: input.localizacao_fisica });
+        if (input.localizacao_rational)
+          atributos.push({ atributo_id: ATRIBUTO_LOCALIZACAO_RATIONAL, conteudo: input.localizacao_rational });
+
+        // 4) Criar produto (POST)
+        const createBody: Record<string, unknown> = {
+          nome: input.nome,
+          codigo_interno: input.codigo_interno ?? "",
+          codigo_barra: input.codigo_barra ?? "",
+          movimenta_estoque: "1",
+          ativo: "1",
+          grupo_id: grupoId,
+          valor_custo: input.valor_custo.toFixed(2),
+          estoque: String(input.estoque ?? 0),
+          descricao: input.descricao ?? "",
+        };
+        if (input.ncm) createBody.fiscal = { ncm: input.ncm };
+        if (atributos.length) createBody.atributos = atributos;
+
+        const created = await gcSend(`/api/produtos`, "POST", createBody, GC_ACCESS, GC_SECRET);
+        const produtoId = created.json?.data?.id ? String(created.json.data.id) : null;
+        if (!created.ok || !produtoId) {
+          return {
+            success: false,
+            error: `Falha ao criar o produto: ${JSON.stringify(created.json ?? {}).slice(0, 300)}`,
+          };
+        }
+
+        // 5) Definir preços exatos por tabela (PUT) — o POST ignora valor_venda e usa markup padrão
+        const upd = await gcSend(
+          `/api/produtos/${produtoId}`,
+          "PUT",
+          { nome: input.nome, valor_custo: input.valor_custo.toFixed(2), valores },
+          GC_ACCESS,
+          GC_SECRET,
+        );
+
+        // 6) Reconferir os preços gravados
+        const det = await gcGet(`/api/produtos/${produtoId}`, GC_ACCESS, GC_SECRET);
+        const precos_aplicados = (det?.data?.valores ?? []).map((v: any) => ({
+          tabela: String(v.nome_tipo),
+          valor: parseDec(v.valor_venda),
+        }));
+
+        return {
+          success: true,
+          produto_id: produtoId,
+          identificacao: input.codigo_interno ? `[${input.codigo_interno}] ${input.nome}` : input.nome,
+          grupo: grupos.find((g) => g.id === grupoId)?.nome ?? grupoId,
+          valor_custo: input.valor_custo,
+          estoque: input.estoque ?? 0,
+          precos_atualizados: upd.ok,
+          precos_aplicados,
+        };
+      },
+    });
+
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       stopWhen: stepCountIs(50),
@@ -208,9 +418,14 @@ Deno.serve(async (req: Request) => {
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
+        "CADASTRO DE PRODUTO: Você pode cadastrar um produto novo com a ferramenta cadastrar_produto. Para isso colete: nome, código interno, grupo/categoria, custo, estoque inicial, localização (física e rational, se houver) e o preço de venda de CADA tabela informada pelo usuário.",
+        "ANTES de chamar cadastrar_produto, mostre um resumo completo e organizado de TODOS os dados (incluindo o preço tabela a tabela) e peça a confirmação explícita do usuário. Só chame a ferramenta depois que o usuário responder confirmando (ex: 'sim', 'pode cadastrar', 'confirmar').",
+        "Nunca invente preços de tabela: use exatamente os valores que o usuário informar para cada tabela. Se o usuário não informar alguma tabela, avise que ela ficará com o markup padrão do GestãoClick.",
+        "Se a ferramenta retornar erro de grupo ou de tabela não encontrada, mostre as opções sugeridas e peça para o usuário escolher.",
+        "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
-      tools: { consultar_estoque: consultarEstoque },
+      tools: { consultar_estoque: consultarEstoque, cadastrar_produto: cadastrarProduto },
     });
 
     return result.toUIMessageStreamResponse({ headers: corsHeaders });

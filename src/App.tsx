@@ -26,6 +26,7 @@ import PurchaseTrackerPage from "./pages/PurchaseTrackerPage";
 import RelatorioPedidosPage from "./pages/RelatorioPedidosPage";
 import RastreadorPage from "./pages/RastreadorPage";
 import ProductExplorerPage from "./pages/ProductExplorerPage";
+import EstoqueIAPage from "./pages/EstoqueIAPage";
 import ProductExplorerConfigPage from "./pages/ProductExplorerConfigPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
@@ -123,6 +124,8 @@ function AuthenticatedApp() {
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
         <Route path="/produtos/explorar" element={<ProductExplorerPage />} />
         <Route path="/produtos/explorar/config" element={<ProductExplorerConfigPage />} />
+        <Route path="/estoque-ia" element={<EstoqueIAPage />} />
+        <Route path="/estoque-ia/:threadId" element={<EstoqueIAPage />} />
         <Route path="/config" element={<ConfigPage />} />
         <Route path="/config/estoque" element={<InventoryPolicyPage />} />
         <Route path="/analise-estoque" element={<InventoryAnalysisPage />} />

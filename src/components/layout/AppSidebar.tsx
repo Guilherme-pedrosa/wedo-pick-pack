@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
+  Bot,
   LayoutDashboard,
   PackageCheck,
   ShoppingCart,
@@ -86,6 +87,7 @@ const menuGroups: MenuGroup[] = [
       { title: "Relatório Fornecedor", icon: FileText, href: "/compras/relatorio-fornecedor" },
       { title: "Análise Estoque", icon: BarChart3, href: "/analise-estoque" },
       { title: "Explorar Peças", icon: Search, href: "/produtos/explorar" },
+      { title: "IA de Estoque", icon: Bot, href: "/estoque-ia" },
       { title: "Rastreador", icon: Search, href: "/rastreador" },
       { title: "Log OS Geradas", icon: ClipboardList, href: "/rastreador/logs" },
       { title: "Política Estoque", icon: Settings, href: "/config/estoque" },

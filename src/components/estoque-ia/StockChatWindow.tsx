@@ -113,11 +113,11 @@ export default function StockChatWindow({ threadId, initialMessages, onMessagesC
             </ConversationEmptyState>
           ) : (
             messages.map((message) => (
-              <Message from={message.role} key={message.id}>
-                <MessageContent>
+              <Message from={message.role} key={message.id} className="select-text">
+                <MessageContent className="select-text">
                   {message.parts.map((part, i) => {
                     if (part.type === "text") {
-                      return <MessageResponse key={i}>{part.text}</MessageResponse>;
+                      return <MessageResponse key={i} className="select-text">{part.text}</MessageResponse>;
                     }
                     if (part.type === "tool-consultar_estoque" || part.type === "dynamic-tool") {
                       const p = part as any;

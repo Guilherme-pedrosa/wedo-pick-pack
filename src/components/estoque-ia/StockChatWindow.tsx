@@ -140,6 +140,15 @@ export default function StockChatWindow({ threadId, initialMessages, onMessagesC
                     }
                     return null;
                   })}
+                  {message.role === "assistant" &&
+                    message.parts.some((p) => p.type === "text" && p.text.trim()) && (
+                      <CopyButton
+                        text={message.parts
+                          .map((p) => (p.type === "text" ? p.text : ""))
+                          .join("")
+                          .trim()}
+                      />
+                    )}
                 </MessageContent>
               </Message>
             ))

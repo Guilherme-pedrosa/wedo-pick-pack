@@ -103,6 +103,85 @@ async function fetchGcDetail(
   }
 }
 
+// Atributos (campos personalizados) de localização no GestãoClick
+const ATRIBUTO_LOCALIZACAO_FISICA = 862832;
+const ATRIBUTO_LOCALIZACAO_RATIONAL = 894023;
+
+function normalizeStr(s: unknown): string {
+  return String(s ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+async function gcGet(path: string, access: string, secret: string): Promise<any | null> {
+  try {
+    const res = await fetch(`${GC_API_URL}${path}`, {
+      headers: {
+        "access-token": access,
+        "secret-access-token": secret,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function gcSend(
+  path: string,
+  method: "POST" | "PUT" | "DELETE",
+  body: unknown,
+  access: string,
+  secret: string,
+): Promise<{ ok: boolean; json: any }> {
+  const res = await fetch(`${GC_API_URL}${path}`, {
+    method,
+    headers: {
+      "access-token": access,
+      "secret-access-token": secret,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
+  }
+  const ok = res.ok && json?.status !== "error";
+  return { ok, json };
+}
+
+async function fetchGrupos(access: string, secret: string): Promise<{ id: string; nome: string }[]> {
+  const out: { id: string; nome: string }[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const j = await gcGet(`/api/grupos_produtos?pagina=${page}`, access, secret);
+    const data: any[] = j?.data ?? [];
+    for (const g of data) out.push({ id: String(g.id), nome: String(g.nome ?? "") });
+    const tp = Number(j?.meta?.total_paginas ?? 1);
+    if (page >= tp) break;
+  }
+  return out;
+}
+
+// As tabelas de preço (tipos de valores) são iguais para todos os produtos da conta.
+// Derivamos a lista canônica a partir de um produto de referência.
+async function fetchTabelasRef(access: string, secret: string): Promise<{ tipo_id: string; nome_tipo: string }[]> {
+  const list = await gcGet(`/api/produtos?pagina=1`, access, secret);
+  const first = list?.data?.[0];
+  if (!first?.id) return [];
+  const det = await gcGet(`/api/produtos/${first.id}`, access, secret);
+  const valores: any[] = det?.data?.valores ?? [];
+  return valores.map((v) => ({ tipo_id: String(v.tipo_id), nome_tipo: String(v.nome_tipo ?? "") }));
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 

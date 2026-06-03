@@ -73,11 +73,28 @@ async function fetchGcDetail(
       }
     }
 
+    // Extract every price table (Valores de venda). For variations, prefer the
+    // variation's own price tables when available; fall back to product-level.
+    let valoresArr: any[] = Array.isArray(raw.valores) ? raw.valores : [];
+    if (variacaoId && Array.isArray(raw.variacoes)) {
+      const v = raw.variacoes.find((x: any) => String(x?.variacao?.id) === String(variacaoId));
+      if (v && Array.isArray(v.variacao?.valores) && v.variacao.valores.length > 0) {
+        valoresArr = v.variacao.valores;
+      }
+    }
+    const tabelas_preco: TabelaPreco[] = valoresArr
+      .map((t: any) => ({
+        tabela: String(t?.nome_tipo ?? "").trim(),
+        valor: parseDec(t?.valor_venda),
+      }))
+      .filter((t) => t.tabela);
+
     return {
       estoque,
       preco_venda: parseDec(raw.valor_venda ?? raw.preco),
       localizacao_fisica: fisica,
       localizacao_rational: rational,
+      tabelas_preco,
     };
   } catch {
     return null;

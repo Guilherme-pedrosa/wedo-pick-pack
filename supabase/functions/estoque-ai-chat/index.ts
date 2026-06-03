@@ -21,11 +21,17 @@ function parseDec(v: unknown): number {
   return parseFloat(s) || 0;
 }
 
+interface TabelaPreco {
+  tabela: string;
+  valor: number;
+}
+
 interface GcDetail {
   estoque: number;
   preco_venda: number;
   localizacao_fisica: string;
   localizacao_rational: string;
+  tabelas_preco: TabelaPreco[];
 }
 
 async function fetchGcDetail(
@@ -67,11 +73,28 @@ async function fetchGcDetail(
       }
     }
 
+    // Extract every price table (Valores de venda). For variations, prefer the
+    // variation's own price tables when available; fall back to product-level.
+    let valoresArr: any[] = Array.isArray(raw.valores) ? raw.valores : [];
+    if (variacaoId && Array.isArray(raw.variacoes)) {
+      const v = raw.variacoes.find((x: any) => String(x?.variacao?.id) === String(variacaoId));
+      if (v && Array.isArray(v.variacao?.valores) && v.variacao.valores.length > 0) {
+        valoresArr = v.variacao.valores;
+      }
+    }
+    const tabelas_preco: TabelaPreco[] = valoresArr
+      .map((t: any) => ({
+        tabela: String(t?.nome_tipo ?? "").trim(),
+        valor: parseDec(t?.valor_venda),
+      }))
+      .filter((t) => t.tabela);
+
     return {
       estoque,
       preco_venda: parseDec(raw.valor_venda ?? raw.preco),
       localizacao_fisica: fisica,
       localizacao_rational: rational,
+      tabelas_preco,
     };
   } catch {
     return null;
@@ -157,6 +180,7 @@ Deno.serve(async (req: Request) => {
             preco_venda: live ? live.preco_venda : parseDec(pm.preco_venda),
             localizacao_fisica: live?.localizacao_fisica || null,
             localizacao_rational: live?.localizacao_rational || null,
+            tabelas_preco: live?.tabelas_preco ?? [],
             saldo_ao_vivo: !!live,
           };
         });
@@ -174,6 +198,9 @@ Deno.serve(async (req: Request) => {
         "Quando o usuário perguntar sobre saldo, quantidade, localização (tabela/prateleira) ou preço de uma peça, use a ferramenta consultar_estoque para buscar os dados reais. NUNCA invente saldos.",
         "Sempre identifique a peça no formato [Código Interno] Nome do Produto.",
         "Formate valores em reais no padrão brasileiro (R$ 1.234,56 com vírgula decimal).",
+        "Cada peça retorna o campo 'tabelas_preco', que é a lista COMPLETA de tabelas de preço (nome da tabela em 'tabela' e o preço em 'valor'). O campo 'preco_venda' é apenas a tabela padrão (geralmente Tabela A) e NÃO deve ser usado quando o usuário pede uma tabela específica.",
+        "Quando o usuário pedir o valor em uma tabela específica (ex: 'TABELA RATIONAL - GUERRA', 'Tabela B', 'Tabela Guerra'), procure essa tabela dentro de 'tabelas_preco' fazendo correspondência por nome (ignore maiúsculas/minúsculas e acentos; 'guerra' deve casar com 'TABELA RATIONAL - GUERRA') e use o 'valor' correspondente. NUNCA use a tabela padrão nesse caso.",
+        "Se a tabela pedida não existir em 'tabelas_preco' para aquela peça, informe que essa tabela não está cadastrada para a peça e mostre as tabelas disponíveis.",
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",

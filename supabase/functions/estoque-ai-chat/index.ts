@@ -21,11 +21,17 @@ function parseDec(v: unknown): number {
   return parseFloat(s) || 0;
 }
 
+interface TabelaPreco {
+  tabela: string;
+  valor: number;
+}
+
 interface GcDetail {
   estoque: number;
   preco_venda: number;
   localizacao_fisica: string;
   localizacao_rational: string;
+  tabelas_preco: TabelaPreco[];
 }
 
 async function fetchGcDetail(

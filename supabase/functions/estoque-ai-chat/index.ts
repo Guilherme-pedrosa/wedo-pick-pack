@@ -180,6 +180,7 @@ Deno.serve(async (req: Request) => {
             preco_venda: live ? live.preco_venda : parseDec(pm.preco_venda),
             localizacao_fisica: live?.localizacao_fisica || null,
             localizacao_rational: live?.localizacao_rational || null,
+            tabelas_preco: live?.tabelas_preco ?? [],
             saldo_ao_vivo: !!live,
           };
         });

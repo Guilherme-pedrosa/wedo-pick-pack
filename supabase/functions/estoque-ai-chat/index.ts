@@ -29,6 +29,7 @@ interface TabelaPreco {
 interface GcDetail {
   estoque: number;
   preco_venda: number;
+  valor_custo: number;
   localizacao_fisica: string;
   localizacao_rational: string;
   tabelas_preco: TabelaPreco[];
@@ -92,6 +93,7 @@ async function fetchGcDetail(
     return {
       estoque,
       preco_venda: parseDec(raw.valor_venda ?? raw.preco),
+      valor_custo: parseDec(raw.valor_custo),
       localizacao_fisica: fisica,
       localizacao_rational: rational,
       tabelas_preco,
@@ -178,6 +180,7 @@ Deno.serve(async (req: Request) => {
             grupo: (pm.nome_grupo as string) ?? null,
             estoque: live ? live.estoque : parseDec(pm.estoque),
             preco_venda: live ? live.preco_venda : parseDec(pm.preco_venda),
+            valor_custo: live ? live.valor_custo : parseDec(pm.valor_custo),
             localizacao_fisica: live?.localizacao_fisica || null,
             localizacao_rational: live?.localizacao_rational || null,
             tabelas_preco: live?.tabelas_preco ?? [],
@@ -201,6 +204,7 @@ Deno.serve(async (req: Request) => {
         "Cada peça retorna o campo 'tabelas_preco', que é a lista COMPLETA de tabelas de preço (nome da tabela em 'tabela' e o preço em 'valor'). O campo 'preco_venda' é apenas a tabela padrão (geralmente Tabela A) e NÃO deve ser usado quando o usuário pede uma tabela específica.",
         "Quando o usuário pedir o valor em uma tabela específica (ex: 'TABELA RATIONAL - GUERRA', 'Tabela B', 'Tabela Guerra'), procure essa tabela dentro de 'tabelas_preco' fazendo correspondência por nome (ignore maiúsculas/minúsculas e acentos; 'guerra' deve casar com 'TABELA RATIONAL - GUERRA') e use o 'valor' correspondente. NUNCA use a tabela padrão nesse caso.",
         "Se a tabela pedida não existir em 'tabelas_preco' para aquela peça, informe que essa tabela não está cadastrada para a peça e mostre as tabelas disponíveis.",
+        "Cada peça também retorna 'valor_custo', que é o custo real cadastrado no sistema. Quando o usuário pedir o custo, use ESSE valor real. NUNCA invente custo, NUNCA estime aplicando markup ou margem sobre uma tabela de preço. Se 'valor_custo' for 0 ou ausente, diga que o custo não está cadastrado — jamais calcule um valor fictício.",
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",

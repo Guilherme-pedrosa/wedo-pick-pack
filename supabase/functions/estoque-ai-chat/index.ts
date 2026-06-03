@@ -93,6 +93,7 @@ async function fetchGcDetail(
     return {
       estoque,
       preco_venda: parseDec(raw.valor_venda ?? raw.preco),
+      valor_custo: parseDec(raw.valor_custo),
       localizacao_fisica: fisica,
       localizacao_rational: rational,
       tabelas_preco,

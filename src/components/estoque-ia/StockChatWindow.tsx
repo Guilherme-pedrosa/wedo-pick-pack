@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { toast } from "sonner";
-import { Package, Send, Square } from "lucide-react";
+import { Package, Send, Square, Copy, Check } from "lucide-react";
+import { useState } from "react";
 
 import {
   Conversation,

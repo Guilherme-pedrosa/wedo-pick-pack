@@ -146,9 +146,10 @@ export default function StockChatWindow({ threadId, initialMessages, onMessagesC
           {status === "submitted" && (
             <Message from="assistant">
               <MessageContent>
-                <Shimmer className="flex items-center gap-2 text-sm">
-                  <Package className="size-4" /> Consultando estoque...
-                </Shimmer>
+                <div className="flex items-center gap-2 text-sm">
+                  <Package className="size-4" />
+                  <Shimmer>Consultando estoque...</Shimmer>
+                </div>
               </MessageContent>
             </Message>
           )}

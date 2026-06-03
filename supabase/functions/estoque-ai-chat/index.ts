@@ -418,9 +418,14 @@ Deno.serve(async (req: Request) => {
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
+        "CADASTRO DE PRODUTO: Você pode cadastrar um produto novo com a ferramenta cadastrar_produto. Para isso colete: nome, código interno, grupo/categoria, custo, estoque inicial, localização (física e rational, se houver) e o preço de venda de CADA tabela informada pelo usuário.",
+        "ANTES de chamar cadastrar_produto, mostre um resumo completo e organizado de TODOS os dados (incluindo o preço tabela a tabela) e peça a confirmação explícita do usuário. Só chame a ferramenta depois que o usuário responder confirmando (ex: 'sim', 'pode cadastrar', 'confirmar').",
+        "Nunca invente preços de tabela: use exatamente os valores que o usuário informar para cada tabela. Se o usuário não informar alguma tabela, avise que ela ficará com o markup padrão do GestãoClick.",
+        "Se a ferramenta retornar erro de grupo ou de tabela não encontrada, mostre as opções sugeridas e peça para o usuário escolher.",
+        "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
-      tools: { consultar_estoque: consultarEstoque },
+      tools: { consultar_estoque: consultarEstoque, cadastrar_produto: cadastrarProduto },
     });
 
     return result.toUIMessageStreamResponse({ headers: corsHeaders });

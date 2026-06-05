@@ -117,6 +117,16 @@ export default function StockChatWindow({ threadId, initialMessages, onMessagesC
                 <MessageContent className="select-text">
                   {message.parts.map((part, i) => {
                     if (part.type === "text") {
+                      // Render the user's own message as plain text so nothing
+                      // gets reformatted/collapsed by markdown (códigos com ".",
+                      // quebras de linha, etc.). Assistant messages keep markdown.
+                      if (message.role === "user") {
+                        return (
+                          <p key={i} className="whitespace-pre-wrap break-words select-text">
+                            {part.text}
+                          </p>
+                        );
+                      }
                       return <MessageResponse key={i} className="select-text">{part.text}</MessageResponse>;
                     }
                     if (part.type === "tool-consultar_estoque" || part.type === "dynamic-tool") {

@@ -282,6 +282,8 @@ export interface ItemCompra {
     qtd: number;
     nome_fornecedor: string;
     situacao: string;
+    /** Data de emissão do pedido de compra (YYYY-MM-DD) */
+    data_emissao?: string;
   }>;
   /** OS that are reserving stock for this product */
   os_reservas?: Array<{

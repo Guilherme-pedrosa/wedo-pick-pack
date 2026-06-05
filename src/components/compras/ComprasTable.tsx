@@ -24,6 +24,27 @@ function formatQty(value: number): string {
   return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Parse "YYYY-MM-DD" (or with time) into a local Date. */
+function parseEmissao(s?: string): Date | null {
+  if (!s) return null;
+  const iso = s.includes('T') ? s : s.replace(' ', 'T');
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Oldest age (in days) among an item's purchase orders. -1 if none. */
+function oldestOrderAgeDays(ordens: Array<{ data_emissao?: string }>): number {
+  let max = -1;
+  const now = Date.now();
+  for (const o of ordens) {
+    const d = parseEmissao(o.data_emissao);
+    if (!d) continue;
+    const days = Math.floor((now - d.getTime()) / 86400000);
+    if (days > max) max = days;
+  }
+  return max;
+}
+
 export default function ComprasTable({ items, showOkStyle, showCoveredStyle, convertedOrcamentoIds }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('qtd_efetiva_a_comprar');
   const [sortAsc, setSortAsc] = useState(false);

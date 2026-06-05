@@ -525,11 +525,11 @@ export async function buildListaCompras(
   // Build purchase-orders map from SELECTED statuses only (user controls which count)
   const compraMap = new Map<string, {
     qtd: number;
-    ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
+    ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; data_emissao?: string }>;
   }>();
   const compraMapByProduto = new Map<string, {
     qtd: number;
-    ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
+    ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; data_emissao?: string }>;
   }>();
   for (const ordem of allOrdensCompra) {
     for (const p of ordem.produtos || []) {
@@ -544,6 +544,7 @@ export async function buildListaCompras(
       entry.ordens.push({
         id: ordem.id, codigo: ordem.codigo, qtd: qty,
         nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao,
+        data_emissao: ordem.data_emissao,
       });
 
       if (!compraMapByProduto.has(produtoId)) compraMapByProduto.set(produtoId, { qtd: 0, ordens: [] });
@@ -552,6 +553,7 @@ export async function buildListaCompras(
       byProdutoEntry.ordens.push({
         id: ordem.id, codigo: ordem.codigo, qtd: qty,
         nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao,
+        data_emissao: ordem.data_emissao,
       });
     }
   }

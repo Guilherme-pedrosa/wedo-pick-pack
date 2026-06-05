@@ -24,6 +24,27 @@ function formatQty(value: number): string {
   return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** Parse "YYYY-MM-DD" (or with time) into a local Date. */
+function parseEmissao(s?: string): Date | null {
+  if (!s) return null;
+  const iso = s.includes('T') ? s : s.replace(' ', 'T');
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Oldest age (in days) among an item's purchase orders. -1 if none. */
+function oldestOrderAgeDays(ordens: Array<{ data_emissao?: string }>): number {
+  let max = -1;
+  const now = Date.now();
+  for (const o of ordens) {
+    const d = parseEmissao(o.data_emissao);
+    if (!d) continue;
+    const days = Math.floor((now - d.getTime()) / 86400000);
+    if (days > max) max = days;
+  }
+  return max;
+}
+
 export default function ComprasTable({ items, showOkStyle, showCoveredStyle, convertedOrcamentoIds }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('qtd_efetiva_a_comprar');
   const [sortAsc, setSortAsc] = useState(false);
@@ -106,9 +127,15 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
             const qtdEfetiva = item.qtd_efetiva_a_comprar ?? item.qtd_a_comprar ?? 0;
             const orcamentos = item.orcamentos ?? [];
             const isOsOnlyDeficit = item.qtd_necessaria === 0 && (item.estoque_reservado_os ?? 0) > 0;
+            const ageDays = oldestOrderAgeDays(ordensCompra);
+            // Pedido de compra aberto há +30 dias → vermelho cintilante; +15 dias → vermelho
+            const ageClass =
+              ageDays > 30 ? 'bg-red-100/80 hover:bg-red-100 animate-blink-red'
+              : ageDays > 15 ? 'bg-red-100/80 hover:bg-red-100'
+              : '';
               return (
                 <> 
-                  <TableRow key={key} className={`${rowBg} ${isOsOnlyDeficit ? 'bg-orange-50/60' : ''}`}>
+                  <TableRow key={key} className={`${ageClass || rowBg} ${isOsOnlyDeficit && !ageClass ? 'bg-orange-50/60' : ''}`}>
                     <TableCell className="font-mono text-xs">{item.codigo_produto}</TableCell>
                     <TableCell className="text-sm max-w-[200px]">
                       <span className="block truncate">{item.nome_produto}</span>

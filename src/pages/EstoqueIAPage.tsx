@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { UIMessage } from "ai";
 import { Plus, MessageSquare, Trash2 } from "lucide-react";
@@ -7,49 +7,62 @@ import StockChatWindow from "@/components/estoque-ia/StockChatWindow";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/estoque-ia-logo.png";
+import {
+  loadThreads,
+  newThreadId,
+  saveThreads,
+  type StoredThread,
+} from "@/lib/estoqueIaStorage";
 
-interface Thread {
-  id: string;
-  title: string;
+// Idempotent, client-safe bootstrap: read localStorage and create a default
+// thread only when none exist. Runs once at module-load of this component.
+function bootstrap(): StoredThread[] {
+  const existing = loadThreads();
+  if (existing.length > 0) return existing;
+  const initial: StoredThread = {
+    id: newThreadId(),
+    title: "Nova conversa",
+    updatedAt: Date.now(),
+    messages: [],
+  };
+  saveThreads([initial]);
+  return [initial];
 }
-
-const newId = () =>
-  (typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `t-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 export default function EstoqueIAPage() {
   const navigate = useNavigate();
   const { threadId } = useParams<{ threadId: string }>();
 
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const messagesStore = useRef<Map<string, UIMessage[]>>(new Map());
+  const [threads, setThreads] = useState<StoredThread[]>(() => bootstrap());
 
-  // Ensure there is an active thread; create one if route has no/unknown id.
-  const ensureActive = useCallback(() => {
+  // Persist threads (with messages) whenever they change.
+  useEffect(() => {
+    saveThreads(threads);
+  }, [threads]);
+
+  // Ensure the route points at a valid thread.
+  useEffect(() => {
     if (threadId && threads.some((t) => t.id === threadId)) return;
-    const id = newId();
-    setThreads((prev) => [{ id, title: "Nova conversa" }, ...prev]);
-    navigate(`/estoque-ia/${id}`, { replace: !threadId });
+    if (threads.length > 0) {
+      navigate(`/estoque-ia/${threads[0].id}`, { replace: true });
+    }
   }, [threadId, threads, navigate]);
 
-  // Lazily create the first thread on initial render.
-  if (!threadId || !threads.some((t) => t.id === threadId)) {
-    if (threads.length === 0 && !threadId) {
-      // create initial thread synchronously via effect-like deferral
-    }
-    // run once
-    queueMicrotask(ensureActive);
-  }
-
   const startNew = () => {
-    const id = newId();
-    setThreads((prev) => [{ id, title: "Nova conversa" }, ...prev]);
+    const id = newThreadId();
+    setThreads((prev) => [
+      { id, title: "Nova conversa", updatedAt: Date.now(), messages: [] },
+      ...prev,
+    ]);
     navigate(`/estoque-ia/${id}`);
   };
 
   const handleMessagesChange = useCallback((id: string, msgs: UIMessage[]) => {
-    messagesStore.current.set(id, msgs);
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === id ? { ...t, messages: msgs, updatedAt: Date.now() } : t,
+      ),
+    );
   }, []);
 
   const handleTitle = useCallback((id: string, title: string) => {
@@ -57,7 +70,6 @@ export default function EstoqueIAPage() {
   }, []);
 
   const deleteThread = (id: string) => {
-    messagesStore.current.delete(id);
     setThreads((prev) => {
       const next = prev.filter((t) => t.id !== id);
       if (id === threadId) {
@@ -68,7 +80,8 @@ export default function EstoqueIAPage() {
     });
   };
 
-  const activeId = threadId && threads.some((t) => t.id === threadId) ? threadId : null;
+  const activeThread =
+    (threadId && threads.find((t) => t.id === threadId)) || null;
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
@@ -89,7 +102,9 @@ export default function EstoqueIAPage() {
               key={t.id}
               className={cn(
                 "group flex items-center gap-2 rounded-md px-2 py-2 text-sm",
-                t.id === activeId ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/50",
+                t.id === activeThread?.id
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:bg-muted/50",
               )}
             >
               <button
@@ -113,11 +128,11 @@ export default function EstoqueIAPage() {
 
       {/* Chat */}
       <main className="flex-1 overflow-hidden">
-        {activeId ? (
+        {activeThread ? (
           <StockChatWindow
-            key={activeId}
-            threadId={activeId}
-            initialMessages={messagesStore.current.get(activeId) ?? []}
+            key={activeThread.id}
+            threadId={activeThread.id}
+            initialMessages={activeThread.messages}
             onMessagesChange={handleMessagesChange}
             onTitle={handleTitle}
           />

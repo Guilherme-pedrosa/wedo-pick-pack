@@ -127,9 +127,15 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
             const qtdEfetiva = item.qtd_efetiva_a_comprar ?? item.qtd_a_comprar ?? 0;
             const orcamentos = item.orcamentos ?? [];
             const isOsOnlyDeficit = item.qtd_necessaria === 0 && (item.estoque_reservado_os ?? 0) > 0;
+            const ageDays = oldestOrderAgeDays(ordensCompra);
+            // Pedido de compra aberto há +30 dias → vermelho cintilante; +15 dias → vermelho
+            const ageClass =
+              ageDays > 30 ? 'bg-red-100/80 hover:bg-red-100 animate-blink-red'
+              : ageDays > 15 ? 'bg-red-100/80 hover:bg-red-100'
+              : '';
               return (
                 <> 
-                  <TableRow key={key} className={`${rowBg} ${isOsOnlyDeficit ? 'bg-orange-50/60' : ''}`}>
+                  <TableRow key={key} className={`${ageClass || rowBg} ${isOsOnlyDeficit && !ageClass ? 'bg-orange-50/60' : ''}`}>
                     <TableCell className="font-mono text-xs">{item.codigo_produto}</TableCell>
                     <TableCell className="text-sm max-w-[200px]">
                       <span className="block truncate">{item.nome_produto}</span>

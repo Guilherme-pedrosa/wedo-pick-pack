@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.push-watcher]
 verify_jwt = false
+
+[functions.inventory-consumption-daily]
+verify_jwt = false

@@ -766,6 +766,15 @@ function SeparationCard({
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setHistoryOpen(true)}
+              className="h-7 px-2 text-xs"
+            >
+              <History className="h-3.5 w-3.5 mr-1" />
+              Histórico
+            </Button>
             {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"

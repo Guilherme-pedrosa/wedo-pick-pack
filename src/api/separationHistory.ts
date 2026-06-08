@@ -54,37 +54,67 @@ function buildSystemDescription(action: string, d: Record<string, unknown> | nul
 export async function getSeparationHistory(sep: SeparationRecord): Promise<SeparationHistory> {
   const events: TimelineEvent[] = [];
 
-  // 1) Local separation record lifecycle events
-  if (sep.started_at) {
-    events.push({
-      at: sep.started_at,
-      source: 'separation',
-      kind: 'started',
-      title: 'Separação iniciada',
-      actor: sep.operator_name,
-      description: `${sep.items_total} item(ns) — cliente ${sep.client_name}`,
-    });
+  // 1) Lifecycle events from ALL separation records of this same OS/Venda
+  //    (a single OS can be separated, returned, re-separated, etc. — show everything)
+  let siblings: SeparationRecord[] = [sep];
+  try {
+    const { data } = await supabase
+      .from('separations')
+      .select('*')
+      .eq('order_type', sep.order_type)
+      .eq('order_id', sep.order_id)
+      .order('started_at', { ascending: true });
+    if (data && data.length > 0) {
+      siblings = data as unknown as SeparationRecord[];
+    }
+  } catch (e) {
+    console.error('Failed to load sibling separations for history:', e);
   }
-  if (sep.concluded_at) {
-    events.push({
-      at: sep.concluded_at,
-      source: 'separation',
-      kind: 'concluded',
-      title: 'Separação registrada',
-      actor: sep.operator_name,
-      description: `${sep.items_confirmed}/${sep.items_total} itens • Status: ${sep.status_name} → ${sep.target_status_name}`,
-    });
-  }
-  if (sep.invalidated && sep.invalidated_at) {
-    const isReturn = (sep.invalidated_reason || '').startsWith('DEVOLUÇÃO');
-    events.push({
-      at: sep.invalidated_at,
-      source: 'separation',
-      kind: isReturn ? 'return' : 'invalidated',
-      title: isReturn ? 'Devolução registrada' : 'Separação invalidada',
-      description: sep.invalidated_reason || undefined,
-    });
-  }
+
+  const multiple = siblings.length > 1;
+  siblings.forEach((s, idx) => {
+    const tag = multiple ? ` (separação ${idx + 1}/${siblings.length})` : '';
+    if (s.started_at) {
+      events.push({
+        at: s.started_at,
+        source: 'separation',
+        kind: 'started',
+        title: `Separação iniciada${tag}`,
+        actor: s.operator_name,
+        description: `${s.items_total} item(ns) — cliente ${s.client_name}`,
+      });
+    }
+    if (s.concluded_at) {
+      events.push({
+        at: s.concluded_at,
+        source: 'separation',
+        kind: 'concluded',
+        title: `Separação registrada${tag}`,
+        actor: s.operator_name,
+        description: `${s.items_confirmed}/${s.items_total} itens • Status: ${s.status_name} → ${s.target_status_name}`,
+      });
+    }
+    if (s.technician_name) {
+      events.push({
+        at: s.concluded_at,
+        source: 'separation',
+        kind: 'tech-link',
+        title: `Técnico vinculado${tag}`,
+        description: `Técnico: ${s.technician_name}${s.technician_gc_id ? ` (ID ${s.technician_gc_id})` : ''}`,
+      });
+    }
+    if (s.invalidated && s.invalidated_at) {
+      const isReturn = (s.invalidated_reason || '').startsWith('DEVOLUÇÃO');
+      events.push({
+        at: s.invalidated_at,
+        source: 'separation',
+        kind: isReturn ? 'return' : 'invalidated',
+        title: `${isReturn ? 'Devolução registrada' : 'Separação invalidada'}${tag}`,
+        description: s.invalidated_reason || undefined,
+      });
+    }
+  });
+
 
   // 2) System logs for this order (everything ever logged against this OS/Venda)
   try {

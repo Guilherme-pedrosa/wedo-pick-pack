@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import {
   History, Loader2, PlayCircle, PackageCheck, UserPlus, UserMinus, Undo2,
-  XCircle, FileText, AlertTriangle, MessageSquare, Radio,
+  XCircle, FileText, AlertTriangle, MessageSquare, Radio, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSeparationHistory, SeparationHistory, TimelineEvent } from '@/api/separationHistory';
@@ -24,6 +24,7 @@ const KIND_META: Record<string, { icon: React.ElementType; color: string }> = {
   invalidated: { icon: XCircle, color: 'text-destructive' },
   'os-generated': { icon: FileText, color: 'text-purple-600' },
   'os-gen-failed': { icon: AlertTriangle, color: 'text-destructive' },
+  'gc-change': { icon: RefreshCw, color: 'text-sky-600' },
   system: { icon: History, color: 'text-muted-foreground' },
 };
 
@@ -50,7 +51,7 @@ function EventRow({ ev }: { ev: TimelineEvent }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-foreground">{ev.title}</span>
           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-            {ev.source === 'separation' ? 'Sistema' : ev.source === 'system' ? 'Log' : ev.source === 'os_gen' ? 'Geração OS' : 'GC'}
+            {ev.kind === 'gc-change' ? 'GestãoClick' : ev.source === 'separation' ? 'Sistema' : ev.source === 'system' ? 'Log' : ev.source === 'os_gen' ? 'Geração OS' : 'GC'}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{fmt(ev.at)}{ev.actor ? ` • ${ev.actor}` : ''}</p>

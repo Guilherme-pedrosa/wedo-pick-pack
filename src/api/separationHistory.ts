@@ -28,6 +28,7 @@ function humanizeSystemAction(action: string): { title: string; kind: string } {
     vincular_tecnico: { title: 'Técnico vinculado', kind: 'tech-link' },
     desvincular_tecnico: { title: 'Técnico desvinculado', kind: 'tech-unlink' },
     devolucao_agenda: { title: 'Devolução por agenda', kind: 'return' },
+    gc_status_change: { title: 'Situação alterada no GestãoClick', kind: 'gc-change' },
   };
   return map[action] || { title: action, kind: 'system' };
 }
@@ -43,6 +44,9 @@ function buildSystemDescription(action: string, d: Record<string, unknown> | nul
   }
   if (action === 'devolucao_agenda') {
     return `Motivo: ${d.motivo ?? '—'}`;
+  }
+  if (action === 'gc_status_change') {
+    return `${d.from_situacao ?? '—'} → ${d.to_situacao ?? '—'} (alterada no GestãoClick)`;
   }
   if (action === 'Separação concluída') {
     const dur = d.duration ? ` em ${d.duration}` : '';

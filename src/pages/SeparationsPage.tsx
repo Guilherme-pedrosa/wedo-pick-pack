@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt, { extractServiceLocation } from '@/components/checkout/SeparationReceipt';
 import SeparationHistoryDialog from '@/components/separations/SeparationHistoryDialog';
+import { trackGcStatusChanges } from '@/api/gcStatusTracker';
 import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 
@@ -152,10 +153,32 @@ export default function SeparationsPage() {
       }
     }
 
+    // Record GC status changes (incl. changes made directly in GC) into the history log
+    try {
+      const observed = uniqueOrders
+        .map(o => {
+          const r = orderResults.get(`${o.order_type}:${o.order_id}`);
+          if (!r) return null;
+          const code = active.find(s => s.order_type === o.order_type && s.order_id === o.order_id)?.order_code;
+          return {
+            order_type: o.order_type as 'os' | 'venda',
+            order_id: o.order_id,
+            order_code: code,
+            situacao_id: r.situacao_id,
+            nome_situacao: r.nome_situacao,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      await trackGcStatusChanges(observed);
+    } catch (err) {
+      console.error('Error tracking GC status changes:', err);
+    }
+
     // Map results back to all separations + check for invalidations
     const liveResults: Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null> = {};
     let invalidated = 0;
     const now = new Date().toISOString();
+
 
     for (const sep of active) {
       const key = `${sep.order_type}:${sep.order_id}`;

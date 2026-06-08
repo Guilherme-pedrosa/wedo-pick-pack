@@ -375,7 +375,7 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
 
-  let path = `/api/compras?pagina=${pagina}`;
+  let path = `/api/compras?limite=100&pagina=${pagina}`;
   if (situacaoId) path += `&situacao_id=${situacaoId}`;
 
   const raw = await apiRequest<{ data: any[]; meta: GCMeta }>(path);

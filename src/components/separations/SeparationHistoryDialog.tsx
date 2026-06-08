@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import {
   History, Loader2, PlayCircle, PackageCheck, UserPlus, UserMinus, Undo2,
-  XCircle, FileText, AlertTriangle, MessageSquare, Radio,
+  XCircle, FileText, AlertTriangle, MessageSquare, Radio, RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSeparationHistory, SeparationHistory, TimelineEvent } from '@/api/separationHistory';

@@ -358,14 +358,15 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const idx = await buildExplorerIndex();
   const detalhe = await getProdutoDetalhe(produtoId);
   const estoque = parseDec(detalhe?.estoque);
+  const comprasAliases = idx.comprasAliases ?? new Map<string, ExplorerCompraRef[]>();
 
   const allOss = (idx.oss.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
   const allOrcamentos = (idx.orcamentos.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
   const allCompras = mergeRefs(
     idx.compras.get(produtoId),
-    idx.comprasAliases.get(codeKey(detalhe?.codigo_interno)),
-    idx.comprasAliases.get(codeKey(detalhe?.codigo_barra)),
-    idx.comprasAliases.get(nameKey(detalhe?.nome)),
+    comprasAliases.get(codeKey(detalhe?.codigo_interno)),
+    comprasAliases.get(codeKey(detalhe?.codigo_barra)),
+    comprasAliases.get(nameKey(detalhe?.nome)),
   ).sort((a, b) => b.data.localeCompare(a.data));
   const allVendas = (idx.vendas.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
 

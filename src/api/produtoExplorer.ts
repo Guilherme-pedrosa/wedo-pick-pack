@@ -167,8 +167,9 @@ export async function buildExplorerIndex(
         const pid = normId((w as any)?.produto?.produto_id);
         if (!pid) continue;
         const qtd = parseDec((w as any)?.produto?.quantidade);
+        const valor_unit = parseDec((w as any)?.produto?.valor_venda);
         if (!oss.has(pid)) oss.set(pid, []);
-        oss.get(pid)!.push({ ...ref, qtd });
+        oss.get(pid)!.push({ ...ref, qtd, valor_unit });
       }
     }
 

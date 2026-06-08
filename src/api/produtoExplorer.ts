@@ -186,7 +186,7 @@ export async function buildExplorerIndex(
   onProgress?: (step: string, page: number, total: number) => void,
   force = false,
 ): Promise<ExplorerIndex> {
-  if (!force && cache && Date.now() - cache.builtAt < TTL) return cache;
+  if (!force && cache?.comprasAliases && Date.now() - cache.builtAt < TTL) return cache;
   if (building) return building;
 
   const cfg = getExplorerConfig();

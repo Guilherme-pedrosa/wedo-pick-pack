@@ -22,6 +22,12 @@ import { logSystemAction } from '@/lib/systemLog';
 const fmtQty = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+const fmtMoney = (n: number) =>
+  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const fmtPct = (n: number) =>
+  `${(n * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+
 const fmtDate = (s: string) => {
   if (!s) return '—';
   const d = new Date(s);
@@ -240,6 +246,89 @@ function Kpi({ label, value, icon, tone }: { label: string; value: string; icon:
   );
 }
 
+function PriceSummaryCard({ s }: { s: ProductExplorerData['priceSummary'] }) {
+  // alerta: vendendo abaixo ou muito perto do custo (margem < 16%)
+  const lowMargin = s.margem_pct !== null && s.margem_pct < 0.16;
+  const negative = s.margem_pct !== null && s.margem_pct < 0;
+  const marginTone = s.margem_pct === null
+    ? ''
+    : negative
+      ? 'border-destructive bg-destructive/10'
+      : lowMargin
+        ? 'border-amber-500 bg-amber-500/10'
+        : 'border-emerald-500 bg-emerald-500/10';
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Receipt className="h-4 w-4" /> Vendas x Compras (valores)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Vendido */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vendido (OS + Vendas)</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold">{fmtQty(s.qtd_vendida)}</span>
+              <span className="text-xs text-muted-foreground">un · {s.num_vendas} registros</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm pt-1">
+              <div><span className="text-muted-foreground">Preço médio:</span> <strong>{fmtMoney(s.preco_venda_medio)}</strong></div>
+              <div><span className="text-muted-foreground">Último:</span> <strong>{fmtMoney(s.ultimo_preco_venda)}</strong></div>
+              <div><span className="text-muted-foreground">Mín:</span> {fmtMoney(s.preco_venda_min)}</div>
+              <div><span className="text-muted-foreground">Máx:</span> {fmtMoney(s.preco_venda_max)}</div>
+            </div>
+          </div>
+          {/* Comprado */}
+          <div className="rounded-lg border p-4 space-y-2">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Comprado (Pedidos)</div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-bold">{fmtQty(s.qtd_comprada)}</span>
+              <span className="text-xs text-muted-foreground">un · {s.num_compras} registros</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm pt-1">
+              <div><span className="text-muted-foreground">Custo médio:</span> <strong>{fmtMoney(s.custo_medio)}</strong></div>
+              <div><span className="text-muted-foreground">Último custo:</span> <strong>{fmtMoney(s.ultimo_custo)}</strong></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Margem */}
+        <div className={`rounded-lg border p-4 flex flex-wrap items-center gap-x-6 gap-y-2 ${marginTone}`}>
+          <div className="flex items-center gap-2">
+            {negative ? (
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+            ) : lowMargin ? (
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+            )}
+            <span className="text-sm font-medium">
+              Margem média:{' '}
+              <strong className="text-lg">
+                {s.margem_pct === null ? '—' : fmtPct(s.margem_pct)}
+              </strong>
+            </span>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            Venda média {fmtMoney(s.preco_venda_medio)} − Custo médio {fmtMoney(s.custo_medio)} ={' '}
+            <strong className={negative ? 'text-destructive' : ''}>
+              {fmtMoney(s.preco_venda_medio - s.custo_medio)}
+            </strong>
+          </div>
+          {s.margem_pct !== null && (negative || lowMargin) && (
+            <span className="text-sm font-semibold">
+              {negative ? '⚠️ Vendendo ABAIXO do custo!' : '⚠️ Margem apertada (perto do custo)'}
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ProductDetail({ data }: { data: ProductExplorerData }) {
   const need = Math.max(0, -data.saldo_projetado);
   return (
@@ -266,6 +355,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
         )}
       </div>
 
+      <PriceSummaryCard s={data.priceSummary} />
+
       <Tabs defaultValue="os">
         <TabsList>
           <TabsTrigger value="os">OS ({data.oss.length})</TabsTrigger>
@@ -287,6 +378,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                     <TableHead>Situação</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead className="text-right">Qtd</TableHead>
+                    <TableHead className="text-right">Vlr. Unit.</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -297,6 +390,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                       <TableCell><Badge variant="outline">{o.nome_situacao || '—'}</Badge></TableCell>
                       <TableCell>{fmtDate(o.data)}</TableCell>
                       <TableCell className="text-right">{fmtQty(o.qtd)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(o.valor_unit)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(o.valor_unit * o.qtd)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -349,6 +444,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                     <TableHead>Situação</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead className="text-right">Qtd</TableHead>
+                    <TableHead className="text-right">Vlr. Unit.</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -359,6 +456,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                       <TableCell><Badge variant="outline">{v.nome_situacao || '—'}</Badge></TableCell>
                       <TableCell>{fmtDate(v.data)}</TableCell>
                       <TableCell className="text-right">{fmtQty(v.qtd)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(v.valor_unit)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(v.valor_unit * v.qtd)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -381,6 +480,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                     <TableHead>Situação</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead className="text-right">Qtd</TableHead>
+                    <TableHead className="text-right">Custo Unit.</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -391,6 +492,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                       <TableCell><Badge variant="outline">{c.nome_situacao || '—'}</Badge></TableCell>
                       <TableCell>{fmtDate(c.data)}</TableCell>
                       <TableCell className="text-right">{fmtQty(c.qtd)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(c.valor_unit)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(c.valor_unit * c.qtd)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

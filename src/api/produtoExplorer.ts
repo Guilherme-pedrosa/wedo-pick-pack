@@ -31,6 +31,7 @@ export interface ExplorerOSRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
 }
 export interface ExplorerOrcRef {
   id: string;
@@ -40,6 +41,7 @@ export interface ExplorerOrcRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
 }
 export interface ExplorerCompraRef {
   id: string;
@@ -49,6 +51,7 @@ export interface ExplorerCompraRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
 }
 export interface ExplorerVendaRef {
   id: string;
@@ -58,6 +61,24 @@ export interface ExplorerVendaRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
+}
+
+export interface PriceSummary {
+  // Vendido (OS executadas + Vendas, exceto cancelados)
+  qtd_vendida: number;
+  num_vendas: number;
+  preco_venda_medio: number; // ponderado por qtd
+  preco_venda_min: number;
+  preco_venda_max: number;
+  ultimo_preco_venda: number;
+  // Comprado (pedidos de compra, exceto cancelados)
+  qtd_comprada: number;
+  num_compras: number;
+  custo_medio: number; // ponderado por qtd
+  ultimo_custo: number;
+  // Análise de margem (preço venda médio vs custo médio)
+  margem_pct: number | null; // (venda - custo) / venda
 }
 
 export interface ProductExplorerData {
@@ -68,6 +89,7 @@ export interface ProductExplorerData {
   orcamentos: ExplorerOrcRef[];
   compras: ExplorerCompraRef[];
   vendas: ExplorerVendaRef[];
+  priceSummary: PriceSummary;
   qtd_demanda_os: number;
   qtd_demanda_orcamentos: number;
   qtd_demanda_vendas: number;
@@ -163,8 +185,9 @@ export async function buildExplorerIndex(
         const pid = normId((w as any)?.produto?.produto_id);
         if (!pid) continue;
         const qtd = parseDec((w as any)?.produto?.quantidade);
+        const valor_unit = parseDec((w as any)?.produto?.valor_venda);
         if (!oss.has(pid)) oss.set(pid, []);
-        oss.get(pid)!.push({ ...ref, qtd });
+        oss.get(pid)!.push({ ...ref, qtd, valor_unit });
       }
     }
 
@@ -189,8 +212,9 @@ export async function buildExplorerIndex(
         const pid = normId(w.produto?.produto_id);
         if (!pid) continue;
         const qtd = parseDec(w.produto?.quantidade);
+        const valor_unit = parseDec((w.produto as any)?.valor_custo ?? (w.produto as any)?.valor_venda);
         if (!orcamentos.has(pid)) orcamentos.set(pid, []);
-        orcamentos.get(pid)!.push({ ...ref, qtd });
+        orcamentos.get(pid)!.push({ ...ref, qtd, valor_unit });
       }
     }
 
@@ -215,8 +239,9 @@ export async function buildExplorerIndex(
         const pid = normId(w.produto?.produto_id);
         if (!pid) continue;
         const qtd = parseDec(w.produto?.quantidade);
+        const valor_unit = parseDec(w.produto?.valor_custo);
         if (!compras.has(pid)) compras.set(pid, []);
-        compras.get(pid)!.push({ ...ref, qtd });
+        compras.get(pid)!.push({ ...ref, qtd, valor_unit });
       }
     }
 
@@ -241,8 +266,9 @@ export async function buildExplorerIndex(
         const pid = normId((w as any)?.produto?.produto_id);
         if (!pid) continue;
         const qtd = parseDec((w as any)?.produto?.quantidade);
+        const valor_unit = parseDec((w as any)?.produto?.valor_venda);
         if (!vendas.has(pid)) vendas.set(pid, []);
-        vendas.get(pid)!.push({ ...ref, qtd });
+        vendas.get(pid)!.push({ ...ref, qtd, valor_unit });
       }
     }
 
@@ -327,6 +353,53 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   if (saldo_projetado < 0) health = 'critical';
   else if (estoque < demanda) health = 'warn';
 
+  // ---- Resumo de preços (vendido x comprado) ----
+  const isCancelled = (s: string) => /CANCELAD|REJEITAD|RECUSAD|DEVOLVID/i.test(s || '');
+  // Vendido = OS + Vendas realizadas (não canceladas), com valor de venda > 0
+  const vendaRecords = [...allOss, ...allVendas]
+    .filter(r => !isCancelled(r.nome_situacao) && r.qtd > 0 && r.valor_unit > 0);
+  // Comprado = pedidos de compra (não cancelados), com custo > 0
+  const compraRecords = allCompras
+    .filter(r => !isCancelled(r.nome_situacao) && r.qtd > 0 && r.valor_unit > 0);
+
+  const wavg = (rows: { qtd: number; valor_unit: number }[]) => {
+    const totQ = rows.reduce((s, r) => s + r.qtd, 0);
+    if (totQ <= 0) return 0;
+    return rows.reduce((s, r) => s + r.qtd * r.valor_unit, 0) / totQ;
+  };
+
+  const qtd_vendida = vendaRecords.reduce((s, r) => s + r.qtd, 0);
+  const qtd_comprada = compraRecords.reduce((s, r) => s + r.qtd, 0);
+  const preco_venda_medio = wavg(vendaRecords);
+  const custo_medio = wavg(compraRecords);
+  const vendaPrices = vendaRecords.map(r => r.valor_unit);
+  const preco_venda_min = vendaPrices.length ? Math.min(...vendaPrices) : 0;
+  const preco_venda_max = vendaPrices.length ? Math.max(...vendaPrices) : 0;
+  // registros já ordenados por data desc → primeiro é o mais recente
+  const ultimo_preco_venda = vendaRecords.length
+    ? vendaRecords.slice().sort((a, b) => b.data.localeCompare(a.data))[0].valor_unit
+    : 0;
+  const ultimo_custo = compraRecords.length
+    ? compraRecords.slice().sort((a, b) => b.data.localeCompare(a.data))[0].valor_unit
+    : 0;
+  const margem_pct = preco_venda_medio > 0 && custo_medio > 0
+    ? (preco_venda_medio - custo_medio) / preco_venda_medio
+    : null;
+
+  const priceSummary: PriceSummary = {
+    qtd_vendida,
+    num_vendas: vendaRecords.length,
+    preco_venda_medio,
+    preco_venda_min,
+    preco_venda_max,
+    ultimo_preco_venda,
+    qtd_comprada,
+    num_compras: compraRecords.length,
+    custo_medio,
+    ultimo_custo,
+    margem_pct,
+  };
+
   return {
     produto_id: produtoId,
     estoque,
@@ -335,6 +408,7 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
     orcamentos,
     compras,
     vendas,
+    priceSummary,
     qtd_demanda_os,
     qtd_demanda_orcamentos,
     qtd_demanda_vendas,

@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'; // util
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt, { extractServiceLocation } from '@/components/checkout/SeparationReceipt';
+import SeparationHistoryDialog from '@/components/separations/SeparationHistoryDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 

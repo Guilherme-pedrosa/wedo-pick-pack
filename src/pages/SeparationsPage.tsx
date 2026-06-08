@@ -494,6 +494,9 @@ function SeparationCard({
   const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
   const [receiptServiceLocation, setReceiptServiceLocation] = useState<string | undefined>(undefined);
 
+  // Full history state
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   // Technician link state
   const [techDialogOpen, setTechDialogOpen] = useState(false);
   const [technicians, setTechnicians] = useState<{ id: string; gc_id: string; name: string }[]>([]);

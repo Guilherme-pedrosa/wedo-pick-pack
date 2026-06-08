@@ -1032,7 +1032,7 @@ export type Database = {
           id: string
           ip_address: string | null
           module: string
-          user_id: string
+          user_id: string | null
           user_name: string
         }
         Insert: {
@@ -1045,7 +1045,7 @@ export type Database = {
           id?: string
           ip_address?: string | null
           module: string
-          user_id: string
+          user_id?: string | null
           user_name?: string
         }
         Update: {
@@ -1058,7 +1058,7 @@ export type Database = {
           id?: string
           ip_address?: string | null
           module?: string
-          user_id?: string
+          user_id?: string | null
           user_name?: string
         }
         Relationships: []

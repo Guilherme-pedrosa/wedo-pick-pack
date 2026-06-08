@@ -365,6 +365,12 @@ export default function SeparationsPage() {
         </div>
       )}
 
+      {!syncing && (
+        <p className="text-[11px] text-muted-foreground text-center print:hidden">
+          A verificação automática cobre apenas as últimas 24h. Para registros mais antigos, clique em <strong>Status GC</strong> para atualizar manualmente.
+        </p>
+      )}
+
       {isLoading && (
         <div className="text-center text-muted-foreground py-12 print:hidden">
           <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />

@@ -544,7 +544,7 @@ async function putStatusWithRetry(path: string, payload: Record<string, any>): P
   }
 }
 
-export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string): Promise<void> {
+export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string, customNote?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
     return;
@@ -558,13 +558,17 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
   const obsInterna = latestOrder.observacoes_interna || rawOrder.observacoes_interna || '';
   const separator = obsInterna.trim() ? '\n' : '';
   const now = new Date().toLocaleString('pt-BR');
-  const operatorNote = operatorName
+  const operatorNote = customNote
+    ? `${separator}[WeDo Checkout] ${customNote} em ${now}`
+    : operatorName
     ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
     : '';
 
   const obs = latestOrder.observacoes || rawOrder.observacoes || '';
   const obsSeparator = obs.trim() ? '\n' : '';
-  const obsNote = operatorName
+  const obsNote = customNote
+    ? `${obsSeparator}[WeDo Checkout] ${customNote} em ${now}`
+    : operatorName
     ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
     : '';
 

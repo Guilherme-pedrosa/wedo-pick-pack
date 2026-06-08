@@ -391,19 +391,22 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
       situacao_id: String(compra?.situacao_id ?? ''),
       nome_situacao: String(compra?.nome_situacao ?? ''),
       valor_total: String(compra?.valor_total ?? '0'),
-      produtos: (compra?.produtos || []).map((p: any) => ({
-        produto: {
-          id: String(p?.produto?.id ?? ''),
-          produto_id: String(p?.produto?.produto_id ?? ''),
-          variacao_id: String(p?.produto?.variacao_id ?? p?.produto?.estoque_id ?? ''),
-          nome_produto: String(p?.produto?.nome_produto ?? ''),
-          codigo_produto: String(p?.produto?.codigo_produto ?? p?.produto?.codigo_interno ?? ''),
-          codigo_barras: String(p?.produto?.codigo_barras ?? p?.produto?.codigo_barra ?? ''),
-          codigo_barra: String(p?.produto?.codigo_barra ?? p?.produto?.codigo_barras ?? ''),
-          quantidade: p?.produto?.quantidade ?? '0',
-          valor_custo: String(p?.produto?.valor_custo ?? '0'),
-        },
-      })),
+      produtos: (compra?.produtos || []).map((p: any) => {
+        const produto = p?.produto ?? p;
+        return {
+          produto: {
+            id: String(produto?.id ?? ''),
+            produto_id: String(produto?.produto_id ?? produto?.id_produto ?? ''),
+            variacao_id: String(produto?.variacao_id ?? produto?.estoque_id ?? ''),
+            nome_produto: String(produto?.nome_produto ?? produto?.nome ?? produto?.descricao ?? ''),
+            codigo_produto: String(produto?.codigo_produto ?? produto?.codigo_interno ?? produto?.codigo ?? ''),
+            codigo_barras: String(produto?.codigo_barras ?? produto?.codigo_barra ?? ''),
+            codigo_barra: String(produto?.codigo_barra ?? produto?.codigo_barras ?? ''),
+            quantidade: produto?.quantidade ?? '0',
+            valor_custo: String(produto?.valor_custo ?? produto?.valor_unitario ?? produto?.valor ?? '0'),
+          },
+        };
+      }),
     };
   });
 

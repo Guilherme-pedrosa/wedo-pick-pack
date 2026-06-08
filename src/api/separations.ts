@@ -153,17 +153,22 @@ export async function getValidSeparatedOrderIds(): Promise<Set<string>> {
 }
 
 export async function invalidateSeparation(id: string, reason: string): Promise<boolean> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('separations')
     .update({
       invalidated: true,
       invalidated_at: new Date().toISOString(),
       invalidated_reason: reason,
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) {
     console.error('Error invalidating separation:', error);
+    return false;
+  }
+  if (!data || data.length === 0) {
+    console.error('Invalidate separation affected 0 rows (RLS or missing id):', id);
     return false;
   }
   return true;
@@ -174,16 +179,21 @@ export async function linkTechnicianToSeparation(
   technicianGcId: string | null,
   technicianName: string | null
 ): Promise<boolean> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('separations')
     .update({
       technician_gc_id: technicianGcId,
       technician_name: technicianName,
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) {
     console.error('Error linking technician to separation:', error);
+    return false;
+  }
+  if (!data || data.length === 0) {
+    console.error('Link technician affected 0 rows (RLS or missing id):', id);
     return false;
   }
   return true;

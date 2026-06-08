@@ -22,6 +22,31 @@ function parseDec(v: unknown): number {
   return parseFloat(s) || 0;
 }
 
+function normText(v: unknown): string {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function codeKey(v: unknown): string {
+  const s = normText(v);
+  return s ? `code:${s}` : '';
+}
+
+function nameKey(v: unknown): string {
+  const s = normText(v);
+  return s ? `name:${s}` : '';
+}
+
+function addToMap<T>(map: Map<string, T[]>, key: string, value: T) {
+  if (!key) return;
+  if (!map.has(key)) map.set(key, []);
+  map.get(key)!.push(value);
+}
+
 // ------------ types ------------
 export interface ExplorerOSRef {
   id: string;
@@ -103,6 +128,7 @@ interface ExplorerIndex {
   oss: Map<string, ExplorerOSRef[]>;
   orcamentos: Map<string, ExplorerOrcRef[]>;
   compras: Map<string, ExplorerCompraRef[]>;
+  comprasAliases: Map<string, ExplorerCompraRef[]>;
   vendas: Map<string, ExplorerVendaRef[]>;
 }
 

@@ -22,6 +22,12 @@ import { logSystemAction } from '@/lib/systemLog';
 const fmtQty = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
+const fmtMoney = (n: number) =>
+  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const fmtPct = (n: number) =>
+  `${(n * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+
 const fmtDate = (s: string) => {
   if (!s) return '—';
   const d = new Date(s);

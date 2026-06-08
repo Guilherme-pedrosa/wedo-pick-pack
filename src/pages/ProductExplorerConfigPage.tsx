@@ -130,8 +130,8 @@ export default function ProductExplorerConfigPage() {
             Configuração do Explorador
           </h1>
           <p className="text-sm text-muted-foreground">
-            Escolha quais situações de OS, Orçamentos e Pedidos de Compra entram no cálculo de demanda e estoque projetado.
-            Se nada for marcado em um grupo, o sistema usa as situações abertas padrão.
+            Escolha quais situações de OS, Orçamentos, Vendas e Pedidos de Compra entram no cálculo de demanda e estoque projetado.
+            Se nada for marcado em um grupo, o sistema considera todas as situações desse grupo.
           </p>
         </div>
         <Button onClick={save} disabled={saving || loading} className="gap-2">
@@ -150,7 +150,7 @@ export default function ProductExplorerConfigPage() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1">
               <Label htmlFor="fromDate" className="text-xs text-muted-foreground">
-                Data inicial (OS, orçamentos, vendas e pedidos de compra com data anterior serão ignorados na sincronização)
+                Data inicial para demanda (OS, orçamentos e vendas). Pedidos de compra continuam entrando no histórico de custo.
               </Label>
               <Input
                 id="fromDate"

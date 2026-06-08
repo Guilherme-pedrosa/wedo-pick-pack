@@ -28,6 +28,7 @@ function humanizeSystemAction(action: string): { title: string; kind: string } {
     vincular_tecnico: { title: 'Técnico vinculado', kind: 'tech-link' },
     desvincular_tecnico: { title: 'Técnico desvinculado', kind: 'tech-unlink' },
     devolucao_agenda: { title: 'Devolução por agenda', kind: 'return' },
+    gc_status_change: { title: 'Situação alterada no GestãoClick', kind: 'gc-change' },
   };
   return map[action] || { title: action, kind: 'system' };
 }

@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { listOrcamentos, listOrdensCompra, getProdutoDetalhe } from './compras';
+import { listOrcamentos, listOrdensCompra, getProdutoDetalhe, getStatusCompras } from './compras';
 import { listOS, listVendas } from './gestaoclick';
 import { GCMeta, GCOrcamento, GCOrdemCompra, GCOrdemServico, GCProdutoDetalhe, GCVenda } from './types';
 import { getExplorerConfig } from '@/lib/explorerConfig';
@@ -20,6 +20,45 @@ function parseDec(v: unknown): number {
   if (s.includes(',') && s.includes('.')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
   if (s.includes(',')) return parseFloat(s.replace(',', '.')) || 0;
   return parseFloat(s) || 0;
+}
+
+function normText(v: unknown): string {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function codeKey(v: unknown): string {
+  const s = normText(v);
+  return s ? `code:${s}` : '';
+}
+
+function nameKey(v: unknown): string {
+  const s = normText(v).replace(/[^A-Z0-9]/g, '');
+  return s ? `name:${s}` : '';
+}
+
+function addToMap<T>(map: Map<string, T[]>, key: string, value: T) {
+  if (!key) return;
+  if (!map.has(key)) map.set(key, []);
+  map.get(key)!.push(value);
+}
+
+function mergeRefs<T extends { id: string; codigo: string; data: string; qtd: number; valor_unit: number }>(...groups: Array<T[] | undefined>): T[] {
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const rows of groups) {
+    for (const row of rows || []) {
+      const key = `${row.id}|${row.codigo}|${row.data}|${row.qtd}|${row.valor_unit}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+  }
+  return out;
 }
 
 // ------------ types ------------
@@ -103,6 +142,7 @@ interface ExplorerIndex {
   oss: Map<string, ExplorerOSRef[]>;
   orcamentos: Map<string, ExplorerOrcRef[]>;
   compras: Map<string, ExplorerCompraRef[]>;
+  comprasAliases: Map<string, ExplorerCompraRef[]>;
   vendas: Map<string, ExplorerVendaRef[]>;
 }
 
@@ -146,7 +186,7 @@ export async function buildExplorerIndex(
   onProgress?: (step: string, page: number, total: number) => void,
   force = false,
 ): Promise<ExplorerIndex> {
-  if (!force && cache && Date.now() - cache.builtAt < TTL) return cache;
+  if (!force && cache?.comprasAliases && Date.now() - cache.builtAt < TTL) return cache;
   if (building) return building;
 
   const cfg = getExplorerConfig();
@@ -162,6 +202,7 @@ export async function buildExplorerIndex(
     const oss = new Map<string, ExplorerOSRef[]>();
     const orcamentos = new Map<string, ExplorerOrcRef[]>();
     const compras = new Map<string, ExplorerCompraRef[]>();
+    const comprasAliases = new Map<string, ExplorerCompraRef[]>();
     const vendas = new Map<string, ExplorerVendaRef[]>();
 
     // OS
@@ -221,11 +262,27 @@ export async function buildExplorerIndex(
     // Compras: histórico de custo não deve ser cortado pela data inicial.
     // A data do explorador serve para demanda/projeção; pedidos antigos ainda
     // precisam aparecer para análise de compras e margem.
-    const compList = await paginate<GCOrdemCompra>(
-      (p) => listOrdensCompra(undefined, p),
-      onProgress,
-      'Indexando Pedidos de Compra',
-    );
+    const compById = new Map<string, GCOrdemCompra>();
+    const addCompra = (c: GCOrdemCompra) => compById.set(normId(c.id) || normId(c.codigo), c);
+    try {
+      const statusCompras = await getStatusCompras();
+      for (const status of statusCompras) {
+        const rows = await paginate<GCOrdemCompra>(
+          (p) => listOrdensCompra(status.id, p),
+          onProgress,
+          `Indexando Pedidos de Compra (${status.nome})`,
+        );
+        rows.forEach(addCompra);
+      }
+    } catch {
+      const rows = await paginate<GCOrdemCompra>(
+        (p) => listOrdensCompra(undefined, p),
+        onProgress,
+        'Indexando Pedidos de Compra',
+      );
+      rows.forEach(addCompra);
+    }
+    const compList = [...compById.values()];
     for (const c of compList) {
       const dataStr = String(c.data_emissao ?? '');
       const ref = {
@@ -238,11 +295,14 @@ export async function buildExplorerIndex(
       };
       for (const w of c.produtos || []) {
         const pid = normId(w.produto?.produto_id);
-        if (!pid) continue;
         const qtd = parseDec(w.produto?.quantidade);
         const valor_unit = parseDec(w.produto?.valor_custo);
-        if (!compras.has(pid)) compras.set(pid, []);
-        compras.get(pid)!.push({ ...ref, qtd, valor_unit });
+        const compraRef = { ...ref, qtd, valor_unit };
+        addToMap(compras, pid, compraRef);
+        addToMap(comprasAliases, codeKey(pid), compraRef);
+        addToMap(comprasAliases, codeKey((w.produto as any)?.codigo_produto), compraRef);
+        addToMap(comprasAliases, codeKey((w.produto as any)?.codigo_barras ?? (w.produto as any)?.codigo_barra), compraRef);
+        addToMap(comprasAliases, nameKey((w.produto as any)?.nome_produto), compraRef);
       }
     }
 
@@ -273,7 +333,7 @@ export async function buildExplorerIndex(
       }
     }
 
-    cache = { builtAt: Date.now(), oss, orcamentos, compras, vendas };
+    cache = { builtAt: Date.now(), oss, orcamentos, compras, comprasAliases, vendas };
     return cache;
   })();
 
@@ -315,10 +375,16 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const idx = await buildExplorerIndex();
   const detalhe = await getProdutoDetalhe(produtoId);
   const estoque = parseDec(detalhe?.estoque);
+  const comprasAliases = idx.comprasAliases ?? new Map<string, ExplorerCompraRef[]>();
 
   const allOss = (idx.oss.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
   const allOrcamentos = (idx.orcamentos.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
-  const allCompras = (idx.compras.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
+  const allCompras = mergeRefs(
+    idx.compras.get(produtoId),
+    comprasAliases.get(codeKey(detalhe?.codigo_interno)),
+    comprasAliases.get(codeKey(detalhe?.codigo_barra)),
+    comprasAliases.get(nameKey(detalhe?.nome)),
+  ).sort((a, b) => b.data.localeCompare(a.data));
   const allVendas = (idx.vendas.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
 
   const cfg = getExplorerConfig();

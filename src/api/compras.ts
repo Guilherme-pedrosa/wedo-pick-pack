@@ -367,7 +367,7 @@ export async function getStatusCompras(): Promise<GCSituacaoCompra[]> {
 }
 
 // --- LIST ORDENS COMPRA ---
-export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise<{ data: GCOrdemCompra[]; meta: GCMeta }> {
+export async function listOrdensCompra(situacaoId?: string, pagina = 1, extraQuery = ''): Promise<{ data: GCOrdemCompra[]; meta: GCMeta }> {
   if (isUsingMock()) {
     await mockDelay();
     let data = [...MOCK_ORDENS_COMPRA];
@@ -375,8 +375,9 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
 
-  let path = `/api/compras?pagina=${pagina}`;
+  let path = `/api/compras?limite=100&pagina=${pagina}`;
   if (situacaoId) path += `&situacao_id=${situacaoId}`;
+  if (extraQuery) path += `&${extraQuery.replace(/^&/, '')}`;
 
   const raw = await apiRequest<{ data: any[]; meta: GCMeta }>(path);
 
@@ -391,16 +392,22 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
       situacao_id: String(compra?.situacao_id ?? ''),
       nome_situacao: String(compra?.nome_situacao ?? ''),
       valor_total: String(compra?.valor_total ?? '0'),
-      produtos: (compra?.produtos || []).map((p: any) => ({
-        produto: {
-          id: String(p?.produto?.id ?? ''),
-          produto_id: String(p?.produto?.produto_id ?? ''),
-          variacao_id: String(p?.produto?.variacao_id ?? p?.produto?.estoque_id ?? ''),
-          nome_produto: String(p?.produto?.nome_produto ?? ''),
-          quantidade: p?.produto?.quantidade ?? '0',
-          valor_custo: String(p?.produto?.valor_custo ?? '0'),
-        },
-      })),
+      produtos: (compra?.produtos || []).map((p: any) => {
+        const produto = p?.produto ?? p;
+        return {
+          produto: {
+            id: String(produto?.id ?? ''),
+            produto_id: String(produto?.produto_id ?? produto?.id_produto ?? ''),
+            variacao_id: String(produto?.variacao_id ?? produto?.estoque_id ?? ''),
+            nome_produto: String(produto?.nome_produto ?? produto?.nome ?? produto?.descricao ?? ''),
+            codigo_produto: String(produto?.codigo_produto ?? produto?.codigo_interno ?? produto?.codigo ?? ''),
+            codigo_barras: String(produto?.codigo_barras ?? produto?.codigo_barra ?? ''),
+            codigo_barra: String(produto?.codigo_barra ?? produto?.codigo_barras ?? ''),
+            quantidade: produto?.quantidade ?? '0',
+            valor_custo: String(produto?.valor_custo ?? produto?.valor_unitario ?? produto?.valor ?? '0'),
+          },
+        };
+      }),
     };
   });
 

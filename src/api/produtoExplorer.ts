@@ -188,6 +188,7 @@ export async function buildExplorerIndex(
     const oss = new Map<string, ExplorerOSRef[]>();
     const orcamentos = new Map<string, ExplorerOrcRef[]>();
     const compras = new Map<string, ExplorerCompraRef[]>();
+    const comprasAliases = new Map<string, ExplorerCompraRef[]>();
     const vendas = new Map<string, ExplorerVendaRef[]>();
 
     // OS
@@ -264,11 +265,13 @@ export async function buildExplorerIndex(
       };
       for (const w of c.produtos || []) {
         const pid = normId(w.produto?.produto_id);
-        if (!pid) continue;
         const qtd = parseDec(w.produto?.quantidade);
         const valor_unit = parseDec(w.produto?.valor_custo);
-        if (!compras.has(pid)) compras.set(pid, []);
-        compras.get(pid)!.push({ ...ref, qtd, valor_unit });
+        const compraRef = { ...ref, qtd, valor_unit };
+        addToMap(compras, pid, compraRef);
+        addToMap(comprasAliases, codeKey((w.produto as any)?.codigo_produto), compraRef);
+        addToMap(comprasAliases, codeKey((w.produto as any)?.codigo_barras ?? (w.produto as any)?.codigo_barra), compraRef);
+        addToMap(comprasAliases, nameKey((w.produto as any)?.nome_produto), compraRef);
       }
     }
 
@@ -299,7 +302,7 @@ export async function buildExplorerIndex(
       }
     }
 
-    cache = { builtAt: Date.now(), oss, orcamentos, compras, vendas };
+    cache = { builtAt: Date.now(), oss, orcamentos, compras, comprasAliases, vendas };
     return cache;
   })();
 

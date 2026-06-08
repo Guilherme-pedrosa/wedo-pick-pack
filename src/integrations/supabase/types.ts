@@ -400,6 +400,36 @@ export type Database = {
         }
         Relationships: []
       }
+      gc_status_snapshots: {
+        Row: {
+          created_at: string
+          id: string
+          nome_situacao: string | null
+          order_id: string
+          order_type: string
+          situacao_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nome_situacao?: string | null
+          order_id: string
+          order_type: string
+          situacao_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome_situacao?: string | null
+          order_id?: string
+          order_type?: string
+          situacao_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       inventory_consumption_events: {
         Row: {
           cliente_nome: string | null

@@ -912,6 +912,12 @@ function SeparationCard({
         )}
       </Card>
 
+      <SeparationHistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        separation={sep}
+      />
+
       {receiptOpen && (
         <SeparationReceipt
           open={receiptOpen}

@@ -1,12 +1,12 @@
 // Local storage config for the Product Explorer index/filters.
-// If a list is empty, the explorer falls back to the keyword-based "open status" heuristic.
+// If a list is empty, the explorer considers every status in that group.
 
 export interface ExplorerConfig {
   osSituacaoIds: string[];
   orcSituacaoIds: string[];
   compraSituacaoIds: string[];
   vendaSituacaoIds: string[];
-  /** YYYY-MM-DD — only consider records on/after this date during indexing. Empty = no filter. */
+  /** YYYY-MM-DD — only consider demand records on/after this date. Purchases remain full history. Empty = no filter. */
   fromDate: string;
 }
 

@@ -604,24 +604,34 @@ function SeparationCard({
   const handleLinkTechnician = async (tech: { gc_id: string; name: string } | null) => {
     setLinking(true);
     try {
-      // Get current user's GC usuario_id for attribution
+      // Get current operator (name + GC usuario_id) for attribution
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       let gcUsuarioId: string | undefined;
+      let operatorName = sep.operator_name || 'Operador';
       if (currentUser) {
         const { data: prof } = await supabase
           .from('profiles')
-          .select('gc_usuario_id')
+          .select('gc_usuario_id, name')
           .eq('id', currentUser.id)
           .maybeSingle();
         gcUsuarioId = prof?.gc_usuario_id || undefined;
+        if (prof?.name) operatorName = prof.name;
       }
+
+      const previousTechName = sep.technician_name;
+      const previousTechGcId = sep.technician_gc_id;
+
+      // Detailed note written into the GC observations for traceability
+      const gcNote = tech
+        ? `Técnico vinculado: ${tech.name} (ID ${tech.gc_id})${previousTechName ? ` — anterior: ${previousTechName}` : ''} | Status: RETIRADA PELO TÉCNICO | por ${operatorName}`
+        : `Técnico DESVINCULADO${previousTechName ? `: ${previousTechName} (ID ${previousTechGcId || '—'})` : ''} | Status revertido para "${sep.target_status_name}" | por ${operatorName}`;
 
       // IMPORTANT: for OS, status in GC must be updated BEFORE persisting local technician link
       // so we never keep a local technician linked with stale status.
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
         const nextStatusId = tech ? RETIRADA_TECNICO_STATUS_ID : sep.target_status_id;
-        await updateOSStatus(sep.order_id, order, nextStatusId, undefined, gcUsuarioId);
+        await updateOSStatus(sep.order_id, order, nextStatusId, undefined, gcUsuarioId, gcNote);
       }
 
       const ok = await linkTechnicianToSeparation(
@@ -638,6 +648,26 @@ function SeparationCard({
         }
         return;
       }
+
+      // Detailed system log entry
+      await logSystemAction({
+        module: 'separations',
+        action: tech ? 'vincular_tecnico' : 'desvincular_tecnico',
+        entityType: sep.order_type,
+        entityId: sep.order_id,
+        entityName: `${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`,
+        details: {
+          separation_id: sep.id,
+          client_name: sep.client_name,
+          operator_name: operatorName,
+          technician_name: tech?.name || null,
+          technician_gc_id: tech?.gc_id || null,
+          previous_technician_name: previousTechName || null,
+          previous_technician_gc_id: previousTechGcId || null,
+          new_status: tech ? 'RETIRADA PELO TÉCNICO' : sep.target_status_name,
+          new_status_id: tech ? RETIRADA_TECNICO_STATUS_ID : sep.target_status_id,
+        },
+      });
 
       if (sep.order_type === 'os') {
         if (tech) {

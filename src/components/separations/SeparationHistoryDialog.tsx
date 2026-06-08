@@ -51,7 +51,7 @@ function EventRow({ ev }: { ev: TimelineEvent }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-foreground">{ev.title}</span>
           <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-            {ev.source === 'separation' ? 'Sistema' : ev.source === 'system' ? 'Log' : ev.source === 'os_gen' ? 'Geração OS' : 'GC'}
+            {ev.kind === 'gc-change' ? 'GestãoClick' : ev.source === 'separation' ? 'Sistema' : ev.source === 'system' ? 'Log' : ev.source === 'os_gen' ? 'Geração OS' : 'GC'}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{fmt(ev.at)}{ev.actor ? ` • ${ev.actor}` : ''}</p>

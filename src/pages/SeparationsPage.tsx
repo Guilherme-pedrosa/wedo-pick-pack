@@ -99,12 +99,23 @@ export default function SeparationsPage() {
     }, 0);
   }, [validSeparations, liveStatuses, computeStockRegression]);
 
-  const fetchLiveStatusesAndSync = useCallback(async (opts?: { showToast?: boolean }) => {
-    const active = separations.filter(s => !s.invalidated);
+  const fetchLiveStatusesAndSync = useCallback(async (opts?: { showToast?: boolean; recentOnly?: boolean }) => {
+    let active = separations.filter(s => !s.invalidated);
+
+    // Automatic refresh only checks the last 24h for speed; older records need manual refresh
+    if (opts?.recentOnly) {
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      active = active.filter(s => {
+        const t = new Date(s.concluded_at).getTime();
+        return !Number.isNaN(t) && t >= cutoff;
+      });
+    }
+
     if (active.length === 0) {
       if (opts?.showToast) toast.info('Nenhuma separação ativa para verificar');
       return;
     }
+
 
     // Deduplicate by order_id to avoid redundant API calls
     const orderMap = new Map<string, { order_type: string; order_id: string }>();

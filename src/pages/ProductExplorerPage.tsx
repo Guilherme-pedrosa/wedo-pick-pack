@@ -378,6 +378,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                     <TableHead>Situação</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead className="text-right">Qtd</TableHead>
+                    <TableHead className="text-right">Vlr. Unit.</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -388,6 +390,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                       <TableCell><Badge variant="outline">{o.nome_situacao || '—'}</Badge></TableCell>
                       <TableCell>{fmtDate(o.data)}</TableCell>
                       <TableCell className="text-right">{fmtQty(o.qtd)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(o.valor_unit)}</TableCell>
+                      <TableCell className="text-right">{fmtMoney(o.valor_unit * o.qtd)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

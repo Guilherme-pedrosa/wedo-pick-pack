@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { listOrcamentos, listOrdensCompra, getProdutoDetalhe } from './compras';
+import { listOrcamentos, listOrdensCompra, getProdutoDetalhe, getStatusCompras } from './compras';
 import { listOS, listVendas } from './gestaoclick';
 import { GCMeta, GCOrcamento, GCOrdemCompra, GCOrdemServico, GCProdutoDetalhe, GCVenda } from './types';
 import { getExplorerConfig } from '@/lib/explorerConfig';
@@ -262,11 +262,27 @@ export async function buildExplorerIndex(
     // Compras: histórico de custo não deve ser cortado pela data inicial.
     // A data do explorador serve para demanda/projeção; pedidos antigos ainda
     // precisam aparecer para análise de compras e margem.
-    const compList = await paginate<GCOrdemCompra>(
-      (p) => listOrdensCompra(undefined, p),
-      onProgress,
-      'Indexando Pedidos de Compra',
-    );
+    const compById = new Map<string, GCOrdemCompra>();
+    const addCompra = (c: GCOrdemCompra) => compById.set(normId(c.id) || normId(c.codigo), c);
+    try {
+      const statusCompras = await getStatusCompras();
+      for (const status of statusCompras) {
+        const rows = await paginate<GCOrdemCompra>(
+          (p) => listOrdensCompra(status.id, p),
+          onProgress,
+          `Indexando Pedidos de Compra (${status.nome})`,
+        );
+        rows.forEach(addCompra);
+      }
+    } catch {
+      const rows = await paginate<GCOrdemCompra>(
+        (p) => listOrdensCompra(undefined, p),
+        onProgress,
+        'Indexando Pedidos de Compra',
+      );
+      rows.forEach(addCompra);
+    }
+    const compList = [...compById.values()];
     for (const c of compList) {
       const dataStr = String(c.data_emissao ?? '');
       const ref = {

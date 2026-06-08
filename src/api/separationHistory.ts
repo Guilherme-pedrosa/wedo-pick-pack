@@ -45,6 +45,9 @@ function buildSystemDescription(action: string, d: Record<string, unknown> | nul
   if (action === 'devolucao_agenda') {
     return `Motivo: ${d.motivo ?? '—'}`;
   }
+  if (action === 'gc_status_change') {
+    return `${d.from_situacao ?? '—'} → ${d.to_situacao ?? '—'} (alterada no GestãoClick)`;
+  }
   if (action === 'Separação concluída') {
     const dur = d.duration ? ` em ${d.duration}` : '';
     return `${d.items_confirmed ?? '?'}/${d.items_total ?? '?'} itens conferidos${dur}. Status alvo: ${d.target_status ?? '—'}.`;

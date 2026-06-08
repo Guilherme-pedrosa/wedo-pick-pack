@@ -218,7 +218,9 @@ export async function buildExplorerIndex(
       }
     }
 
-    // Compras
+    // Compras: histórico de custo não deve ser cortado pela data inicial.
+    // A data do explorador serve para demanda/projeção; pedidos antigos ainda
+    // precisam aparecer para análise de compras e margem.
     const compList = await paginate<GCOrdemCompra>(
       (p) => listOrdensCompra(undefined, p),
       onProgress,
@@ -226,7 +228,6 @@ export async function buildExplorerIndex(
     );
     for (const c of compList) {
       const dataStr = String(c.data_emissao ?? '');
-      if (!afterFrom(dataStr)) continue;
       const ref = {
         id: String(c.id),
         codigo: String(c.codigo ?? c.id),

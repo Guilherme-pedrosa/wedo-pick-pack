@@ -193,13 +193,13 @@ export default function SeparationsPage() {
 
   const syncWithGC = useCallback(() => fetchLiveStatusesAndSync({ showToast: true }), [fetchLiveStatusesAndSync]);
 
-  // Auto-fetch live statuses on mount and every 30 min
+  // Auto-fetch live statuses on mount and every 30 min — only last 24h for speed
   useEffect(() => {
     if (separations.length > 0 && !fetchingLive && !syncing) {
-      fetchLiveStatusesAndSync();
+      fetchLiveStatusesAndSync({ recentOnly: true });
     }
     liveStatusIntervalRef.current = setInterval(() => {
-      fetchLiveStatusesAndSync();
+      fetchLiveStatusesAndSync({ recentOnly: true });
     }, 30 * 60 * 1000);
     return () => {
       if (liveStatusIntervalRef.current) clearInterval(liveStatusIntervalRef.current);

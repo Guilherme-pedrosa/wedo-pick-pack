@@ -336,15 +336,22 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const matchVenda = (v: ExplorerVendaRef) =>
     vendaSet.size > 0 ? vendaSet.has(v.situacao_id) : false;
 
-  const oss = allOss.filter(matchOS);
-  const orcamentos = allOrcamentos.filter(matchOrc);
-  const compras = allCompras.filter(matchCompra);
-  const vendas = allVendas.filter(matchVenda);
+  // Subconjuntos "em aberto" — usados apenas para os KPIs de demanda/projeção
+  const ossOpen = allOss.filter(matchOS);
+  const orcamentosOpen = allOrcamentos.filter(matchOrc);
+  const comprasOpen = allCompras.filter(matchCompra);
+  const vendasOpen = allVendas.filter(matchVenda);
 
-  const qtd_demanda_os = oss.reduce((s, o) => s + o.qtd, 0);
-  const qtd_demanda_orcamentos = orcamentos.reduce((s, o) => s + o.qtd, 0);
-  const qtd_demanda_vendas = vendas.reduce((s, v) => s + v.qtd, 0);
-  const qtd_em_compra = compras.reduce((s, c) => s + c.qtd, 0);
+  // Listas exibidas nas abas = histórico completo (inclui finalizados/recebidos)
+  const oss = allOss;
+  const orcamentos = allOrcamentos;
+  const compras = allCompras;
+  const vendas = allVendas;
+
+  const qtd_demanda_os = ossOpen.reduce((s, o) => s + o.qtd, 0);
+  const qtd_demanda_orcamentos = orcamentosOpen.reduce((s, o) => s + o.qtd, 0);
+  const qtd_demanda_vendas = vendasOpen.reduce((s, v) => s + v.qtd, 0);
+  const qtd_em_compra = comprasOpen.reduce((s, c) => s + c.qtd, 0);
 
   const demanda = qtd_demanda_os + qtd_demanda_orcamentos + qtd_demanda_vendas;
   const saldo_projetado = estoque + qtd_em_compra - demanda;

@@ -240,16 +240,17 @@ const TechniciansPage = () => {
       }
     }
 
-    // Mantém apenas separações cujo status atual ainda bate com target_status_id
-    // (ainda "Retirada pelo técnico" — não executada). As que mudaram de status
-    // são automaticamente desvinculadas do técnico no banco. Se a verificação
-    // falhou, preserva por segurança.
+    // Mantém apenas separações cuja situação atual no GC seja EXATAMENTE
+    // "Retirada pelo técnico" (7684665). Qualquer outra situação significa que
+    // a OS saiu do técnico → desvincula no banco. Se a verificação falhou
+    // (sem status), preserva por segurança.
+    const RETIRADA_TECNICO_STATUS_ID = "7684665";
     const idsToUnlink: string[] = [];
     for (const sep of allSeps) {
       const key = `${sep.order_type}:${sep.order_id}`;
       const liveStatus = liveStatusByKey.get(key);
       if (!liveStatus) continue;
-      if (liveStatus !== sep.target_status_id) {
+      if (liveStatus !== RETIRADA_TECNICO_STATUS_ID) {
         idsToUnlink.push(sep.id);
       }
     }

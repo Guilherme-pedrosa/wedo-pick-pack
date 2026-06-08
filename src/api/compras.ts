@@ -367,7 +367,7 @@ export async function getStatusCompras(): Promise<GCSituacaoCompra[]> {
 }
 
 // --- LIST ORDENS COMPRA ---
-export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise<{ data: GCOrdemCompra[]; meta: GCMeta }> {
+export async function listOrdensCompra(situacaoId?: string, pagina = 1, extraQuery = ''): Promise<{ data: GCOrdemCompra[]; meta: GCMeta }> {
   if (isUsingMock()) {
     await mockDelay();
     let data = [...MOCK_ORDENS_COMPRA];
@@ -377,6 +377,7 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1): Promise
 
   let path = `/api/compras?limite=100&pagina=${pagina}`;
   if (situacaoId) path += `&situacao_id=${situacaoId}`;
+  if (extraQuery) path += `&${extraQuery.replace(/^&/, '')}`;
 
   const raw = await apiRequest<{ data: any[]; meta: GCMeta }>(path);
 

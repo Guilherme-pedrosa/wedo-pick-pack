@@ -24,6 +24,7 @@ const KIND_META: Record<string, { icon: React.ElementType; color: string }> = {
   invalidated: { icon: XCircle, color: 'text-destructive' },
   'os-generated': { icon: FileText, color: 'text-purple-600' },
   'os-gen-failed': { icon: AlertTriangle, color: 'text-destructive' },
+  'gc-change': { icon: RefreshCw, color: 'text-sky-600' },
   system: { icon: History, color: 'text-muted-foreground' },
 };
 

@@ -225,6 +225,9 @@ export interface GCCompraProduto {
   produto_id: string;
   variacao_id: string;
   nome_produto: string;
+  codigo_produto?: string;
+  codigo_barras?: string;
+  codigo_barra?: string;
   quantidade: string | number;
   valor_custo: string;
 }

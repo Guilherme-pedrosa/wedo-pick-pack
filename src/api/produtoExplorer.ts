@@ -283,6 +283,7 @@ export async function buildExplorerIndex(
         const valor_unit = parseDec(w.produto?.valor_custo);
         const compraRef = { ...ref, qtd, valor_unit };
         addToMap(compras, pid, compraRef);
+        addToMap(comprasAliases, codeKey(pid), compraRef);
         addToMap(comprasAliases, codeKey((w.produto as any)?.codigo_produto), compraRef);
         addToMap(comprasAliases, codeKey((w.produto as any)?.codigo_barras ?? (w.produto as any)?.codigo_barra), compraRef);
         addToMap(comprasAliases, nameKey((w.produto as any)?.nome_produto), compraRef);

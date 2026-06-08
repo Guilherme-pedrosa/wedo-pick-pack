@@ -272,6 +272,8 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
         )}
       </div>
 
+      <PriceSummaryCard s={data.priceSummary} />
+
       <Tabs defaultValue="os">
         <TabsList>
           <TabsTrigger value="os">OS ({data.oss.length})</TabsTrigger>

@@ -64,6 +64,23 @@ export interface ExplorerVendaRef {
   valor_unit: number;
 }
 
+export interface PriceSummary {
+  // Vendido (OS executadas + Vendas, exceto cancelados)
+  qtd_vendida: number;
+  num_vendas: number;
+  preco_venda_medio: number; // ponderado por qtd
+  preco_venda_min: number;
+  preco_venda_max: number;
+  ultimo_preco_venda: number;
+  // Comprado (pedidos de compra, exceto cancelados)
+  qtd_comprada: number;
+  num_compras: number;
+  custo_medio: number; // ponderado por qtd
+  ultimo_custo: number;
+  // Análise de margem (preço venda médio vs custo médio)
+  margem_pct: number | null; // (venda - custo) / venda
+}
+
 export interface ProductExplorerData {
   produto_id: string;
   estoque: number;
@@ -72,6 +89,7 @@ export interface ProductExplorerData {
   orcamentos: ExplorerOrcRef[];
   compras: ExplorerCompraRef[];
   vendas: ExplorerVendaRef[];
+  priceSummary: PriceSummary;
   qtd_demanda_os: number;
   qtd_demanda_orcamentos: number;
   qtd_demanda_vendas: number;

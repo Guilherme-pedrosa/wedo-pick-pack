@@ -353,6 +353,53 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   if (saldo_projetado < 0) health = 'critical';
   else if (estoque < demanda) health = 'warn';
 
+  // ---- Resumo de preços (vendido x comprado) ----
+  const isCancelled = (s: string) => /CANCELAD|REJEITAD|RECUSAD|DEVOLVID/i.test(s || '');
+  // Vendido = OS + Vendas realizadas (não canceladas), com valor de venda > 0
+  const vendaRecords = [...allOss, ...allVendas]
+    .filter(r => !isCancelled(r.nome_situacao) && r.qtd > 0 && r.valor_unit > 0);
+  // Comprado = pedidos de compra (não cancelados), com custo > 0
+  const compraRecords = allCompras
+    .filter(r => !isCancelled(r.nome_situacao) && r.qtd > 0 && r.valor_unit > 0);
+
+  const wavg = (rows: { qtd: number; valor_unit: number }[]) => {
+    const totQ = rows.reduce((s, r) => s + r.qtd, 0);
+    if (totQ <= 0) return 0;
+    return rows.reduce((s, r) => s + r.qtd * r.valor_unit, 0) / totQ;
+  };
+
+  const qtd_vendida = vendaRecords.reduce((s, r) => s + r.qtd, 0);
+  const qtd_comprada = compraRecords.reduce((s, r) => s + r.qtd, 0);
+  const preco_venda_medio = wavg(vendaRecords);
+  const custo_medio = wavg(compraRecords);
+  const vendaPrices = vendaRecords.map(r => r.valor_unit);
+  const preco_venda_min = vendaPrices.length ? Math.min(...vendaPrices) : 0;
+  const preco_venda_max = vendaPrices.length ? Math.max(...vendaPrices) : 0;
+  // registros já ordenados por data desc → primeiro é o mais recente
+  const ultimo_preco_venda = vendaRecords.length
+    ? vendaRecords.slice().sort((a, b) => b.data.localeCompare(a.data))[0].valor_unit
+    : 0;
+  const ultimo_custo = compraRecords.length
+    ? compraRecords.slice().sort((a, b) => b.data.localeCompare(a.data))[0].valor_unit
+    : 0;
+  const margem_pct = preco_venda_medio > 0 && custo_medio > 0
+    ? (preco_venda_medio - custo_medio) / preco_venda_medio
+    : null;
+
+  const priceSummary: PriceSummary = {
+    qtd_vendida,
+    num_vendas: vendaRecords.length,
+    preco_venda_medio,
+    preco_venda_min,
+    preco_venda_max,
+    ultimo_preco_venda,
+    qtd_comprada,
+    num_compras: compraRecords.length,
+    custo_medio,
+    ultimo_custo,
+    margem_pct,
+  };
+
   return {
     produto_id: produtoId,
     estoque,
@@ -361,6 +408,7 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
     orcamentos,
     compras,
     vendas,
+    priceSummary,
     qtd_demanda_os,
     qtd_demanda_orcamentos,
     qtd_demanda_vendas,

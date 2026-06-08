@@ -47,6 +47,20 @@ function addToMap<T>(map: Map<string, T[]>, key: string, value: T) {
   map.get(key)!.push(value);
 }
 
+function mergeRefs<T extends { id: string; codigo: string; data: string; qtd: number; valor_unit: number }>(...groups: Array<T[] | undefined>): T[] {
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const rows of groups) {
+    for (const row of rows || []) {
+      const key = `${row.id}|${row.codigo}|${row.data}|${row.qtd}|${row.valor_unit}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+  }
+  return out;
+}
+
 // ------------ types ------------
 export interface ExplorerOSRef {
   id: string;
@@ -347,7 +361,12 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
 
   const allOss = (idx.oss.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
   const allOrcamentos = (idx.orcamentos.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
-  const allCompras = (idx.compras.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
+  const allCompras = mergeRefs(
+    idx.compras.get(produtoId),
+    idx.comprasAliases.get(codeKey(detalhe?.codigo_interno)),
+    idx.comprasAliases.get(codeKey(detalhe?.codigo_barra)),
+    idx.comprasAliases.get(nameKey(detalhe?.nome)),
+  ).sort((a, b) => b.data.localeCompare(a.data));
   const allVendas = (idx.vendas.get(produtoId) ?? []).slice().sort((a, b) => b.data.localeCompare(a.data));
 
   const cfg = getExplorerConfig();

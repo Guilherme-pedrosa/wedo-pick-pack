@@ -31,6 +31,7 @@ export interface ExplorerOSRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
 }
 export interface ExplorerOrcRef {
   id: string;
@@ -40,6 +41,7 @@ export interface ExplorerOrcRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
 }
 export interface ExplorerCompraRef {
   id: string;
@@ -49,6 +51,7 @@ export interface ExplorerCompraRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
 }
 export interface ExplorerVendaRef {
   id: string;
@@ -58,6 +61,7 @@ export interface ExplorerVendaRef {
   nome_situacao: string;
   data: string;
   qtd: number;
+  valor_unit: number;
 }
 
 export interface ProductExplorerData {

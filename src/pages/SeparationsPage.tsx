@@ -9,12 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar, Radio, PackageX } from 'lucide-react';
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2, Printer, FileText, UserPlus, User, X, Undo2, Calendar, Radio, PackageX, History } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils'; // util
 import { toast } from 'sonner';
 import { PickingItem, GCProdutoItem } from '@/api/types';
 import SeparationReceipt, { extractServiceLocation } from '@/components/checkout/SeparationReceipt';
+import SeparationHistoryDialog from '@/components/separations/SeparationHistoryDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 
@@ -494,6 +495,9 @@ function SeparationCard({
   const [receiptEquipment, setReceiptEquipment] = useState<string | undefined>(sep.equipment_name || undefined);
   const [receiptServiceLocation, setReceiptServiceLocation] = useState<string | undefined>(undefined);
 
+  // Full history state
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   // Technician link state
   const [techDialogOpen, setTechDialogOpen] = useState(false);
   const [technicians, setTechnicians] = useState<{ id: string; gc_id: string; name: string }[]>([]);
@@ -762,6 +766,15 @@ function SeparationCard({
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setHistoryOpen(true)}
+              className="h-7 px-2 text-xs"
+            >
+              <History className="h-3.5 w-3.5 mr-1" />
+              Histórico
+            </Button>
             {!isInvalid && !isReturn && (
               <Button
                 variant="ghost"
@@ -898,6 +911,12 @@ function SeparationCard({
           </div>
         )}
       </Card>
+
+      <SeparationHistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        separation={sep}
+      />
 
       {receiptOpen && (
         <SeparationReceipt

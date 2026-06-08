@@ -327,14 +327,14 @@ export async function getProductExplorerData(produtoId: string): Promise<Product
   const vendaSet = new Set(cfg.vendaSituacaoIds);
 
   const matchOS = (o: ExplorerOSRef) =>
-    osSet.size > 0 ? osSet.has(o.situacao_id) : isOpenOS(o.nome_situacao);
+    osSet.size > 0 ? osSet.has(o.situacao_id) : true;
   const matchOrc = (o: ExplorerOrcRef) =>
-    orcSet.size > 0 ? orcSet.has(o.situacao_id) : isOpenOrc(o.nome_situacao);
+    orcSet.size > 0 ? orcSet.has(o.situacao_id) : true;
   const matchCompra = (c: ExplorerCompraRef) =>
-    compraSet.size > 0 ? compraSet.has(c.situacao_id) : isOpenCompra(c.nome_situacao);
-  // Vendas: sem heurística padrão — só conta se o usuário marcou situações específicas
+    compraSet.size > 0 ? compraSet.has(c.situacao_id) : true;
   const matchVenda = (v: ExplorerVendaRef) =>
-    vendaSet.size > 0 ? vendaSet.has(v.situacao_id) : false;
+    vendaSet.size > 0 ? vendaSet.has(v.situacao_id) : true;
+
 
   // Subconjuntos "em aberto" — usados apenas para os KPIs de demanda/projeção
   const ossOpen = allOss.filter(matchOS);

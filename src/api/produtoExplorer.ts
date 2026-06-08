@@ -194,8 +194,9 @@ export async function buildExplorerIndex(
         const pid = normId(w.produto?.produto_id);
         if (!pid) continue;
         const qtd = parseDec(w.produto?.quantidade);
+        const valor_unit = parseDec((w.produto as any)?.valor_custo ?? (w.produto as any)?.valor_venda);
         if (!orcamentos.has(pid)) orcamentos.set(pid, []);
-        orcamentos.get(pid)!.push({ ...ref, qtd });
+        orcamentos.get(pid)!.push({ ...ref, qtd, valor_unit });
       }
     }
 

@@ -37,7 +37,7 @@ function codeKey(v: unknown): string {
 }
 
 function nameKey(v: unknown): string {
-  const s = normText(v);
+  const s = normText(v).replace(/[^A-Z0-9]/g, '');
   return s ? `name:${s}` : '';
 }
 

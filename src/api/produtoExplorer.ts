@@ -221,8 +221,9 @@ export async function buildExplorerIndex(
         const pid = normId(w.produto?.produto_id);
         if (!pid) continue;
         const qtd = parseDec(w.produto?.quantidade);
+        const valor_unit = parseDec(w.produto?.valor_custo);
         if (!compras.has(pid)) compras.set(pid, []);
-        compras.get(pid)!.push({ ...ref, qtd });
+        compras.get(pid)!.push({ ...ref, qtd, valor_unit });
       }
     }
 

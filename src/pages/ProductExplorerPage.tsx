@@ -18,6 +18,7 @@ import {
   ProductSearchResult,
 } from '@/api/produtoExplorer';
 import { logSystemAction } from '@/lib/systemLog';
+import { gcCompraUrl } from '@/lib/gcLinks';
 
 const fmtQty = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });

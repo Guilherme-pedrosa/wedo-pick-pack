@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { gcCompraUrl } from '@/lib/gcLinks';
 
 type SortKey = 'codigo_produto' | 'nome_produto' | 'grupo' | 'estoque_atual' | 'qtd_necessaria' | 'qtd_efetiva_a_comprar' | 'qtd_ja_em_compra' | 'ultimo_preco' | 'estimativa' | 'fornecedor_nome';
 

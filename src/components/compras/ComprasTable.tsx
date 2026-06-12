@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { gcCompraUrl } from '@/lib/gcLinks';
 
 type SortKey = 'codigo_produto' | 'nome_produto' | 'grupo' | 'estoque_atual' | 'qtd_necessaria' | 'qtd_efetiva_a_comprar' | 'qtd_ja_em_compra' | 'ultimo_preco' | 'estimativa' | 'fornecedor_nome';
 
@@ -270,7 +271,9 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                         {ordensCompra.map(oc => (
                           <div key={oc.id} className="flex items-center gap-4 text-xs">
                             <Badge variant="outline" className="text-[10px] bg-amber-50">PC</Badge>
-                            <span className="font-mono font-medium">{oc.codigo}</span>
+                            {gcCompraUrl(oc.id) ? (
+                              <a href={gcCompraUrl(oc.id)!} target="_blank" rel="noopener noreferrer" className="font-mono font-medium underline hover:text-primary">{oc.codigo}</a>
+                            ) : <span className="font-mono font-medium">{oc.codigo}</span>}
                             <span className="text-muted-foreground truncate max-w-[160px]">{oc.nome_fornecedor}</span>
                             <span className="font-medium">Qtd: {oc.qtd}</span>
                             <Badge variant="outline" className="text-[10px]">{oc.situacao}</Badge>

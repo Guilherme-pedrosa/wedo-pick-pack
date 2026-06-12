@@ -18,6 +18,7 @@ import {
   ProductSearchResult,
 } from '@/api/produtoExplorer';
 import { logSystemAction } from '@/lib/systemLog';
+import { gcCompraUrl } from '@/lib/gcLinks';
 
 const fmtQty = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -487,7 +488,11 @@ function ProductDetail({ data }: { data: ProductExplorerData }) {
                 <TableBody>
                   {data.compras.map(c => (
                     <TableRow key={c.id}>
-                      <TableCell className="font-medium">#{c.codigo}</TableCell>
+                      <TableCell className="font-medium">
+                        {gcCompraUrl(c.id) ? (
+                          <a href={gcCompraUrl(c.id)!} target="_blank" rel="noopener noreferrer" className="underline hover:text-primary">#{c.codigo}</a>
+                        ) : <>#{c.codigo}</>}
+                      </TableCell>
                       <TableCell>{c.nome_fornecedor || '—'}</TableCell>
                       <TableCell><Badge variant="outline">{c.nome_situacao || '—'}</Badge></TableCell>
                       <TableCell>{fmtDate(c.data)}</TableCell>

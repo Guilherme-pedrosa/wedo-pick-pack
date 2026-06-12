@@ -22,6 +22,38 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
+import { gcCompraUrl } from '@/lib/gcLinks';
+
+type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string };
+
+/** Renderiza as ordens de compra como links clicáveis para o GestãoClick. */
+function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
+  if (!ordens || ordens.length === 0) return null;
+  return (
+    <>
+      {ordens.map((o, i) => {
+        const url = gcCompraUrl(o.id);
+        const label = `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`;
+        return (
+          <span key={o.id || o.codigo}>
+            {i > 0 && ' • '}
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-primary"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {label}
+              </a>
+            ) : label}
+          </span>
+        );
+      })}
+    </>
+  );
+}
 
 function exportCSV(result: RastreadorResult) {
   const header = [
@@ -526,7 +558,7 @@ export default function RastreadorPage() {
                       <span className="text-blue-600">
                         🛒 Em compra: {formatQty(item.qtd_em_compra)} {item.ordens_compra && item.ordens_compra.length > 0 && (
                           <span className="text-muted-foreground">
-                            ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')})
+                            (<OrdensCompraLinks ordens={item.ordens_compra} />)
                           </span>
                         )}
                         {(() => {
@@ -680,7 +712,7 @@ export default function RastreadorPage() {
                             <td className={`text-right py-0.5 px-2 ${!item.pronto ? (coberto ? 'text-green-700' : 'text-red-700') : ''}`}>{emCompra ? formatQty(emCompra) : '—'}</td>
                             <td className="py-0.5 px-2 text-[10px]">
                               {item.ordens_compra && item.ordens_compra.length > 0
-                                ? item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')
+                                ? <OrdensCompraLinks ordens={item.ordens_compra} />
                                 : (!item.pronto ? '⛔ Sem PC' : '—')}
                             </td>
                             <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>
@@ -1043,7 +1075,7 @@ export default function RastreadorPage() {
                                         <span className="text-blue-600">
                                           🛒 Em compra: {formatQty(item.qtd_em_compra)} {item.ordens_compra && item.ordens_compra.length > 0 && (
                                             <span className="text-muted-foreground">
-                                              ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')})
+                                              (<OrdensCompraLinks ordens={item.ordens_compra} />)
                                             </span>
                                           )}
                                           {(() => {
@@ -1130,7 +1162,7 @@ export default function RastreadorPage() {
                               🛒 Em compra: <strong>{formatQty(c.qtd_em_compra)}</strong>
                               {c.ordens_compra && c.ordens_compra.length > 0 && (
                                 <span className="text-muted-foreground ml-1">
-                                  ({c.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')})
+                                  (<OrdensCompraLinks ordens={c.ordens_compra} />)
                                 </span>
                               )}
                               {(() => {

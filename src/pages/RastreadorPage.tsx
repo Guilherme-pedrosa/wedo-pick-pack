@@ -712,7 +712,7 @@ export default function RastreadorPage() {
                             <td className={`text-right py-0.5 px-2 ${!item.pronto ? (coberto ? 'text-green-700' : 'text-red-700') : ''}`}>{emCompra ? formatQty(emCompra) : '—'}</td>
                             <td className="py-0.5 px-2 text-[10px]">
                               {item.ordens_compra && item.ordens_compra.length > 0
-                                ? item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')
+                                ? <OrdensCompraLinks ordens={item.ordens_compra} />
                                 : (!item.pronto ? '⛔ Sem PC' : '—')}
                             </td>
                             <td className="text-center py-0.5 pl-2">{item.pronto ? '✅' : '❌'}</td>

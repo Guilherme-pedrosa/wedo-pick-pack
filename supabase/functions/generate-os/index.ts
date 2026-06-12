@@ -91,6 +91,31 @@ async function auvoGetTask(token: string, taskId: string | number): Promise<any>
   return data;
 }
 
+// Best-effort deletion of an Auvo task. Used to roll back the activity that was
+// created before the GestãoClick document, so failed attempts don't leave
+// orphan activities ("tanto de atividade pra mesma OS").
+async function auvoDeleteTask(token: string, taskId: string | number): Promise<boolean> {
+  try {
+    const res = await fetch(`${AUVO_API_URL}/tasks/${taskId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn(`[generate-os] ⚠️ Could not delete orphan Auvo task ${taskId} [${res.status}]: ${text.slice(0, 300)}`);
+      return false;
+    }
+    console.log(`[generate-os] Rolled back orphan Auvo task ${taskId}`);
+    return true;
+  } catch (e) {
+    console.warn(`[generate-os] ⚠️ Error deleting orphan Auvo task ${taskId}:`, e);
+    return false;
+  }
+}
+
 function parseMoney(value: unknown): number {
   const raw = String(value ?? '').trim();
   if (!raw) return 0;

@@ -22,6 +22,38 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
+import { gcCompraUrl } from '@/lib/gcLinks';
+
+type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string };
+
+/** Renderiza as ordens de compra como links clicáveis para o GestãoClick. */
+function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
+  if (!ordens || ordens.length === 0) return null;
+  return (
+    <>
+      {ordens.map((o, i) => {
+        const url = gcCompraUrl(o.id);
+        const label = `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`;
+        return (
+          <span key={o.id || o.codigo}>
+            {i > 0 && ' • '}
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-primary"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {label}
+              </a>
+            ) : label}
+          </span>
+        );
+      })}
+    </>
+  );
+}
 
 function exportCSV(result: RastreadorResult) {
   const header = [

@@ -1,0 +1,1 @@
+UPDATE public.profiles SET auvo_user_id = 233131 WHERE id = 'ef8ddc61-7bc5-409a-a165-f2aca2b3279c';

@@ -1075,7 +1075,7 @@ export default function RastreadorPage() {
                                         <span className="text-blue-600">
                                           🛒 Em compra: {formatQty(item.qtd_em_compra)} {item.ordens_compra && item.ordens_compra.length > 0 && (
                                             <span className="text-muted-foreground">
-                                              ({item.ordens_compra.map(o => `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`).join(' • ')})
+                                              (<OrdensCompraLinks ordens={item.ordens_compra} />)
                                             </span>
                                           )}
                                           {(() => {

@@ -226,18 +226,38 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const {
-      orcamento,        // GCOrcamento object from frontend
       auvo_user_id,     // number - idUserFrom in Auvo
       gc_usuario_id,    // optional - GC user ID for attribution
       auvo_customer_id, // optional - Auvo customer ID (when no source task to clone from)
       manual_equipamento, // optional - manual equipment text when not in orçamento
     } = body;
+    let orcamento = body.orcamento; // GCOrcamento object from frontend
 
     if (!orcamento || !auvo_user_id) {
       return new Response(
         JSON.stringify({ error: 'Missing orcamento or auvo_user_id' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // ============================================
+    // AUTHORITATIVE ORÇAMENTO: re-fetch the full budget from GestãoClick.
+    // The frontend payload carries "thin" product/service lines WITHOUT unit
+    // prices or per-line discounts (valor_venda / desconto_valor / valor_total).
+    // If we trust that payload, GC recomputes the order total from the product
+    // registry's GROSS price and ignores the line discounts, so "valor do
+    // pedido" ends up higher than the parcelas → "valor das parcelas, faltando X".
+    // Fetching the full orçamento gives us the priced lines GC expects.
+    // ============================================
+    try {
+      const fullOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, 'GET');
+      if (fullOrc?.data) {
+        // Overlay GC's authoritative data, keeping any frontend-only helper fields.
+        orcamento = { ...orcamento, ...fullOrc.data };
+        console.log(`[generate-os] Loaded authoritative orçamento #${orcamento.codigo}: produtos=${(orcamento.produtos || []).length}, servicos=${(orcamento.servicos || []).length}, valor_total=${orcamento.valor_total}`);
+      }
+    } catch (fetchErr) {
+      console.warn('[generate-os] Could not re-fetch full orçamento, using frontend payload:', fetchErr);
     }
 
     // Detect budget type: a budget with any service => OS; product-only => Venda

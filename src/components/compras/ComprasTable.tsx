@@ -270,7 +270,9 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                         {ordensCompra.map(oc => (
                           <div key={oc.id} className="flex items-center gap-4 text-xs">
                             <Badge variant="outline" className="text-[10px] bg-amber-50">PC</Badge>
-                            <span className="font-mono font-medium">{oc.codigo}</span>
+                            {gcCompraUrl(oc.id) ? (
+                              <a href={gcCompraUrl(oc.id)!} target="_blank" rel="noopener noreferrer" className="font-mono font-medium underline hover:text-primary">{oc.codigo}</a>
+                            ) : <span className="font-mono font-medium">{oc.codigo}</span>}
                             <span className="text-muted-foreground truncate max-w-[160px]">{oc.nome_fornecedor}</span>
                             <span className="font-medium">Qtd: {oc.qtd}</span>
                             <Badge variant="outline" className="text-[10px]">{oc.situacao}</Badge>

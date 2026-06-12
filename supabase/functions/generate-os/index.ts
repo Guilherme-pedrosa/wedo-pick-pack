@@ -486,6 +486,7 @@ Deno.serve(async (req: Request) => {
     let osId: string | undefined;
     let osCodigo: string | undefined;
 
+    try {
     if (isServico) {
       // ----- OS (orçamento de serviço) -----
       console.log('[generate-os] Step 3: Discovering OS attribute IDs...');

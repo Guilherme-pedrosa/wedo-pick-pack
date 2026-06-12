@@ -482,7 +482,9 @@ export async function rastrearOrcamentos(
       });
     }
 
-    const allReady = itens.length > 0 && itens.every(i => i.pronto);
+    // Orçamentos só de serviços (sem produtos) não dependem de estoque → prontos.
+    // .every() de array vazio retorna true.
+    const allReady = itens.every(i => i.pronto);
     const temComprometido = itens.some(i => i.comprometido);
 
     const osLinked = ignoredOSLinks.get(orc.id);

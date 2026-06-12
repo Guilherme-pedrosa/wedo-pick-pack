@@ -627,6 +627,14 @@ Deno.serve(async (req: Request) => {
       osCodigo = gcResult?.data?.codigo;
       console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);
     }
+    } catch (gcErr) {
+      // The Auvo activity was created before this step. Roll it back so a failed
+      // GestãoClick submission does not leave an orphan activity behind.
+      if (auvoTaskId) {
+        await auvoDeleteTask(auvoToken, auvoTaskId);
+      }
+      throw gcErr;
+    }
 
     // ============================================
     // STEP 6: Update orçamento status to "OS Gerada" (7109779)

@@ -18,7 +18,7 @@ export interface OrcamentoReadiness {
     pronto: boolean;             // real stock >= needed
     comprometido: boolean;       // true if this item is disputed by other budgets/OSs
     qtd_em_compra?: number;
-    ordens_compra?: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
+    ordens_compra?: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
   }>;
   totalItens: number;
   itensProntos: number;
@@ -35,7 +35,7 @@ export interface ConflictInfo {
   demanda_total: number;
   orcamentos_envolvidos: Array<{ id: string; codigo: string; nome_cliente: string; qtd: number }>;
   qtd_em_compra?: number;
-  ordens_compra?: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
+  ordens_compra?: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
 }
 
 export interface OSReservedInfo {
@@ -334,8 +334,8 @@ export async function rastrearOrcamentos(
 
   // Phase 4c: Fetch purchase orders for the SELECTED statuses (user controls which count
   // as "em compra"). If no statuses selected, skip — coverage analysis is disabled.
-  const compraMapByKey = new Map<string, { qtd: number; ordens: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
-  const compraMapByProduto = new Map<string, { qtd: number; ordens: Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
+  const compraMapByKey = new Map<string, { qtd: number; ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
+  const compraMapByProduto = new Map<string, { qtd: number; ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> }>();
   if (situacaoCompraIds && situacaoCompraIds.length > 0) {
     onProgress?.('Buscando pedidos de compra…', 0, 1);
     try {
@@ -357,7 +357,7 @@ export async function rastrearOrcamentos(
           const vid = normalizeId(p.produto.variacao_id);
           const key = makeKey(pid, vid);
           const qty = parseDecimal(p.produto.quantidade);
-          const ref = { codigo: ordem.codigo, qtd: qty, nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao };
+          const ref = { id: String(ordem.id ?? ""), codigo: ordem.codigo, qtd: qty, nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao };
           if (!compraMapByKey.has(key)) compraMapByKey.set(key, { qtd: 0, ordens: [] });
           const e1 = compraMapByKey.get(key)!;
           e1.qtd += qty; e1.ordens.push(ref);
@@ -373,7 +373,7 @@ export async function rastrearOrcamentos(
 
   function getCompraInfo(pid: string, key: string) {
     const entry = compraMapByKey.get(key) ?? compraMapByProduto.get(pid);
-    if (!entry) return { qtd_em_compra: 0, ordens_compra: [] as Array<{ codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> };
+    if (!entry) return { qtd_em_compra: 0, ordens_compra: [] as Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }> };
     const seen = new Set<string>();
     const ordens = entry.ordens.filter(o => { if (seen.has(o.codigo)) return false; seen.add(o.codigo); return true; });
     return { qtd_em_compra: entry.qtd, ordens_compra: ordens };

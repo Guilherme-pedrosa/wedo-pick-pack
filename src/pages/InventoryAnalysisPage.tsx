@@ -739,6 +739,12 @@ export default function InventoryAnalysisPage() {
       if (usedDefaultLT) alertas.push('Sem lead time do fornecedor, usado padrão');
       if (oneOffDemand) alertas.push('Demanda baseada em apenas um evento');
       if (staleDemand) alertas.push('Produto com demanda antiga');
+      if (statusEstoque === 'REVISAR_MANUALMENTE') {
+        alertas.push('Item de alto valor com apenas um evento. ABC financeiro não autoriza estoque automático.');
+        motivos.push('ABC financeiro = ' + abcClass + ', giro = ' + classeGiro + ' → revisar manualmente');
+      } else if (statusEstoque === 'NAO_ESTOCAR') {
+        motivos.push('Sem giro recorrente (' + classeGiro + ') → não estocar automaticamente');
+      }
 
       // --- Risco operacional (ordenação) ---
       const stockoutRisk = (projForCompare <= 0) ? 100 : 0;

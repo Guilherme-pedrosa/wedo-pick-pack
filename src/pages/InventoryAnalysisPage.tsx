@@ -106,6 +106,13 @@ interface AnalysisItem {
   event_count: number;
   source_count: number;
   client_count: number;
+  event_count_90d: number;
+  event_count_180d: number;
+  source_count_90d: number;
+  source_count_180d: number;
+  non_zero_months_90d: number;
+  non_zero_months_180d: number;
+  days_since_last: number | null;
 
   historical_monthly_avg: number;
   recent_monthly_avg: number;
@@ -114,6 +121,10 @@ interface AnalysisItem {
   cv: number | null;
   adi: number | null;
   non_zero_months: number;
+
+  classe_giro: GiroClass;
+  status_estoque: StatusEstoque;
+
 
   abc_class: ABCClass;
   cumulative_pct: number;

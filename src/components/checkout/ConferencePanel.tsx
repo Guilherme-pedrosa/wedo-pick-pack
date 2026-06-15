@@ -148,6 +148,15 @@ export default function ConferencePanel() {
     return (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
   }, [scanQty, session?.items, parseScanQty]);
 
+  // Leitura via coletor/scanner USB (desktop): captura código + Enter
+  const handleScan = useCallback(() => {
+    processScan(scanCode, scanQtyValue());
+    setScanCode('');
+    scanRef.current?.focus();
+  }, [scanCode, processScan, scanQtyValue]);
+
+
+
   const handlePrint = useCallback(() => {
     if (!session) return;
     const items = session.items;

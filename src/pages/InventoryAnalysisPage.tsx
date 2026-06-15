@@ -1091,23 +1091,30 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Valor Consumo', 'Consumo Médio/Dia', 'Estoque Atual', 'Dias Cobertura', 'ROP', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
       i.grupo || 'Sem grupo',
       i.abc_class,
+      i.xyz_class,
+      i.demand_pattern,
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.event_count,
       formatNumberBR(i.total_qty, 0),
       formatNumberBR(i.total_value, 2),
-      formatNumberBR(i.hybrid_score, 1),
+      formatNumberBR(i.historical_monthly_avg, 2),
+      formatNumberBR(i.forecast_monthly, 2),
       formatNumberBR(i.avg_daily, 2),
       i.estoque_atual ?? '',
-      i.dias_cobertura !== null ? formatNumberBR(i.dias_cobertura, 1) : '',
-      i.rop !== null ? formatNumberBR(i.rop, 1) : '',
-      i.qty_a_comprar ?? '',
+      i.projected_available !== null ? formatNumberBR(i.projected_available, 1) : '',
+      formatNumberBR(i.lead_time_days, 0),
+      i.safety_stock,
+      i.operational_minimum,
+      i.reorder_point,
+      i.max_stock,
+      i.qty_a_comprar,
     ]);
 
     downloadCsv(
@@ -1120,23 +1127,31 @@ export default function InventoryAnalysisPage() {
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
 
-    const headers = ['Classe ABC', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Saída (peças)', 'OS Únicas', 'Estoque Atual', 'Consumo Méd/Dia', 'Lead Time', 'ROP', 'Cobertura (dias)', 'Necessidade Bruta', 'PC em Andamento (peças)', 'Qtd Líquida a Comprar', 'PCs'];
+    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', 'Motivos', 'Alertas', 'PCs'];
     const rows = purchaseItems.map((i) => [
+      i.risk_score,
       i.abc_class,
+      i.xyz_class,
+      i.demand_pattern,
+      i.is_critical ? 'Sim' : 'Não',
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
-      (i as any).grupo || 'Sem grupo',
-      formatNumberBR(Math.round(i.total_qty), 0),
-      i.event_count,
-      i.estoque_atual,
-      formatNumberBR(i.avg_daily, 2),
-      formatNumberBR(Math.round(i.lead_time_days), 0),
-      i.rop !== null ? formatNumberBR(i.rop, 0) : '',
-      i.dias_cobertura !== null ? formatNumberBR(i.dias_cobertura, 0) : '0',
-      i.qty_a_comprar,
+      i.grupo || 'Sem grupo',
+      i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
+      i.estoque_atual ?? '',
       i.pc_qty,
+      formatNumberBR(i.budget_demand_qty, 2),
+      i.projected_available !== null ? formatNumberBR(i.projected_available, 1) : '',
+      formatNumberBR(i.lead_time_days, 0),
+      i.safety_stock,
+      i.operational_minimum,
+      i.reorder_point,
+      i.max_stock,
+      i.qty_a_comprar,
       i.qty_liquida,
+      i.motivos_sugestao.join(' | '),
+      i.alertas.join(' | '),
       i.pc_refs.map((r) => `PC${r.codigo}(${r.qtd})`).join(' · '),
     ]);
 

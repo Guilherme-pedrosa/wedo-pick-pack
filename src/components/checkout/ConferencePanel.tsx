@@ -22,7 +22,6 @@ export default function ConferencePanel() {
   const config = useCheckoutStore(s => s.config);
 
   const isMobile = useIsMobile();
-  const [scanCode, setScanCode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');

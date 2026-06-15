@@ -28,14 +28,14 @@ interface SourceRef {
 
 interface ConsumptionRow {
   produto_id: string;
-  variacao_id: string | null;
   total_qty: number;
   total_value: number;
   event_count: number;
   source_count: number;
+  client_count: number;
   first_date: string;
   last_date: string;
-  hybrid_score: number;
+  consumption_value: number;
   source_refs: SourceRef[];
   monthly_qty: Record<string, number>;
 }

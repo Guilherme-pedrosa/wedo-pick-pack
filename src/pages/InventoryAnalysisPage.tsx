@@ -440,9 +440,13 @@ export default function InventoryAnalysisPage() {
   const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
   const budgetSituacaoIds: string[] = configQuery.data?.budget_crossref_situacao_ids || [];
 
+  // A análise de demanda precisa cobrir a janela completa (analysisMonths), mesmo
+  // que o lookback configurado seja menor.
+  const effectiveLookback = Math.max(lookbackDays, POLICY.analysisMonths * 31);
+
   const consumptionQuery = useQuery({
-    queryKey: ['inv-consumption', lookbackDays],
-    queryFn: () => fetchConsumptionAgg(lookbackDays),
+    queryKey: ['inv-consumption', effectiveLookback],
+    queryFn: () => fetchConsumptionAgg(effectiveLookback),
     enabled: !!configQuery.data,
   });
   const trendQuery = useQuery({ queryKey: ['inv-trend'], queryFn: fetchTrendData });

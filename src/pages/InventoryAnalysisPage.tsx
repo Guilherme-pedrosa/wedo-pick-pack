@@ -312,10 +312,11 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
 
   const rows = await fetchAllRows(
     'inventory_consumption_events',
-    'produto_id, variacao_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
+    'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
     { gte: ['occurred_at', cutoffStr] },
   );
 
+  // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
   const map = new Map<string, ConsumptionRow & { _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef> }>();
   for (const r of rows) {
     const key = r.produto_id;
@@ -331,14 +332,14 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
+      existing.event_count += 1;
       existing._sources.add(sourceId);
       existing._clients.add(clientKey);
-      existing.event_count = existing._clients.size;
       existing.source_count = existing._sources.size;
+      existing.client_count = existing._clients.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
       existing.monthly_qty[monthKey] = (existing.monthly_qty[monthKey] || 0) + qty;
-      // Aggregate source refs by source_id
       const existingRef = existing._sourceRefs.get(sourceId);
       if (existingRef) {
         existingRef.qty += qty;
@@ -350,14 +351,14 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
       refMap.set(sourceId, { source_id: sourceId, source_type: sourceType, qty, cliente });
       map.set(key, {
         produto_id: r.produto_id,
-        variacao_id: r.variacao_id,
         total_qty: qty,
         total_value: val,
         event_count: 1,
         source_count: 1,
+        client_count: 1,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
-        hybrid_score: 0,
+        consumption_value: 0,
         source_refs: [],
         monthly_qty: { [monthKey]: qty },
         _sources: new Set([sourceId]),
@@ -367,20 +368,13 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     }
   }
 
-  // Finalize source_refs from map
   for (const row of map.values()) {
     row.source_refs = [...row._sourceRefs.values()];
+    row.consumption_value = row.total_value; // valor de consumo (custo × qtd) p/ ABC
   }
 
-  // Classic ABC: rank by consumption value (unit cost × qty consumed)
-  // hybrid_score field reused to hold consumption_value for backward compat
-  for (const row of map.values()) {
-    row.hybrid_score = row.total_value;
-  }
-
-  // Include any product with at least 1 unique consumption event
   const filtered = [...map.values()].filter(r => r.event_count >= 1);
-  return filtered.sort((a, b) => b.total_value - a.total_value);
+  return filtered.sort((a, b) => b.consumption_value - a.consumption_value);
 }
 
 async function fetchTrendData(): Promise<any[]> {

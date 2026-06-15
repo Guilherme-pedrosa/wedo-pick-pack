@@ -29,7 +29,7 @@ export default function ConferencePanel() {
   const [forced, setForced] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-  const scanRef = useRef<HTMLInputElement>(null);
+
 
 
 

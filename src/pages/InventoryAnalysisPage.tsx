@@ -1663,42 +1663,40 @@ export default function InventoryAnalysisPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
-                    <TableHead className="w-12">ABC</TableHead>
+                    <TableHead className="w-12">ABC fin.</TableHead>
+                    <TableHead className="w-16">Giro</TableHead>
                     <TableHead>Produto</TableHead>
-                    <TableHead>Grupo</TableHead>
                     <TableHead className="text-right">Eventos</TableHead>
-                    <TableHead className="text-right">Consumo</TableHead>
+                    <TableHead className="text-right">90d</TableHead>
+                    <TableHead className="text-right">180d</TableHead>
+                    <TableHead className="text-right">Últ. consumo</TableHead>
                     <TableHead className="text-right">Valor (R$)</TableHead>
-                    <TableHead className="text-right">Méd/dia</TableHead>
                     <TableHead className="text-right">Estoque</TableHead>
-                    <TableHead className="text-right">Cob.</TableHead>
+                    <TableHead>Decisão estoque</TableHead>
                     <TableHead className="text-right">% Acum.</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredItems.map((item, idx) => (
-                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < item.lead_time_days ? 'bg-destructive/5' : ''}>
+                    <TableRow key={item.produto_id} className={item.status_estoque === 'REVISAR_MANUALMENTE' ? 'bg-amber-500/5' : ''}>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>{abcBadge(item.abc_class)}</TableCell>
+                      <TableCell>{giroBadge(item.classe_giro)}</TableCell>
                       <TableCell>
-                        <p className="text-sm font-medium truncate max-w-[250px]">{item.nome}</p>
+                        <p className="text-sm font-medium truncate max-w-[230px]">{item.nome}</p>
                         {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                       <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
-                      <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_90d}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_180d}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {item.days_since_last !== null ? `${item.days_since_last}d` : '—'}
+                      </TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
                       <TableCell className="text-right">
                         {item.estoque_atual !== null ? item.estoque_atual : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {item.dias_cobertura !== null ? (
-                          <span className={item.dias_cobertura < item.lead_time_days ? 'text-destructive font-bold' : 'text-xs'}>
-                            {item.dias_cobertura.toFixed(0)}d
-                          </span>
-                        ) : <span className="text-muted-foreground text-xs">—</span>}
-                      </TableCell>
+                      <TableCell>{statusEstoqueBadge(item.status_estoque)}</TableCell>
                       <TableCell className="text-right text-[10px] text-muted-foreground">
                         {(item.cumulative_pct * 100).toFixed(1)}%
                       </TableCell>

@@ -314,6 +314,10 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
   cutoff.setDate(cutoff.getDate() - lookbackDays);
   const cutoffStr = cutoff.toISOString();
 
+  const now = Date.now();
+  const cut90 = now - 90 * 86400000;
+  const cut180 = now - 180 * 86400000;
+
   const rows = await fetchAllRows(
     'inventory_consumption_events',
     'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
@@ -321,7 +325,11 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
   );
 
   // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
-  const map = new Map<string, ConsumptionRow & { _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef> }>();
+  type Internal = ConsumptionRow & {
+    _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef>;
+    _sources90: Set<string>; _sources180: Set<string>;
+  };
+  const map = new Map<string, Internal>();
   for (const r of rows) {
     const key = r.produto_id;
     if (!key || key.trim() === '') continue;
@@ -333,14 +341,23 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     const clientKey = (cliente || sourceId).toLowerCase().trim();
     const existing = map.get(key);
     const monthKey = (r.occurred_at || '').slice(0, 7); // YYYY-MM
+    const occMs = r.occurred_at ? new Date(r.occurred_at).getTime() : 0;
+    const in90 = occMs >= cut90;
+    const in180 = occMs >= cut180;
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
       existing.event_count += 1;
+      if (in90) existing.event_count_90d += 1;
+      if (in180) existing.event_count_180d += 1;
       existing._sources.add(sourceId);
       existing._clients.add(clientKey);
+      if (in90) existing._sources90.add(sourceId);
+      if (in180) existing._sources180.add(sourceId);
       existing.source_count = existing._sources.size;
       existing.client_count = existing._clients.size;
+      existing.source_count_90d = existing._sources90.size;
+      existing.source_count_180d = existing._sources180.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
       existing.monthly_qty[monthKey] = (existing.monthly_qty[monthKey] || 0) + qty;
@@ -360,6 +377,10 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         event_count: 1,
         source_count: 1,
         client_count: 1,
+        event_count_90d: in90 ? 1 : 0,
+        event_count_180d: in180 ? 1 : 0,
+        source_count_90d: in90 ? 1 : 0,
+        source_count_180d: in180 ? 1 : 0,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
         consumption_value: 0,
@@ -367,6 +388,8 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         monthly_qty: { [monthKey]: qty },
         _sources: new Set([sourceId]),
         _clients: new Set([clientKey]),
+        _sources90: in90 ? new Set([sourceId]) : new Set<string>(),
+        _sources180: in180 ? new Set([sourceId]) : new Set<string>(),
         _sourceRefs: refMap,
       });
     }

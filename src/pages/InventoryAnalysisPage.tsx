@@ -33,6 +33,10 @@ interface ConsumptionRow {
   event_count: number;
   source_count: number;
   client_count: number;
+  event_count_90d: number;
+  event_count_180d: number;
+  source_count_90d: number;
+  source_count_180d: number;
   first_date: string;
   last_date: string;
   consumption_value: number;
@@ -85,6 +89,9 @@ type ABCClass = 'A' | 'B' | 'C';
 type XYZClass = 'X' | 'Y' | 'Z';
 type DemandPattern = 'regular' | 'intermitente' | 'erratica' | 'lumpy' | 'sem_demanda';
 
+type GiroClass = 'ALTO' | 'MEDIO' | 'BAIXO' | 'SEM_GIRO';
+type StatusEstoque = 'COMPRAR_ESTOQUE' | 'REVISAR_MANUALMENTE' | 'NAO_ESTOCAR' | 'ESTOQUE_OK';
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;
@@ -99,6 +106,13 @@ interface AnalysisItem {
   event_count: number;
   source_count: number;
   client_count: number;
+  event_count_90d: number;
+  event_count_180d: number;
+  source_count_90d: number;
+  source_count_180d: number;
+  non_zero_months_90d: number;
+  non_zero_months_180d: number;
+  days_since_last: number | null;
 
   historical_monthly_avg: number;
   recent_monthly_avg: number;
@@ -107,6 +121,10 @@ interface AnalysisItem {
   cv: number | null;
   adi: number | null;
   non_zero_months: number;
+
+  classe_giro: GiroClass;
+  status_estoque: StatusEstoque;
+
 
   abc_class: ABCClass;
   cumulative_pct: number;
@@ -310,6 +328,10 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
   cutoff.setDate(cutoff.getDate() - lookbackDays);
   const cutoffStr = cutoff.toISOString();
 
+  const now = Date.now();
+  const cut90 = now - 90 * 86400000;
+  const cut180 = now - 180 * 86400000;
+
   const rows = await fetchAllRows(
     'inventory_consumption_events',
     'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
@@ -317,7 +339,11 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
   );
 
   // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
-  const map = new Map<string, ConsumptionRow & { _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef> }>();
+  type Internal = ConsumptionRow & {
+    _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef>;
+    _sources90: Set<string>; _sources180: Set<string>;
+  };
+  const map = new Map<string, Internal>();
   for (const r of rows) {
     const key = r.produto_id;
     if (!key || key.trim() === '') continue;
@@ -329,14 +355,23 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     const clientKey = (cliente || sourceId).toLowerCase().trim();
     const existing = map.get(key);
     const monthKey = (r.occurred_at || '').slice(0, 7); // YYYY-MM
+    const occMs = r.occurred_at ? new Date(r.occurred_at).getTime() : 0;
+    const in90 = occMs >= cut90;
+    const in180 = occMs >= cut180;
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
       existing.event_count += 1;
+      if (in90) existing.event_count_90d += 1;
+      if (in180) existing.event_count_180d += 1;
       existing._sources.add(sourceId);
       existing._clients.add(clientKey);
+      if (in90) existing._sources90.add(sourceId);
+      if (in180) existing._sources180.add(sourceId);
       existing.source_count = existing._sources.size;
       existing.client_count = existing._clients.size;
+      existing.source_count_90d = existing._sources90.size;
+      existing.source_count_180d = existing._sources180.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
       existing.monthly_qty[monthKey] = (existing.monthly_qty[monthKey] || 0) + qty;
@@ -356,6 +391,10 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         event_count: 1,
         source_count: 1,
         client_count: 1,
+        event_count_90d: in90 ? 1 : 0,
+        event_count_180d: in180 ? 1 : 0,
+        source_count_90d: in90 ? 1 : 0,
+        source_count_180d: in180 ? 1 : 0,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
         consumption_value: 0,
@@ -363,6 +402,8 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         monthly_qty: { [monthKey]: qty },
         _sources: new Set([sourceId]),
         _clients: new Set([clientKey]),
+        _sources90: in90 ? new Set([sourceId]) : new Set<string>(),
+        _sources180: in180 ? new Set([sourceId]) : new Set<string>(),
         _sourceRefs: refMap,
       });
     }
@@ -526,6 +567,17 @@ export default function InventoryAnalysisPage() {
       const nonZeroMonths = monthlySeries.filter(v => v > 0).length;
       const adi = nonZeroMonths > 0 ? POLICY.analysisMonths / nonZeroMonths : null;
 
+      // --- Classe de GIRO (recorrência real, separada do ABC financeiro) ---
+      const nonZeroMonths90 = monthlySeries.slice(0, 3).filter(v => v > 0).length;
+      const nonZeroMonths180 = monthlySeries.slice(0, 6).filter(v => v > 0).length;
+      const lastMsGiro = r.last_date ? new Date(r.last_date).getTime() : 0;
+      const daysSinceLast = lastMsGiro ? Math.round((now.getTime() - lastMsGiro) / 86400000) : null;
+      let classeGiro: GiroClass;
+      if (r.source_count_90d >= 3 || nonZeroMonths90 >= 2) classeGiro = 'ALTO';
+      else if (r.source_count_180d >= 2 || nonZeroMonths180 >= 2) classeGiro = 'MEDIO';
+      else if (r.event_count_180d >= 1) classeGiro = 'BAIXO';
+      else classeGiro = 'SEM_GIRO';
+
       // --- XYZ ---
       const cvVal = cv ?? 0;
       const xyzClass: XYZClass = cvVal <= 0.5 ? 'X' : cvVal <= 1.0 ? 'Y' : 'Z';
@@ -647,6 +699,28 @@ export default function InventoryAnalysisPage() {
         qtyToBuy = 0;
       }
 
+      // === GATE DE GIRO: ABC mede dinheiro, estoque mede giro ===
+      // (sem overrides manuais no cliente → manualStockItem/manualMinStock = false)
+      const manualStockItem = false;
+      const manualMinStock = 0;
+      const hasManual = manualStockItem || manualMinStock > 0;
+      const recurringStockDemand = classeGiro === 'ALTO' || classeGiro === 'MEDIO';
+      const oneEventOnly = r.event_count <= 1;
+      // Item caro com 1 evento → revisar manualmente, nunca compra automática
+      const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
+      // Só pode entrar na compra automática se houver giro ALTO/MEDIO ou política manual
+      const canBuyForStock = hasManual || (recurringStockDemand && !oneEventOnly);
+
+      let statusEstoque: StatusEstoque;
+      if (!canBuyForStock) {
+        qtyToBuy = 0;
+        statusEstoque = expensiveOneOff || (unitCost > 500 && oneEventOnly)
+          ? 'REVISAR_MANUALMENTE'
+          : 'NAO_ESTOCAR';
+      } else {
+        statusEstoque = qtyToBuy > 0 ? 'COMPRAR_ESTOQUE' : 'ESTOQUE_OK';
+      }
+
       // --- Motivos e alertas ---
       const motivos: string[] = [];
       const alertas: string[] = [];
@@ -665,6 +739,12 @@ export default function InventoryAnalysisPage() {
       if (usedDefaultLT) alertas.push('Sem lead time do fornecedor, usado padrão');
       if (oneOffDemand) alertas.push('Demanda baseada em apenas um evento');
       if (staleDemand) alertas.push('Produto com demanda antiga');
+      if (statusEstoque === 'REVISAR_MANUALMENTE') {
+        alertas.push('Item de alto valor com apenas um evento. ABC financeiro não autoriza estoque automático.');
+        motivos.push('ABC financeiro = ' + abcClass + ', giro = ' + classeGiro + ' → revisar manualmente');
+      } else if (statusEstoque === 'NAO_ESTOCAR') {
+        motivos.push('Sem giro recorrente (' + classeGiro + ') → não estocar automaticamente');
+      }
 
       // --- Risco operacional (ordenação) ---
       const stockoutRisk = (projForCompare <= 0) ? 100 : 0;
@@ -693,6 +773,17 @@ export default function InventoryAnalysisPage() {
         event_count: r.event_count,
         source_count: r.source_count,
         client_count: r.client_count,
+        event_count_90d: r.event_count_90d,
+        event_count_180d: r.event_count_180d,
+        source_count_90d: r.source_count_90d,
+        source_count_180d: r.source_count_180d,
+        non_zero_months_90d: nonZeroMonths90,
+        non_zero_months_180d: nonZeroMonths180,
+        days_since_last: daysSinceLast,
+
+        classe_giro: classeGiro,
+        status_estoque: statusEstoque,
+
 
         historical_monthly_avg: historicalMonthlyAvg,
         recent_monthly_avg: recentMonthlyAvg,
@@ -1091,17 +1182,24 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
       i.grupo || 'Sem grupo',
       i.abc_class,
+      i.classe_giro,
+      i.status_estoque,
       i.xyz_class,
       i.demand_pattern,
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.event_count,
+      i.event_count_90d,
+      i.event_count_180d,
+      i.source_count_90d,
+      i.source_count_180d,
+      i.days_since_last ?? '',
       formatNumberBR(i.total_qty, 0),
       formatNumberBR(i.total_value, 2),
       formatNumberBR(i.historical_monthly_avg, 2),
@@ -1168,6 +1266,33 @@ export default function InventoryAnalysisPage() {
       C: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
     };
     return <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${variants[cls]}`}>{cls}</span>;
+  };
+
+  const giroBadge = (cls: GiroClass) => {
+    const variants: Record<GiroClass, string> = {
+      ALTO: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+      MEDIO: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+      BAIXO: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+      SEM_GIRO: 'bg-muted text-muted-foreground',
+    };
+    const labels: Record<GiroClass, string> = { ALTO: 'Alto', MEDIO: 'Médio', BAIXO: 'Baixo', SEM_GIRO: 'Sem giro' };
+    return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${variants[cls]}`}>{labels[cls]}</span>;
+  };
+
+  const statusEstoqueBadge = (st: StatusEstoque) => {
+    const variants: Record<StatusEstoque, string> = {
+      COMPRAR_ESTOQUE: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+      ESTOQUE_OK: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+      REVISAR_MANUALMENTE: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+      NAO_ESTOCAR: 'bg-muted text-muted-foreground',
+    };
+    const labels: Record<StatusEstoque, string> = {
+      COMPRAR_ESTOQUE: 'Comprar estoque',
+      ESTOQUE_OK: 'Estoque ok',
+      REVISAR_MANUALMENTE: 'Revisar manual',
+      NAO_ESTOCAR: 'Não estocar',
+    };
+    return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${variants[st]}`}>{labels[st]}</span>;
   };
 
   const isLoading = consumptionQuery.isLoading || configQuery.isLoading;
@@ -1545,42 +1670,40 @@ export default function InventoryAnalysisPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">#</TableHead>
-                    <TableHead className="w-12">ABC</TableHead>
+                    <TableHead className="w-12">ABC fin.</TableHead>
+                    <TableHead className="w-16">Giro</TableHead>
                     <TableHead>Produto</TableHead>
-                    <TableHead>Grupo</TableHead>
                     <TableHead className="text-right">Eventos</TableHead>
-                    <TableHead className="text-right">Consumo</TableHead>
+                    <TableHead className="text-right">90d</TableHead>
+                    <TableHead className="text-right">180d</TableHead>
+                    <TableHead className="text-right">Últ. consumo</TableHead>
                     <TableHead className="text-right">Valor (R$)</TableHead>
-                    <TableHead className="text-right">Méd/dia</TableHead>
                     <TableHead className="text-right">Estoque</TableHead>
-                    <TableHead className="text-right">Cob.</TableHead>
+                    <TableHead>Decisão estoque</TableHead>
                     <TableHead className="text-right">% Acum.</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredItems.map((item, idx) => (
-                    <TableRow key={item.produto_id} className={item.dias_cobertura !== null && item.dias_cobertura < item.lead_time_days ? 'bg-destructive/5' : ''}>
+                    <TableRow key={item.produto_id} className={item.status_estoque === 'REVISAR_MANUALMENTE' ? 'bg-amber-500/5' : ''}>
                       <TableCell className="text-xs text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>{abcBadge(item.abc_class)}</TableCell>
+                      <TableCell>{giroBadge(item.classe_giro)}</TableCell>
                       <TableCell>
-                        <p className="text-sm font-medium truncate max-w-[250px]">{item.nome}</p>
+                        <p className="text-sm font-medium truncate max-w-[230px]">{item.nome}</p>
                         {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
                       <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
-                      <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_90d}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_180d}</TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {item.days_since_last !== null ? `${item.days_since_last}d` : '—'}
+                      </TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
                       <TableCell className="text-right">
                         {item.estoque_atual !== null ? item.estoque_atual : <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {item.dias_cobertura !== null ? (
-                          <span className={item.dias_cobertura < item.lead_time_days ? 'text-destructive font-bold' : 'text-xs'}>
-                            {item.dias_cobertura.toFixed(0)}d
-                          </span>
-                        ) : <span className="text-muted-foreground text-xs">—</span>}
-                      </TableCell>
+                      <TableCell>{statusEstoqueBadge(item.status_estoque)}</TableCell>
                       <TableCell className="text-right text-[10px] text-muted-foreground">
                         {(item.cumulative_pct * 100).toFixed(1)}%
                       </TableCell>

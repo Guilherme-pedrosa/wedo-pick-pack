@@ -1373,7 +1373,13 @@ export default function InventoryAnalysisPage() {
     { name: 'C', count: kpis.cCount, fill: 'hsl(142 71% 45%)' },
   ];
   const showStickyFilters = activeTab === 'ranking' || (activeTab === 'compras' && stockMap.size > 0);
-  const activeFilterCount = activeTab === 'compras' ? purchaseItems.length : filteredItems.length;
+  const activeFilterCount = activeTab === 'compras'
+    ? purchaseItems.length
+    : activeTab === 'orcsemgiro'
+      ? budgetNoGiroItems.length
+      : activeTab === 'recorrenteok'
+        ? recurringOkItems.length
+        : filteredItems.length;
 
   return (
     <div className="max-w-[1400px] mx-auto p-4 sm:p-6 space-y-6">

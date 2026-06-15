@@ -132,15 +132,11 @@ export default function ConferencePanel() {
       : String(value).replace('.', ',');
   }, []);
 
-  const handleScan = useCallback(() => {
+  const scanQtyValue = useCallback(() => {
     const hasFractional = session?.items.some(i => i.qtd_total % 1 !== 0);
     const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-    const effectiveQty = (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
-    processScan(scanCode, effectiveQty);
-    setScanCode('');
-    setScanQty('1');
-    scanRef.current?.focus();
-  }, [scanCode, scanQty, processScan, session?.items, parseScanQty]);
+    return (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
+  }, [scanQty, session?.items, parseScanQty]);
 
   const handlePrint = useCallback(() => {
     if (!session) return;

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
+import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser';
 import {
   DecodeHintType,
   BarcodeFormat,
-  type IScannerControls,
 } from '@zxing/library';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';

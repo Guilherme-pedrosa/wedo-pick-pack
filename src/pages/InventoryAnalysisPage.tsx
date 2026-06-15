@@ -1182,17 +1182,24 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
       i.grupo || 'Sem grupo',
       i.abc_class,
+      i.classe_giro,
+      i.status_estoque,
       i.xyz_class,
       i.demand_pattern,
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.event_count,
+      i.event_count_90d,
+      i.event_count_180d,
+      i.source_count_90d,
+      i.source_count_180d,
+      i.days_since_last ?? '',
       formatNumberBR(i.total_qty, 0),
       formatNumberBR(i.total_value, 2),
       formatNumberBR(i.historical_monthly_avg, 2),

@@ -849,51 +849,22 @@ export default function InventoryAnalysisPage() {
     const aCount = items.filter(i => i.abc_class === 'A').length;
     const bCount = items.filter(i => i.abc_class === 'B').length;
     const cCount = items.filter(i => i.abc_class === 'C').length;
-    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days).length;
+    const criticalCount = items.filter(i => i.stock_known && i.projected_available !== null && i.projected_available <= i.reorder_point).length;
     const totalConsumo = items.reduce((s, i) => s + i.total_qty, 0);
     const totalValor = items.reduce((s, i) => s + i.total_value, 0);
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase suggestions: triggered by client reach OR by recurring outflow volume.
-  // - Client-reach gate: <R$1k → 2+ clients, ≥R$1k → 3+ clients (catches broad demand)
-  // - Volume gate: 4+ documentos de saída únicos (cobre casos como contratos Ecolab,
-  //   onde um único cliente puxa muita peça e o gate de clientes únicos sozinho ignoraria)
+  // Lista de compras: o motor de planejamento já decidiu qty_a_comprar por todas as
+  // regras (ROP, mínimo operacional, orçamento, lead time, bloqueios). Aqui apenas
+  // filtramos quem precisa comprar (qtd líquida > 0) e ordenamos por risco operacional.
   const purchaseItems = useMemo(() => {
-    return analysisItems.filter((item) => {
-      if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
-
-      const i = item;
-      // Se a PC ativa já cobre a demanda, não entra na lista de compras.
-      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
-
-      // Regra unificada: olhar Vendas + OS de qualquer grupo (sem distinção
-      // para ESPECÍFICO). Item entra na sugestão se atender qualquer um:
-      //  (a) há orçamento pendente cruzado puxando demanda,
-      //  (b) saída recorrente (≥2 docs) + estoque zerado/negativo,
-      //  (c) saída recorrente + cobertura < lead time (vai zerar antes da PC),
-      //  (d) saída recorrente + estoque < ROP,
-      //  (e) gates de alcance: clientes únicos (>=2 ou >=3 para itens >R$1k)
-      //      OU volume de documentos únicos (>=2).
-      if (i.orc_qty > 0) return true;
-
-      const isRecurring = (i.source_count ?? 0) >= 2;
-      const isOutOfStock = i.estoque_atual !== null && i.estoque_atual <= 0;
-      if (isRecurring && isOutOfStock) return true;
-
-      const coverageBelowLT = i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days;
-      if (isRecurring && coverageBelowLT) return true;
-
-      const belowROP = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
-      if (isRecurring && belowROP) return true;
-
-      const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
-      const minClients = avgUnitCost >= 1000 ? 3 : 2;
-      const passesClientGate = i.event_count >= minClients;
-      const passesVolumeGate = (i.source_count ?? 0) >= 2;
-
-      return passesClientGate || passesVolumeGate;
-    });
+    return analysisItems
+      .filter((item) => {
+        if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
+        return item.qty_liquida > 0;
+      })
+      .sort((a, b) => b.risk_score - a.risk_score);
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Fetch active purchase orders from GC

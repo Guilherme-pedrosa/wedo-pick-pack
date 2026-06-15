@@ -1459,7 +1459,13 @@ export default function InventoryAnalysisPage() {
                           {item.valor_custo !== null ? `R$ ${item.valor_custo.toFixed(2)}` : '—'}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
-                          {item.stock_known ? item.estoque_atual : <span className="text-amber-600 text-xs" title="Estoque não carregado">—</span>}
+                          {item.stock_known ? (
+                            (item.estoque_atual ?? 0) < 0 ? (
+                              <span className="text-red-600 font-bold animate-pulse" title="Estoque negativo — não deveria existir!">{item.estoque_atual}</span>
+                            ) : (
+                              item.estoque_atual
+                            )
+                          ) : <span className="text-amber-600 text-xs" title="Estoque não carregado">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
                           {item.pc_qty > 0 ? (

@@ -28,14 +28,14 @@ interface SourceRef {
 
 interface ConsumptionRow {
   produto_id: string;
-  variacao_id: string | null;
   total_qty: number;
   total_value: number;
   event_count: number;
   source_count: number;
+  client_count: number;
   first_date: string;
   last_date: string;
-  hybrid_score: number;
+  consumption_value: number;
   source_refs: SourceRef[];
   monthly_qty: Record<string, number>;
 }
@@ -81,6 +81,10 @@ interface OrcEntry {
   refs: OrcRef[];
 }
 
+type ABCClass = 'A' | 'B' | 'C';
+type XYZClass = 'X' | 'Y' | 'Z';
+type DemandPattern = 'regular' | 'intermitente' | 'erratica' | 'lumpy' | 'sem_demanda';
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;
@@ -89,33 +93,138 @@ interface AnalysisItem {
   fornecedor_nome: string | null;
   grupo: string | null;
   valor_custo: number | null;
+
   total_qty: number;
   total_value: number;
   event_count: number;
   source_count: number;
-  hybrid_score: number;
-  avg_daily: number;
-  abc_class: 'A' | 'B' | 'C';
+  client_count: number;
+
+  historical_monthly_avg: number;
+  recent_monthly_avg: number;
+  forecast_monthly: number;
+  monthly_std_dev: number;
+  cv: number | null;
+  adi: number | null;
+  non_zero_months: number;
+
+  abc_class: ABCClass;
   cumulative_pct: number;
+  xyz_class: XYZClass;
+  demand_pattern: DemandPattern;
+  is_critical: boolean;
+  is_recurring: boolean;
+
   estoque_atual: number | null;
-  dias_cobertura: number | null;
-  lead_time_days: number;
-  rop: number | null;
-  qty_a_comprar: number | null;
-  qty_liquida: number | null;
+  stock_known: boolean;
   pc_qty: number;
-  pc_refs: PCRef[];
+  effective_pc_qty: number;
   orc_qty: number;
+  budget_demand_qty: number;
+  projected_available: number | null;
+
+  avg_daily: number;
+  lead_time_days: number;
+  safety_stock: number;
+  operational_minimum: number;
+  reorder_point: number;
+  max_stock: number;
+  dias_cobertura: number | null;
+
+  qty_a_comprar: number;
+  qty_liquida: number;
+
+  risk_score: number;
+  motivos_sugestao: string[];
+  alertas: string[];
+
+  pc_refs: PCRef[];
   orc_refs: OrcRef[];
   source_refs: SourceRef[];
-  coverage_target: number;
 }
 
 type AnalysisTab = 'compras' | 'ranking' | 'leadtime' | 'trend';
 
-// ABC-specific safety margins on top of lead time
-// A = critical items, 40% safety; B = 25%; C = 10%
-const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
+// ============================================================================
+// POLÍTICA DE REPOSIÇÃO — parâmetros centralizados e fáceis de ajustar.
+// (Pode futuramente vir de inventory_policy_config.)
+// ============================================================================
+const POLICY = {
+  analysisMonths: 12,
+  minAnalysisMonths: 6,
+  recentMonths: 3,
+  reviewPeriodDays: 30,
+
+  defaultLeadTimeDays: 21,
+  minLeadTimeDays: 7,
+  maxLeadTimeDays: 90,
+
+  serviceLevels: { critical: 0.98, A: 0.95, B: 0.90, C: 0.85 },
+  zScores: { critical: 2.05, A: 1.65, B: 1.28, C: 1.04 } as Record<string, number>,
+
+  lowCostThresholds: { veryLow: 30, low: 80, medium: 200, moderate: 500 },
+  minShelfByCost: { veryLow: 6, low: 4, medium: 2, moderate: 1 },
+  maxCoverageDaysByCost: { veryLow: 90, low: 75, medium: 60, moderate: 45, high: 30 },
+
+  staleDemandDays: 365,
+  stalePurchaseOrderDays: 90,
+
+  pendingBudgetDemandFactor: 0.70,
+  approvedBudgetDemandFactor: 1.00,
+
+  minRecurringSources: 2,
+  minRecurringQty: 2,
+};
+
+const CRITICAL_KEYWORDS = [
+  'placa', 'controlador', 'compressor', 'contator', 'rele', 'relé', 'termostato',
+  'sensor', 'resistencia', 'resistência', 'motor', 'bomba', 'ventilador', 'micro',
+  'chave', 'rolamento', 'retentor', 'correia', 'mangueira', 'vedacao', 'vedação',
+  'valvula', 'válvula',
+];
+
+// Futuramente: tabela manual inventory_criticality_overrides
+//   (produto_id, criticality: 'critical'|'normal'|'do_not_stock', min_qty_override, max_qty_override, notes)
+function inferCriticality(nome: string): boolean {
+  const name = (nome || '').toLowerCase();
+  return CRITICAL_KEYWORDS.some(k => name.includes(k));
+}
+
+function getCoverageDaysByCost(unitCost: number): number {
+  const t = POLICY.lowCostThresholds;
+  const c = POLICY.maxCoverageDaysByCost;
+  if (unitCost > 0 && unitCost <= t.veryLow) return c.veryLow;
+  if (unitCost <= t.low) return c.low;
+  if (unitCost <= t.medium) return c.medium;
+  if (unitCost <= t.moderate) return c.moderate;
+  return c.high;
+}
+
+function getOperationalMinimum(unitCost: number, isRecurring: boolean, isCritical: boolean): number {
+  if (!isRecurring && !isCritical) return 0;
+  const t = POLICY.lowCostThresholds;
+  const m = POLICY.minShelfByCost;
+  if (unitCost > 0 && unitCost <= t.veryLow) return m.veryLow;
+  if (unitCost <= t.low) return m.low;
+  if (unitCost <= t.medium) return m.medium;
+  if (unitCost <= t.moderate && isCritical) return m.moderate;
+  return isCritical ? 1 : 0;
+}
+
+// Teto de estoque de segurança por custo, para itens intermitentes/lumpy não explodirem.
+function getMaxShelfQtyByCost(unitCost: number, forecastMonthly: number): number {
+  const coverageDays = getCoverageDaysByCost(unitCost);
+  return Math.ceil((forecastMonthly / 30) * coverageDays) + getOperationalMinimum(unitCost, true, false);
+}
+
+function stdDev(series: number[]): number {
+  const n = series.length;
+  if (n === 0) return 0;
+  const mean = series.reduce((s, v) => s + v, 0) / n;
+  const variance = series.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+  return Math.sqrt(variance);
+}
+
 const ANALYSIS_FILTER_STORAGE_KEY = 'inventory-analysis-filters';
 const ALL_GROUPS_VALUE = '__all__';
 const DEFAULT_ANALYSIS_TAB: AnalysisTab = 'compras';
@@ -203,10 +312,11 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
 
   const rows = await fetchAllRows(
     'inventory_consumption_events',
-    'produto_id, variacao_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
+    'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
     { gte: ['occurred_at', cutoffStr] },
   );
 
+  // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
   const map = new Map<string, ConsumptionRow & { _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef> }>();
   for (const r of rows) {
     const key = r.produto_id;
@@ -222,14 +332,14 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     if (existing) {
       existing.total_qty += qty;
       existing.total_value += val;
+      existing.event_count += 1;
       existing._sources.add(sourceId);
       existing._clients.add(clientKey);
-      existing.event_count = existing._clients.size;
       existing.source_count = existing._sources.size;
+      existing.client_count = existing._clients.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
       if (r.occurred_at > existing.last_date) existing.last_date = r.occurred_at;
       existing.monthly_qty[monthKey] = (existing.monthly_qty[monthKey] || 0) + qty;
-      // Aggregate source refs by source_id
       const existingRef = existing._sourceRefs.get(sourceId);
       if (existingRef) {
         existingRef.qty += qty;
@@ -241,14 +351,14 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
       refMap.set(sourceId, { source_id: sourceId, source_type: sourceType, qty, cliente });
       map.set(key, {
         produto_id: r.produto_id,
-        variacao_id: r.variacao_id,
         total_qty: qty,
         total_value: val,
         event_count: 1,
         source_count: 1,
+        client_count: 1,
         first_date: r.occurred_at,
         last_date: r.occurred_at,
-        hybrid_score: 0,
+        consumption_value: 0,
         source_refs: [],
         monthly_qty: { [monthKey]: qty },
         _sources: new Set([sourceId]),
@@ -258,20 +368,13 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     }
   }
 
-  // Finalize source_refs from map
   for (const row of map.values()) {
     row.source_refs = [...row._sourceRefs.values()];
+    row.consumption_value = row.total_value; // valor de consumo (custo × qtd) p/ ABC
   }
 
-  // Classic ABC: rank by consumption value (unit cost × qty consumed)
-  // hybrid_score field reused to hold consumption_value for backward compat
-  for (const row of map.values()) {
-    row.hybrid_score = row.total_value;
-  }
-
-  // Include any product with at least 1 unique consumption event
   const filtered = [...map.values()].filter(r => r.event_count >= 1);
-  return filtered.sort((a, b) => b.total_value - a.total_value);
+  return filtered.sort((a, b) => b.consumption_value - a.consumption_value);
 }
 
 async function fetchTrendData(): Promise<any[]> {
@@ -337,9 +440,13 @@ export default function InventoryAnalysisPage() {
   const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
   const budgetSituacaoIds: string[] = configQuery.data?.budget_crossref_situacao_ids || [];
 
+  // A análise de demanda precisa cobrir a janela completa (analysisMonths), mesmo
+  // que o lookback configurado seja menor.
+  const effectiveLookback = Math.max(lookbackDays, POLICY.analysisMonths * 31);
+
   const consumptionQuery = useQuery({
-    queryKey: ['inv-consumption', lookbackDays],
-    queryFn: () => fetchConsumptionAgg(lookbackDays),
+    queryKey: ['inv-consumption', effectiveLookback],
+    queryFn: () => fetchConsumptionAgg(effectiveLookback),
     enabled: !!configQuery.data,
   });
   const trendQuery = useQuery({ queryKey: ['inv-trend'], queryFn: fetchTrendData });
@@ -370,135 +477,267 @@ export default function InventoryAnalysisPage() {
     return Math.round(sorted.length % 2 ? sorted[mid].avg_lead_time_days : (sorted[mid - 1].avg_lead_time_days + sorted[mid].avg_lead_time_days) / 2);
   }, [leadTimesQuery.data]);
 
-  // Build analysis items with ABC + per-supplier ROP
+  // ===========================================================================
+  // MOTOR DE PLANEJAMENTO POR PRODUTO_ID (estilo ERP/EAM).
+  // Todos os cruzamentos (estoque, PC, orçamento, consumo) por produto_id.
+  // ===========================================================================
   const analysisItems: AnalysisItem[] = useMemo(() => {
     const rows = consumptionQuery.data || [];
     const names = namesQuery.data || new Map();
     if (rows.length === 0) return [];
 
-    const totalScore = rows.reduce((s, r) => s + r.hybrid_score, 0);
+    // --- ABC clássico por valor de consumo (custo × qtd) ---
+    const totalValue = rows.reduce((s, r) => s + r.consumption_value, 0);
     let cumulative = 0;
 
-    return rows.map(r => {
-      cumulative += r.hybrid_score;
-      const pct = totalScore > 0 ? cumulative / totalScore : 0;
-      const abcClass: 'A' | 'B' | 'C' = pct <= thresholds.A ? 'A' : pct <= thresholds.B ? 'B' : 'C';
+    // Pré-computar as chaves dos últimos analysisMonths meses (mais recente primeiro).
+    const now = new Date();
+    const monthKeys: string[] = [];
+    for (let i = 0; i < POLICY.analysisMonths; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    return rows.map((r): AnalysisItem => {
+      cumulative += r.consumption_value;
+      const pct = totalValue > 0 ? cumulative / totalValue : 0;
+      const abcClass: ABCClass = pct <= thresholds.A ? 'A' : pct <= thresholds.B ? 'B' : 'C';
+
       const info = names.get(r.produto_id);
-      const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
-      const estoque = stockMap.get(r.produto_id) ?? null;
-      
-      // Use THIS product's supplier lead time, not global average
+      const nome = info?.nome || `Produto ${r.produto_id}`;
+      const unitCost = info?.valor_custo ?? (r.total_qty > 0 ? r.total_value / r.total_qty : 0);
+      const isCritical = inferCriticality(nome);
+
+      // --- Séries mensais (incluindo zeros) ---
+      const monthlySeries = monthKeys.map(k => r.monthly_qty?.[k] || 0); // 12 meses (recente→antigo)
+      const recentSeries = monthlySeries.slice(0, POLICY.recentMonths);
+      const historicalMonthlyAvg = monthlySeries.reduce((s, v) => s + v, 0) / monthlySeries.length;
+      const recentMonthlyAvg = recentSeries.length
+        ? recentSeries.reduce((s, v) => s + v, 0) / recentSeries.length
+        : 0;
+      // média ponderada recente: mês atual 0.5, anterior 0.3, dois meses atrás 0.2
+      const recentWeightedAvg =
+        (recentSeries[0] || 0) * 0.5 +
+        (recentSeries[1] || 0) * 0.3 +
+        (recentSeries[2] || 0) * 0.2;
+
+      const monthlyStdDev = stdDev(monthlySeries);
+      const cv = historicalMonthlyAvg > 0 ? monthlyStdDev / historicalMonthlyAvg : null;
+      const nonZeroMonths = monthlySeries.filter(v => v > 0).length;
+      const adi = nonZeroMonths > 0 ? POLICY.analysisMonths / nonZeroMonths : null;
+
+      // --- XYZ ---
+      const cvVal = cv ?? 0;
+      const xyzClass: XYZClass = cvVal <= 0.5 ? 'X' : cvVal <= 1.0 ? 'Y' : 'Z';
+
+      // --- Padrão de demanda ---
+      const cv2 = cvVal * cvVal;
+      let demandPattern: DemandPattern;
+      if (nonZeroMonths === 0) demandPattern = 'sem_demanda';
+      else if (adi! <= 1.32 && cv2 <= 0.49) demandPattern = 'regular';
+      else if (adi! > 1.32 && cv2 <= 0.49) demandPattern = 'intermitente';
+      else if (adi! <= 1.32 && cv2 > 0.49) demandPattern = 'erratica';
+      else demandPattern = 'lumpy';
+
+      // --- Recorrência ---
+      const isRecurring =
+        r.source_count >= POLICY.minRecurringSources ||
+        r.event_count >= POLICY.minRecurringSources ||
+        r.total_qty >= POLICY.minRecurringQty ||
+        nonZeroMonths >= 2;
+
+      // --- Previsão de demanda mensal por padrão ---
+      const baseForecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg);
+      let forecastMonthly: number;
+      if (demandPattern === 'intermitente') forecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg * 0.7);
+      else if (demandPattern === 'lumpy') forecastMonthly = historicalMonthlyAvg;
+      else if (demandPattern === 'sem_demanda') forecastMonthly = 0;
+      else forecastMonthly = baseForecastMonthly; // regular / erratica
+
+      // --- Lead time (por fornecedor; senão padrão), com limites ---
       const fornecedorId = info?.fornecedor_id || null;
       const supplierLT = fornecedorId ? supplierLTMap.get(fornecedorId) : null;
-      const leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : fallbackLeadTime;
+      let leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : POLICY.defaultLeadTimeDays;
+      leadTimeDays = Math.min(POLICY.maxLeadTimeDays, Math.max(POLICY.minLeadTimeDays, leadTimeDays));
       const fornecedorNome = supplierLT?.fornecedor_nome || null;
-      // (grupo ESPECÍFICO segue mesma regra dos demais — sem distinção)
+      const usedDefaultLT = !supplierLT;
 
-      // ============================================================
-      // MÉDIA PONDERADA MENSAL — últimos 3 meses, mais recente pesa mais.
-      // Ex.: mês atual=5, anterior=1, retrasado=0 → (5*3 + 1*2 + 0*1) / 6 = 2,83 un/mês.
-      // O teto de compra é 1 mês de cobertura máximo.
-      // ============================================================
-      const now = new Date();
-      const monthKeys: string[] = [];
-      for (let i = 0; i < 3; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-      }
-      const weights = [3, 2, 1]; // mês atual, -1, -2
-      let weightedSum = 0;
-      let weightTotal = 0;
-      for (let i = 0; i < monthKeys.length; i++) {
-        const q = r.monthly_qty?.[monthKeys[i]] || 0;
-        weightedSum += q * weights[i];
-        weightTotal += weights[i];
-      }
-      const monthlyWeightedAvg = weightTotal > 0 ? weightedSum / weightTotal : 0;
-      const targetCoverage = Math.ceil(monthlyWeightedAvg); // teto = 1 mês
+      // --- Demanda diária ---
+      const avgDailyDemand = forecastMonthly / 30;
+      const stdDailyDemand = monthlyStdDev / 30;
 
-      const safetyFactor = ABC_SAFETY[abcClass];
-      const coverageTarget = leadTimeDays;
-      // ROP mantido apenas como referência informativa (gatilho de cobertura), mas
-      // a sugestão real é limitada pela média ponderada mensal.
-      const ropAvg = avgDaily * leadTimeDays * safetyFactor;
-      const sourceCount = r.source_count ?? 0;
-      const avgQtyPerDoc = sourceCount > 0 ? r.total_qty / sourceCount : 0;
-      let ropRecurrence = 0;
-      if (sourceCount >= 2) {
-        const firstMs = new Date(r.first_date).getTime();
-        const lastMs = new Date(r.last_date).getTime();
-        const spanDays = Math.max(1, (lastMs - firstMs) / 86400000);
-        const intervalDays = spanDays / (sourceCount - 1);
-        const expectedDocsInLT = leadTimeDays / intervalDays;
-        ropRecurrence = Math.max(avgQtyPerDoc, expectedDocsInLT * avgQtyPerDoc * safetyFactor);
+      // --- Estoque de segurança ---
+      const z = isCritical ? POLICY.zScores.critical : POLICY.zScores[abcClass];
+      let safetyStock = Math.ceil(z * stdDailyDemand * Math.sqrt(leadTimeDays));
+      if (!Number.isFinite(safetyStock) || safetyStock < 0) safetyStock = 0;
+      // teto por custo para demanda intermitente/lumpy não explodir
+      if (demandPattern === 'intermitente' || demandPattern === 'lumpy') {
+        safetyStock = Math.min(safetyStock, getMaxShelfQtyByCost(unitCost, forecastMonthly));
       }
-      const rop = Math.max(ropAvg, ropRecurrence);
-      const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
 
-      // Budget demand (orçamentos pendentes)
+      // --- Mínimo operacional (peça barata recorrente / crítica) ---
+      const operationalMinimum = getOperationalMinimum(unitCost, isRecurring, isCritical);
+
+      // --- Demanda de orçamento ponderada ---
       const orcEntry = orcMap.get(r.produto_id);
       const orcQty = orcEntry?.qtd || 0;
       const orcRefs = orcEntry?.refs || [];
+      // sistema não diferencia aprovado/pendente → usa fator pendente
+      const budgetDemandQty = orcQty * POLICY.pendingBudgetDemandFactor;
 
-      // Necessidade base = cobrir 1 mês (média ponderada) + orçamentos pendentes,
-      // descontando APENAS estoque positivo (estoque negativo no ERP não justifica
-      // inflar compra — é ajuste pendente, não demanda real).
-      // TETO ABSOLUTO: 1 mês de cobertura + orçamentos. Nunca sugerir mais do que isso.
-      const estoquePositivo = Math.max(0, estoque ?? 0);
-      const demandaTotal = targetCoverage + orcQty; // teto duro
-      const baseNeed = estoque !== null
-        ? Math.max(0, Math.min(demandaTotal, Math.ceil(demandaTotal - estoquePositivo)))
-        : null;
-      let qtyAComprar: number | null = baseNeed;
-
-      // Regra unificada: qualquer grupo segue baseNeed (cobertura mensal ponderada
-      // + orçamentos − estoque). Salvaguarda abaixo trata casos sem demanda real.
-
-
-      // Salvaguarda final: se não há orçamento e a média ponderada mensal é zero,
-      // não sugerir compra por histórico antigo. Evita pedir 15 peças com 4 saídas
-      // na vida toda e nenhum orçamento.
-      if (orcQty === 0 && monthlyWeightedAvg === 0) {
-        qtyAComprar = 0;
-      }
-
-      // Cross-reference with active purchase orders
+      // --- Pedido de compra em aberto ---
       const pcEntry = pcMap.get(r.produto_id);
       const pcQty = pcEntry?.qtd || 0;
       const pcRefs = pcEntry?.refs || [];
-      const qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
+      // (sem data de PC validada disponível por item → mantém comportamento atual)
+      const effectivePcQty = pcQty;
+
+      // --- Estoque e saldo projetado ---
+      const estoque = stockMap.get(r.produto_id) ?? null;
+      const stockKnown = estoque !== null && estoque !== undefined;
+      const estoqueBase = stockKnown ? estoque! : 0;
+      const projectedAvailable = stockKnown
+        ? estoqueBase + effectivePcQty - budgetDemandQty
+        : null;
+
+      // --- Ponto de ressuprimento ---
+      const demandDuringLeadTime = avgDailyDemand * leadTimeDays;
+      let reorderPoint = Math.ceil(demandDuringLeadTime + safetyStock);
+      reorderPoint = Math.max(reorderPoint, operationalMinimum);
+
+      // --- Estoque máximo alvo ---
+      const coverageDays = getCoverageDaysByCost(unitCost);
+      let maxStock = Math.ceil(avgDailyDemand * (leadTimeDays + coverageDays) + safetyStock);
+      maxStock = Math.max(maxStock, operationalMinimum);
+      if (unitCost > POLICY.lowCostThresholds.moderate && demandPattern === 'lumpy' && !isCritical && budgetDemandQty <= 0) {
+        maxStock = 0;
+      }
+
+      // --- Regra final de compra ---
+      const projForCompare = projectedAvailable ?? estoqueBase;
+      const shouldReorder =
+        projForCompare <= reorderPoint ||
+        budgetDemandQty > estoqueBase ||
+        (estoqueBase <= 0 && operationalMinimum > 0);
+
+      let qtyToBuy = shouldReorder ? maxStock - projForCompare : 0;
+      qtyToBuy = Math.max(0, Math.ceil(qtyToBuy));
+      // cobrir orçamento se maior que o máximo
+      if (budgetDemandQty > 0) {
+        qtyToBuy = Math.max(qtyToBuy, Math.ceil(budgetDemandQty - estoqueBase - effectivePcQty));
+        qtyToBuy = Math.max(0, qtyToBuy);
+      }
+
+      // --- Lote mínimo / múltiplo de compra (se existirem no cadastro) ---
+      const minOrderQty = Number((info as any)?.min_order_qty || 0) || 0;
+      const orderMultiple = Number((info as any)?.order_multiple || 0) || 0;
+      if (qtyToBuy > 0 && minOrderQty > 0) qtyToBuy = Math.max(qtyToBuy, minOrderQty);
+      if (qtyToBuy > 0 && orderMultiple > 0) qtyToBuy = Math.ceil(qtyToBuy / orderMultiple) * orderMultiple;
+
+      // --- Bloqueios (não comprar peça errada) ---
+      const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
+      const daysSinceLastConsumption = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
+      const staleDemand = daysSinceLastConsumption > POLICY.staleDemandDays;
+      const oneOffDemand = r.source_count <= 1 && r.event_count <= 1 && nonZeroMonths <= 1;
+      if (staleDemand && oneOffDemand && budgetDemandQty <= 0 && !isCritical) {
+        qtyToBuy = 0;
+      }
+      // peça cara com saída única antiga sem orçamento/criticidade → não comprar
+      if (oneOffDemand && budgetDemandQty <= 0 && !isCritical && !isRecurring && operationalMinimum === 0) {
+        qtyToBuy = 0;
+      }
+
+      // --- Motivos e alertas ---
+      const motivos: string[] = [];
+      const alertas: string[] = [];
+      if (qtyToBuy > 0) {
+        if (stockKnown && projForCompare <= reorderPoint) motivos.push('Estoque projetado abaixo do ponto de ressuprimento');
+        if (stockKnown && estoqueBase <= 0) motivos.push('Estoque atual zerado');
+        if (operationalMinimum > 0 && estoqueBase < operationalMinimum) motivos.push('Peça barata recorrente abaixo do mínimo operacional');
+        if (budgetDemandQty > 0) motivos.push('Orçamento pendente gerou demanda prevista');
+        if (safetyStock > 0 && leadTimeDays >= 21) motivos.push('Lead time do fornecedor exige estoque de segurança');
+        if (recentWeightedAvg > historicalMonthlyAvg) motivos.push('Demanda recente maior que média histórica');
+        if (demandPattern === 'intermitente') motivos.push('Demanda intermitente tratada com mínimo operacional');
+        if (pcQty > 0 && effectivePcQty < reorderPoint) motivos.push('Pedido de compra em aberto insuficiente');
+        if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');
+      }
+      if (!stockKnown) alertas.push('Estoque atual não carregado');
+      if (usedDefaultLT) alertas.push('Sem lead time do fornecedor, usado padrão');
+      if (oneOffDemand) alertas.push('Demanda baseada em apenas um evento');
+      if (staleDemand) alertas.push('Produto com demanda antiga');
+
+      // --- Risco operacional (ordenação) ---
+      const stockoutRisk = (projForCompare <= 0) ? 100 : 0;
+      const belowRopRisk = (projForCompare <= reorderPoint) ? 50 : 0;
+      const budgetRisk = (budgetDemandQty > estoqueBase) ? 40 : 0;
+      const criticalityRisk = isCritical ? 30 : 0;
+      const leadTimeRisk = leadTimeDays >= 30 ? 20 : 0;
+      const recurrenceRisk = isRecurring ? 10 : 0;
+      const riskScore = stockoutRisk + belowRopRisk + budgetRisk + criticalityRisk + leadTimeRisk + recurrenceRisk;
+
+      const avgDaily = avgDailyDemand;
+      const diasCobertura = stockKnown && avgDaily > 0 ? estoqueBase / avgDaily : null;
+      const qtyLiquida = Math.max(0, qtyToBuy - effectivePcQty);
 
       return {
         produto_id: r.produto_id,
-        nome: info?.nome || `Produto ${r.produto_id}`,
+        nome,
         codigo_interno: info?.codigo_interno || null,
-        grupo: info?.grupo || null,
-        valor_custo: info?.valor_custo ?? null,
         fornecedor_id: fornecedorId,
         fornecedor_nome: fornecedorNome,
+        grupo: info?.grupo || null,
+        valor_custo: info?.valor_custo ?? null,
+
         total_qty: r.total_qty,
         total_value: r.total_value,
         event_count: r.event_count,
         source_count: r.source_count,
-        hybrid_score: r.hybrid_score,
-        avg_daily: avgDaily,
+        client_count: r.client_count,
+
+        historical_monthly_avg: historicalMonthlyAvg,
+        recent_monthly_avg: recentMonthlyAvg,
+        forecast_monthly: forecastMonthly,
+        monthly_std_dev: monthlyStdDev,
+        cv,
+        adi,
+        non_zero_months: nonZeroMonths,
+
         abc_class: abcClass,
         cumulative_pct: pct,
+        xyz_class: xyzClass,
+        demand_pattern: demandPattern,
+        is_critical: isCritical,
+        is_recurring: isRecurring,
+
         estoque_atual: estoque,
-        dias_cobertura: diasCobertura,
-        lead_time_days: leadTimeDays,
-        rop,
-        qty_a_comprar: qtyAComprar,
-        qty_liquida: qtyLiquida,
+        stock_known: stockKnown,
         pc_qty: pcQty,
-        pc_refs: pcRefs,
+        effective_pc_qty: effectivePcQty,
         orc_qty: orcQty,
+        budget_demand_qty: budgetDemandQty,
+        projected_available: projectedAvailable,
+
+        avg_daily: avgDaily,
+        lead_time_days: leadTimeDays,
+        safety_stock: safetyStock,
+        operational_minimum: operationalMinimum,
+        reorder_point: reorderPoint,
+        max_stock: maxStock,
+        dias_cobertura: diasCobertura,
+
+        qty_a_comprar: qtyToBuy,
+        qty_liquida: qtyLiquida,
+
+        risk_score: riskScore,
+        motivos_sugestao: motivos,
+        alertas,
+
+        pc_refs: pcRefs,
         orc_refs: orcRefs,
         source_refs: r.source_refs || [],
-        coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, thresholds, supplierLTMap]);
 
   // Unique groups for filter
   const uniqueGrupos = useMemo(() => {
@@ -610,51 +849,22 @@ export default function InventoryAnalysisPage() {
     const aCount = items.filter(i => i.abc_class === 'A').length;
     const bCount = items.filter(i => i.abc_class === 'B').length;
     const cCount = items.filter(i => i.abc_class === 'C').length;
-    const criticalCount = items.filter(i => i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days).length;
+    const criticalCount = items.filter(i => i.stock_known && i.projected_available !== null && i.projected_available <= i.reorder_point).length;
     const totalConsumo = items.reduce((s, i) => s + i.total_qty, 0);
     const totalValor = items.reduce((s, i) => s + i.total_value, 0);
     return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
   }, [analysisItems]);
 
-  // Purchase suggestions: triggered by client reach OR by recurring outflow volume.
-  // - Client-reach gate: <R$1k → 2+ clients, ≥R$1k → 3+ clients (catches broad demand)
-  // - Volume gate: 4+ documentos de saída únicos (cobre casos como contratos Ecolab,
-  //   onde um único cliente puxa muita peça e o gate de clientes únicos sozinho ignoraria)
+  // Lista de compras: o motor de planejamento já decidiu qty_a_comprar por todas as
+  // regras (ROP, mínimo operacional, orçamento, lead time, bloqueios). Aqui apenas
+  // filtramos quem precisa comprar (qtd líquida > 0) e ordenamos por risco operacional.
   const purchaseItems = useMemo(() => {
-    return analysisItems.filter((item) => {
-      if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
-
-      const i = item;
-      // Se a PC ativa já cobre a demanda, não entra na lista de compras.
-      if (i.qty_liquida === null || i.qty_liquida <= 0) return false;
-
-      // Regra unificada: olhar Vendas + OS de qualquer grupo (sem distinção
-      // para ESPECÍFICO). Item entra na sugestão se atender qualquer um:
-      //  (a) há orçamento pendente cruzado puxando demanda,
-      //  (b) saída recorrente (≥2 docs) + estoque zerado/negativo,
-      //  (c) saída recorrente + cobertura < lead time (vai zerar antes da PC),
-      //  (d) saída recorrente + estoque < ROP,
-      //  (e) gates de alcance: clientes únicos (>=2 ou >=3 para itens >R$1k)
-      //      OU volume de documentos únicos (>=2).
-      if (i.orc_qty > 0) return true;
-
-      const isRecurring = (i.source_count ?? 0) >= 2;
-      const isOutOfStock = i.estoque_atual !== null && i.estoque_atual <= 0;
-      if (isRecurring && isOutOfStock) return true;
-
-      const coverageBelowLT = i.dias_cobertura !== null && i.dias_cobertura < i.lead_time_days;
-      if (isRecurring && coverageBelowLT) return true;
-
-      const belowROP = i.estoque_atual !== null && i.rop > 0 && i.estoque_atual < i.rop;
-      if (isRecurring && belowROP) return true;
-
-      const avgUnitCost = i.total_qty > 0 ? i.total_value / i.total_qty : 0;
-      const minClients = avgUnitCost >= 1000 ? 3 : 2;
-      const passesClientGate = i.event_count >= minClients;
-      const passesVolumeGate = (i.source_count ?? 0) >= 2;
-
-      return passesClientGate || passesVolumeGate;
-    });
+    return analysisItems
+      .filter((item) => {
+        if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
+        return item.qty_liquida > 0;
+      })
+      .sort((a, b) => b.risk_score - a.risk_score);
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Fetch active purchase orders from GC
@@ -881,23 +1091,30 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Valor Consumo', 'Consumo Médio/Dia', 'Estoque Atual', 'Dias Cobertura', 'ROP', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
       i.grupo || 'Sem grupo',
       i.abc_class,
+      i.xyz_class,
+      i.demand_pattern,
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.event_count,
       formatNumberBR(i.total_qty, 0),
       formatNumberBR(i.total_value, 2),
-      formatNumberBR(i.hybrid_score, 1),
+      formatNumberBR(i.historical_monthly_avg, 2),
+      formatNumberBR(i.forecast_monthly, 2),
       formatNumberBR(i.avg_daily, 2),
       i.estoque_atual ?? '',
-      i.dias_cobertura !== null ? formatNumberBR(i.dias_cobertura, 1) : '',
-      i.rop !== null ? formatNumberBR(i.rop, 1) : '',
-      i.qty_a_comprar ?? '',
+      i.projected_available !== null ? formatNumberBR(i.projected_available, 1) : '',
+      formatNumberBR(i.lead_time_days, 0),
+      i.safety_stock,
+      i.operational_minimum,
+      i.reorder_point,
+      i.max_stock,
+      i.qty_a_comprar,
     ]);
 
     downloadCsv(
@@ -910,23 +1127,31 @@ export default function InventoryAnalysisPage() {
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
 
-    const headers = ['Classe ABC', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Saída (peças)', 'OS Únicas', 'Estoque Atual', 'Consumo Méd/Dia', 'Lead Time', 'ROP', 'Cobertura (dias)', 'Necessidade Bruta', 'PC em Andamento (peças)', 'Qtd Líquida a Comprar', 'PCs'];
+    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', 'Motivos', 'Alertas', 'PCs'];
     const rows = purchaseItems.map((i) => [
+      i.risk_score,
       i.abc_class,
+      i.xyz_class,
+      i.demand_pattern,
+      i.is_critical ? 'Sim' : 'Não',
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
-      (i as any).grupo || 'Sem grupo',
-      formatNumberBR(Math.round(i.total_qty), 0),
-      i.event_count,
-      i.estoque_atual,
-      formatNumberBR(i.avg_daily, 2),
-      formatNumberBR(Math.round(i.lead_time_days), 0),
-      i.rop !== null ? formatNumberBR(i.rop, 0) : '',
-      i.dias_cobertura !== null ? formatNumberBR(i.dias_cobertura, 0) : '0',
-      i.qty_a_comprar,
+      i.grupo || 'Sem grupo',
+      i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
+      i.estoque_atual ?? '',
       i.pc_qty,
+      formatNumberBR(i.budget_demand_qty, 2),
+      i.projected_available !== null ? formatNumberBR(i.projected_available, 1) : '',
+      formatNumberBR(i.lead_time_days, 0),
+      i.safety_stock,
+      i.operational_minimum,
+      i.reorder_point,
+      i.max_stock,
+      i.qty_a_comprar,
       i.qty_liquida,
+      i.motivos_sugestao.join(' | '),
+      i.alertas.join(' | '),
       i.pc_refs.map((r) => `PC${r.codigo}(${r.qtd})`).join(' · '),
     ]);
 
@@ -1009,17 +1234,17 @@ export default function InventoryAnalysisPage() {
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe A</p>
           <p className="text-xl font-bold text-destructive mt-0.5">{kpis.aCount}</p>
-          <p className="text-[10px] text-muted-foreground">{(thresholds.A * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.A}</p>
+          <p className="text-[10px] text-muted-foreground">{(thresholds.A * 100).toFixed(0)}% do valor · z {POLICY.zScores.A}</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe B</p>
           <p className="text-xl font-bold text-amber-600 mt-0.5">{kpis.bCount}</p>
-          <p className="text-[10px] text-muted-foreground">{((thresholds.B - thresholds.A) * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.B}</p>
+          <p className="text-[10px] text-muted-foreground">{((thresholds.B - thresholds.A) * 100).toFixed(0)}% do valor · z {POLICY.zScores.B}</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe C</p>
           <p className="text-xl font-bold text-primary mt-0.5">{kpis.cCount}</p>
-          <p className="text-[10px] text-muted-foreground">{((1 - thresholds.B) * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.C}</p>
+          <p className="text-[10px] text-muted-foreground">{((1 - thresholds.B) * 100).toFixed(0)}% do valor · z {POLICY.zScores.C}</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Lead Time (fallback)</p>
@@ -1172,7 +1397,7 @@ export default function InventoryAnalysisPage() {
                 )}
               </div>
               <div className="mt-4 text-xs text-muted-foreground space-y-1">
-                <p>📊 Cobertura = Lead Time <strong>por fornecedor</strong> · Segurança: <strong>A ×{ABC_SAFETY.A}</strong>, B ×{ABC_SAFETY.B}, C ×{ABC_SAFETY.C}</p>
+                <p>📊 Política ERP: ponto de ressuprimento = demanda no lead time + estoque de segurança (z por classe/criticidade) · mínimo operacional para peça barata recorrente</p>
                 <p>⏱ Lead time: <strong>por fornecedor do produto</strong> (fallback: {fallbackLeadTime}d se sem vínculo)</p>
                 <p>🛡 {leadTimes.length} fornecedores com lead time calculado</p>
               </div>
@@ -1193,20 +1418,22 @@ export default function InventoryAnalysisPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead className="w-12">ABC</TableHead>
+                      <TableHead className="w-10">XYZ</TableHead>
                       <TableHead>Produto</TableHead>
-                      <TableHead>Grupo</TableHead>
+                      <TableHead>Padrão</TableHead>
                       <TableHead className="text-right">Custo Unit.</TableHead>
-                      <TableHead className="text-right">Saída (peças)</TableHead>
-                      <TableHead className="text-right">OS</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
-                      <TableHead className="text-right">Méd/dia</TableHead>
+                      <TableHead className="text-right text-blue-600">PC Aberto</TableHead>
+                      <TableHead className="text-right text-amber-600">Orç. Pond.</TableHead>
+                      <TableHead className="text-right">Saldo Proj.</TableHead>
                       <TableHead className="text-right">LT</TableHead>
+                      <TableHead className="text-right">Est. Seg.</TableHead>
+                      <TableHead className="text-right">Mín. Op.</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
-                      <TableHead className="text-right">Cobertura</TableHead>
-                      <TableHead className="text-right">Necessidade</TableHead>
-                      <TableHead className="text-right text-amber-600">Orçamentos</TableHead>
-                      <TableHead className="text-right text-blue-600">PC Andamento</TableHead>
+                      <TableHead className="text-right">Est. Máx.</TableHead>
+                      <TableHead className="text-right">Sugerido</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
+                      <TableHead>Motivos / Alertas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1216,72 +1443,66 @@ export default function InventoryAnalysisPage() {
                         item.abc_class === 'B' ? 'bg-amber-50/50 dark:bg-amber-950/10' : ''
                       }>
                         <TableCell>{abcBadge(item.abc_class)}</TableCell>
+                        <TableCell className="text-xs font-medium text-muted-foreground">{item.xyz_class}</TableCell>
                         <TableCell>
-                          <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
+                          <p className="text-sm font-medium truncate max-w-[260px] flex items-center gap-1">
+                            {item.is_critical && <span title="Peça crítica">🔧</span>}
+                            {item.nome}
+                          </p>
                           <p className="text-[10px] text-muted-foreground">
                             {item.codigo_interno && `${item.codigo_interno} · `}
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
+                        <TableCell className="text-[10px] text-muted-foreground capitalize">{item.demand_pattern.replace('_', ' ')}</TableCell>
                         <TableCell className="text-right text-xs">
                           {item.valor_custo !== null ? `R$ ${item.valor_custo.toFixed(2)}` : '—'}
                         </TableCell>
-                        <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
-                        <TableCell className="text-right text-xs">
-                          {item.event_count}
-                          {item.source_refs.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => {
-                              const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
-                              return `${r.source_type.toUpperCase()} ${codigo}: ${Math.round(r.qty)}un (${r.cliente})`;
-                            }).join('\n')}>
-                              {item.source_refs.slice(0, 3).map(r => {
-                                const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
-                                const prefix = r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase();
-                                return `${prefix}${codigo}`;
-                              }).join(', ')}
-                              {item.source_refs.length > 3 && ` +${item.source_refs.length - 3}`}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">{item.estoque_atual}</TableCell>
-                        <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
-                        <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
-                        <TableCell className="text-right text-xs">{item.rop?.toFixed(0)}</TableCell>
                         <TableCell className="text-right">
-                          <span className={`font-bold ${(item.dias_cobertura ?? 0) < item.lead_time_days ? 'text-destructive' : 'text-amber-600'}`}>
-                            {item.dias_cobertura?.toFixed(0) || '0'}d
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
-                        <TableCell className="text-right">
-                          {item.orc_qty > 0 ? (
-                            <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
-                              {item.orc_qty}un
-                              <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate">
-                                {item.orc_refs.map(r => `#${r.codigo}`).join(', ')}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
+                          {item.stock_known ? item.estoque_atual : <span className="text-amber-600 text-xs" title="Estoque não carregado">—</span>}
                         </TableCell>
                         <TableCell className="text-right">
                           {item.pc_qty > 0 ? (
                             <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>
                               {item.pc_qty}un
-                              <span className="text-[10px] text-muted-foreground block">
-                                {item.pc_refs.map(r => `PC${r.codigo}`).join(', ')}
-                              </span>
                             </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Badge variant={item.qty_liquida && item.qty_liquida > 0 ? "destructive" : "secondary"} className="font-bold text-sm">
-                            {item.qty_liquida ?? item.qty_a_comprar}
+                          {item.budget_demand_qty > 0 ? (
+                            <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
+                              {item.budget_demand_qty.toFixed(1)}
+                              <span className="text-[10px] text-muted-foreground block">({item.orc_qty} bruto)</span>
+                            </span>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right text-xs">
+                          {item.projected_available !== null
+                            ? <span className={item.projected_available <= item.reorder_point ? 'text-destructive font-bold' : ''}>{item.projected_available.toFixed(1)}</span>
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
+                        <TableCell className="text-right text-xs">{item.safety_stock}</TableCell>
+                        <TableCell className="text-right text-xs">{item.operational_minimum}</TableCell>
+                        <TableCell className="text-right text-xs">{item.reorder_point}</TableCell>
+                        <TableCell className="text-right text-xs">{item.max_stock}</TableCell>
+                        <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={item.qty_liquida > 0 ? "destructive" : "secondary"} className="font-bold text-sm">
+                            {item.qty_liquida}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[220px]">
+                          <div className="flex flex-col gap-0.5">
+                            {item.motivos_sugestao.map((m, idx) => (
+                              <span key={idx} className="text-[10px] text-muted-foreground">• {m}</span>
+                            ))}
+                            {item.alertas.map((a, idx) => (
+                              <span key={`a${idx}`} className="text-[10px] text-amber-600 flex items-center gap-1">
+                                <AlertTriangle className="h-2.5 w-2.5" /> {a}
+                              </span>
+                            ))}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

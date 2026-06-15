@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { matchItemByCode } from '@/lib/scanMatcher';
 import { Badge } from '@/components/ui/badge';

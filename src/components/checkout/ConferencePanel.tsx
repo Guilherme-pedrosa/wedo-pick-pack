@@ -22,7 +22,6 @@ export default function ConferencePanel() {
   const config = useCheckoutStore(s => s.config);
 
   const isMobile = useIsMobile();
-  const [scanCode, setScanCode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
@@ -30,7 +29,7 @@ export default function ConferencePanel() {
   const [forced, setForced] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-  const scanRef = useRef<HTMLInputElement>(null);
+
 
 
 
@@ -59,26 +58,12 @@ export default function ConferencePanel() {
     return () => { document.title = 'WeDo Checkout'; };
   }, [session?.codigo, session?.concludedAt]);
 
-  // Desktop (coletor/scanner USB): mantém o input focado para capturar a leitura
-  useEffect(() => {
-    if (isMobile) return;
-    if (session?.refId && !session.concludedAt) {
-      scanRef.current?.focus();
-    }
-  }, [isMobile, session?.refId, session?.concludedAt]);
+  // Desktop: captura GLOBAL do coletor por timing (efeito definido abaixo,
+  // após processScan/scanQtyValue).
+  const scanBufferRef = useRef<{ chars: string[]; times: number[] }>({ chars: [], times: [] });
+  const [scannerActivity, setScannerActivity] = useState(false);
 
-  // F2 reposiciona o foco no campo do coletor (desktop)
-  useEffect(() => {
-    if (isMobile) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault();
-        scanRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isMobile]);
+
 
 
 
@@ -148,12 +133,62 @@ export default function ConferencePanel() {
     return (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
   }, [scanQty, session?.items, parseScanQty]);
 
-  // Leitura via coletor/scanner USB (desktop): captura código + Enter
-  const handleScan = useCallback(() => {
-    processScan(scanCode, scanQtyValue());
-    setScanCode('');
-    scanRef.current?.focus();
-  }, [scanCode, processScan, scanQtyValue]);
+  // Desktop: captura GLOBAL do coletor por timing. Coletor envia caracteres
+  // em milissegundos + Enter. Digitação manual (lenta) é bloqueada.
+  useEffect(() => {
+    if (isMobile) return;
+    if (!session || session.concludedAt) return;
+
+    const MAX_GAP_MS = 60;     // intervalo máx. entre teclas do coletor
+    const MIN_LENGTH = 3;      // tamanho mínimo de código válido
+
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      // Permite digitar no campo de Qtd, ignorando a captura global
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      const now = Date.now();
+      const buf = scanBufferRef.current;
+
+      if (e.key === 'Enter') {
+        const code = buf.chars.join('');
+        const times = buf.times.slice();
+        scanBufferRef.current = { chars: [], times: [] };
+        setScannerActivity(false);
+        if (code.length < MIN_LENGTH) return;
+
+        let maxGap = 0;
+        for (let i = 1; i < times.length; i++) {
+          maxGap = Math.max(maxGap, times[i] - times[i - 1]);
+        }
+        if (maxGap > MAX_GAP_MS) {
+          setFeedback({ type: 'error', msg: 'Digitação manual bloqueada — use o coletor de código de barras' });
+          toast.error('Digitação manual não é permitida. Use o coletor.');
+          return;
+        }
+        processScan(code, scanQtyValue());
+        return;
+      }
+
+      if (e.key.length === 1) {
+        // reinicia o buffer se houve pausa longa (início de nova leitura)
+        if (buf.times.length && now - buf.times[buf.times.length - 1] > 100) {
+          buf.chars = [];
+          buf.times = [];
+        }
+        buf.chars.push(e.key);
+        buf.times.push(now);
+        setScannerActivity(true);
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMobile, session?.refId, session?.concludedAt, processScan, scanQtyValue]);
+
+
 
 
 
@@ -304,18 +339,16 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                 {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
               </Button>
             ) : (
-              <Input
-                ref={scanRef}
-                value={scanCode}
-                onChange={e => setScanCode(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
-                placeholder="Aponte o coletor e leia o código de barras…"
-                className="text-base py-3 border-2 border-secondary focus:border-secondary flex-1 h-[52px]"
-                autoComplete="off"
-                spellCheck={false}
-                autoFocus
-              />
+              <div
+                className={`flex-1 h-[52px] rounded-md border-2 flex items-center gap-2 px-3 text-base select-none transition-colors ${
+                  scannerActivity ? 'border-primary bg-primary/5 text-foreground' : 'border-dashed border-secondary text-muted-foreground'
+                }`}
+              >
+                <Scan className={`h-5 w-5 shrink-0 ${scannerActivity ? 'text-primary animate-pulse' : ''}`} />
+                {scannerActivity ? 'Lendo código…' : 'Aguardando leitura do coletor… (a digitação manual é bloqueada)'}
+              </div>
             )}
+
             {showQtyField && (
               <div className="w-24">
                 <label className="text-[10px] font-medium text-muted-foreground">Qtd por leitura</label>

@@ -53,24 +53,8 @@ export default function ConferencePanel() {
     return () => { document.title = 'WeDo Checkout'; };
   }, [session?.codigo, session?.concludedAt]);
 
-  // Auto-focus scan input only when session starts/changes
-  useEffect(() => {
-    if (session?.refId && !session.concludedAt) {
-      scanRef.current?.focus();
-    }
-  }, [session?.refId, session?.concludedAt]);
+  // (texto/teclado de digitação removidos — leitura apenas por câmera)
 
-  // F2 shortcut
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault();
-        scanRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
 
   // Clear feedback
   useEffect(() => {

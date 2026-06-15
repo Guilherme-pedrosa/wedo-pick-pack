@@ -21,6 +21,13 @@ export default function ConferencePanel() {
   const confirmItem = useCheckoutStore(s => s.confirmItem);
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
+  const { user } = useAuth();
+
+  // Apenas Guilherme e Filipe podem digitar o código manualmente; os demais
+  // ficam restritos à leitura por coletor (desktop) / câmera (mobile).
+  const ALLOWED_MANUAL_EMAILS = ['guilherme@wedocorp.com', 'filipe.carvalho@wedocorp.com'];
+  const allowManualEntry = !!user?.email && ALLOWED_MANUAL_EMAILS.includes(user.email.toLowerCase());
+  const [manualCode, setManualCode] = useState('');
 
   const isMobile = useIsMobile();
   const [scanQty, setScanQty] = useState('1');

@@ -81,6 +81,10 @@ interface OrcEntry {
   refs: OrcRef[];
 }
 
+type ABCClass = 'A' | 'B' | 'C';
+type XYZClass = 'X' | 'Y' | 'Z';
+type DemandPattern = 'regular' | 'intermitente' | 'erratica' | 'lumpy' | 'sem_demanda';
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;
@@ -89,33 +93,138 @@ interface AnalysisItem {
   fornecedor_nome: string | null;
   grupo: string | null;
   valor_custo: number | null;
+
   total_qty: number;
   total_value: number;
   event_count: number;
   source_count: number;
-  hybrid_score: number;
-  avg_daily: number;
-  abc_class: 'A' | 'B' | 'C';
+  client_count: number;
+
+  historical_monthly_avg: number;
+  recent_monthly_avg: number;
+  forecast_monthly: number;
+  monthly_std_dev: number;
+  cv: number | null;
+  adi: number | null;
+  non_zero_months: number;
+
+  abc_class: ABCClass;
   cumulative_pct: number;
+  xyz_class: XYZClass;
+  demand_pattern: DemandPattern;
+  is_critical: boolean;
+  is_recurring: boolean;
+
   estoque_atual: number | null;
-  dias_cobertura: number | null;
-  lead_time_days: number;
-  rop: number | null;
-  qty_a_comprar: number | null;
-  qty_liquida: number | null;
+  stock_known: boolean;
   pc_qty: number;
-  pc_refs: PCRef[];
+  effective_pc_qty: number;
   orc_qty: number;
+  budget_demand_qty: number;
+  projected_available: number | null;
+
+  avg_daily: number;
+  lead_time_days: number;
+  safety_stock: number;
+  operational_minimum: number;
+  reorder_point: number;
+  max_stock: number;
+  dias_cobertura: number | null;
+
+  qty_a_comprar: number;
+  qty_liquida: number;
+
+  risk_score: number;
+  motivos_sugestao: string[];
+  alertas: string[];
+
+  pc_refs: PCRef[];
   orc_refs: OrcRef[];
   source_refs: SourceRef[];
-  coverage_target: number;
 }
 
 type AnalysisTab = 'compras' | 'ranking' | 'leadtime' | 'trend';
 
-// ABC-specific safety margins on top of lead time
-// A = critical items, 40% safety; B = 25%; C = 10%
-const ABC_SAFETY = { A: 1.4, B: 1.25, C: 1.1 };
+// ============================================================================
+// POLÍTICA DE REPOSIÇÃO — parâmetros centralizados e fáceis de ajustar.
+// (Pode futuramente vir de inventory_policy_config.)
+// ============================================================================
+const POLICY = {
+  analysisMonths: 12,
+  minAnalysisMonths: 6,
+  recentMonths: 3,
+  reviewPeriodDays: 30,
+
+  defaultLeadTimeDays: 21,
+  minLeadTimeDays: 7,
+  maxLeadTimeDays: 90,
+
+  serviceLevels: { critical: 0.98, A: 0.95, B: 0.90, C: 0.85 },
+  zScores: { critical: 2.05, A: 1.65, B: 1.28, C: 1.04 } as Record<string, number>,
+
+  lowCostThresholds: { veryLow: 30, low: 80, medium: 200, moderate: 500 },
+  minShelfByCost: { veryLow: 6, low: 4, medium: 2, moderate: 1 },
+  maxCoverageDaysByCost: { veryLow: 90, low: 75, medium: 60, moderate: 45, high: 30 },
+
+  staleDemandDays: 365,
+  stalePurchaseOrderDays: 90,
+
+  pendingBudgetDemandFactor: 0.70,
+  approvedBudgetDemandFactor: 1.00,
+
+  minRecurringSources: 2,
+  minRecurringQty: 2,
+};
+
+const CRITICAL_KEYWORDS = [
+  'placa', 'controlador', 'compressor', 'contator', 'rele', 'relé', 'termostato',
+  'sensor', 'resistencia', 'resistência', 'motor', 'bomba', 'ventilador', 'micro',
+  'chave', 'rolamento', 'retentor', 'correia', 'mangueira', 'vedacao', 'vedação',
+  'valvula', 'válvula',
+];
+
+// Futuramente: tabela manual inventory_criticality_overrides
+//   (produto_id, criticality: 'critical'|'normal'|'do_not_stock', min_qty_override, max_qty_override, notes)
+function inferCriticality(nome: string): boolean {
+  const name = (nome || '').toLowerCase();
+  return CRITICAL_KEYWORDS.some(k => name.includes(k));
+}
+
+function getCoverageDaysByCost(unitCost: number): number {
+  const t = POLICY.lowCostThresholds;
+  const c = POLICY.maxCoverageDaysByCost;
+  if (unitCost > 0 && unitCost <= t.veryLow) return c.veryLow;
+  if (unitCost <= t.low) return c.low;
+  if (unitCost <= t.medium) return c.medium;
+  if (unitCost <= t.moderate) return c.moderate;
+  return c.high;
+}
+
+function getOperationalMinimum(unitCost: number, isRecurring: boolean, isCritical: boolean): number {
+  if (!isRecurring && !isCritical) return 0;
+  const t = POLICY.lowCostThresholds;
+  const m = POLICY.minShelfByCost;
+  if (unitCost > 0 && unitCost <= t.veryLow) return m.veryLow;
+  if (unitCost <= t.low) return m.low;
+  if (unitCost <= t.medium) return m.medium;
+  if (unitCost <= t.moderate && isCritical) return m.moderate;
+  return isCritical ? 1 : 0;
+}
+
+// Teto de estoque de segurança por custo, para itens intermitentes/lumpy não explodirem.
+function getMaxShelfQtyByCost(unitCost: number, forecastMonthly: number): number {
+  const coverageDays = getCoverageDaysByCost(unitCost);
+  return Math.ceil((forecastMonthly / 30) * coverageDays) + getOperationalMinimum(unitCost, true, false);
+}
+
+function stdDev(series: number[]): number {
+  const n = series.length;
+  if (n === 0) return 0;
+  const mean = series.reduce((s, v) => s + v, 0) / n;
+  const variance = series.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+  return Math.sqrt(variance);
+}
+
 const ANALYSIS_FILTER_STORAGE_KEY = 'inventory-analysis-filters';
 const ALL_GROUPS_VALUE = '__all__';
 const DEFAULT_ANALYSIS_TAB: AnalysisTab = 'compras';

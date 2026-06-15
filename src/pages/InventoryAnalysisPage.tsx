@@ -1418,20 +1418,22 @@ export default function InventoryAnalysisPage() {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead className="w-12">ABC</TableHead>
+                      <TableHead className="w-10">XYZ</TableHead>
                       <TableHead>Produto</TableHead>
-                      <TableHead>Grupo</TableHead>
+                      <TableHead>Padrão</TableHead>
                       <TableHead className="text-right">Custo Unit.</TableHead>
-                      <TableHead className="text-right">Saída (peças)</TableHead>
-                      <TableHead className="text-right">OS</TableHead>
                       <TableHead className="text-right">Estoque</TableHead>
-                      <TableHead className="text-right">Méd/dia</TableHead>
+                      <TableHead className="text-right text-blue-600">PC Aberto</TableHead>
+                      <TableHead className="text-right text-amber-600">Orç. Pond.</TableHead>
+                      <TableHead className="text-right">Saldo Proj.</TableHead>
                       <TableHead className="text-right">LT</TableHead>
+                      <TableHead className="text-right">Est. Seg.</TableHead>
+                      <TableHead className="text-right">Mín. Op.</TableHead>
                       <TableHead className="text-right">ROP</TableHead>
-                      <TableHead className="text-right">Cobertura</TableHead>
-                      <TableHead className="text-right">Necessidade</TableHead>
-                      <TableHead className="text-right text-amber-600">Orçamentos</TableHead>
-                      <TableHead className="text-right text-blue-600">PC Andamento</TableHead>
+                      <TableHead className="text-right">Est. Máx.</TableHead>
+                      <TableHead className="text-right">Sugerido</TableHead>
                       <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
+                      <TableHead>Motivos / Alertas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1441,72 +1443,66 @@ export default function InventoryAnalysisPage() {
                         item.abc_class === 'B' ? 'bg-amber-50/50 dark:bg-amber-950/10' : ''
                       }>
                         <TableCell>{abcBadge(item.abc_class)}</TableCell>
+                        <TableCell className="text-xs font-medium text-muted-foreground">{item.xyz_class}</TableCell>
                         <TableCell>
-                          <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
+                          <p className="text-sm font-medium truncate max-w-[260px] flex items-center gap-1">
+                            {item.is_critical && <span title="Peça crítica">🔧</span>}
+                            {item.nome}
+                          </p>
                           <p className="text-[10px] text-muted-foreground">
                             {item.codigo_interno && `${item.codigo_interno} · `}
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">{item.grupo || '—'}</TableCell>
+                        <TableCell className="text-[10px] text-muted-foreground capitalize">{item.demand_pattern.replace('_', ' ')}</TableCell>
                         <TableCell className="text-right text-xs">
                           {item.valor_custo !== null ? `R$ ${item.valor_custo.toFixed(2)}` : '—'}
                         </TableCell>
-                        <TableCell className="text-right font-medium">{Math.round(item.total_qty)}</TableCell>
-                        <TableCell className="text-right text-xs">
-                          {item.event_count}
-                          {item.source_refs.length > 0 && (
-                            <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate" title={item.source_refs.map(r => {
-                              const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
-                              return `${r.source_type.toUpperCase()} ${codigo}: ${Math.round(r.qty)}un (${r.cliente})`;
-                            }).join('\n')}>
-                              {item.source_refs.slice(0, 3).map(r => {
-                                const codigo = docCodigoMap.get(`${r.source_type}:${r.source_id}`) || r.source_id;
-                                const prefix = r.source_type === 'os' ? 'OS' : r.source_type === 'venda' ? 'V' : r.source_type.toUpperCase();
-                                return `${prefix}${codigo}`;
-                              }).join(', ')}
-                              {item.source_refs.length > 3 && ` +${item.source_refs.length - 3}`}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">{item.estoque_atual}</TableCell>
-                        <TableCell className="text-right text-xs">{item.avg_daily.toFixed(2)}</TableCell>
-                        <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
-                        <TableCell className="text-right text-xs">{item.rop?.toFixed(0)}</TableCell>
                         <TableCell className="text-right">
-                          <span className={`font-bold ${(item.dias_cobertura ?? 0) < item.lead_time_days ? 'text-destructive' : 'text-amber-600'}`}>
-                            {item.dias_cobertura?.toFixed(0) || '0'}d
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
-                        <TableCell className="text-right">
-                          {item.orc_qty > 0 ? (
-                            <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
-                              {item.orc_qty}un
-                              <span className="text-[10px] text-muted-foreground block max-w-[160px] truncate">
-                                {item.orc_refs.map(r => `#${r.codigo}`).join(', ')}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
+                          {item.stock_known ? item.estoque_atual : <span className="text-amber-600 text-xs" title="Estoque não carregado">—</span>}
                         </TableCell>
                         <TableCell className="text-right">
                           {item.pc_qty > 0 ? (
                             <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>
                               {item.pc_qty}un
-                              <span className="text-[10px] text-muted-foreground block">
-                                {item.pc_refs.map(r => `PC${r.codigo}`).join(', ')}
-                              </span>
                             </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Badge variant={item.qty_liquida && item.qty_liquida > 0 ? "destructive" : "secondary"} className="font-bold text-sm">
-                            {item.qty_liquida ?? item.qty_a_comprar}
+                          {item.budget_demand_qty > 0 ? (
+                            <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
+                              {item.budget_demand_qty.toFixed(1)}
+                              <span className="text-[10px] text-muted-foreground block">({item.orc_qty} bruto)</span>
+                            </span>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right text-xs">
+                          {item.projected_available !== null
+                            ? <span className={item.projected_available <= item.reorder_point ? 'text-destructive font-bold' : ''}>{item.projected_available.toFixed(1)}</span>
+                            : '—'}
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
+                        <TableCell className="text-right text-xs">{item.safety_stock}</TableCell>
+                        <TableCell className="text-right text-xs">{item.operational_minimum}</TableCell>
+                        <TableCell className="text-right text-xs">{item.reorder_point}</TableCell>
+                        <TableCell className="text-right text-xs">{item.max_stock}</TableCell>
+                        <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant={item.qty_liquida > 0 ? "destructive" : "secondary"} className="font-bold text-sm">
+                            {item.qty_liquida}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[220px]">
+                          <div className="flex flex-col gap-0.5">
+                            {item.motivos_sugestao.map((m, idx) => (
+                              <span key={idx} className="text-[10px] text-muted-foreground">• {m}</span>
+                            ))}
+                            {item.alertas.map((a, idx) => (
+                              <span key={`a${idx}`} className="text-[10px] text-amber-600 flex items-center gap-1">
+                                <AlertTriangle className="h-2.5 w-2.5" /> {a}
+                              </span>
+                            ))}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

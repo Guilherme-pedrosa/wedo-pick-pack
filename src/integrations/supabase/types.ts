@@ -873,6 +873,108 @@ export type Database = {
         }
         Relationships: []
       }
+      product_supplier_history: {
+        Row: {
+          arrival_date: string | null
+          compra_codigo: string | null
+          compra_id: string | null
+          created_at: string
+          data_emissao: string | null
+          fornecedor_id: string | null
+          fornecedor_nome: string | null
+          id: string
+          lead_time_days: number | null
+          produto_id: string
+          quantidade: number | null
+          raw: Json | null
+          situacao_final: string | null
+          valor_custo: number | null
+        }
+        Insert: {
+          arrival_date?: string | null
+          compra_codigo?: string | null
+          compra_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          lead_time_days?: number | null
+          produto_id: string
+          quantidade?: number | null
+          raw?: Json | null
+          situacao_final?: string | null
+          valor_custo?: number | null
+        }
+        Update: {
+          arrival_date?: string | null
+          compra_codigo?: string | null
+          compra_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          lead_time_days?: number | null
+          produto_id?: string
+          quantidade?: number | null
+          raw?: Json | null
+          situacao_final?: string | null
+          valor_custo?: number | null
+        }
+        Relationships: []
+      }
+      product_supplier_stats: {
+        Row: {
+          avg_lead_time_days: number | null
+          confidence_level: string | null
+          fornecedor_id: string | null
+          fornecedor_nome: string | null
+          id: string
+          last_purchase_at: string | null
+          last_unit_cost: number | null
+          max_lead_time_days: number | null
+          median_lead_time_days: number | null
+          min_lead_time_days: number | null
+          produto_id: string
+          purchase_count: number
+          total_qty_purchased: number | null
+          updated_at: string
+        }
+        Insert: {
+          avg_lead_time_days?: number | null
+          confidence_level?: string | null
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          last_purchase_at?: string | null
+          last_unit_cost?: number | null
+          max_lead_time_days?: number | null
+          median_lead_time_days?: number | null
+          min_lead_time_days?: number | null
+          produto_id: string
+          purchase_count?: number
+          total_qty_purchased?: number | null
+          updated_at?: string
+        }
+        Update: {
+          avg_lead_time_days?: number | null
+          confidence_level?: string | null
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          last_purchase_at?: string | null
+          last_unit_cost?: number | null
+          max_lead_time_days?: number | null
+          median_lead_time_days?: number | null
+          min_lead_time_days?: number | null
+          produto_id?: string
+          purchase_count?: number
+          total_qty_purchased?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products_index: {
         Row: {
           ativo: boolean

@@ -1261,7 +1261,32 @@ export default function InventoryAnalysisPage() {
     return <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${variants[cls]}`}>{cls}</span>;
   };
 
-  const isLoading = consumptionQuery.isLoading || configQuery.isLoading;
+  const giroBadge = (cls: GiroClass) => {
+    const variants: Record<GiroClass, string> = {
+      ALTO: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+      MEDIO: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+      BAIXO: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+      SEM_GIRO: 'bg-muted text-muted-foreground',
+    };
+    const labels: Record<GiroClass, string> = { ALTO: 'Alto', MEDIO: 'Médio', BAIXO: 'Baixo', SEM_GIRO: 'Sem giro' };
+    return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${variants[cls]}`}>{labels[cls]}</span>;
+  };
+
+  const statusEstoqueBadge = (st: StatusEstoque) => {
+    const variants: Record<StatusEstoque, string> = {
+      COMPRAR_ESTOQUE: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+      ESTOQUE_OK: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+      REVISAR_MANUALMENTE: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+      NAO_ESTOCAR: 'bg-muted text-muted-foreground',
+    };
+    const labels: Record<StatusEstoque, string> = {
+      COMPRAR_ESTOQUE: 'Comprar estoque',
+      ESTOQUE_OK: 'Estoque ok',
+      REVISAR_MANUALMENTE: 'Revisar manual',
+      NAO_ESTOCAR: 'Não estocar',
+    };
+    return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${variants[st]}`}>{labels[st]}</span>;
+  };
 
   if (isLoading) {
     return (

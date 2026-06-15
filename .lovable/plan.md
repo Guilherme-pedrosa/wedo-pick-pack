@@ -1,52 +1,63 @@
-## Objetivo
+# Motor de Planejamento de Compras — Backend-first
 
-Levar os contadores "parados +30 dias" e "com chegada atrasada" do Acompanhamento de Pedidos de Compra para o Dashboard, com snapshot atualizado a cada hora pelo servidor, e exibir um popup global (1x por snapshot) para todos os usuários quando houver pedidos nessas duas categorias.
+## Princípio
+GestãoClick = fonte de dados brutos. Pick Pack (Supabase) = cérebro. O cálculo de necessidade sai da `InventoryAnalysisPage.tsx` e passa a rodar numa Edge Function dedicada, salvando resultado em tabelas. A tela só exibe, filtra, exporta e aprova.
 
-## Backend
+Chave de análise única: **`produto_id`**. Nunca `item_key` nem `variacao_id`.
 
-### 1. Tabela `purchase_tracker_settings`
-Linha única (singleton) com:
-- `watched_situacao_ids text[]` — quais situações de compra varrer (mesmas hoje persistidas em localStorage na página).
-- `updated_at timestamptz`.
-- RLS: leitura para autenticados, escrita apenas para admin.
+---
 
-### 2. Tabela `purchase_tracker_snapshots`
-- `id uuid pk`, `created_at timestamptz`, `status text` (success/error)
-- `total int` (total de pedidos varridos)
-- `warn_count int` (parados >15 e <=30 dias)
-- `crit_count int` (parados >30 dias)
-- `arrival_overdue_count int`
-- `crit_rows jsonb` / `arrival_rows jsonb` — top N (código, fornecedor, situação, dias)
-- `error_message text`
-- RLS: leitura para autenticados.
+## Fase 1 — Banco de dados (migração)
 
-### 3. Edge function `purchase-tracker-snapshot`
-- Lê `watched_situacao_ids`.
-- Faz a varredura paginada via `gc-proxy` (mesma lógica do `PurchaseTrackerPage.handleScan`/`extractRow`).
-- Calcula severidades (stuck dias / atraso chegada).
-- Insere linha em `purchase_tracker_snapshots`.
+### `inventory_planning_runs`
+Cabeçalho de cada execução: `started_at`, `finished_at`, `status`, `lookback_days`, `products_analyzed`, `suggestions_count`, `total_estimated_value`, `errors_count`, `notes`.
 
-### 4. Cron `pg_cron` horário
-Invoca a edge function a cada 1h.
+### `inventory_purchase_suggestions`
+Uma linha por produto sugerido, vinculada a `run_id`. Campos: identificação (`produto_id`, `nome`, `codigo_interno`, `grupo`, `fornecedor_id`, `fornecedor_nome`, `valor_custo`), métricas de consumo (`estoque_atual`, `consumo_12m`, `consumo_3m`, `event_count`, `source_count`, `client_count`, `media_historica_mensal`, `media_recente_mensal`, `demanda_prevista_mensal`, `monthly_std_dev`, `cv`, `adi`), classificações (`abc_class`, `xyz_class`, `demand_pattern`), política (`lead_time_days`, `safety_stock`, `operational_minimum`, `reorder_point`, `max_stock`), cruzamentos (`orcamento_qty`, `orcamento_ponderado_qty`, `pc_aberta_qty`, `saldo_projetado`, `qty_sugerida`, `risk_score`), e `motivos`/`alertas` (jsonb), além de `aprovado`, `gc_compra_id` para o vínculo pós-criação.
 
-## Frontend
+### `inventory_policy_overrides`
+Exceções manuais por peça: `produto_id` (único), `criticality`, `min_qty_override`, `max_qty_override`, `do_not_stock`, `preferred_supplier_id`, `lead_time_override_days`, `notes`.
 
-### 5. Página PurchaseTrackerPage
-Ao alterar as situações selecionadas, faz upsert em `purchase_tracker_settings` (mantém localStorage como cache, mas o servidor passa a ser fonte de verdade para o cron).
+Todas com GRANTs (authenticated + service_role), RLS habilitado, policies para usuários autenticados, e trigger `updated_at`.
 
-### 6. Dashboard
-- Novo card "Compras Atrasadas" (clicável → `/purchase-tracker`) mostrando `crit_count + arrival_overdue_count` com subtítulo "X parados +30 · Y atrasados — atualizado hh:mm".
-- Lê o último snapshot success.
+---
 
-### 7. Popup global hourly (componente em `AppLayout`)
-- Faz polling a cada 60s no último snapshot.
-- Compara `snapshot.id` com `localStorage.lastSeenPurchaseSnapshotId`.
-- Se for novo E (`crit_count>0 || arrival_overdue_count>0`) → abre `AlertDialog` com resumo + top rows e botão "Abrir acompanhamento" (navega para `/purchase-tracker`) e "Dispensar" (grava o id como visto).
-- Garante que aparece para todos os usuários logados, 1x por novo snapshot.
+## Fase 2 — Edge Function `inventory-planning-run`
+Orquestra tudo no backend (respeitando rate limit GC: batching ~1.1s, retries):
+1. Lê `products_index` (produtos ativos que movimentam estoque).
+2. Lê `inventory_consumption_events` (consumo histórico já sincronizado).
+3. Estoque atual: usa cache local / bulk-stock; sinaliza alerta quando ausente.
+4. PCs em aberto: situações de `inventory_policy_config.purchase_crossref_situacao_ids`; ignora antigas (>90d → alerta, não desconta).
+5. Orçamentos pendentes: situações de `budget_crossref_situacao_ids`; pondera por situação (aprovado 1.0 / aguardando 0.7 / negociação 0.4 / fallback 0.7).
+6. Lead time por fornecedor de `supplier_lead_times` (fallback 21d).
+7. Aplica `inventory_policy_overrides`.
+8. Roda o motor (série 12m com meses zerados, ABC/XYZ, padrão de demanda, mínimo operacional, safety stock por z-score, ROP, estoque máximo por cobertura, saldo projetado, condição de compra, bloqueios anti-ruído).
+9. Grava `inventory_planning_runs` + `inventory_purchase_suggestions`.
+
+A fórmula reaproveita a lógica já existente hoje na página (já validada) — apenas portada para Deno e persistida.
+
+## Fase 3 — Edge Function `create-gc-purchase-from-suggestions`
+Recebe `suggestion_ids`, valida `qty_sugerida > 0`, agrupa por `fornecedor_id`, monta `POST /api/compras` (via proxy GC existente), cria a compra, salva `gc_compra_id` na sugestão. **Nunca cria sem aprovação explícita.**
+
+## Fase 4 — Cron diário
+Encadear às 06:00 BRT: `sync-products` → `inventory-consumption-sync` → `inventory-lead-time-sync` → `inventory-planning-run` (via pg_cron + pg_net, com anon key, usando insert tool).
+
+## Fase 5 — Refatorar `InventoryAnalysisPage.tsx`
+Para de ser o motor. Passa a: botão "Rodar Planejamento" (chama a function), mostrar último run, listar `inventory_purchase_suggestions` via React Query, filtros (fornecedor/risco/grupo/valor), exportar CSV (UTF-8 BOM, `;`), selecionar itens e "Gerar Compra no GestãoClick" agrupado por fornecedor.
+
+---
 
 ## Detalhes técnicos
+- Aba "Lista de Compras" lê da tabela, não recalcula no cliente.
+- Mantém formatação pt-BR e exportação CSV com BOM/`;` (regra do projeto).
+- Identificação sempre `[Código Interno] Nome`.
+- Motivos/alertas exibidos por linha, como hoje, vindos do jsonb persistido.
 
-- Reusar `parseFlexibleDate` / `parseGCDate` / `daysBetween` extraindo para `src/lib/purchaseTrackerUtils.ts` (consumido pela página e pelo dashboard se necessário).
-- A edge function repete a lógica em Deno (não compartilha código do front) para evitar acoplamento — apenas chama o proxy GC existente.
-- Para a primeira execução sem configuração, a função pula com status `skipped` se `watched_situacao_ids` estiver vazio.
-- Popup global registrado dentro do layout autenticado já existente (mesmo lugar do header) para garantir cobertura em todas as rotas.
+## Ordem de execução
+1. Migração (Fase 1) — requer aprovação.
+2. Functions (Fases 2–3).
+3. Cron (Fase 4).
+4. Refatorar tela (Fase 5).
+
+## Observação
+Esta é uma reescrita grande. Sugiro fazer Fase 1+2+5 primeiro (gerar e exibir sugestões persistidas) e validar os números contra a tela atual antes de ligar criação de compra (Fase 3) e o cron (Fase 4).

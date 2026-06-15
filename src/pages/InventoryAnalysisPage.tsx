@@ -1397,7 +1397,7 @@ export default function InventoryAnalysisPage() {
                 )}
               </div>
               <div className="mt-4 text-xs text-muted-foreground space-y-1">
-                <p>📊 Cobertura = Lead Time <strong>por fornecedor</strong> · Segurança: <strong>A ×{ABC_SAFETY.A}</strong>, B ×{ABC_SAFETY.B}, C ×{ABC_SAFETY.C}</p>
+                <p>📊 Política ERP: ponto de ressuprimento = demanda no lead time + estoque de segurança (z por classe/criticidade) · mínimo operacional para peça barata recorrente</p>
                 <p>⏱ Lead time: <strong>por fornecedor do produto</strong> (fallback: {fallbackLeadTime}d se sem vínculo)</p>
                 <p>🛡 {leadTimes.length} fornecedores com lead time calculado</p>
               </div>

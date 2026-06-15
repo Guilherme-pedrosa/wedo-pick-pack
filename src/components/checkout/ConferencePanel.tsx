@@ -59,26 +59,63 @@ export default function ConferencePanel() {
     return () => { document.title = 'WeDo Checkout'; };
   }, [session?.codigo, session?.concludedAt]);
 
-  // Desktop (coletor/scanner USB): mantém o input focado para capturar a leitura
+  // Desktop: captura GLOBAL do coletor por timing. Coletor envia caracteres
+  // em milissegundos + Enter. Digitação manual (lenta) é bloqueada.
+  const scanBufferRef = useRef<{ chars: string[]; times: number[] }>({ chars: [], times: [] });
+  const [scannerActivity, setScannerActivity] = useState(false);
   useEffect(() => {
     if (isMobile) return;
-    if (session?.refId && !session.concludedAt) {
-      scanRef.current?.focus();
-    }
-  }, [isMobile, session?.refId, session?.concludedAt]);
+    if (!session || session.concludedAt) return;
 
-  // F2 reposiciona o foco no campo do coletor (desktop)
-  useEffect(() => {
-    if (isMobile) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault();
-        scanRef.current?.focus();
+    const MAX_GAP_MS = 60;     // intervalo máx. entre teclas do coletor
+    const MIN_LENGTH = 3;      // tamanho mínimo de código válido
+
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      // Permite digitar no campo de Qtd, ignorando a captura global
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      const now = Date.now();
+      const buf = scanBufferRef.current;
+
+      if (e.key === 'Enter') {
+        const code = buf.chars.join('');
+        const times = buf.times.slice();
+        scanBufferRef.current = { chars: [], times: [] };
+        setScannerActivity(false);
+        if (code.length < MIN_LENGTH) return;
+
+        let maxGap = 0;
+        for (let i = 1; i < times.length; i++) {
+          maxGap = Math.max(maxGap, times[i] - times[i - 1]);
+        }
+        if (maxGap > MAX_GAP_MS) {
+          setFeedback({ type: 'error', msg: 'Digitação manual bloqueada — use o coletor de código de barras' });
+          toast.error('Digitação manual não é permitida. Use o coletor.');
+          return;
+        }
+        processScan(code, scanQtyValue());
+        return;
+      }
+
+      if (e.key.length === 1) {
+        // reinicia o buffer se houve pausa longa (início de nova leitura)
+        if (buf.times.length && now - buf.times[buf.times.length - 1] > 100) {
+          buf.chars = [];
+          buf.times = [];
+        }
+        buf.chars.push(e.key);
+        buf.times.push(now);
+        setScannerActivity(true);
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [isMobile]);
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMobile, session?.refId, session?.concludedAt, processScan, scanQtyValue]);
+
 
 
 

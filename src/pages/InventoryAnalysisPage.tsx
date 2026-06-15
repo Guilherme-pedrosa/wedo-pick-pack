@@ -979,9 +979,29 @@ export default function InventoryAnalysisPage() {
     return analysisItems
       .filter((item) => {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
-        return item.qty_liquida > 0;
+        return item.is_stock_eligible && item.suggested_qty > 0;
       })
       .sort((a, b) => b.risk_score - a.risk_score);
+  }, [analysisItems, grupoFilter, searchTerm]);
+
+  // Orçamentos pendentes sem giro recorrente — sinal, mas NÃO compra automática
+  const budgetNoGiroItems = useMemo(() => {
+    return analysisItems
+      .filter((item) => {
+        if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
+        return item.budget_without_giro;
+      })
+      .sort((a, b) => b.budget_signal_qty - a.budget_signal_qty);
+  }, [analysisItems, grupoFilter, searchTerm]);
+
+  // Estoque recorrente OK — elegível mas sem necessidade de compra agora
+  const recurringOkItems = useMemo(() => {
+    return analysisItems
+      .filter((item) => {
+        if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
+        return item.is_stock_eligible && item.suggested_qty <= 0;
+      })
+      .sort((a, b) => (b.total_qty) - (a.total_qty));
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Fetch active purchase orders from GC

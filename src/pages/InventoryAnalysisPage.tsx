@@ -208,6 +208,16 @@ function inferCriticality(nome: string): boolean {
   return CRITICAL_KEYWORDS.some(k => name.includes(k));
 }
 
+// Mínimo de prateleira puro por custo (independe de recorrência).
+function getMinShelfQty(unitCost: number): number {
+  const t = POLICY.lowCostThresholds;
+  const m = POLICY.minShelfByCost;
+  if (unitCost > 0 && unitCost <= t.veryLow) return m.veryLow;
+  if (unitCost <= t.low) return m.low;
+  if (unitCost <= t.medium) return m.medium;
+  return 1;
+}
+
 function getCoverageDaysByCost(unitCost: number): number {
   const t = POLICY.lowCostThresholds;
   const c = POLICY.maxCoverageDaysByCost;

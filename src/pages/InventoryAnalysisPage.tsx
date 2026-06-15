@@ -773,6 +773,17 @@ export default function InventoryAnalysisPage() {
         event_count: r.event_count,
         source_count: r.source_count,
         client_count: r.client_count,
+        event_count_90d: r.event_count_90d,
+        event_count_180d: r.event_count_180d,
+        source_count_90d: r.source_count_90d,
+        source_count_180d: r.source_count_180d,
+        non_zero_months_90d: nonZeroMonths90,
+        non_zero_months_180d: nonZeroMonths180,
+        days_since_last: daysSinceLast,
+
+        classe_giro: classeGiro,
+        status_estoque: statusEstoque,
+
 
         historical_monthly_avg: historicalMonthlyAvg,
         recent_monthly_avg: recentMonthlyAvg,

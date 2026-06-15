@@ -831,6 +831,13 @@ export default function InventoryAnalysisPage() {
         qty_a_comprar: qtyToBuy,
         qty_liquida: qtyLiquida,
 
+        stock_demand_qty: stockDemandQty,
+        budget_signal_qty: budgetSignalQty,
+        suggested_qty: qtyToBuy,
+        is_stock_eligible: isStockEligible,
+        budget_without_giro: budgetWithoutGiro,
+
+
         risk_score: riskScore,
         motivos_sugestao: motivos,
         alertas,

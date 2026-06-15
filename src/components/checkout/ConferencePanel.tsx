@@ -346,6 +346,25 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                 <Camera className="h-5 w-5" />
                 {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
               </Button>
+            ) : allowManualEntry ? (
+              <Input
+                type="text"
+                value={manualCode}
+                onChange={e => setManualCode(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const code = manualCode.trim();
+                    if (!code) return;
+                    if (processScan(code, scanQtyValue())) {
+                      setManualCode('');
+                    }
+                  }
+                }}
+                placeholder="Leia ou digite o código e pressione Enter"
+                autoFocus
+                className="flex-1 h-[52px] text-base"
+              />
             ) : (
               <div
                 className={`flex-1 h-[52px] rounded-md border-2 flex items-center gap-2 px-3 text-base select-none transition-colors ${

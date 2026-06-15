@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { matchItemByCode } from '@/lib/scanMatcher';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,8 @@ export default function ConferencePanel() {
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
 
+  const isMobile = useIsMobile();
+  const [scanCode, setScanCode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
@@ -27,6 +30,9 @@ export default function ConferencePanel() {
   const [forced, setForced] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const scanRef = useRef<HTMLInputElement>(null);
+
+
 
 
 
@@ -53,7 +59,27 @@ export default function ConferencePanel() {
     return () => { document.title = 'WeDo Checkout'; };
   }, [session?.codigo, session?.concludedAt]);
 
-  // (texto/teclado de digitação removidos — leitura apenas por câmera)
+  // Desktop (coletor/scanner USB): mantém o input focado para capturar a leitura
+  useEffect(() => {
+    if (isMobile) return;
+    if (session?.refId && !session.concludedAt) {
+      scanRef.current?.focus();
+    }
+  }, [isMobile, session?.refId, session?.concludedAt]);
+
+  // F2 reposiciona o foco no campo do coletor (desktop)
+  useEffect(() => {
+    if (isMobile) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        scanRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isMobile]);
+
 
 
   // Clear feedback
@@ -121,6 +147,15 @@ export default function ConferencePanel() {
     const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
     return (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
   }, [scanQty, session?.items, parseScanQty]);
+
+  // Leitura via coletor/scanner USB (desktop): captura código + Enter
+  const handleScan = useCallback(() => {
+    processScan(scanCode, scanQtyValue());
+    setScanCode('');
+    scanRef.current?.focus();
+  }, [scanCode, processScan, scanQtyValue]);
+
+
 
   const handlePrint = useCallback(() => {
     if (!session) return;
@@ -252,20 +287,35 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         </div>
       </div>
 
-      {/* Scan zone — leitura exclusiva por câmera */}
+      {/* Scan zone — desktop: coletor/scanner USB · mobile: câmera */}
       <div className="border-2 border-secondary bg-secondary/10 mx-3 md:mx-4 mt-3 md:mt-4 rounded-lg p-3">
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Scan className="h-3.5 w-3.5" /> Leitura por código de barras
+            <Scan className="h-3.5 w-3.5" />
+            {isMobile ? 'Leitura por câmera' : 'Leitura por coletor (scanner)'}
           </label>
           <div className="flex gap-2">
-            <Button
-              className="flex-1 h-[52px] gap-2 text-base"
-              onClick={() => setCameraOpen(true)}
-            >
-              <Camera className="h-5 w-5" />
-              {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
-            </Button>
+            {isMobile ? (
+              <Button
+                className="flex-1 h-[52px] gap-2 text-base"
+                onClick={() => setCameraOpen(true)}
+              >
+                <Camera className="h-5 w-5" />
+                {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
+              </Button>
+            ) : (
+              <Input
+                ref={scanRef}
+                value={scanCode}
+                onChange={e => setScanCode(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
+                placeholder="Aponte o coletor e leia o código de barras…"
+                className="text-base py-3 border-2 border-secondary focus:border-secondary flex-1 h-[52px]"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+              />
+            )}
             {showQtyField && (
               <div className="w-24">
                 <label className="text-[10px] font-medium text-muted-foreground">Qtd por leitura</label>
@@ -293,6 +343,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             {feedback.msg}
           </p>
         )}
+
       </div>
 
       {/* Lazy-loaded barcode scanner (leitura contínua) */}

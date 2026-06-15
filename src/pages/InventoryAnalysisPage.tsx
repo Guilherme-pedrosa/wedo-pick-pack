@@ -1716,6 +1716,94 @@ export default function InventoryAnalysisPage() {
           )}
         </TabsContent>
 
+        {/* ORÇAMENTO SEM GIRO — sinal, nunca compra automática */}
+        <TabsContent value="orcsemgiro" className="mt-4 space-y-4">
+          <Card className="p-3 border-amber-300 bg-amber-50/50 dark:bg-amber-900/10">
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              Produtos que aparecem em orçamentos pendentes mas <strong>não têm giro recorrente</strong>.
+              Servem como alerta de antecipação — não entram na compra automática de estoque.
+            </p>
+          </Card>
+          <div className="rounded-lg border overflow-auto max-h-[520px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produto</TableHead>
+                  <TableHead className="text-right">Orç. (sinal)</TableHead>
+                  <TableHead className="w-16">Giro</TableHead>
+                  <TableHead className="text-right">Eventos</TableHead>
+                  <TableHead className="text-right">Custo Unit.</TableHead>
+                  <TableHead className="text-right">Estoque</TableHead>
+                  <TableHead>Decisão</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {budgetNoGiroItems.map(item => (
+                  <TableRow key={item.produto_id}>
+                    <TableCell>
+                      <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
+                      {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
+                    </TableCell>
+                    <TableCell className="text-right text-xs font-medium">{item.budget_signal_qty.toFixed(1)}</TableCell>
+                    <TableCell>{giroBadge(item.classe_giro)}</TableCell>
+                    <TableCell className="text-right text-xs">{item.event_count}</TableCell>
+                    <TableCell className="text-right text-xs">{item.valor_custo !== null ? item.valor_custo.toFixed(2) : '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{item.estoque_atual ?? '—'}</TableCell>
+                    <TableCell>{statusEstoqueBadge(item.status_estoque)}</TableCell>
+                  </TableRow>
+                ))}
+                {budgetNoGiroItems.length === 0 && (
+                  <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">Nenhum orçamento pendente sem giro.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        {/* ESTOQUE RECORRENTE OK */}
+        <TabsContent value="recorrenteok" className="mt-4 space-y-4">
+          <Card className="p-3">
+            <p className="text-xs text-muted-foreground">
+              Produtos recorrentes (elegíveis para estoque) com cobertura suficiente — sem necessidade de compra agora.
+            </p>
+          </Card>
+          <div className="rounded-lg border overflow-auto max-h-[520px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produto</TableHead>
+                  <TableHead className="w-16">Giro</TableHead>
+                  <TableHead className="text-right">Consumo 90d</TableHead>
+                  <TableHead className="text-right">Consumo 180d</TableHead>
+                  <TableHead className="text-right">Estoque</TableHead>
+                  <TableHead className="text-right">Alvo</TableHead>
+                  <TableHead className="text-right">PC Aberto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recurringOkItems.map(item => (
+                  <TableRow key={item.produto_id}>
+                    <TableCell>
+                      <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
+                      {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
+                    </TableCell>
+                    <TableCell>{giroBadge(item.classe_giro)}</TableCell>
+                    <TableCell className="text-right text-xs">{Math.round(item.event_count_90d)}</TableCell>
+                    <TableCell className="text-right text-xs">{Math.round(item.event_count_180d)}</TableCell>
+                    <TableCell className="text-right text-xs">{item.estoque_atual ?? '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{item.stock_demand_qty}</TableCell>
+                    <TableCell className="text-right text-xs">{item.pc_qty || '—'}</TableCell>
+                  </TableRow>
+                ))}
+                {recurringOkItems.length === 0 && (
+                  <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">Nenhum produto recorrente com estoque suficiente.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+
         {/* RANKING ABC */}
         <TabsContent value="ranking" className="mt-4 space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">

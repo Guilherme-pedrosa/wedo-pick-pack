@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, RefreshCw, Download, AlertTriangle, TrendingUp, Package, ShoppingCart, Clock, BarChart3, Filter } from 'lucide-react';
+import { Loader2, RefreshCw, Download, AlertTriangle, TrendingUp, Package, PackageCheck, ShoppingCart, Clock, BarChart3, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
@@ -152,6 +152,13 @@ interface AnalysisItem {
   qty_a_comprar: number;
   qty_liquida: number;
 
+  stock_demand_qty: number;
+  budget_signal_qty: number;
+  suggested_qty: number;
+  is_stock_eligible: boolean;
+  budget_without_giro: boolean;
+
+
   risk_score: number;
   motivos_sugestao: string[];
   alertas: string[];
@@ -161,7 +168,7 @@ interface AnalysisItem {
   source_refs: SourceRef[];
 }
 
-type AnalysisTab = 'compras' | 'ranking' | 'leadtime' | 'trend';
+type AnalysisTab = 'compras' | 'orcsemgiro' | 'recorrenteok' | 'ranking' | 'leadtime' | 'trend';
 
 // ============================================================================
 // POLÍTICA DE REPOSIÇÃO — parâmetros centralizados e fáceis de ajustar.
@@ -206,6 +213,16 @@ const CRITICAL_KEYWORDS = [
 function inferCriticality(nome: string): boolean {
   const name = (nome || '').toLowerCase();
   return CRITICAL_KEYWORDS.some(k => name.includes(k));
+}
+
+// Mínimo de prateleira puro por custo (independe de recorrência).
+function getMinShelfQty(unitCost: number): number {
+  const t = POLICY.lowCostThresholds;
+  const m = POLICY.minShelfByCost;
+  if (unitCost > 0 && unitCost <= t.veryLow) return m.veryLow;
+  if (unitCost <= t.low) return m.low;
+  if (unitCost <= t.medium) return m.medium;
+  return 1;
 }
 
 function getCoverageDaysByCost(unitCost: number): number {
@@ -630,18 +647,18 @@ export default function InventoryAnalysisPage() {
       // --- Mínimo operacional (peça barata recorrente / crítica) ---
       const operationalMinimum = getOperationalMinimum(unitCost, isRecurring, isCritical);
 
-      // --- Demanda de orçamento ponderada ---
+      // --- Sinal de orçamento pendente (situações escolhidas) ---
       const orcEntry = orcMap.get(r.produto_id);
       const orcQty = orcEntry?.qtd || 0;
       const orcRefs = orcEntry?.refs || [];
-      // sistema não diferencia aprovado/pendente → usa fator pendente
-      const budgetDemandQty = orcQty * POLICY.pendingBudgetDemandFactor;
+      // sistema não diferencia aprovado/pendente → usa fator pendente (configurável)
+      const budgetSignalQty = orcQty * POLICY.pendingBudgetDemandFactor;
+      const budgetDemandQty = budgetSignalQty; // compat. com saldo projetado
 
       // --- Pedido de compra em aberto ---
       const pcEntry = pcMap.get(r.produto_id);
       const pcQty = pcEntry?.qtd || 0;
       const pcRefs = pcEntry?.refs || [];
-      // (sem data de PC validada disponível por item → mantém comportamento atual)
       const effectivePcQty = pcQty;
 
       // --- Estoque e saldo projetado ---
@@ -649,96 +666,98 @@ export default function InventoryAnalysisPage() {
       const stockKnown = estoque !== null && estoque !== undefined;
       const estoqueBase = stockKnown ? estoque! : 0;
       const projectedAvailable = stockKnown
-        ? estoqueBase + effectivePcQty - budgetDemandQty
+        ? estoqueBase + effectivePcQty - budgetSignalQty
         : null;
 
-      // --- Ponto de ressuprimento ---
+      // --- Ponto de ressuprimento (informativo) ---
       const demandDuringLeadTime = avgDailyDemand * leadTimeDays;
       let reorderPoint = Math.ceil(demandDuringLeadTime + safetyStock);
       reorderPoint = Math.max(reorderPoint, operationalMinimum);
 
-      // --- Estoque máximo alvo ---
+      // --- Estoque máximo alvo = nível de demanda de estoque (consumo real) ---
       const coverageDays = getCoverageDaysByCost(unitCost);
+      const minShelfQty = getMinShelfQty(unitCost);
       let maxStock = Math.ceil(avgDailyDemand * (leadTimeDays + coverageDays) + safetyStock);
       maxStock = Math.max(maxStock, operationalMinimum);
-      if (unitCost > POLICY.lowCostThresholds.moderate && demandPattern === 'lumpy' && !isCritical && budgetDemandQty <= 0) {
-        maxStock = 0;
-      }
 
-      // --- Regra final de compra ---
-      const projForCompare = projectedAvailable ?? estoqueBase;
-      const shouldReorder =
-        projForCompare <= reorderPoint ||
-        budgetDemandQty > estoqueBase ||
-        (estoqueBase <= 0 && operationalMinimum > 0);
+      // ===================================================================
+      // ELEGIBILIDADE PARA ESTOQUE (giro real, não dinheiro)
+      // ===================================================================
+      const totalQty90d = monthlySeries.slice(0, 3).reduce((s, v) => s + v, 0);
+      const totalQty180d = monthlySeries.slice(0, 6).reduce((s, v) => s + v, 0);
+      const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
+      const daysSinceLastConsumption = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
 
-      let qtyToBuy = shouldReorder ? maxStock - projForCompare : 0;
-      qtyToBuy = Math.max(0, Math.ceil(qtyToBuy));
-      // cobrir orçamento se maior que o máximo
-      if (budgetDemandQty > 0) {
-        qtyToBuy = Math.max(qtyToBuy, Math.ceil(budgetDemandQty - estoqueBase - effectivePcQty));
-        qtyToBuy = Math.max(0, qtyToBuy);
-      }
+      // sem overrides manuais no cliente → manualStockItem/manualMinStock = false
+      const manualStockItem = false;
+      const manualMinStock = 0;
+      const hasManual = manualStockItem || manualMinStock > 0;
+
+      const hasRecentConsumption = totalQty90d > 0 || daysSinceLastConsumption <= 90;
+      const isRecurringStock =
+        r.source_count_90d >= 2 ||
+        r.source_count_180d >= 3 ||
+        nonZeroMonths180 >= 2 ||
+        totalQty180d >= minShelfQty;
+      const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual;
+
+      const oneEventOnly = r.event_count <= 1;
+      const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
+
+      // --- Demanda de estoque (consumo real) e demanda total ---
+      const stockDemandQty = isStockEligible ? Math.max(maxStock, minShelfQty) : 0;
+      // orçamento NÃO soma cego: usa max com a demanda de estoque, e só p/ elegíveis
+      const demandaTotal = isStockEligible ? Math.max(stockDemandQty, budgetSignalQty) : 0;
+
+      let suggestedQty = isStockEligible
+        ? Math.max(0, Math.ceil(demandaTotal - estoqueBase - effectivePcQty))
+        : 0;
 
       // --- Lote mínimo / múltiplo de compra (se existirem no cadastro) ---
       const minOrderQty = Number((info as any)?.min_order_qty || 0) || 0;
       const orderMultiple = Number((info as any)?.order_multiple || 0) || 0;
-      if (qtyToBuy > 0 && minOrderQty > 0) qtyToBuy = Math.max(qtyToBuy, minOrderQty);
-      if (qtyToBuy > 0 && orderMultiple > 0) qtyToBuy = Math.ceil(qtyToBuy / orderMultiple) * orderMultiple;
+      if (suggestedQty > 0 && minOrderQty > 0) suggestedQty = Math.max(suggestedQty, minOrderQty);
+      if (suggestedQty > 0 && orderMultiple > 0) suggestedQty = Math.ceil(suggestedQty / orderMultiple) * orderMultiple;
 
-      // --- Bloqueios (não comprar peça errada) ---
-      const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
-      const daysSinceLastConsumption = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
       const staleDemand = daysSinceLastConsumption > POLICY.staleDemandDays;
       const oneOffDemand = r.source_count <= 1 && r.event_count <= 1 && nonZeroMonths <= 1;
-      if (staleDemand && oneOffDemand && budgetDemandQty <= 0 && !isCritical) {
-        qtyToBuy = 0;
-      }
-      // peça cara com saída única antiga sem orçamento/criticidade → não comprar
-      if (oneOffDemand && budgetDemandQty <= 0 && !isCritical && !isRecurring && operationalMinimum === 0) {
-        qtyToBuy = 0;
-      }
 
-      // === GATE DE GIRO: ABC mede dinheiro, estoque mede giro ===
-      // (sem overrides manuais no cliente → manualStockItem/manualMinStock = false)
-      const manualStockItem = false;
-      const manualMinStock = 0;
-      const hasManual = manualStockItem || manualMinStock > 0;
-      const recurringStockDemand = classeGiro === 'ALTO' || classeGiro === 'MEDIO';
-      const oneEventOnly = r.event_count <= 1;
-      // Item caro com 1 evento → revisar manualmente, nunca compra automática
-      const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
-      // Só pode entrar na compra automática se houver giro ALTO/MEDIO ou política manual
-      const canBuyForStock = hasManual || (recurringStockDemand && !oneEventOnly);
+      // item em orçamento pendente mas sem giro → não compra automática (aba separada)
+      const budgetWithoutGiro = budgetSignalQty > 0 && !isStockEligible;
 
+      let qtyToBuy = suggestedQty;
+
+      // === STATUS DE ESTOQUE ===
       let statusEstoque: StatusEstoque;
-      if (!canBuyForStock) {
+      if (!isStockEligible) {
         qtyToBuy = 0;
-        statusEstoque = expensiveOneOff || (unitCost > 500 && oneEventOnly)
+        statusEstoque = (expensiveOneOff || (unitCost > 500 && oneEventOnly))
           ? 'REVISAR_MANUALMENTE'
           : 'NAO_ESTOCAR';
       } else {
         statusEstoque = qtyToBuy > 0 ? 'COMPRAR_ESTOQUE' : 'ESTOQUE_OK';
       }
 
+      const projForCompare = projectedAvailable ?? estoqueBase;
+
       // --- Motivos e alertas ---
       const motivos: string[] = [];
       const alertas: string[] = [];
       if (qtyToBuy > 0) {
-        if (stockKnown && projForCompare <= reorderPoint) motivos.push('Estoque projetado abaixo do ponto de ressuprimento');
+        if (hasRecentConsumption && isRecurringStock) motivos.push('Peça recorrente com consumo recente');
         if (stockKnown && estoqueBase <= 0) motivos.push('Estoque atual zerado');
-        if (operationalMinimum > 0 && estoqueBase < operationalMinimum) motivos.push('Peça barata recorrente abaixo do mínimo operacional');
-        if (budgetDemandQty > 0) motivos.push('Orçamento pendente gerou demanda prevista');
+        if (stockKnown && estoqueBase < stockDemandQty) motivos.push('Estoque abaixo do mínimo calculado');
+        if (budgetSignalQty > 0) motivos.push('Orçamento pendente aumentou risco');
+        if (pcQty > 0 && effectivePcQty < demandaTotal) motivos.push('Pedido de compra em aberto insuficiente');
         if (safetyStock > 0 && leadTimeDays >= 21) motivos.push('Lead time do fornecedor exige estoque de segurança');
-        if (recentWeightedAvg > historicalMonthlyAvg) motivos.push('Demanda recente maior que média histórica');
-        if (demandPattern === 'intermitente') motivos.push('Demanda intermitente tratada com mínimo operacional');
-        if (pcQty > 0 && effectivePcQty < reorderPoint) motivos.push('Pedido de compra em aberto insuficiente');
         if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');
       }
-      if (!stockKnown) alertas.push('Estoque atual não carregado');
-      if (usedDefaultLT) alertas.push('Sem lead time do fornecedor, usado padrão');
-      if (oneOffDemand) alertas.push('Demanda baseada em apenas um evento');
+      if (!stockKnown) alertas.push('Sem estoque atual carregado');
+      if (usedDefaultLT) alertas.push('Sem lead time real, usado fallback');
       if (staleDemand) alertas.push('Produto com demanda antiga');
+      if (budgetWithoutGiro) {
+        alertas.push('Produto em orçamento pendente, mas sem giro recorrente. Não comprar automaticamente.');
+      }
       if (statusEstoque === 'REVISAR_MANUALMENTE') {
         alertas.push('Item de alto valor com apenas um evento. ABC financeiro não autoriza estoque automático.');
         motivos.push('ABC financeiro = ' + abcClass + ', giro = ' + classeGiro + ' → revisar manualmente');
@@ -757,7 +776,7 @@ export default function InventoryAnalysisPage() {
 
       const avgDaily = avgDailyDemand;
       const diasCobertura = stockKnown && avgDaily > 0 ? estoqueBase / avgDaily : null;
-      const qtyLiquida = Math.max(0, qtyToBuy - effectivePcQty);
+      const qtyLiquida = qtyToBuy; // suggestedQty já líquido de PC em aberto
 
       return {
         produto_id: r.produto_id,
@@ -818,6 +837,13 @@ export default function InventoryAnalysisPage() {
 
         qty_a_comprar: qtyToBuy,
         qty_liquida: qtyLiquida,
+
+        stock_demand_qty: stockDemandQty,
+        budget_signal_qty: budgetSignalQty,
+        suggested_qty: qtyToBuy,
+        is_stock_eligible: isStockEligible,
+        budget_without_giro: budgetWithoutGiro,
+
 
         risk_score: riskScore,
         motivos_sugestao: motivos,
@@ -953,9 +979,29 @@ export default function InventoryAnalysisPage() {
     return analysisItems
       .filter((item) => {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
-        return item.qty_liquida > 0;
+        return item.is_stock_eligible && item.suggested_qty > 0;
       })
       .sort((a, b) => b.risk_score - a.risk_score);
+  }, [analysisItems, grupoFilter, searchTerm]);
+
+  // Orçamentos pendentes sem giro recorrente — sinal, mas NÃO compra automática
+  const budgetNoGiroItems = useMemo(() => {
+    return analysisItems
+      .filter((item) => {
+        if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
+        return item.budget_without_giro;
+      })
+      .sort((a, b) => b.budget_signal_qty - a.budget_signal_qty);
+  }, [analysisItems, grupoFilter, searchTerm]);
+
+  // Estoque recorrente OK — elegível mas sem necessidade de compra agora
+  const recurringOkItems = useMemo(() => {
+    return analysisItems
+      .filter((item) => {
+        if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
+        return item.is_stock_eligible && item.suggested_qty <= 0;
+      })
+      .sort((a, b) => (b.total_qty) - (a.total_qty));
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Fetch active purchase orders from GC
@@ -1327,7 +1373,13 @@ export default function InventoryAnalysisPage() {
     { name: 'C', count: kpis.cCount, fill: 'hsl(142 71% 45%)' },
   ];
   const showStickyFilters = activeTab === 'ranking' || (activeTab === 'compras' && stockMap.size > 0);
-  const activeFilterCount = activeTab === 'compras' ? purchaseItems.length : filteredItems.length;
+  const activeFilterCount = activeTab === 'compras'
+    ? purchaseItems.length
+    : activeTab === 'orcsemgiro'
+      ? budgetNoGiroItems.length
+      : activeTab === 'recorrenteok'
+        ? recurringOkItems.length
+        : filteredItems.length;
 
   return (
     <div className="max-w-[1400px] mx-auto p-4 sm:p-6 space-y-6">
@@ -1390,7 +1442,9 @@ export default function InventoryAnalysisPage() {
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AnalysisTab)}>
         <TabsList className="flex-wrap">
-          <TabsTrigger value="compras" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" /> Lista de Compras</TabsTrigger>
+          <TabsTrigger value="compras" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" /> Comprar Agora</TabsTrigger>
+          <TabsTrigger value="orcsemgiro" className="gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Orçamento sem Giro</TabsTrigger>
+          <TabsTrigger value="recorrenteok" className="gap-1"><PackageCheck className="h-3.5 w-3.5" /> Estoque OK</TabsTrigger>
           <TabsTrigger value="ranking" className="gap-1"><BarChart3 className="h-3.5 w-3.5" /> Ranking ABC</TabsTrigger>
           <TabsTrigger value="leadtime" className="gap-1"><Clock className="h-3.5 w-3.5" /> Lead Times</TabsTrigger>
           <TabsTrigger value="trend" className="gap-1"><TrendingUp className="h-3.5 w-3.5" /> Tendência</TabsTrigger>
@@ -1661,6 +1715,94 @@ export default function InventoryAnalysisPage() {
             </>
           )}
         </TabsContent>
+
+        {/* ORÇAMENTO SEM GIRO — sinal, nunca compra automática */}
+        <TabsContent value="orcsemgiro" className="mt-4 space-y-4">
+          <Card className="p-3 border-amber-300 bg-amber-50/50 dark:bg-amber-900/10">
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              Produtos que aparecem em orçamentos pendentes mas <strong>não têm giro recorrente</strong>.
+              Servem como alerta de antecipação — não entram na compra automática de estoque.
+            </p>
+          </Card>
+          <div className="rounded-lg border overflow-auto max-h-[520px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produto</TableHead>
+                  <TableHead className="text-right">Orç. (sinal)</TableHead>
+                  <TableHead className="w-16">Giro</TableHead>
+                  <TableHead className="text-right">Eventos</TableHead>
+                  <TableHead className="text-right">Custo Unit.</TableHead>
+                  <TableHead className="text-right">Estoque</TableHead>
+                  <TableHead>Decisão</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {budgetNoGiroItems.map(item => (
+                  <TableRow key={item.produto_id}>
+                    <TableCell>
+                      <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
+                      {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
+                    </TableCell>
+                    <TableCell className="text-right text-xs font-medium">{item.budget_signal_qty.toFixed(1)}</TableCell>
+                    <TableCell>{giroBadge(item.classe_giro)}</TableCell>
+                    <TableCell className="text-right text-xs">{item.event_count}</TableCell>
+                    <TableCell className="text-right text-xs">{item.valor_custo !== null ? item.valor_custo.toFixed(2) : '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{item.estoque_atual ?? '—'}</TableCell>
+                    <TableCell>{statusEstoqueBadge(item.status_estoque)}</TableCell>
+                  </TableRow>
+                ))}
+                {budgetNoGiroItems.length === 0 && (
+                  <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">Nenhum orçamento pendente sem giro.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        {/* ESTOQUE RECORRENTE OK */}
+        <TabsContent value="recorrenteok" className="mt-4 space-y-4">
+          <Card className="p-3">
+            <p className="text-xs text-muted-foreground">
+              Produtos recorrentes (elegíveis para estoque) com cobertura suficiente — sem necessidade de compra agora.
+            </p>
+          </Card>
+          <div className="rounded-lg border overflow-auto max-h-[520px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produto</TableHead>
+                  <TableHead className="w-16">Giro</TableHead>
+                  <TableHead className="text-right">Consumo 90d</TableHead>
+                  <TableHead className="text-right">Consumo 180d</TableHead>
+                  <TableHead className="text-right">Estoque</TableHead>
+                  <TableHead className="text-right">Alvo</TableHead>
+                  <TableHead className="text-right">PC Aberto</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recurringOkItems.map(item => (
+                  <TableRow key={item.produto_id}>
+                    <TableCell>
+                      <p className="text-sm font-medium truncate max-w-[280px]">{item.nome}</p>
+                      {item.codigo_interno && <p className="text-[10px] text-muted-foreground">{item.codigo_interno}</p>}
+                    </TableCell>
+                    <TableCell>{giroBadge(item.classe_giro)}</TableCell>
+                    <TableCell className="text-right text-xs">{Math.round(item.event_count_90d)}</TableCell>
+                    <TableCell className="text-right text-xs">{Math.round(item.event_count_180d)}</TableCell>
+                    <TableCell className="text-right text-xs">{item.estoque_atual ?? '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{item.stock_demand_qty}</TableCell>
+                    <TableCell className="text-right text-xs">{item.pc_qty || '—'}</TableCell>
+                  </TableRow>
+                ))}
+                {recurringOkItems.length === 0 && (
+                  <TableRow><TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">Nenhum produto recorrente com estoque suficiente.</TableCell></TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
 
         {/* RANKING ABC */}
         <TabsContent value="ranking" className="mt-4 space-y-4">

@@ -1,63 +1,70 @@
-# Motor de Planejamento de Compras — Backend-first
+# Análise de Estoque — Giro real, Sinal de Orçamento e Lead Time por compra
 
-## Princípio
-GestãoClick = fonte de dados brutos. Pick Pack (Supabase) = cérebro. O cálculo de necessidade sai da `InventoryAnalysisPage.tsx` e passa a rodar numa Edge Function dedicada, salvando resultado em tabelas. A tela só exibe, filtra, exporta e aprova.
+Reescrita profunda da Análise de Estoque para separar **dinheiro (ABC)** de **giro (recorrência)**, usar orçamento pendente apenas como sinal para peças que já giram, e calcular lead time pelo histórico real de pedidos de compra.
 
-Chave de análise única: **`produto_id`**. Nunca `item_key` nem `variacao_id`.
+## Já implementado (mensagem anterior — base de giro)
+- `classe_giro` (ALTO / MEDIO / BAIXO / SEM_GIRO) por `source_count_90d/180d` e meses com saída.
+- `status_estoque` (COMPRAR_ESTOQUE / REVISAR_MANUALMENTE / NAO_ESTOCAR / ESTOQUE_OK).
+- Gate: item só entra na compra automática com giro ALTO/MEDIO ou política manual; item caro (> R$ 500) com 1 evento → REVISAR_MANUALMENTE, qty 0; orçamento não promove item sem giro.
+- Aba Ranking ABC mostra ABC financeiro, giro, eventos, 90d, 180d, dias desde último consumo, decisão de estoque. Export CSV atualizado.
 
----
+## Fase 1 — Demanda separada na Análise (`InventoryAnalysisPage.tsx`)
+Substituir o cálculo único de `qty` por três campos:
+- `stockDemandQty` — do consumo real (`forecastMonthly`, `getMinShelfQty`, `getCoverageDaysByCost` por custo).
+- `budgetSignalQty` — soma `qtd_orcamento * fator_situacao` (quase-aprovado 0.70, negociação 0.40, default 0.50; configurável).
+- `suggestedQty` — final, só para `isStockEligible`.
 
-## Fase 1 — Banco de dados (migração)
+Elegibilidade:
+```
+hasRecentConsumption = recentQty90d > 0 || daysSinceLast <= 90
+isRecurring = sourceCount90d>=2 || sourceCount180d>=3 || nonZeroMonths180d>=2 || totalQty180d>=minShelfQty
+isStockEligible = (hasRecentConsumption && isRecurring) || manualMinStock>0 || manualStockItem
+```
+Demanda total (não somar cego):
+```
+demandaTotal = isStockEligible ? max(stockDemandQty, budgetSignalQty) : 0
+suggestedQty = max(0, ceil(demandaTotal - estoqueAtual - pcOpenQty))
+```
+Orçamento só soma quando houver reserva/OS vinculada que consome estoque.
 
-### `inventory_planning_runs`
-Cabeçalho de cada execução: `started_at`, `finished_at`, `status`, `lookback_days`, `products_analyzed`, `suggestions_count`, `total_estimated_value`, `errors_count`, `notes`.
+## Fase 2 — Abas da tela
+1. **Comprar agora** — elegíveis com `suggestedQty > 0` (lista atual de compras).
+2. **Revisar orçamento sem giro** — produtos em orçamento pendente sem recorrência suficiente (alerta, nunca compra automática).
+3. **Estoque recorrente OK** — recorrentes com estoque suficiente.
+4. **Ranking ABC** (existente, já com giro).
+5. **Lead time fornecedores** (existente, enriquecida na Fase 4).
 
-### `inventory_purchase_suggestions`
-Uma linha por produto sugerido, vinculada a `run_id`. Campos: identificação (`produto_id`, `nome`, `codigo_interno`, `grupo`, `fornecedor_id`, `fornecedor_nome`, `valor_custo`), métricas de consumo (`estoque_atual`, `consumo_12m`, `consumo_3m`, `event_count`, `source_count`, `client_count`, `media_historica_mensal`, `media_recente_mensal`, `demanda_prevista_mensal`, `monthly_std_dev`, `cv`, `adi`), classificações (`abc_class`, `xyz_class`, `demand_pattern`), política (`lead_time_days`, `safety_stock`, `operational_minimum`, `reorder_point`, `max_stock`), cruzamentos (`orcamento_qty`, `orcamento_ponderado_qty`, `pc_aberta_qty`, `saldo_projetado`, `qty_sugerida`, `risk_score`), e `motivos`/`alertas` (jsonb), além de `aprovado`, `gc_compra_id` para o vínculo pós-criação.
+Colunas/CSV da lista final: fornecedor_preferencial, lead_time_days, lead_time_source, lead_time_confidence, estoque_atual, pc_open_qty, stockDemandQty, budgetSignalQty, demandaTotal, suggestedQty, consumo_90d/180d, sourceCount90d/180d, daysSinceLast, motivos, alertas.
 
-### `inventory_policy_overrides`
-Exceções manuais por peça: `produto_id` (único), `criticality`, `min_qty_override`, `max_qty_override`, `do_not_stock`, `preferred_supplier_id`, `lead_time_override_days`, `notes`.
+## Fase 3 — Tabelas de fornecedor por compra (migração)
+- `product_supplier_history`: produto_id, fornecedor_id, fornecedor_nome, compra_id, compra_codigo, data_emissao, arrival_date, lead_time_days, quantidade, valor_custo, situacao_final, raw, created_at.
+- `product_supplier_stats`: produto_id, fornecedor_id, fornecedor_nome, purchase_count, last_purchase_at, total_qty_purchased, avg/median/min/max_lead_time_days, last_unit_cost, confidence_level, updated_at.
+- GRANTs (authenticated + service_role) e RLS conforme padrão do projeto.
 
-Todas com GRANTs (authenticated + service_role), RLS habilitado, policies para usuários autenticados, e trigger `updated_at`.
+## Fase 4 — Lead time real (`inventory-lead-time-sync`)
+- `leadTimeDays = data_situacao_final − data_emissao` (fallback principal data_emissao).
+- Situações finais de `inventory_policy_config.purchase_arrived_situacao_ids` (nova coluna de config); erro claro se vazio.
+- `normalizeStatusName()` (sem acento/espaço/caixa) para comparar situações.
+- Fornecedor vem do **cabeçalho da compra** (`fornecedor_id`/`nome_fornecedor`), atribuído a cada produto da compra.
+- Gera `product_supplier_history` por linha de produto e agrega `product_supplier_stats`.
+- Aceitar 1–2 amostras com `confidence_level = low` (remover trava `sample_count >= 3`).
+- Não descartar fornecedor por mudança de status em lote — apenas marcar `possible_batch_update`.
 
----
+Fornecedor preferencial: mais comprado em 365d → mais recente → menor mediana de LT → `products_index.fornecedor_id` → sem fornecedor. `lead_time_source`: produto_fornecedor_historico / fornecedor_historico / mediana_global / fallback_padrao (com alerta no fallback).
 
-## Fase 2 — Edge Function `inventory-planning-run`
-Orquestra tudo no backend (respeitando rate limit GC: batching ~1.1s, retries):
-1. Lê `products_index` (produtos ativos que movimentam estoque).
-2. Lê `inventory_consumption_events` (consumo histórico já sincronizado).
-3. Estoque atual: usa cache local / bulk-stock; sinaliza alerta quando ausente.
-4. PCs em aberto: situações de `inventory_policy_config.purchase_crossref_situacao_ids`; ignora antigas (>90d → alerta, não desconta).
-5. Orçamentos pendentes: situações de `budget_crossref_situacao_ids`; pondera por situação (aprovado 1.0 / aguardando 0.7 / negociação 0.4 / fallback 0.7).
-6. Lead time por fornecedor de `supplier_lead_times` (fallback 21d).
-7. Aplica `inventory_policy_overrides`.
-8. Roda o motor (série 12m com meses zerados, ABC/XYZ, padrão de demanda, mínimo operacional, safety stock por z-score, ROP, estoque máximo por cobertura, saldo projetado, condição de compra, bloqueios anti-ruído).
-9. Grava `inventory_planning_runs` + `inventory_purchase_suggestions`.
-
-A fórmula reaproveita a lógica já existente hoje na página (já validada) — apenas portada para Deno e persistida.
-
-## Fase 3 — Edge Function `create-gc-purchase-from-suggestions`
-Recebe `suggestion_ids`, valida `qty_sugerida > 0`, agrupa por `fornecedor_id`, monta `POST /api/compras` (via proxy GC existente), cria a compra, salva `gc_compra_id` na sugestão. **Nunca cria sem aprovação explícita.**
-
-## Fase 4 — Cron diário
-Encadear às 06:00 BRT: `sync-products` → `inventory-consumption-sync` → `inventory-lead-time-sync` → `inventory-planning-run` (via pg_cron + pg_net, com anon key, usando insert tool).
-
-## Fase 5 — Refatorar `InventoryAnalysisPage.tsx`
-Para de ser o motor. Passa a: botão "Rodar Planejamento" (chama a function), mostrar último run, listar `inventory_purchase_suggestions` via React Query, filtros (fornecedor/risco/grupo/valor), exportar CSV (UTF-8 BOM, `;`), selecionar itens e "Gerar Compra no GestãoClick" agrupado por fornecedor.
-
----
+## Fase 5 — Espelhar no motor persistido (`inventory-planning-run`)
+Aplicar o mesmo gate de giro/elegibilidade e a mesma separação de demanda para a lista automática/cron, mantendo consistência com a tela.
 
 ## Detalhes técnicos
-- Aba "Lista de Compras" lê da tabela, não recalcula no cliente.
-- Mantém formatação pt-BR e exportação CSV com BOM/`;` (regra do projeto).
-- Identificação sempre `[Código Interno] Nome`.
-- Motivos/alertas exibidos por linha, como hoje, vindos do jsonb persistido.
+- Chave de agregação SEMPRE `produto_id` (sem `item_key`/`variacao_id`).
+- Config nova: `purchase_arrived_situacao_ids` e fatores de situação de orçamento em `inventory_policy_config` (editável na Política de Estoque).
+- Formatação pt-BR e CSV com BOM/`;` mantidos.
 
-## Ordem de execução
-1. Migração (Fase 1) — requer aprovação.
-2. Functions (Fases 2–3).
-3. Cron (Fase 4).
-4. Refatorar tela (Fase 5).
+## Critérios de aceite
+- Orçamento pendente nunca compra peça sem giro automaticamente.
+- Peças recorrentes com estoque baixo entram na compra; PC aberta abate necessidade.
+- Lead time = data_emissao → situação final configurada; fornecedor da peça vem da compra.
+- Histórico produto×fornecedor criado das compras finalizadas; não depende só do cadastro do produto.
+- Ranking ABC pode mostrar item caro como A, mas a lista de compras não o sugere com 1 venda.
 
-## Observação
-Esta é uma reescrita grande. Sugiro fazer Fase 1+2+5 primeiro (gerar e exibir sugestões persistidas) e validar os números contra a tela atual antes de ligar criação de compra (Fase 3) e o cron (Fase 4).
+Sugiro executar por fases nesta ordem (1→2 dão valor imediato na tela; 3→4 destravam lead time real; 5 alinha o cron). Posso começar pela Fase 1+2 e seguir.

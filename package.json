@@ -49,6 +49,8 @@
     "@streamdown/mermaid": "^1.0.2",
     "@supabase/supabase-js": "^2.98.0",
     "@tanstack/react-query": "^5.83.0",
+    "@zxing/browser": "^0.2.0",
+    "@zxing/library": "^0.23.0",
     "ai": "^6.0.196",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",

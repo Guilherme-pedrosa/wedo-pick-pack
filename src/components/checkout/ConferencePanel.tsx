@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { matchItemByCode } from '@/lib/scanMatcher';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,6 @@ export default function ConferencePanel() {
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
 
-  const [scanCode, setScanCode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
@@ -28,7 +27,8 @@ export default function ConferencePanel() {
   const [forced, setForced] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
-  const scanRef = useRef<HTMLInputElement>(null);
+
+
 
   // Timer - only update the elapsed string, not the whole component
   useEffect(() => {
@@ -53,24 +53,8 @@ export default function ConferencePanel() {
     return () => { document.title = 'WeDo Checkout'; };
   }, [session?.codigo, session?.concludedAt]);
 
-  // Auto-focus scan input only when session starts/changes
-  useEffect(() => {
-    if (session?.refId && !session.concludedAt) {
-      scanRef.current?.focus();
-    }
-  }, [session?.refId, session?.concludedAt]);
+  // (texto/teclado de digitação removidos — leitura apenas por câmera)
 
-  // F2 shortcut
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'F2') {
-        e.preventDefault();
-        scanRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
 
   // Clear feedback
   useEffect(() => {
@@ -79,23 +63,24 @@ export default function ConferencePanel() {
     return () => clearTimeout(t);
   }, [feedback]);
 
-  const processScan = useCallback((code: string, qty: number) => {
-    if (!session || !code.trim()) return;
+  const processScan = useCallback((code: string, qty: number): boolean => {
+    if (!session || !code.trim()) return false;
 
     const match = matchItemByCode(code, session.items);
     if (!match) {
       setFeedback({ type: 'error', msg: 'Código não encontrado nesta OS/Venda' });
       toast.error('Código não encontrado nesta OS/Venda');
-      scanRef.current?.classList.add('scan-shake');
-      setTimeout(() => scanRef.current?.classList.remove('scan-shake'), 500);
+      return false;
     } else if (match.conferido) {
       setFeedback({ type: 'error', msg: `${match.nome_produto} — já completamente conferido` });
       toast.error(`${match.nome_produto} — já completamente conferido`);
+      return false;
     } else {
       const remaining = match.qtd_total - match.qtd_conferida;
       if (qty > remaining) {
         setFeedback({ type: 'error', msg: `${match.nome_produto} — quantidade informada (${qty}) excede o restante (${remaining})` });
         toast.error(`Quantidade informada (${qty}) excede o restante na OS (${remaining})`);
+        return false;
       } else {
         confirmItem(match.id, qty);
         const newQtd = match.qtd_conferida + qty;
@@ -106,6 +91,7 @@ export default function ConferencePanel() {
           setFeedback({ type: 'success', msg: `✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total} conferidos` });
           toast.success(`✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total}`);
         }
+        return true;
       }
     }
   }, [session, confirmItem]);
@@ -130,15 +116,11 @@ export default function ConferencePanel() {
       : String(value).replace('.', ',');
   }, []);
 
-  const handleScan = useCallback(() => {
+  const scanQtyValue = useCallback(() => {
     const hasFractional = session?.items.some(i => i.qtd_total % 1 !== 0);
     const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-    const effectiveQty = (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
-    processScan(scanCode, effectiveQty);
-    setScanCode('');
-    setScanQty('1');
-    scanRef.current?.focus();
-  }, [scanCode, scanQty, processScan, session?.items, parseScanQty]);
+    return (hasLargeQty || hasFractional) ? parseScanQty(scanQty) : 1;
+  }, [scanQty, session?.items, parseScanQty]);
 
   const handlePrint = useCallback(() => {
     if (!session) return;
@@ -270,38 +252,23 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         </div>
       </div>
 
-      {/* Scan zone */}
+      {/* Scan zone — leitura exclusiva por câmera */}
       <div className="border-2 border-secondary bg-secondary/10 mx-3 md:mx-4 mt-3 md:mt-4 rounded-lg p-3">
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Scan className="h-3.5 w-3.5" /> Código do item
+            <Scan className="h-3.5 w-3.5" /> Leitura por código de barras
           </label>
           <div className="flex gap-2">
-            <Input
-              ref={scanRef}
-              value={scanCode}
-              onChange={e => setScanCode(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
-              placeholder="Código de barras ou produto…"
-              className="text-base py-3 border-2 border-secondary focus:border-secondary flex-1"
-              autoComplete="off"
-              spellCheck={false}
-              autoFocus
-            />
             <Button
-              variant="secondary"
-              size="icon"
-              className="h-[46px] w-[46px] shrink-0"
+              className="flex-1 h-[52px] gap-2 text-base"
               onClick={() => setCameraOpen(true)}
-              title="Escanear com câmera"
             >
               <Camera className="h-5 w-5" />
+              {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
             </Button>
-          </div>
-          {showQtyField && (
-            <div className="flex gap-2">
-              <div className="w-20">
-                <label className="text-xs font-medium text-muted-foreground">Qtd</label>
+            {showQtyField && (
+              <div className="w-24">
+                <label className="text-[10px] font-medium text-muted-foreground">Qtd por leitura</label>
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -318,11 +285,8 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                   className="text-base py-3 text-center"
                 />
               </div>
-              <div className="flex items-end">
-                <Button onClick={handleScan} className="h-[46px] px-6">OK</Button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         {feedback && (
           <p className={`mt-2 text-sm font-medium ${feedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
@@ -331,21 +295,17 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         )}
       </div>
 
-      {/* Lazy-loaded barcode scanner */}
+      {/* Lazy-loaded barcode scanner (leitura contínua) */}
       {cameraOpen && (
         <Suspense fallback={null}>
           <BarcodeScannerModal
             open={cameraOpen}
             onClose={() => setCameraOpen(false)}
-            onScan={(code) => {
-              const hasFrac = session?.items.some(i => i.qtd_total % 1 !== 0);
-              const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-              processScan(code, (hasLargeQty || hasFrac) ? parseScanQty(scanQty) : 1);
-              scanRef.current?.focus();
-            }}
+            onScan={(code) => processScan(code, scanQtyValue())}
           />
         </Suspense>
       )}
+
 
       {/* Progress */}
       <div className="px-3 md:px-4 py-2">

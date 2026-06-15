@@ -79,23 +79,24 @@ export default function ConferencePanel() {
     return () => clearTimeout(t);
   }, [feedback]);
 
-  const processScan = useCallback((code: string, qty: number) => {
-    if (!session || !code.trim()) return;
+  const processScan = useCallback((code: string, qty: number): boolean => {
+    if (!session || !code.trim()) return false;
 
     const match = matchItemByCode(code, session.items);
     if (!match) {
       setFeedback({ type: 'error', msg: 'Código não encontrado nesta OS/Venda' });
       toast.error('Código não encontrado nesta OS/Venda');
-      scanRef.current?.classList.add('scan-shake');
-      setTimeout(() => scanRef.current?.classList.remove('scan-shake'), 500);
+      return false;
     } else if (match.conferido) {
       setFeedback({ type: 'error', msg: `${match.nome_produto} — já completamente conferido` });
       toast.error(`${match.nome_produto} — já completamente conferido`);
+      return false;
     } else {
       const remaining = match.qtd_total - match.qtd_conferida;
       if (qty > remaining) {
         setFeedback({ type: 'error', msg: `${match.nome_produto} — quantidade informada (${qty}) excede o restante (${remaining})` });
         toast.error(`Quantidade informada (${qty}) excede o restante na OS (${remaining})`);
+        return false;
       } else {
         confirmItem(match.id, qty);
         const newQtd = match.qtd_conferida + qty;
@@ -106,6 +107,7 @@ export default function ConferencePanel() {
           setFeedback({ type: 'success', msg: `✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total} conferidos` });
           toast.success(`✓ ${match.nome_produto} — ${newQtd}/${match.qtd_total}`);
         }
+        return true;
       }
     }
   }, [session, confirmItem]);

@@ -1234,7 +1234,7 @@ export default function InventoryAnalysisPage() {
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe A</p>
           <p className="text-xl font-bold text-destructive mt-0.5">{kpis.aCount}</p>
-          <p className="text-[10px] text-muted-foreground">{(thresholds.A * 100).toFixed(0)}% do valor · seg ×{ABC_SAFETY.A}</p>
+          <p className="text-[10px] text-muted-foreground">{(thresholds.A * 100).toFixed(0)}% do valor · z {POLICY.zScores.A}</p>
         </Card>
         <Card className="p-3">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Classe B</p>

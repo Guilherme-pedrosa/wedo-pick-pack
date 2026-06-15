@@ -287,20 +287,35 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         </div>
       </div>
 
-      {/* Scan zone — leitura exclusiva por câmera */}
+      {/* Scan zone — desktop: coletor/scanner USB · mobile: câmera */}
       <div className="border-2 border-secondary bg-secondary/10 mx-3 md:mx-4 mt-3 md:mt-4 rounded-lg p-3">
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Scan className="h-3.5 w-3.5" /> Leitura por código de barras
+            <Scan className="h-3.5 w-3.5" />
+            {isMobile ? 'Leitura por câmera' : 'Leitura por coletor (scanner)'}
           </label>
           <div className="flex gap-2">
-            <Button
-              className="flex-1 h-[52px] gap-2 text-base"
-              onClick={() => setCameraOpen(true)}
-            >
-              <Camera className="h-5 w-5" />
-              {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
-            </Button>
+            {isMobile ? (
+              <Button
+                className="flex-1 h-[52px] gap-2 text-base"
+                onClick={() => setCameraOpen(true)}
+              >
+                <Camera className="h-5 w-5" />
+                {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
+              </Button>
+            ) : (
+              <Input
+                ref={scanRef}
+                value={scanCode}
+                onChange={e => setScanCode(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
+                placeholder="Aponte o coletor e leia o código de barras…"
+                className="text-base py-3 border-2 border-secondary focus:border-secondary flex-1 h-[52px]"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+              />
+            )}
             {showQtyField && (
               <div className="w-24">
                 <label className="text-[10px] font-medium text-muted-foreground">Qtd por leitura</label>
@@ -328,6 +343,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             {feedback.msg}
           </p>
         )}
+
       </div>
 
       {/* Lazy-loaded barcode scanner (leitura contínua) */}

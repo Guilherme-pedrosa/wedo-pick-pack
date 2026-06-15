@@ -477,135 +477,267 @@ export default function InventoryAnalysisPage() {
     return Math.round(sorted.length % 2 ? sorted[mid].avg_lead_time_days : (sorted[mid - 1].avg_lead_time_days + sorted[mid].avg_lead_time_days) / 2);
   }, [leadTimesQuery.data]);
 
-  // Build analysis items with ABC + per-supplier ROP
+  // ===========================================================================
+  // MOTOR DE PLANEJAMENTO POR PRODUTO_ID (estilo ERP/EAM).
+  // Todos os cruzamentos (estoque, PC, orçamento, consumo) por produto_id.
+  // ===========================================================================
   const analysisItems: AnalysisItem[] = useMemo(() => {
     const rows = consumptionQuery.data || [];
     const names = namesQuery.data || new Map();
     if (rows.length === 0) return [];
 
-    const totalScore = rows.reduce((s, r) => s + r.hybrid_score, 0);
+    // --- ABC clássico por valor de consumo (custo × qtd) ---
+    const totalValue = rows.reduce((s, r) => s + r.consumption_value, 0);
     let cumulative = 0;
 
-    return rows.map(r => {
-      cumulative += r.hybrid_score;
-      const pct = totalScore > 0 ? cumulative / totalScore : 0;
-      const abcClass: 'A' | 'B' | 'C' = pct <= thresholds.A ? 'A' : pct <= thresholds.B ? 'B' : 'C';
+    // Pré-computar as chaves dos últimos analysisMonths meses (mais recente primeiro).
+    const now = new Date();
+    const monthKeys: string[] = [];
+    for (let i = 0; i < POLICY.analysisMonths; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    return rows.map((r): AnalysisItem => {
+      cumulative += r.consumption_value;
+      const pct = totalValue > 0 ? cumulative / totalValue : 0;
+      const abcClass: ABCClass = pct <= thresholds.A ? 'A' : pct <= thresholds.B ? 'B' : 'C';
+
       const info = names.get(r.produto_id);
-      const avgDaily = lookbackDays > 0 ? r.total_qty / lookbackDays : 0;
-      const estoque = stockMap.get(r.produto_id) ?? null;
-      
-      // Use THIS product's supplier lead time, not global average
+      const nome = info?.nome || `Produto ${r.produto_id}`;
+      const unitCost = info?.valor_custo ?? (r.total_qty > 0 ? r.total_value / r.total_qty : 0);
+      const isCritical = inferCriticality(nome);
+
+      // --- Séries mensais (incluindo zeros) ---
+      const monthlySeries = monthKeys.map(k => r.monthly_qty?.[k] || 0); // 12 meses (recente→antigo)
+      const recentSeries = monthlySeries.slice(0, POLICY.recentMonths);
+      const historicalMonthlyAvg = monthlySeries.reduce((s, v) => s + v, 0) / monthlySeries.length;
+      const recentMonthlyAvg = recentSeries.length
+        ? recentSeries.reduce((s, v) => s + v, 0) / recentSeries.length
+        : 0;
+      // média ponderada recente: mês atual 0.5, anterior 0.3, dois meses atrás 0.2
+      const recentWeightedAvg =
+        (recentSeries[0] || 0) * 0.5 +
+        (recentSeries[1] || 0) * 0.3 +
+        (recentSeries[2] || 0) * 0.2;
+
+      const monthlyStdDev = stdDev(monthlySeries);
+      const cv = historicalMonthlyAvg > 0 ? monthlyStdDev / historicalMonthlyAvg : null;
+      const nonZeroMonths = monthlySeries.filter(v => v > 0).length;
+      const adi = nonZeroMonths > 0 ? POLICY.analysisMonths / nonZeroMonths : null;
+
+      // --- XYZ ---
+      const cvVal = cv ?? 0;
+      const xyzClass: XYZClass = cvVal <= 0.5 ? 'X' : cvVal <= 1.0 ? 'Y' : 'Z';
+
+      // --- Padrão de demanda ---
+      const cv2 = cvVal * cvVal;
+      let demandPattern: DemandPattern;
+      if (nonZeroMonths === 0) demandPattern = 'sem_demanda';
+      else if (adi! <= 1.32 && cv2 <= 0.49) demandPattern = 'regular';
+      else if (adi! > 1.32 && cv2 <= 0.49) demandPattern = 'intermitente';
+      else if (adi! <= 1.32 && cv2 > 0.49) demandPattern = 'erratica';
+      else demandPattern = 'lumpy';
+
+      // --- Recorrência ---
+      const isRecurring =
+        r.source_count >= POLICY.minRecurringSources ||
+        r.event_count >= POLICY.minRecurringSources ||
+        r.total_qty >= POLICY.minRecurringQty ||
+        nonZeroMonths >= 2;
+
+      // --- Previsão de demanda mensal por padrão ---
+      const baseForecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg);
+      let forecastMonthly: number;
+      if (demandPattern === 'intermitente') forecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg * 0.7);
+      else if (demandPattern === 'lumpy') forecastMonthly = historicalMonthlyAvg;
+      else if (demandPattern === 'sem_demanda') forecastMonthly = 0;
+      else forecastMonthly = baseForecastMonthly; // regular / erratica
+
+      // --- Lead time (por fornecedor; senão padrão), com limites ---
       const fornecedorId = info?.fornecedor_id || null;
       const supplierLT = fornecedorId ? supplierLTMap.get(fornecedorId) : null;
-      const leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : fallbackLeadTime;
+      let leadTimeDays = supplierLT ? supplierLT.avg_lead_time_days : POLICY.defaultLeadTimeDays;
+      leadTimeDays = Math.min(POLICY.maxLeadTimeDays, Math.max(POLICY.minLeadTimeDays, leadTimeDays));
       const fornecedorNome = supplierLT?.fornecedor_nome || null;
-      // (grupo ESPECÍFICO segue mesma regra dos demais — sem distinção)
+      const usedDefaultLT = !supplierLT;
 
-      // ============================================================
-      // MÉDIA PONDERADA MENSAL — últimos 3 meses, mais recente pesa mais.
-      // Ex.: mês atual=5, anterior=1, retrasado=0 → (5*3 + 1*2 + 0*1) / 6 = 2,83 un/mês.
-      // O teto de compra é 1 mês de cobertura máximo.
-      // ============================================================
-      const now = new Date();
-      const monthKeys: string[] = [];
-      for (let i = 0; i < 3; i++) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        monthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-      }
-      const weights = [3, 2, 1]; // mês atual, -1, -2
-      let weightedSum = 0;
-      let weightTotal = 0;
-      for (let i = 0; i < monthKeys.length; i++) {
-        const q = r.monthly_qty?.[monthKeys[i]] || 0;
-        weightedSum += q * weights[i];
-        weightTotal += weights[i];
-      }
-      const monthlyWeightedAvg = weightTotal > 0 ? weightedSum / weightTotal : 0;
-      const targetCoverage = Math.ceil(monthlyWeightedAvg); // teto = 1 mês
+      // --- Demanda diária ---
+      const avgDailyDemand = forecastMonthly / 30;
+      const stdDailyDemand = monthlyStdDev / 30;
 
-      const safetyFactor = ABC_SAFETY[abcClass];
-      const coverageTarget = leadTimeDays;
-      // ROP mantido apenas como referência informativa (gatilho de cobertura), mas
-      // a sugestão real é limitada pela média ponderada mensal.
-      const ropAvg = avgDaily * leadTimeDays * safetyFactor;
-      const sourceCount = r.source_count ?? 0;
-      const avgQtyPerDoc = sourceCount > 0 ? r.total_qty / sourceCount : 0;
-      let ropRecurrence = 0;
-      if (sourceCount >= 2) {
-        const firstMs = new Date(r.first_date).getTime();
-        const lastMs = new Date(r.last_date).getTime();
-        const spanDays = Math.max(1, (lastMs - firstMs) / 86400000);
-        const intervalDays = spanDays / (sourceCount - 1);
-        const expectedDocsInLT = leadTimeDays / intervalDays;
-        ropRecurrence = Math.max(avgQtyPerDoc, expectedDocsInLT * avgQtyPerDoc * safetyFactor);
+      // --- Estoque de segurança ---
+      const z = isCritical ? POLICY.zScores.critical : POLICY.zScores[abcClass];
+      let safetyStock = Math.ceil(z * stdDailyDemand * Math.sqrt(leadTimeDays));
+      if (!Number.isFinite(safetyStock) || safetyStock < 0) safetyStock = 0;
+      // teto por custo para demanda intermitente/lumpy não explodir
+      if (demandPattern === 'intermitente' || demandPattern === 'lumpy') {
+        safetyStock = Math.min(safetyStock, getMaxShelfQtyByCost(unitCost, forecastMonthly));
       }
-      const rop = Math.max(ropAvg, ropRecurrence);
-      const diasCobertura = estoque !== null && avgDaily > 0 ? estoque / avgDaily : null;
 
-      // Budget demand (orçamentos pendentes)
+      // --- Mínimo operacional (peça barata recorrente / crítica) ---
+      const operationalMinimum = getOperationalMinimum(unitCost, isRecurring, isCritical);
+
+      // --- Demanda de orçamento ponderada ---
       const orcEntry = orcMap.get(r.produto_id);
       const orcQty = orcEntry?.qtd || 0;
       const orcRefs = orcEntry?.refs || [];
+      // sistema não diferencia aprovado/pendente → usa fator pendente
+      const budgetDemandQty = orcQty * POLICY.pendingBudgetDemandFactor;
 
-      // Necessidade base = cobrir 1 mês (média ponderada) + orçamentos pendentes,
-      // descontando APENAS estoque positivo (estoque negativo no ERP não justifica
-      // inflar compra — é ajuste pendente, não demanda real).
-      // TETO ABSOLUTO: 1 mês de cobertura + orçamentos. Nunca sugerir mais do que isso.
-      const estoquePositivo = Math.max(0, estoque ?? 0);
-      const demandaTotal = targetCoverage + orcQty; // teto duro
-      const baseNeed = estoque !== null
-        ? Math.max(0, Math.min(demandaTotal, Math.ceil(demandaTotal - estoquePositivo)))
-        : null;
-      let qtyAComprar: number | null = baseNeed;
-
-      // Regra unificada: qualquer grupo segue baseNeed (cobertura mensal ponderada
-      // + orçamentos − estoque). Salvaguarda abaixo trata casos sem demanda real.
-
-
-      // Salvaguarda final: se não há orçamento e a média ponderada mensal é zero,
-      // não sugerir compra por histórico antigo. Evita pedir 15 peças com 4 saídas
-      // na vida toda e nenhum orçamento.
-      if (orcQty === 0 && monthlyWeightedAvg === 0) {
-        qtyAComprar = 0;
-      }
-
-      // Cross-reference with active purchase orders
+      // --- Pedido de compra em aberto ---
       const pcEntry = pcMap.get(r.produto_id);
       const pcQty = pcEntry?.qtd || 0;
       const pcRefs = pcEntry?.refs || [];
-      const qtyLiquida = qtyAComprar !== null ? Math.max(0, qtyAComprar - pcQty) : null;
+      // (sem data de PC validada disponível por item → mantém comportamento atual)
+      const effectivePcQty = pcQty;
+
+      // --- Estoque e saldo projetado ---
+      const estoque = stockMap.get(r.produto_id) ?? null;
+      const stockKnown = estoque !== null && estoque !== undefined;
+      const estoqueBase = stockKnown ? estoque! : 0;
+      const projectedAvailable = stockKnown
+        ? estoqueBase + effectivePcQty - budgetDemandQty
+        : null;
+
+      // --- Ponto de ressuprimento ---
+      const demandDuringLeadTime = avgDailyDemand * leadTimeDays;
+      let reorderPoint = Math.ceil(demandDuringLeadTime + safetyStock);
+      reorderPoint = Math.max(reorderPoint, operationalMinimum);
+
+      // --- Estoque máximo alvo ---
+      const coverageDays = getCoverageDaysByCost(unitCost);
+      let maxStock = Math.ceil(avgDailyDemand * (leadTimeDays + coverageDays) + safetyStock);
+      maxStock = Math.max(maxStock, operationalMinimum);
+      if (unitCost > POLICY.lowCostThresholds.moderate && demandPattern === 'lumpy' && !isCritical && budgetDemandQty <= 0) {
+        maxStock = 0;
+      }
+
+      // --- Regra final de compra ---
+      const projForCompare = projectedAvailable ?? estoqueBase;
+      const shouldReorder =
+        projForCompare <= reorderPoint ||
+        budgetDemandQty > estoqueBase ||
+        (estoqueBase <= 0 && operationalMinimum > 0);
+
+      let qtyToBuy = shouldReorder ? maxStock - projForCompare : 0;
+      qtyToBuy = Math.max(0, Math.ceil(qtyToBuy));
+      // cobrir orçamento se maior que o máximo
+      if (budgetDemandQty > 0) {
+        qtyToBuy = Math.max(qtyToBuy, Math.ceil(budgetDemandQty - estoqueBase - effectivePcQty));
+        qtyToBuy = Math.max(0, qtyToBuy);
+      }
+
+      // --- Lote mínimo / múltiplo de compra (se existirem no cadastro) ---
+      const minOrderQty = Number((info as any)?.min_order_qty || 0) || 0;
+      const orderMultiple = Number((info as any)?.order_multiple || 0) || 0;
+      if (qtyToBuy > 0 && minOrderQty > 0) qtyToBuy = Math.max(qtyToBuy, minOrderQty);
+      if (qtyToBuy > 0 && orderMultiple > 0) qtyToBuy = Math.ceil(qtyToBuy / orderMultiple) * orderMultiple;
+
+      // --- Bloqueios (não comprar peça errada) ---
+      const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
+      const daysSinceLastConsumption = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
+      const staleDemand = daysSinceLastConsumption > POLICY.staleDemandDays;
+      const oneOffDemand = r.source_count <= 1 && r.event_count <= 1 && nonZeroMonths <= 1;
+      if (staleDemand && oneOffDemand && budgetDemandQty <= 0 && !isCritical) {
+        qtyToBuy = 0;
+      }
+      // peça cara com saída única antiga sem orçamento/criticidade → não comprar
+      if (oneOffDemand && budgetDemandQty <= 0 && !isCritical && !isRecurring && operationalMinimum === 0) {
+        qtyToBuy = 0;
+      }
+
+      // --- Motivos e alertas ---
+      const motivos: string[] = [];
+      const alertas: string[] = [];
+      if (qtyToBuy > 0) {
+        if (stockKnown && projForCompare <= reorderPoint) motivos.push('Estoque projetado abaixo do ponto de ressuprimento');
+        if (stockKnown && estoqueBase <= 0) motivos.push('Estoque atual zerado');
+        if (operationalMinimum > 0 && estoqueBase < operationalMinimum) motivos.push('Peça barata recorrente abaixo do mínimo operacional');
+        if (budgetDemandQty > 0) motivos.push('Orçamento pendente gerou demanda prevista');
+        if (safetyStock > 0 && leadTimeDays >= 21) motivos.push('Lead time do fornecedor exige estoque de segurança');
+        if (recentWeightedAvg > historicalMonthlyAvg) motivos.push('Demanda recente maior que média histórica');
+        if (demandPattern === 'intermitente') motivos.push('Demanda intermitente tratada com mínimo operacional');
+        if (pcQty > 0 && effectivePcQty < reorderPoint) motivos.push('Pedido de compra em aberto insuficiente');
+        if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');
+      }
+      if (!stockKnown) alertas.push('Estoque atual não carregado');
+      if (usedDefaultLT) alertas.push('Sem lead time do fornecedor, usado padrão');
+      if (oneOffDemand) alertas.push('Demanda baseada em apenas um evento');
+      if (staleDemand) alertas.push('Produto com demanda antiga');
+
+      // --- Risco operacional (ordenação) ---
+      const stockoutRisk = (projForCompare <= 0) ? 100 : 0;
+      const belowRopRisk = (projForCompare <= reorderPoint) ? 50 : 0;
+      const budgetRisk = (budgetDemandQty > estoqueBase) ? 40 : 0;
+      const criticalityRisk = isCritical ? 30 : 0;
+      const leadTimeRisk = leadTimeDays >= 30 ? 20 : 0;
+      const recurrenceRisk = isRecurring ? 10 : 0;
+      const riskScore = stockoutRisk + belowRopRisk + budgetRisk + criticalityRisk + leadTimeRisk + recurrenceRisk;
+
+      const avgDaily = avgDailyDemand;
+      const diasCobertura = stockKnown && avgDaily > 0 ? estoqueBase / avgDaily : null;
+      const qtyLiquida = Math.max(0, qtyToBuy - effectivePcQty);
 
       return {
         produto_id: r.produto_id,
-        nome: info?.nome || `Produto ${r.produto_id}`,
+        nome,
         codigo_interno: info?.codigo_interno || null,
-        grupo: info?.grupo || null,
-        valor_custo: info?.valor_custo ?? null,
         fornecedor_id: fornecedorId,
         fornecedor_nome: fornecedorNome,
+        grupo: info?.grupo || null,
+        valor_custo: info?.valor_custo ?? null,
+
         total_qty: r.total_qty,
         total_value: r.total_value,
         event_count: r.event_count,
         source_count: r.source_count,
-        hybrid_score: r.hybrid_score,
-        avg_daily: avgDaily,
+        client_count: r.client_count,
+
+        historical_monthly_avg: historicalMonthlyAvg,
+        recent_monthly_avg: recentMonthlyAvg,
+        forecast_monthly: forecastMonthly,
+        monthly_std_dev: monthlyStdDev,
+        cv,
+        adi,
+        non_zero_months: nonZeroMonths,
+
         abc_class: abcClass,
         cumulative_pct: pct,
+        xyz_class: xyzClass,
+        demand_pattern: demandPattern,
+        is_critical: isCritical,
+        is_recurring: isRecurring,
+
         estoque_atual: estoque,
-        dias_cobertura: diasCobertura,
-        lead_time_days: leadTimeDays,
-        rop,
-        qty_a_comprar: qtyAComprar,
-        qty_liquida: qtyLiquida,
+        stock_known: stockKnown,
         pc_qty: pcQty,
-        pc_refs: pcRefs,
+        effective_pc_qty: effectivePcQty,
         orc_qty: orcQty,
+        budget_demand_qty: budgetDemandQty,
+        projected_available: projectedAvailable,
+
+        avg_daily: avgDaily,
+        lead_time_days: leadTimeDays,
+        safety_stock: safetyStock,
+        operational_minimum: operationalMinimum,
+        reorder_point: reorderPoint,
+        max_stock: maxStock,
+        dias_cobertura: diasCobertura,
+
+        qty_a_comprar: qtyToBuy,
+        qty_liquida: qtyLiquida,
+
+        risk_score: riskScore,
+        motivos_sugestao: motivos,
+        alertas,
+
+        pc_refs: pcRefs,
         orc_refs: orcRefs,
         source_refs: r.source_refs || [],
-        coverage_target: coverageTarget,
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, lookbackDays, thresholds, supplierLTMap, fallbackLeadTime]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, thresholds, supplierLTMap]);
 
   // Unique groups for filter
   const uniqueGrupos = useMemo(() => {

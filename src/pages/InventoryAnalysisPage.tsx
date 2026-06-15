@@ -1417,23 +1417,23 @@ export default function InventoryAnalysisPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="w-12">ABC</TableHead>
-                      <TableHead className="w-10">XYZ</TableHead>
-                      <TableHead>Produto</TableHead>
-                      <TableHead>Padrão</TableHead>
-                      <TableHead className="text-right">Custo Unit.</TableHead>
-                      <TableHead className="text-right">Estoque</TableHead>
-                      <TableHead className="text-right text-blue-600">PC Aberto</TableHead>
-                      <TableHead className="text-right text-amber-600">Orç. Pond.</TableHead>
-                      <TableHead className="text-right">Saldo Proj.</TableHead>
-                      <TableHead className="text-right">LT</TableHead>
-                      <TableHead className="text-right">Est. Seg.</TableHead>
-                      <TableHead className="text-right">Mín. Op.</TableHead>
-                      <TableHead className="text-right">ROP</TableHead>
-                      <TableHead className="text-right">Est. Máx.</TableHead>
-                      <TableHead className="text-right">Sugerido</TableHead>
-                      <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
-                      <TableHead>Motivos / Alertas</TableHead>
+                      <TableHead className="w-10 px-2 py-1.5 text-xs">ABC</TableHead>
+                      <TableHead className="w-8 px-2 py-1.5 text-xs">XYZ</TableHead>
+                      <TableHead className="px-2 py-1.5 text-xs">Produto</TableHead>
+                      <TableHead className="px-2 py-1.5 text-xs">Padrão</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-amber-600">Orç. Pond.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Saldo Proj.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">LT</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Est. Seg.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Mín. Op.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">ROP</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Est. Máx.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Sugerido</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs font-bold text-destructive">COMPRAR</TableHead>
+                      <TableHead className="px-2 py-1.5 text-xs">Motivos / Alertas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

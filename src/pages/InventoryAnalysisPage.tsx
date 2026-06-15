@@ -1417,23 +1417,23 @@ export default function InventoryAnalysisPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead className="w-12">ABC</TableHead>
-                      <TableHead className="w-10">XYZ</TableHead>
-                      <TableHead>Produto</TableHead>
-                      <TableHead>Padrão</TableHead>
-                      <TableHead className="text-right">Custo Unit.</TableHead>
-                      <TableHead className="text-right">Estoque</TableHead>
-                      <TableHead className="text-right text-blue-600">PC Aberto</TableHead>
-                      <TableHead className="text-right text-amber-600">Orç. Pond.</TableHead>
-                      <TableHead className="text-right">Saldo Proj.</TableHead>
-                      <TableHead className="text-right">LT</TableHead>
-                      <TableHead className="text-right">Est. Seg.</TableHead>
-                      <TableHead className="text-right">Mín. Op.</TableHead>
-                      <TableHead className="text-right">ROP</TableHead>
-                      <TableHead className="text-right">Est. Máx.</TableHead>
-                      <TableHead className="text-right">Sugerido</TableHead>
-                      <TableHead className="text-right font-bold text-destructive">COMPRAR</TableHead>
-                      <TableHead>Motivos / Alertas</TableHead>
+                      <TableHead className="w-10 px-2 py-1.5 text-xs">ABC</TableHead>
+                      <TableHead className="w-8 px-2 py-1.5 text-xs">XYZ</TableHead>
+                      <TableHead className="px-2 py-1.5 text-xs">Produto</TableHead>
+                      <TableHead className="px-2 py-1.5 text-xs">Padrão</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-amber-600">Orç. Pond.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Saldo Proj.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">LT</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Est. Seg.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Mín. Op.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">ROP</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Est. Máx.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">Sugerido</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs font-bold text-destructive">COMPRAR</TableHead>
+                      <TableHead className="px-2 py-1.5 text-xs">Motivos / Alertas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1442,9 +1442,9 @@ export default function InventoryAnalysisPage() {
                         item.abc_class === 'A' ? 'bg-red-50/50 dark:bg-red-950/10' :
                         item.abc_class === 'B' ? 'bg-amber-50/50 dark:bg-amber-950/10' : ''
                       }>
-                        <TableCell>{abcBadge(item.abc_class)}</TableCell>
-                        <TableCell className="text-xs font-medium text-muted-foreground">{item.xyz_class}</TableCell>
-                        <TableCell>
+                        <TableCell className="px-2 py-1">{abcBadge(item.abc_class)}</TableCell>
+                        <TableCell className="px-2 py-1 text-xs font-medium text-muted-foreground">{item.xyz_class}</TableCell>
+                        <TableCell className="px-2 py-1">
                           <p className="text-sm font-medium truncate max-w-[260px] flex items-center gap-1">
                             {item.is_critical && <span title="Peça crítica">🔧</span>}
                             {item.nome}
@@ -1454,21 +1454,21 @@ export default function InventoryAnalysisPage() {
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
                         </TableCell>
-                        <TableCell className="text-[10px] text-muted-foreground capitalize">{item.demand_pattern.replace('_', ' ')}</TableCell>
-                        <TableCell className="text-right text-xs">
+                        <TableCell className="px-2 py-1 text-[10px] text-muted-foreground capitalize">{item.demand_pattern.replace('_', ' ')}</TableCell>
+                        <TableCell className="px-2 py-1 text-right text-xs">
                           {item.valor_custo !== null ? `R$ ${item.valor_custo.toFixed(2)}` : '—'}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="px-2 py-1 text-right">
                           {item.stock_known ? item.estoque_atual : <span className="text-amber-600 text-xs" title="Estoque não carregado">—</span>}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="px-2 py-1 text-right">
                           {item.pc_qty > 0 ? (
                             <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>
                               {item.pc_qty}un
                             </span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="px-2 py-1 text-right">
                           {item.budget_demand_qty > 0 ? (
                             <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
                               {item.budget_demand_qty.toFixed(1)}
@@ -1476,23 +1476,23 @@ export default function InventoryAnalysisPage() {
                             </span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
-                        <TableCell className="text-right text-xs">
+                        <TableCell className="px-2 py-1 text-right text-xs">
                           {item.projected_available !== null
                             ? <span className={item.projected_available <= item.reorder_point ? 'text-destructive font-bold' : ''}>{item.projected_available.toFixed(1)}</span>
                             : '—'}
                         </TableCell>
-                        <TableCell className="text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
-                        <TableCell className="text-right text-xs">{item.safety_stock}</TableCell>
-                        <TableCell className="text-right text-xs">{item.operational_minimum}</TableCell>
-                        <TableCell className="text-right text-xs">{item.reorder_point}</TableCell>
-                        <TableCell className="text-right text-xs">{item.max_stock}</TableCell>
-                        <TableCell className="text-right text-xs">{item.qty_a_comprar}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="px-2 py-1 text-right text-xs font-medium">{Math.round(item.lead_time_days)}d</TableCell>
+                        <TableCell className="px-2 py-1 text-right text-xs">{item.safety_stock}</TableCell>
+                        <TableCell className="px-2 py-1 text-right text-xs">{item.operational_minimum}</TableCell>
+                        <TableCell className="px-2 py-1 text-right text-xs">{item.reorder_point}</TableCell>
+                        <TableCell className="px-2 py-1 text-right text-xs">{item.max_stock}</TableCell>
+                        <TableCell className="px-2 py-1 text-right text-xs">{item.qty_a_comprar}</TableCell>
+                        <TableCell className="px-2 py-1 text-right">
                           <Badge variant={item.qty_liquida > 0 ? "destructive" : "secondary"} className="font-bold text-sm">
                             {item.qty_liquida}
                           </Badge>
                         </TableCell>
-                        <TableCell className="max-w-[220px]">
+                        <TableCell className="px-2 py-1 max-w-[220px]">
                           <div className="flex flex-col gap-0.5">
                             {item.motivos_sugestao.map((m, idx) => (
                               <span key={idx} className="text-[10px] text-muted-foreground">• {m}</span>

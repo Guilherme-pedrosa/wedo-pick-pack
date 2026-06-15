@@ -1436,7 +1436,9 @@ export default function InventoryAnalysisPage() {
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as AnalysisTab)}>
         <TabsList className="flex-wrap">
-          <TabsTrigger value="compras" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" /> Lista de Compras</TabsTrigger>
+          <TabsTrigger value="compras" className="gap-1"><ShoppingCart className="h-3.5 w-3.5" /> Comprar Agora</TabsTrigger>
+          <TabsTrigger value="orcsemgiro" className="gap-1"><AlertTriangle className="h-3.5 w-3.5" /> Orçamento sem Giro</TabsTrigger>
+          <TabsTrigger value="recorrenteok" className="gap-1"><PackageCheck className="h-3.5 w-3.5" /> Estoque OK</TabsTrigger>
           <TabsTrigger value="ranking" className="gap-1"><BarChart3 className="h-3.5 w-3.5" /> Ranking ABC</TabsTrigger>
           <TabsTrigger value="leadtime" className="gap-1"><Clock className="h-3.5 w-3.5" /> Lead Times</TabsTrigger>
           <TabsTrigger value="trend" className="gap-1"><TrendingUp className="h-3.5 w-3.5" /> Tendência</TabsTrigger>

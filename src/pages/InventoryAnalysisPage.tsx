@@ -152,6 +152,13 @@ interface AnalysisItem {
   qty_a_comprar: number;
   qty_liquida: number;
 
+  stock_demand_qty: number;
+  budget_signal_qty: number;
+  suggested_qty: number;
+  is_stock_eligible: boolean;
+  budget_without_giro: boolean;
+
+
   risk_score: number;
   motivos_sugestao: string[];
   alertas: string[];

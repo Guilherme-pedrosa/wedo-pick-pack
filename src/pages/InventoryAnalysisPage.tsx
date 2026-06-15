@@ -1288,6 +1288,8 @@ export default function InventoryAnalysisPage() {
     return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${variants[st]}`}>{labels[st]}</span>;
   };
 
+  const isLoading = consumptionQuery.isLoading || configQuery.isLoading;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">

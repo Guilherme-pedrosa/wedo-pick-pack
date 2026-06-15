@@ -567,6 +567,17 @@ export default function InventoryAnalysisPage() {
       const nonZeroMonths = monthlySeries.filter(v => v > 0).length;
       const adi = nonZeroMonths > 0 ? POLICY.analysisMonths / nonZeroMonths : null;
 
+      // --- Classe de GIRO (recorrência real, separada do ABC financeiro) ---
+      const nonZeroMonths90 = monthlySeries.slice(0, 3).filter(v => v > 0).length;
+      const nonZeroMonths180 = monthlySeries.slice(0, 6).filter(v => v > 0).length;
+      const lastMsGiro = r.last_date ? new Date(r.last_date).getTime() : 0;
+      const daysSinceLast = lastMsGiro ? Math.round((now.getTime() - lastMsGiro) / 86400000) : null;
+      let classeGiro: GiroClass;
+      if (r.source_count_90d >= 3 || nonZeroMonths90 >= 2) classeGiro = 'ALTO';
+      else if (r.source_count_180d >= 2 || nonZeroMonths180 >= 2) classeGiro = 'MEDIO';
+      else if (r.event_count_180d >= 1) classeGiro = 'BAIXO';
+      else classeGiro = 'SEM_GIRO';
+
       // --- XYZ ---
       const cvVal = cv ?? 0;
       const xyzClass: XYZClass = cvVal <= 0.5 ? 'X' : cvVal <= 1.0 ? 'Y' : 'Z';

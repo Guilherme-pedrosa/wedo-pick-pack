@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/hooks/useAuth';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { matchItemByCode } from '@/lib/scanMatcher';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +21,13 @@ export default function ConferencePanel() {
   const confirmItem = useCheckoutStore(s => s.confirmItem);
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
+  const { user } = useAuth();
+
+  // Apenas Guilherme e Filipe podem digitar o código manualmente; os demais
+  // ficam restritos à leitura por coletor (desktop) / câmera (mobile).
+  const ALLOWED_MANUAL_EMAILS = ['guilherme@wedocorp.com', 'filipe.carvalho@wedocorp.com'];
+  const allowManualEntry = !!user?.email && ALLOWED_MANUAL_EMAILS.includes(user.email.toLowerCase());
+  const [manualCode, setManualCode] = useState('');
 
   const isMobile = useIsMobile();
   const [scanQty, setScanQty] = useState('1');
@@ -338,6 +346,25 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                 <Camera className="h-5 w-5" />
                 {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
               </Button>
+            ) : allowManualEntry ? (
+              <Input
+                type="text"
+                value={manualCode}
+                onChange={e => setManualCode(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const code = manualCode.trim();
+                    if (!code) return;
+                    if (processScan(code, scanQtyValue())) {
+                      setManualCode('');
+                    }
+                  }
+                }}
+                placeholder="Leia ou digite o código e pressione Enter"
+                autoFocus
+                className="flex-1 h-[52px] text-base"
+              />
             ) : (
               <div
                 className={`flex-1 h-[52px] rounded-md border-2 flex items-center gap-2 px-3 text-base select-none transition-colors ${

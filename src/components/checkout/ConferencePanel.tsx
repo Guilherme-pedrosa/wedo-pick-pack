@@ -252,38 +252,23 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         </div>
       </div>
 
-      {/* Scan zone */}
+      {/* Scan zone — leitura exclusiva por câmera */}
       <div className="border-2 border-secondary bg-secondary/10 mx-3 md:mx-4 mt-3 md:mt-4 rounded-lg p-3">
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <Scan className="h-3.5 w-3.5" /> Código do item
+            <Scan className="h-3.5 w-3.5" /> Leitura por código de barras
           </label>
           <div className="flex gap-2">
-            <Input
-              ref={scanRef}
-              value={scanCode}
-              onChange={e => setScanCode(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
-              placeholder="Código de barras ou produto…"
-              className="text-base py-3 border-2 border-secondary focus:border-secondary flex-1"
-              autoComplete="off"
-              spellCheck={false}
-              autoFocus
-            />
             <Button
-              variant="secondary"
-              size="icon"
-              className="h-[46px] w-[46px] shrink-0"
+              className="flex-1 h-[52px] gap-2 text-base"
               onClick={() => setCameraOpen(true)}
-              title="Escanear com câmera"
             >
               <Camera className="h-5 w-5" />
+              {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
             </Button>
-          </div>
-          {showQtyField && (
-            <div className="flex gap-2">
-              <div className="w-20">
-                <label className="text-xs font-medium text-muted-foreground">Qtd</label>
+            {showQtyField && (
+              <div className="w-24">
+                <label className="text-[10px] font-medium text-muted-foreground">Qtd por leitura</label>
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -300,11 +285,8 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                   className="text-base py-3 text-center"
                 />
               </div>
-              <div className="flex items-end">
-                <Button onClick={handleScan} className="h-[46px] px-6">OK</Button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         {feedback && (
           <p className={`mt-2 text-sm font-medium ${feedback.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
@@ -313,21 +295,17 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
         )}
       </div>
 
-      {/* Lazy-loaded barcode scanner */}
+      {/* Lazy-loaded barcode scanner (leitura contínua) */}
       {cameraOpen && (
         <Suspense fallback={null}>
           <BarcodeScannerModal
             open={cameraOpen}
             onClose={() => setCameraOpen(false)}
-            onScan={(code) => {
-              const hasFrac = session?.items.some(i => i.qtd_total % 1 !== 0);
-              const hasLargeQty = session?.items.some(i => i.qtd_total >= 5);
-              processScan(code, (hasLargeQty || hasFrac) ? parseScanQty(scanQty) : 1);
-              scanRef.current?.focus();
-            }}
+            onScan={(code) => processScan(code, scanQtyValue())}
           />
         </Suspense>
       )}
+
 
       {/* Progress */}
       <div className="px-3 md:px-4 py-2">

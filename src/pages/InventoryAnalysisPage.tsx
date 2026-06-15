@@ -168,7 +168,7 @@ interface AnalysisItem {
   source_refs: SourceRef[];
 }
 
-type AnalysisTab = 'compras' | 'ranking' | 'leadtime' | 'trend';
+type AnalysisTab = 'compras' | 'orcsemgiro' | 'recorrenteok' | 'ranking' | 'leadtime' | 'trend';
 
 // ============================================================================
 // POLÍTICA DE REPOSIÇÃO — parâmetros centralizados e fáceis de ajustar.

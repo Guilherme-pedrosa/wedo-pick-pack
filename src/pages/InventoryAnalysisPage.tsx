@@ -776,7 +776,7 @@ export default function InventoryAnalysisPage() {
 
       const avgDaily = avgDailyDemand;
       const diasCobertura = stockKnown && avgDaily > 0 ? estoqueBase / avgDaily : null;
-      const qtyLiquida = Math.max(0, qtyToBuy - effectivePcQty);
+      const qtyLiquida = qtyToBuy; // suggestedQty já líquido de PC em aberto
 
       return {
         produto_id: r.produto_id,

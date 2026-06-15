@@ -472,6 +472,48 @@ export type Database = {
         }
         Relationships: []
       }
+      inventory_planning_runs: {
+        Row: {
+          created_at: string
+          errors_count: number
+          finished_at: string | null
+          id: string
+          lookback_days: number
+          notes: string | null
+          products_analyzed: number
+          started_at: string
+          status: string
+          suggestions_count: number
+          total_estimated_value: number
+        }
+        Insert: {
+          created_at?: string
+          errors_count?: number
+          finished_at?: string | null
+          id?: string
+          lookback_days?: number
+          notes?: string | null
+          products_analyzed?: number
+          started_at?: string
+          status?: string
+          suggestions_count?: number
+          total_estimated_value?: number
+        }
+        Update: {
+          created_at?: string
+          errors_count?: number
+          finished_at?: string | null
+          id?: string
+          lookback_days?: number
+          notes?: string | null
+          products_analyzed?: number
+          started_at?: string
+          status?: string
+          suggestions_count?: number
+          total_estimated_value?: number
+        }
+        Relationships: []
+      }
       inventory_policy_config: {
         Row: {
           abc_thresholds: Json
@@ -516,6 +558,191 @@ export type Database = {
           vendas_stockout_situacao_ids?: Json
         }
         Relationships: []
+      }
+      inventory_policy_overrides: {
+        Row: {
+          created_at: string
+          criticality: string | null
+          do_not_stock: boolean
+          id: string
+          lead_time_override_days: number | null
+          max_qty_override: number | null
+          min_qty_override: number | null
+          notes: string | null
+          preferred_supplier_id: string | null
+          produto_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criticality?: string | null
+          do_not_stock?: boolean
+          id?: string
+          lead_time_override_days?: number | null
+          max_qty_override?: number | null
+          min_qty_override?: number | null
+          notes?: string | null
+          preferred_supplier_id?: string | null
+          produto_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criticality?: string | null
+          do_not_stock?: boolean
+          id?: string
+          lead_time_override_days?: number | null
+          max_qty_override?: number | null
+          min_qty_override?: number | null
+          notes?: string | null
+          preferred_supplier_id?: string | null
+          produto_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      inventory_purchase_suggestions: {
+        Row: {
+          abc_class: string | null
+          adi: number
+          alertas: Json
+          aprovado: boolean
+          client_count: number
+          codigo_interno: string | null
+          consumo_12m: number
+          consumo_3m: number
+          created_at: string
+          cv: number
+          demand_pattern: string | null
+          demanda_prevista_mensal: number
+          estoque_atual: number | null
+          event_count: number
+          fornecedor_id: string | null
+          fornecedor_nome: string | null
+          gc_compra_id: string | null
+          grupo: string | null
+          id: string
+          is_critical: boolean
+          lead_time_days: number
+          max_stock: number
+          media_historica_mensal: number
+          media_recente_mensal: number
+          monthly_std_dev: number
+          motivos: Json
+          nome: string | null
+          operational_minimum: number
+          orcamento_ponderado_qty: number
+          orcamento_qty: number
+          pc_aberta_qty: number
+          produto_id: string
+          qty_sugerida: number
+          reorder_point: number
+          risk_score: number
+          run_id: string
+          safety_stock: number
+          saldo_projetado: number | null
+          source_count: number
+          stock_known: boolean
+          valor_custo: number | null
+          xyz_class: string | null
+        }
+        Insert: {
+          abc_class?: string | null
+          adi?: number
+          alertas?: Json
+          aprovado?: boolean
+          client_count?: number
+          codigo_interno?: string | null
+          consumo_12m?: number
+          consumo_3m?: number
+          created_at?: string
+          cv?: number
+          demand_pattern?: string | null
+          demanda_prevista_mensal?: number
+          estoque_atual?: number | null
+          event_count?: number
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          gc_compra_id?: string | null
+          grupo?: string | null
+          id?: string
+          is_critical?: boolean
+          lead_time_days?: number
+          max_stock?: number
+          media_historica_mensal?: number
+          media_recente_mensal?: number
+          monthly_std_dev?: number
+          motivos?: Json
+          nome?: string | null
+          operational_minimum?: number
+          orcamento_ponderado_qty?: number
+          orcamento_qty?: number
+          pc_aberta_qty?: number
+          produto_id: string
+          qty_sugerida?: number
+          reorder_point?: number
+          risk_score?: number
+          run_id: string
+          safety_stock?: number
+          saldo_projetado?: number | null
+          source_count?: number
+          stock_known?: boolean
+          valor_custo?: number | null
+          xyz_class?: string | null
+        }
+        Update: {
+          abc_class?: string | null
+          adi?: number
+          alertas?: Json
+          aprovado?: boolean
+          client_count?: number
+          codigo_interno?: string | null
+          consumo_12m?: number
+          consumo_3m?: number
+          created_at?: string
+          cv?: number
+          demand_pattern?: string | null
+          demanda_prevista_mensal?: number
+          estoque_atual?: number | null
+          event_count?: number
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          gc_compra_id?: string | null
+          grupo?: string | null
+          id?: string
+          is_critical?: boolean
+          lead_time_days?: number
+          max_stock?: number
+          media_historica_mensal?: number
+          media_recente_mensal?: number
+          monthly_std_dev?: number
+          motivos?: Json
+          nome?: string | null
+          operational_minimum?: number
+          orcamento_ponderado_qty?: number
+          orcamento_qty?: number
+          pc_aberta_qty?: number
+          produto_id?: string
+          qty_sugerida?: number
+          reorder_point?: number
+          risk_score?: number
+          run_id?: string
+          safety_stock?: number
+          saldo_projetado?: number | null
+          source_count?: number
+          stock_known?: boolean
+          valor_custo?: number | null
+          xyz_class?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_purchase_suggestions_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_planning_runs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       os_generation_logs: {
         Row: {

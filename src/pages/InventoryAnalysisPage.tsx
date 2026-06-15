@@ -89,6 +89,9 @@ type ABCClass = 'A' | 'B' | 'C';
 type XYZClass = 'X' | 'Y' | 'Z';
 type DemandPattern = 'regular' | 'intermitente' | 'erratica' | 'lumpy' | 'sem_demanda';
 
+type GiroClass = 'ALTO' | 'MEDIO' | 'BAIXO' | 'SEM_GIRO';
+type StatusEstoque = 'COMPRAR_ESTOQUE' | 'REVISAR_MANUALMENTE' | 'NAO_ESTOCAR' | 'ESTOQUE_OK';
+
 interface AnalysisItem {
   produto_id: string;
   nome: string;

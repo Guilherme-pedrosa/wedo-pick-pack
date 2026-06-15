@@ -340,18 +340,16 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                 {cameraOpen ? 'Escaneando…' : 'Escanear código de barras'}
               </Button>
             ) : (
-              <Input
-                ref={scanRef}
-                value={scanCode}
-                onChange={e => setScanCode(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleScan(); } }}
-                placeholder="Aponte o coletor e leia o código de barras…"
-                className="text-base py-3 border-2 border-secondary focus:border-secondary flex-1 h-[52px]"
-                autoComplete="off"
-                spellCheck={false}
-                autoFocus
-              />
+              <div
+                className={`flex-1 h-[52px] rounded-md border-2 flex items-center gap-2 px-3 text-base select-none transition-colors ${
+                  scannerActivity ? 'border-primary bg-primary/5 text-foreground' : 'border-dashed border-secondary text-muted-foreground'
+                }`}
+              >
+                <Scan className={`h-5 w-5 shrink-0 ${scannerActivity ? 'text-primary animate-pulse' : ''}`} />
+                {scannerActivity ? 'Lendo código…' : 'Aguardando leitura do coletor… (a digitação manual é bloqueada)'}
+              </div>
             )}
+
             {showQtyField && (
               <div className="w-24">
                 <label className="text-[10px] font-medium text-muted-foreground">Qtd por leitura</label>

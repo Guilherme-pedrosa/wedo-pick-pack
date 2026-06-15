@@ -33,6 +33,10 @@ interface ConsumptionRow {
   event_count: number;
   source_count: number;
   client_count: number;
+  event_count_90d: number;
+  event_count_180d: number;
+  source_count_90d: number;
+  source_count_180d: number;
   first_date: string;
   last_date: string;
   consumption_value: number;

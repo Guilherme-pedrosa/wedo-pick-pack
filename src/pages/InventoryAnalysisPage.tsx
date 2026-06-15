@@ -699,6 +699,28 @@ export default function InventoryAnalysisPage() {
         qtyToBuy = 0;
       }
 
+      // === GATE DE GIRO: ABC mede dinheiro, estoque mede giro ===
+      // (sem overrides manuais no cliente → manualStockItem/manualMinStock = false)
+      const manualStockItem = false;
+      const manualMinStock = 0;
+      const hasManual = manualStockItem || manualMinStock > 0;
+      const recurringStockDemand = classeGiro === 'ALTO' || classeGiro === 'MEDIO';
+      const oneEventOnly = r.event_count <= 1;
+      // Item caro com 1 evento → revisar manualmente, nunca compra automática
+      const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
+      // Só pode entrar na compra automática se houver giro ALTO/MEDIO ou política manual
+      const canBuyForStock = hasManual || (recurringStockDemand && !oneEventOnly);
+
+      let statusEstoque: StatusEstoque;
+      if (!canBuyForStock) {
+        qtyToBuy = 0;
+        statusEstoque = expensiveOneOff || (unitCost > 500 && oneEventOnly)
+          ? 'REVISAR_MANUALMENTE'
+          : 'NAO_ESTOCAR';
+      } else {
+        statusEstoque = qtyToBuy > 0 ? 'COMPRAR_ESTOQUE' : 'ESTOQUE_OK';
+      }
+
       // --- Motivos e alertas ---
       const motivos: string[] = [];
       const alertas: string[] = [];

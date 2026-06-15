@@ -21,6 +21,8 @@ export default function ConferencePanel() {
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
 
+  const isMobile = useIsMobile();
+  const [scanCode, setScanCode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
@@ -28,6 +30,9 @@ export default function ConferencePanel() {
   const [forced, setForced] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const scanRef = useRef<HTMLInputElement>(null);
+
+
 
 
 

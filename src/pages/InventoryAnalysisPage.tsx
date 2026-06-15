@@ -753,7 +753,8 @@ export default function InventoryAnalysisPage() {
         if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');
       }
       if (!stockKnown) alertas.push('Sem estoque atual carregado');
-      if (usedDefaultLT) alertas.push('Sem lead time real, usado fallback');
+      // Lead time real = intervalo entre a SITUAÇÃO DE INÍCIO do pedido de compra
+      // e a DATA DE ENTRADA no estoque daquele pedido (Fase 4). Sem aviso de fallback aqui.
       if (staleDemand) alertas.push('Produto com demanda antiga');
       if (budgetWithoutGiro) {
         alertas.push('Produto em orçamento pendente, mas sem giro recorrente. Não comprar automaticamente.');

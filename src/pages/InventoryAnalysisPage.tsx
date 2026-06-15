@@ -640,18 +640,18 @@ export default function InventoryAnalysisPage() {
       // --- Mínimo operacional (peça barata recorrente / crítica) ---
       const operationalMinimum = getOperationalMinimum(unitCost, isRecurring, isCritical);
 
-      // --- Demanda de orçamento ponderada ---
+      // --- Sinal de orçamento pendente (situações escolhidas) ---
       const orcEntry = orcMap.get(r.produto_id);
       const orcQty = orcEntry?.qtd || 0;
       const orcRefs = orcEntry?.refs || [];
-      // sistema não diferencia aprovado/pendente → usa fator pendente
-      const budgetDemandQty = orcQty * POLICY.pendingBudgetDemandFactor;
+      // sistema não diferencia aprovado/pendente → usa fator pendente (configurável)
+      const budgetSignalQty = orcQty * POLICY.pendingBudgetDemandFactor;
+      const budgetDemandQty = budgetSignalQty; // compat. com saldo projetado
 
       // --- Pedido de compra em aberto ---
       const pcEntry = pcMap.get(r.produto_id);
       const pcQty = pcEntry?.qtd || 0;
       const pcRefs = pcEntry?.refs || [];
-      // (sem data de PC validada disponível por item → mantém comportamento atual)
       const effectivePcQty = pcQty;
 
       // --- Estoque e saldo projetado ---
@@ -659,77 +659,79 @@ export default function InventoryAnalysisPage() {
       const stockKnown = estoque !== null && estoque !== undefined;
       const estoqueBase = stockKnown ? estoque! : 0;
       const projectedAvailable = stockKnown
-        ? estoqueBase + effectivePcQty - budgetDemandQty
+        ? estoqueBase + effectivePcQty - budgetSignalQty
         : null;
 
-      // --- Ponto de ressuprimento ---
+      // --- Ponto de ressuprimento (informativo) ---
       const demandDuringLeadTime = avgDailyDemand * leadTimeDays;
       let reorderPoint = Math.ceil(demandDuringLeadTime + safetyStock);
       reorderPoint = Math.max(reorderPoint, operationalMinimum);
 
-      // --- Estoque máximo alvo ---
+      // --- Estoque máximo alvo = nível de demanda de estoque (consumo real) ---
       const coverageDays = getCoverageDaysByCost(unitCost);
+      const minShelfQty = getMinShelfQty(unitCost);
       let maxStock = Math.ceil(avgDailyDemand * (leadTimeDays + coverageDays) + safetyStock);
       maxStock = Math.max(maxStock, operationalMinimum);
-      if (unitCost > POLICY.lowCostThresholds.moderate && demandPattern === 'lumpy' && !isCritical && budgetDemandQty <= 0) {
-        maxStock = 0;
-      }
 
-      // --- Regra final de compra ---
-      const projForCompare = projectedAvailable ?? estoqueBase;
-      const shouldReorder =
-        projForCompare <= reorderPoint ||
-        budgetDemandQty > estoqueBase ||
-        (estoqueBase <= 0 && operationalMinimum > 0);
+      // ===================================================================
+      // ELEGIBILIDADE PARA ESTOQUE (giro real, não dinheiro)
+      // ===================================================================
+      const totalQty90d = monthlySeries.slice(0, 3).reduce((s, v) => s + v, 0);
+      const totalQty180d = monthlySeries.slice(0, 6).reduce((s, v) => s + v, 0);
+      const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
+      const daysSinceLastConsumption = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
 
-      let qtyToBuy = shouldReorder ? maxStock - projForCompare : 0;
-      qtyToBuy = Math.max(0, Math.ceil(qtyToBuy));
-      // cobrir orçamento se maior que o máximo
-      if (budgetDemandQty > 0) {
-        qtyToBuy = Math.max(qtyToBuy, Math.ceil(budgetDemandQty - estoqueBase - effectivePcQty));
-        qtyToBuy = Math.max(0, qtyToBuy);
-      }
+      // sem overrides manuais no cliente → manualStockItem/manualMinStock = false
+      const manualStockItem = false;
+      const manualMinStock = 0;
+      const hasManual = manualStockItem || manualMinStock > 0;
+
+      const hasRecentConsumption = totalQty90d > 0 || daysSinceLastConsumption <= 90;
+      const isRecurringStock =
+        r.source_count_90d >= 2 ||
+        r.source_count_180d >= 3 ||
+        nonZeroMonths180 >= 2 ||
+        totalQty180d >= minShelfQty;
+      const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual;
+
+      const oneEventOnly = r.event_count <= 1;
+      const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
+
+      // --- Demanda de estoque (consumo real) e demanda total ---
+      const stockDemandQty = isStockEligible ? Math.max(maxStock, minShelfQty) : 0;
+      // orçamento NÃO soma cego: usa max com a demanda de estoque, e só p/ elegíveis
+      const demandaTotal = isStockEligible ? Math.max(stockDemandQty, budgetSignalQty) : 0;
+
+      let suggestedQty = isStockEligible
+        ? Math.max(0, Math.ceil(demandaTotal - estoqueBase - effectivePcQty))
+        : 0;
 
       // --- Lote mínimo / múltiplo de compra (se existirem no cadastro) ---
       const minOrderQty = Number((info as any)?.min_order_qty || 0) || 0;
       const orderMultiple = Number((info as any)?.order_multiple || 0) || 0;
-      if (qtyToBuy > 0 && minOrderQty > 0) qtyToBuy = Math.max(qtyToBuy, minOrderQty);
-      if (qtyToBuy > 0 && orderMultiple > 0) qtyToBuy = Math.ceil(qtyToBuy / orderMultiple) * orderMultiple;
+      if (suggestedQty > 0 && minOrderQty > 0) suggestedQty = Math.max(suggestedQty, minOrderQty);
+      if (suggestedQty > 0 && orderMultiple > 0) suggestedQty = Math.ceil(suggestedQty / orderMultiple) * orderMultiple;
 
-      // --- Bloqueios (não comprar peça errada) ---
-      const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
-      const daysSinceLastConsumption = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
       const staleDemand = daysSinceLastConsumption > POLICY.staleDemandDays;
       const oneOffDemand = r.source_count <= 1 && r.event_count <= 1 && nonZeroMonths <= 1;
-      if (staleDemand && oneOffDemand && budgetDemandQty <= 0 && !isCritical) {
-        qtyToBuy = 0;
-      }
-      // peça cara com saída única antiga sem orçamento/criticidade → não comprar
-      if (oneOffDemand && budgetDemandQty <= 0 && !isCritical && !isRecurring && operationalMinimum === 0) {
-        qtyToBuy = 0;
-      }
 
-      // === GATE DE GIRO: ABC mede dinheiro, estoque mede giro ===
-      // (sem overrides manuais no cliente → manualStockItem/manualMinStock = false)
-      const manualStockItem = false;
-      const manualMinStock = 0;
-      const hasManual = manualStockItem || manualMinStock > 0;
-      const recurringStockDemand = classeGiro === 'ALTO' || classeGiro === 'MEDIO';
-      const oneEventOnly = r.event_count <= 1;
-      // Item caro com 1 evento → revisar manualmente, nunca compra automática
-      const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
-      // Só pode entrar na compra automática se houver giro ALTO/MEDIO ou política manual
-      const canBuyForStock = hasManual || (recurringStockDemand && !oneEventOnly);
+      // item em orçamento pendente mas sem giro → não compra automática (aba separada)
+      const budgetWithoutGiro = budgetSignalQty > 0 && !isStockEligible;
 
+      let qtyToBuy = suggestedQty;
+
+      // === STATUS DE ESTOQUE ===
       let statusEstoque: StatusEstoque;
-      if (!canBuyForStock) {
+      if (!isStockEligible) {
         qtyToBuy = 0;
-        statusEstoque = expensiveOneOff || (unitCost > 500 && oneEventOnly)
+        statusEstoque = (expensiveOneOff || (unitCost > 500 && oneEventOnly))
           ? 'REVISAR_MANUALMENTE'
           : 'NAO_ESTOCAR';
       } else {
         statusEstoque = qtyToBuy > 0 ? 'COMPRAR_ESTOQUE' : 'ESTOQUE_OK';
       }
+
+
 
       // --- Motivos e alertas ---
       const motivos: string[] = [];

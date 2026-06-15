@@ -731,26 +731,26 @@ export default function InventoryAnalysisPage() {
         statusEstoque = qtyToBuy > 0 ? 'COMPRAR_ESTOQUE' : 'ESTOQUE_OK';
       }
 
-
+      const projForCompare = projectedAvailable ?? estoqueBase;
 
       // --- Motivos e alertas ---
       const motivos: string[] = [];
       const alertas: string[] = [];
       if (qtyToBuy > 0) {
-        if (stockKnown && projForCompare <= reorderPoint) motivos.push('Estoque projetado abaixo do ponto de ressuprimento');
+        if (hasRecentConsumption && isRecurringStock) motivos.push('Peça recorrente com consumo recente');
         if (stockKnown && estoqueBase <= 0) motivos.push('Estoque atual zerado');
-        if (operationalMinimum > 0 && estoqueBase < operationalMinimum) motivos.push('Peça barata recorrente abaixo do mínimo operacional');
-        if (budgetDemandQty > 0) motivos.push('Orçamento pendente gerou demanda prevista');
+        if (stockKnown && estoqueBase < stockDemandQty) motivos.push('Estoque abaixo do mínimo calculado');
+        if (budgetSignalQty > 0) motivos.push('Orçamento pendente aumentou risco');
+        if (pcQty > 0 && effectivePcQty < demandaTotal) motivos.push('Pedido de compra em aberto insuficiente');
         if (safetyStock > 0 && leadTimeDays >= 21) motivos.push('Lead time do fornecedor exige estoque de segurança');
-        if (recentWeightedAvg > historicalMonthlyAvg) motivos.push('Demanda recente maior que média histórica');
-        if (demandPattern === 'intermitente') motivos.push('Demanda intermitente tratada com mínimo operacional');
-        if (pcQty > 0 && effectivePcQty < reorderPoint) motivos.push('Pedido de compra em aberto insuficiente');
         if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');
       }
-      if (!stockKnown) alertas.push('Estoque atual não carregado');
-      if (usedDefaultLT) alertas.push('Sem lead time do fornecedor, usado padrão');
-      if (oneOffDemand) alertas.push('Demanda baseada em apenas um evento');
+      if (!stockKnown) alertas.push('Sem estoque atual carregado');
+      if (usedDefaultLT) alertas.push('Sem lead time real, usado fallback');
       if (staleDemand) alertas.push('Produto com demanda antiga');
+      if (budgetWithoutGiro) {
+        alertas.push('Produto em orçamento pendente, mas sem giro recorrente. Não comprar automaticamente.');
+      }
       if (statusEstoque === 'REVISAR_MANUALMENTE') {
         alertas.push('Item de alto valor com apenas um evento. ABC financeiro não autoriza estoque automático.');
         motivos.push('ABC financeiro = ' + abcClass + ', giro = ' + classeGiro + ' → revisar manualmente');

@@ -217,17 +217,22 @@ async function getOSAtributoIds(): Promise<{
   return { numOrcamento, tarefaExecucao, tarefaOs, localReparo, horasTecnicas };
 }
 
-// ---------- GC: Discover Venda "TAREFA DE ENTREGA" attribute ID ----------
-async function getVendaTarefaEntregaAtributoId(): Promise<string | null> {
+// ---------- GC: Discover Venda extra-field attribute IDs ----------
+async function getVendaAtributoIds(): Promise<{ tarefaEntrega: string | null; numOrcamento: string | null }> {
   const res = await gcRequest('/api/atributos_vendas', 'GET');
   const list: AtributoMeta[] = res?.data || [];
+  let tarefaEntrega: string | null = null;
+  let numOrcamento: string | null = null;
   for (const a of list) {
     const nome = normalize(a.nome || '');
-    if (nome.includes('tarefa') && nome.includes('entrega')) {
-      return a.id;
+    if (!tarefaEntrega && nome.includes('tarefa') && nome.includes('entrega')) {
+      tarefaEntrega = a.id;
+    }
+    if (!numOrcamento && nome.includes('numero') && nome.includes('orcamento')) {
+      numOrcamento = a.id;
     }
   }
-  return null;
+  return { tarefaEntrega, numOrcamento };
 }
 
 // ---------- Main handler ----------

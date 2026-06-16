@@ -632,6 +632,26 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // Insert the Auvo task number into the venda "TAREFA DE ENTREGA" custom field.
+      try {
+        const tarefaEntregaAttrId = await getVendaTarefaEntregaAtributoId();
+        if (tarefaEntregaAttrId) {
+          const idx = vendaAtributos.findIndex(
+            (a) => a.atributo.atributo_id === tarefaEntregaAttrId
+          );
+          const entry = {
+            atributo: { atributo_id: tarefaEntregaAttrId, conteudo: String(auvoTaskId) },
+          };
+          if (idx >= 0) vendaAtributos[idx] = entry;
+          else vendaAtributos.push(entry);
+          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${tarefaEntregaAttrId}) = ${auvoTaskId}`);
+        } else {
+          console.warn('[generate-os] ⚠️ Atributo "TAREFA DE ENTREGA" não encontrado nos atributos de venda.');
+        }
+      } catch (e) {
+        console.warn('[generate-os] ⚠️ Falha ao resolver atributo TAREFA DE ENTREGA da venda:', e);
+      }
+
       // Situação "SEPARADO - AGUARDANDO ENTREGA / DESPACHO"
       const VENDA_SITUACAO_ID = '8955109';
 

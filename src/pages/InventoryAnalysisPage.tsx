@@ -749,7 +749,7 @@ export default function InventoryAnalysisPage() {
         if (stockKnown && estoqueBase < stockDemandQty) motivos.push('Estoque abaixo do mínimo calculado');
         if (budgetSignalQty > 0) motivos.push('Orçamento pendente aumentou risco');
         if (pcQty > 0 && effectivePcQty < demandaTotal) motivos.push('Pedido de compra em aberto insuficiente');
-        if (safetyStock > 0 && leadTimeDays >= 21) motivos.push('Lead time do fornecedor exige estoque de segurança');
+        // Lead time entra no cálculo do estoque de segurança, mas não deve aparecer como motivo textual na lista.
         if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');
       }
       if (!stockKnown) alertas.push('Sem estoque atual carregado');
@@ -1613,7 +1613,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right px-2 py-1.5 text-xs">Est. Máx.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Sugerido</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs font-bold text-destructive">COMPRAR</TableHead>
-                      <TableHead className="px-2 py-1.5 text-xs">Motivos / Alertas</TableHead>
+                      <TableHead className="min-w-[260px] px-2 py-1.5 text-xs">Motivos / Alertas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1678,13 +1678,13 @@ export default function InventoryAnalysisPage() {
                             {item.qty_liquida}
                           </Badge>
                         </TableCell>
-                        <TableCell className="px-2 py-1 max-w-[220px]">
+                        <TableCell className="min-w-[260px] max-w-[320px] px-2 py-1">
                           <div className="flex flex-col gap-0.5">
                             {item.motivos_sugestao.map((m, idx) => (
-                              <span key={idx} className="text-[10px] text-muted-foreground">• {m}</span>
+                              <span key={idx} className="text-[10px] leading-snug text-muted-foreground">• {m}</span>
                             ))}
                             {item.alertas.map((a, idx) => (
-                              <span key={`a${idx}`} className="text-[10px] text-amber-600 flex items-center gap-1">
+                              <span key={`a${idx}`} className="flex items-start gap-1 text-[10px] leading-snug text-amber-600">
                                 <AlertTriangle className="h-2.5 w-2.5" /> {a}
                               </span>
                             ))}

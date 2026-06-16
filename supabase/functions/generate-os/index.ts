@@ -217,17 +217,22 @@ async function getOSAtributoIds(): Promise<{
   return { numOrcamento, tarefaExecucao, tarefaOs, localReparo, horasTecnicas };
 }
 
-// ---------- GC: Discover Venda "TAREFA DE ENTREGA" attribute ID ----------
-async function getVendaTarefaEntregaAtributoId(): Promise<string | null> {
+// ---------- GC: Discover Venda extra-field attribute IDs ----------
+async function getVendaAtributoIds(): Promise<{ tarefaEntrega: string | null; numOrcamento: string | null }> {
   const res = await gcRequest('/api/atributos_vendas', 'GET');
   const list: AtributoMeta[] = res?.data || [];
+  let tarefaEntrega: string | null = null;
+  let numOrcamento: string | null = null;
   for (const a of list) {
     const nome = normalize(a.nome || '');
-    if (nome.includes('tarefa') && nome.includes('entrega')) {
-      return a.id;
+    if (!tarefaEntrega && nome.includes('tarefa') && nome.includes('entrega')) {
+      tarefaEntrega = a.id;
+    }
+    if (!numOrcamento && nome.includes('numero') && nome.includes('orcamento')) {
+      numOrcamento = a.id;
     }
   }
-  return null;
+  return { tarefaEntrega, numOrcamento };
 }
 
 // ---------- Main handler ----------
@@ -632,24 +637,31 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Insert the Auvo task number into the venda "TAREFA DE ENTREGA" custom field.
+      // Insert the Auvo task number into the venda "TAREFA DE ENTREGA" custom field
+      // and the orçamento code into the "NÚMERO DO ORÇAMENTO" custom field.
       try {
-        const tarefaEntregaAttrId = await getVendaTarefaEntregaAtributoId();
-        if (tarefaEntregaAttrId) {
-          const idx = vendaAtributos.findIndex(
-            (a) => a.atributo.atributo_id === tarefaEntregaAttrId
-          );
-          const entry = {
-            atributo: { atributo_id: tarefaEntregaAttrId, conteudo: String(auvoTaskId) },
-          };
+        const vendaAttrIds = await getVendaAtributoIds();
+        const upsertVendaAttr = (attrId: string | null, conteudo: string) => {
+          if (!attrId) return;
+          const idx = vendaAtributos.findIndex((a) => a.atributo.atributo_id === attrId);
+          const entry = { atributo: { atributo_id: attrId, conteudo } };
           if (idx >= 0) vendaAtributos[idx] = entry;
           else vendaAtributos.push(entry);
-          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${tarefaEntregaAttrId}) = ${auvoTaskId}`);
+        };
+        if (vendaAttrIds.tarefaEntrega) {
+          upsertVendaAttr(vendaAttrIds.tarefaEntrega, String(auvoTaskId));
+          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${vendaAttrIds.tarefaEntrega}) = ${auvoTaskId}`);
         } else {
           console.warn('[generate-os] ⚠️ Atributo "TAREFA DE ENTREGA" não encontrado nos atributos de venda.');
         }
+        if (vendaAttrIds.numOrcamento) {
+          upsertVendaAttr(vendaAttrIds.numOrcamento, String(orcamento.codigo));
+          console.log(`[generate-os] Venda NÚMERO DO ORÇAMENTO (attr ${vendaAttrIds.numOrcamento}) = ${orcamento.codigo}`);
+        } else {
+          console.warn('[generate-os] ⚠️ Atributo "NÚMERO DO ORÇAMENTO" não encontrado nos atributos de venda.');
+        }
       } catch (e) {
-        console.warn('[generate-os] ⚠️ Falha ao resolver atributo TAREFA DE ENTREGA da venda:', e);
+        console.warn('[generate-os] ⚠️ Falha ao resolver atributos extras da venda:', e);
       }
 
       // Situação "SEPARADO - AGUARDANDO ENTREGA / DESPACHO"

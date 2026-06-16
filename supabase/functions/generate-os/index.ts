@@ -217,6 +217,19 @@ async function getOSAtributoIds(): Promise<{
   return { numOrcamento, tarefaExecucao, tarefaOs, localReparo, horasTecnicas };
 }
 
+// ---------- GC: Discover Venda "TAREFA DE ENTREGA" attribute ID ----------
+async function getVendaTarefaEntregaAtributoId(): Promise<string | null> {
+  const res = await gcRequest('/api/atributos_vendas', 'GET');
+  const list: AtributoMeta[] = res?.data || [];
+  for (const a of list) {
+    const nome = normalize(a.nome || '');
+    if (nome.includes('tarefa') && nome.includes('entrega')) {
+      return a.id;
+    }
+  }
+  return null;
+}
+
 // ---------- Main handler ----------
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {

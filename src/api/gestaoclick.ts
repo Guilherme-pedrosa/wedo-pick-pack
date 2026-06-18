@@ -386,19 +386,18 @@ function normalizeLineUnitPrice<T extends Record<string, any>>(
     const declaredLineCents = Math.round(lineTotal * 100);
     const computedLineCents = computeLineTotalCents(line);
 
-    // Fix rounding drift from fractional quantities without changing the order
-    // total. Example OS 9742: qty 1,500 × unit 145,73 is validated by GC as
-    // 218,60, but the document total line is 218,59. Send the exact gross unit
-    // implied by valor_total so the ERP recomputes back to the stored total.
-    // Only intervene when our computed line total diverges from the GC-declared
-    // total by 0,50 or more. For smaller differences (< 0,50), always trust the
-    // value stored in GestãoClick and leave the line untouched.
+    // Fix small rounding drift from fractional quantities without changing the
+    // order total. Example OS 9742: qty 1,500 × unit 145,73 is validated by GC as
+    // 218,60 by our calc path, but the GC-declared line total is 218,59. When the
+    // difference is below R$ 0,50, always trust GestãoClick's valor_total and send
+    // the exact gross unit implied by that value so the PUT validates the stored
+    // total instead of our recomputed total.
     const hasLineRoundingDrift =
       qty > 0 &&
       lineTotal >= 0 &&
       computedLineCents != null &&
       computedLineCents !== declaredLineCents &&
-      Math.abs(computedLineCents - declaredLineCents) >= 50;
+      Math.abs(computedLineCents - declaredLineCents) < 50;
 
     if (hasLineRoundingDrift) {
       const expectedUnit = computeExpectedLineGrossUnitPrice(line);

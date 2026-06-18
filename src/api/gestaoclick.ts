@@ -544,6 +544,39 @@ async function putStatusWithRetry(path: string, payload: Record<string, any>): P
   }
 }
 
+function shouldFallbackToFullStatusPayload(error: unknown): boolean {
+  if (isInstallmentMismatchError(error)) return false;
+
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  return (
+    message.includes('obrigat') ||
+    message.includes('required') ||
+    message.includes('necess') ||
+    message.includes('inválid') ||
+    message.includes('invalid') ||
+    message.includes('não informado') ||
+    message.includes('nao informado')
+  );
+}
+
+async function putStatusOnlyWithFallback(
+  path: string,
+  minimalPayload: Record<string, any>,
+  fullPayload: Record<string, any>
+): Promise<GCUpdateResponse> {
+  try {
+    return await apiRequest<GCUpdateResponse>(path, {
+      method: 'PUT',
+      body: JSON.stringify(minimalPayload),
+    });
+  } catch (error) {
+    if (!shouldFallbackToFullStatusPayload(error)) throw error;
+
+    console.warn('[GC] PUT mínimo de status recusado. Reenviando payload completo preservado.');
+    return putStatusWithRetry(path, fullPayload);
+  }
+}
+
 export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string, customNote?: string): Promise<void> {
   if (isUsingMock()) {
     await mockDelay();
@@ -597,7 +630,14 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
-  const putResponse = await putStatusWithRetry(`/api/ordens_servicos/${id}`, payload);
+  const minimalPayload: Record<string, any> = {
+    situacao_id: newStatusId,
+    observacoes: obs + obsNote,
+    observacoes_interna: obsInterna + operatorNote,
+  };
+  if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
+
+  const putResponse = await putStatusOnlyWithFallback(`/api/ordens_servicos/${id}`, minimalPayload, payload);
 
   const expectedStatus = normalizeStatusId(newStatusId);
   const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
@@ -664,7 +704,14 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
 
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
-  const putResponse = await putStatusWithRetry(`/api/vendas/${id}`, payload);
+  const minimalPayload: Record<string, any> = {
+    situacao_id: newStatusId,
+    observacoes: obs + obsNote,
+    observacoes_interna: obsInterna + operatorNote,
+  };
+  if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
+
+  const putResponse = await putStatusOnlyWithFallback(`/api/vendas/${id}`, minimalPayload, payload);
 
   const expectedStatus = normalizeStatusId(newStatusId);
   const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);

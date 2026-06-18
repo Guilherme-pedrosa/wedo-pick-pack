@@ -1,8 +1,9 @@
 import { useMemo, memo } from 'react';
 import { PickingItem } from '@/api/types';
 import { useCheckoutStore } from '@/store/checkoutStore';
-import { CheckCircle2, Package, MapPin } from 'lucide-react';
+import { CheckCircle2, Package, MapPin, Copy } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { toast } from 'sonner';
 
 interface Props {
   items: PickingItem[];
@@ -15,6 +16,46 @@ const formatTime = (iso?: string) => {
   const d = new Date(iso);
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 };
+
+const copyCode = async (code?: string) => {
+  const value = String(code || '').trim();
+  if (!value) return;
+  await navigator.clipboard.writeText(value);
+  toast.success(`Código copiado: ${value}`);
+};
+
+function CopyableCode({ label, value }: { label?: string; value?: string }) {
+  const code = String(value || '').trim();
+
+  if (!code) return <span>—</span>;
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
+      {label && <span className="shrink-0">{label}</span>}
+      <code
+        className="select-text cursor-text break-all font-mono text-xs text-muted-foreground"
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          copyCode(code);
+        }}
+      >
+        {code}
+      </code>
+      <button
+        type="button"
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        title="Copiar código"
+        aria-label={`Copiar código ${code}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          copyCode(code);
+        }}
+      >
+        <Copy className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
 
 const ItemRow = memo(function ItemRow({ item, isMobile }: { item: PickingItem; isMobile: boolean }) {
   if (isMobile) {
@@ -39,8 +80,8 @@ const ItemRow = memo(function ItemRow({ item, isMobile }: { item: PickingItem; i
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground ml-5.5">
-              {item.codigo_produto && <span className="font-mono">Cód: {item.codigo_produto}</span>}
-              {item.codigo_barras && <span className="font-mono">EAN: {item.codigo_barras}</span>}
+              {item.codigo_produto && <CopyableCode label="Cód:" value={item.codigo_produto} />}
+              {item.codigo_barras && <CopyableCode label="EAN:" value={item.codigo_barras} />}
               <span>{item.sigla_unidade}</span>
             </div>
             {(item.localizacao_fisica || item.localizacao_rational) && (
@@ -76,8 +117,8 @@ const ItemRow = memo(function ItemRow({ item, isMobile }: { item: PickingItem; i
           <span className={item.conferido ? 'text-green-800' : 'font-medium'}>{item.nome_produto}</span>
         </div>
       </td>
-      <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">{item.codigo_produto || '—'}</td>
-      <td className="py-2.5 px-3 font-mono text-xs text-muted-foreground">{item.codigo_barras || '—'}</td>
+      <td className="py-2.5 px-3"><CopyableCode value={item.codigo_produto} /></td>
+      <td className="py-2.5 px-3"><CopyableCode value={item.codigo_barras} /></td>
       <td className="py-2.5 px-3 text-xs">
         {(item.localizacao_fisica || item.localizacao_rational) ? (
           <div className="flex items-start gap-1">

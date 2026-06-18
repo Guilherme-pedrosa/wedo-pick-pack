@@ -398,50 +398,42 @@ function setPagamentoValor(p: any, newValor: string): any {
   return { ...p, valor: newValor };
 }
 
+function computeLineTotalCents(line: Record<string, any>): number | null {
+  const qty = parseCurrency(line?.quantidade);
+  const unit = parseCurrency(line?.valor_venda);
+  if (qty <= 0 || unit < 0 || String(line?.valor_venda ?? '').trim() === '') return null;
+
+  const fixedDiscount = parseCurrency(line?.desconto_valor);
+  const percentDiscount = parseCurrency(line?.desconto_porcentagem);
+
+  let lineRaw = qty * unit;
+  if (percentDiscount > 0) {
+    lineRaw = percentDiscount >= 100 ? 0 : lineRaw * (1 - percentDiscount / 100);
+  }
+  lineRaw -= fixedDiscount;
+
+  if (!Number.isFinite(lineRaw)) return null;
+  return Math.max(0, Math.round(lineRaw * 100));
+}
+
 /**
- * Compute the line total the way GestãoClick does on PUT:
- * sum(line.valor_total) for produtos + servicos, minus general discount, plus frete.
- *
- * The ERP recalculates valor_total server-side from the line items. If the
- * declared `valor_total` in the payload disagrees with this re-computation
- * (often by 1-2 cents due to fractional quantities like 0.600 × 280.57), the
- * ERP will compare its own recomputed total against the installments and
- * complain that they don't match.
- *
- * To avoid this, we anchor BOTH `valor_total` and the installments to the
- * same recomputed subtotal in cents.
- */
-/**
- * Compute the order total the way GestãoClick's PUT validator does.
- *
- * O GC valida dinheiro em centavos. Portanto, se a linha já trouxe
- * `valor_total`, ela é a fonte de verdade com 2 casas; quando não trouxe,
- * calculamos a linha e arredondamos imediatamente para centavos antes de somar.
- * Isso evita que frações invisíveis depois da vírgula alterem o total das parcelas.
+ * Compute the order total the same way GestãoClick's PUT validator does:
+ * calculate each line from quantidade × valor_venda, round each line to cents,
+ * then sum. This catches cases like OS 9742: 1.500 × 145.73 = 218.595 → 218.60.
  */
 function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
   const lineSumCents = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
     if (!Array.isArray(arr)) return 0;
     return arr.reduce((s, entry) => {
       const line = entry?.[key] || entry;
+      const computed = computeLineTotalCents(line);
+      if (computed != null) return s + computed;
+
       const declared = line?.valor_total;
       if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
         return s + Math.round(parseCurrency(declared) * 100);
       }
-
-      const qty = parseCurrency(line?.quantidade);
-      const unit = parseCurrency(line?.valor_venda);
-      const fixedDiscount = parseCurrency(line?.desconto_valor);
-      const percentDiscount = parseCurrency(line?.desconto_porcentagem);
-
-      if (qty <= 0 || unit <= 0) return s;
-
-      let lineRaw = qty * unit;
-      if (percentDiscount > 0) {
-        lineRaw = percentDiscount >= 100 ? 0 : lineRaw * (1 - percentDiscount / 100);
-      }
-      lineRaw -= fixedDiscount;
-      return s + Math.round(lineRaw * 100);
+      return s;
     }, 0);
   };
 

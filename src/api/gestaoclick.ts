@@ -545,7 +545,11 @@ async function putStatusWithRetry(path: string, payload: Record<string, any>): P
 }
 
 function shouldFallbackToFullStatusPayload(error: unknown): boolean {
-  if (isInstallmentMismatchError(error)) return false;
+  // O PUT mínimo do GC ainda valida o financeiro existente. Quando ele reclama
+  // de parcelas, reenviamos o documento completo normalizado em centavos,
+  // usando `valor_total` das linhas como fonte — sem recalcular por quantidade
+  // com 3 casas decimais.
+  if (isInstallmentMismatchError(error)) return true;
 
   const message = error instanceof Error ? error.message.toLowerCase() : '';
   return (

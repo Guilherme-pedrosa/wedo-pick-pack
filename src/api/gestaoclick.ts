@@ -383,6 +383,32 @@ function normalizeLineUnitPrice<T extends Record<string, any>>(
     const fixedDiscount = parseCurrency(line.desconto_valor);
     const lineTotal = parseCurrency(line.valor_total);
 
+    const declaredLineCents = Math.round(lineTotal * 100);
+    const computedLineCents = computeLineTotalCents(line);
+
+    // Fix rounding drift from fractional quantities without changing the order
+    // total. Example OS 9742: qty 1,500 × unit 145,73 is validated by GC as
+    // 218,60, but the document total line is 218,59. Send the exact gross unit
+    // implied by valor_total so the ERP recomputes back to the stored total.
+    const hasLineRoundingDrift =
+      qty > 0 &&
+      lineTotal >= 0 &&
+      computedLineCents != null &&
+      computedLineCents !== declaredLineCents;
+
+    if (hasLineRoundingDrift) {
+      const expectedUnit = computeExpectedLineGrossUnitPrice(line);
+      if (expectedUnit != null && Number.isFinite(expectedUnit) && expectedUnit >= 0) {
+        return {
+          ...entry,
+          [key]: {
+            ...line,
+            valor_venda: formatCurrency(expectedUnit, 6),
+          },
+        };
+      }
+    }
+
     // Only intervene in the exact double-discount scenario:
     // valor_venda is effectively zero, but the line carries a fixed discount
     // and a positive line total. Without this fix the ERP would subtract the
@@ -455,9 +481,9 @@ function computeLineTotalCents(line: Record<string, any>): number | null {
 }
 
 /**
- * Compute the order total the same way GestãoClick's PUT validator does:
- * calculate each line from quantidade × valor_venda, round each line to cents,
- * then sum. This catches cases like OS 9742: 1.500 × 145.73 = 218.595 → 218.60.
+ * Compute the order total the same way GestãoClick's PUT validator does after
+ * our line-unit normalization: calculate each line from quantidade × valor_venda,
+ * round each line to cents, then sum.
  */
 function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
   const lineSumCents = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
@@ -495,20 +521,16 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
   const declaredTotalCents = Math.round(parseCurrency(payload.valor_total) * 100);
   const recomputedCents = computeRecomputedTotalCents(payload);
 
-  // Anchor to the value the ERP will actually compute from line items.
-  // Fall back to the declared total only when we can't recompute (e.g. no items).
-  const targetCents = recomputedCents ?? declaredTotalCents;
+  // The document's valor_total is authoritative. Do not "fix" a stored 5361,41
+  // into 5361,42; instead line-unit normalization above must make GC validate
+  // the stored total.
+  const targetCents = declaredTotalCents > 0 ? declaredTotalCents : (recomputedCents ?? 0);
 
   if (targetCents <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
     return payload;
   }
 
-  // If declared total disagrees with line-recomputed total, sync it.
-  let nextPayload = payload;
-  if (recomputedCents != null && recomputedCents !== declaredTotalCents) {
-    console.warn(`[GC] valor_total declarado (${declaredTotalCents/100}) ≠ soma das linhas (${recomputedCents/100}). Ajustando para ${recomputedCents/100}.`);
-    nextPayload = { ...payload, valor_total: formatCurrency(recomputedCents / 100) };
-  }
+  const nextPayload = payload;
 
   const parcCentsList = nextPayload.pagamentos.map((p: any) => Math.round(getPagamentoValor(p) * 100));
   const parcTotalCents = parcCentsList.reduce((s: number, c: number) => s + c, 0);

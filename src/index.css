@@ -142,10 +142,12 @@
       user-select: none;
       -webkit-touch-callout: none;
     }
-    /* Re-enable selection inside inputs and editable content */
-    input, textarea, [contenteditable="true"], .selectable {
+    /* Re-enable selection inside inputs, editable, and readable text content */
+    input, textarea, [contenteditable="true"], .selectable,
+    p, span, td, th, code, pre, .font-mono, h1, h2, h3, h4 {
       -webkit-user-select: text;
       user-select: text;
+      -webkit-touch-callout: default;
     }
   }
 

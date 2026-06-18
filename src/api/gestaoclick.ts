@@ -299,6 +299,35 @@ function formatCurrency(value: number, decimals = 2): string {
   return roundTo(value, decimals).toFixed(decimals);
 }
 
+const FINANCIAL_SCALE = 4n;
+const FINANCIAL_FACTOR = 10n ** FINANCIAL_SCALE;
+
+function parseScaledDecimal(value: unknown, scale = Number(FINANCIAL_SCALE)): bigint {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 0n;
+
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : raw;
+  const sign = normalized.startsWith('-') ? -1n : 1n;
+  const unsigned = normalized.replace(/^[+-]/, '');
+  const [integerPart = '0', fractionPart = ''] = unsigned.split('.');
+  const integerDigits = integerPart.replace(/\D/g, '') || '0';
+  const fractionDigits = fractionPart.replace(/\D/g, '');
+  const keptFraction = fractionDigits.slice(0, scale).padEnd(scale, '0');
+  const nextDigit = Number(fractionDigits[scale] || '0');
+
+  let scaled = BigInt(integerDigits) * (10n ** BigInt(scale)) + BigInt(keptFraction || '0');
+  if (nextDigit >= 5) scaled += 1n;
+  return scaled * sign;
+}
+
+function roundFractionToInt(numerator: bigint, denominator: bigint): bigint {
+  if (denominator <= 0n) return 0n;
+  if (numerator <= 0n) return 0n;
+  return (numerator + denominator / 2n) / denominator;
+}
+
 function computeExpectedLineGrossUnitPrice(line: Record<string, any>): number | null {
   const qty = parseCurrency(line.quantidade);
   if (qty <= 0) return null;
@@ -399,21 +428,30 @@ function setPagamentoValor(p: any, newValor: string): any {
 }
 
 function computeLineTotalCents(line: Record<string, any>): number | null {
-  const qty = parseCurrency(line?.quantidade);
-  const unit = parseCurrency(line?.valor_venda);
-  if (qty <= 0 || unit < 0 || String(line?.valor_venda ?? '').trim() === '') return null;
+  const qty = parseScaledDecimal(line?.quantidade);
+  const unit = parseScaledDecimal(line?.valor_venda);
+  if (qty <= 0n || unit < 0n || String(line?.valor_venda ?? '').trim() === '') return null;
 
-  const fixedDiscount = parseCurrency(line?.desconto_valor);
-  const percentDiscount = parseCurrency(line?.desconto_porcentagem);
+  const fixedDiscount = parseScaledDecimal(line?.desconto_valor);
+  const percentDiscount = parseScaledDecimal(line?.desconto_porcentagem);
+  const maxPercent = 100n * FINANCIAL_FACTOR;
 
-  let lineRaw = qty * unit;
-  if (percentDiscount > 0) {
-    lineRaw = percentDiscount >= 100 ? 0 : lineRaw * (1 - percentDiscount / 100);
+  let amountNumerator = qty * unit;
+  let amountDenominator = FINANCIAL_FACTOR * FINANCIAL_FACTOR;
+
+  if (percentDiscount > 0n) {
+    if (percentDiscount >= maxPercent) {
+      amountNumerator = 0n;
+    } else {
+      amountNumerator *= maxPercent - percentDiscount;
+      amountDenominator *= maxPercent;
+    }
   }
-  lineRaw -= fixedDiscount;
 
-  if (!Number.isFinite(lineRaw)) return null;
-  return Math.max(0, Math.round(lineRaw * 100));
+  const centsNumerator = (amountNumerator * 100n * FINANCIAL_FACTOR) - (fixedDiscount * 100n * amountDenominator);
+  const centsDenominator = amountDenominator * FINANCIAL_FACTOR;
+  const cents = roundFractionToInt(centsNumerator, centsDenominator);
+  return Number(cents);
 }
 
 /**

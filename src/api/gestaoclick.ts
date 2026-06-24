@@ -775,12 +775,22 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
   const minimalPayload: Record<string, any> = {
+    tipo: payload.tipo,
     // GC reseta o cliente para "Consumidor" quando o PUT não informa cliente_id.
     cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
     situacao_id: newStatusId,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
+    // GC zera o valor do pedido (0,00) quando o PUT não reenvia as linhas/valores.
+    valor_total: payload.valor_total,
+    valor_frete: payload.valor_frete,
+    condicao_pagamento: payload.condicao_pagamento,
+    produtos: payload.produtos,
+    servicos: payload.servicos,
   };
+  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
+  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
+  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
   if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
 
   const putResponse = await putStatusOnlyWithFallback(`/api/vendas/${id}`, minimalPayload, payload);

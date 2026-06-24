@@ -580,8 +580,26 @@ function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<
   return recalcPagamentos(normalized);
 }
 
+// O GestãoClick SÓ registra as linhas e recalcula o valor_total em PUT quando
+// produtos/serviços são enviados em formato PLANO (sem o wrapper produto/servico).
+// Se enviados aninhados ({ produto: {...} }), o GC zera o valor do pedido (0,00).
+function flattenLinesForGC(payload: Record<string, any>): Record<string, any> {
+  const out = { ...payload };
+  if (Array.isArray(payload.produtos)) {
+    out.produtos = payload.produtos.map((e: any) =>
+      e && typeof e.produto === 'object' && e.produto ? e.produto : e
+    );
+  }
+  if (Array.isArray(payload.servicos)) {
+    out.servicos = payload.servicos.map((e: any) =>
+      e && typeof e.servico === 'object' && e.servico ? e.servico : e
+    );
+  }
+  return out;
+}
+
 async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
-  const fixedPayload = withInstallmentPrecisionFallback(payload);
+  const fixedPayload = flattenLinesForGC(withInstallmentPrecisionFallback(payload));
 
   try {
     return await apiRequest<GCUpdateResponse>(path, {
@@ -594,7 +612,7 @@ async function putStatusWithRetry(path: string, payload: Record<string, any>): P
     console.warn('[GC] Installment mismatch detected. Retrying with normalized financial payload.');
     return apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
-      body: JSON.stringify(withInstallmentPrecisionFallback(fixedPayload)),
+      body: JSON.stringify(flattenLinesForGC(withInstallmentPrecisionFallback(fixedPayload))),
     });
   }
 }
@@ -626,7 +644,7 @@ async function putStatusOnlyWithFallback(
   try {
     return await apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
-      body: JSON.stringify(minimalPayload),
+      body: JSON.stringify(flattenLinesForGC(minimalPayload)),
     });
   } catch (error) {
     if (!shouldFallbackToFullStatusPayload(error)) throw error;
@@ -695,7 +713,16 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     situacao_id: newStatusId,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
+    // GC zera o valor do pedido (0,00) quando o PUT não reenvia as linhas/valores.
+    valor_total: payload.valor_total,
+    valor_frete: payload.valor_frete,
+    condicao_pagamento: payload.condicao_pagamento,
+    produtos: payload.produtos,
+    servicos: payload.servicos,
   };
+  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
+  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
+  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
   if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
 
   const putResponse = await putStatusOnlyWithFallback(`/api/ordens_servicos/${id}`, minimalPayload, payload);
@@ -766,12 +793,22 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
   const minimalPayload: Record<string, any> = {
+    tipo: payload.tipo,
     // GC reseta o cliente para "Consumidor" quando o PUT não informa cliente_id.
     cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
     situacao_id: newStatusId,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
+    // GC zera o valor do pedido (0,00) quando o PUT não reenvia as linhas/valores.
+    valor_total: payload.valor_total,
+    valor_frete: payload.valor_frete,
+    condicao_pagamento: payload.condicao_pagamento,
+    produtos: payload.produtos,
+    servicos: payload.servicos,
   };
+  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
+  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
+  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
   if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
 
   const putResponse = await putStatusOnlyWithFallback(`/api/vendas/${id}`, minimalPayload, payload);

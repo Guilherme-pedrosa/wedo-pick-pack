@@ -695,7 +695,16 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
     situacao_id: newStatusId,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
+    // GC zera o valor do pedido (0,00) quando o PUT não reenvia as linhas/valores.
+    valor_total: payload.valor_total,
+    valor_frete: payload.valor_frete,
+    condicao_pagamento: payload.condicao_pagamento,
+    produtos: payload.produtos,
+    servicos: payload.servicos,
   };
+  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
+  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
+  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
   if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
 
   const putResponse = await putStatusOnlyWithFallback(`/api/ordens_servicos/${id}`, minimalPayload, payload);

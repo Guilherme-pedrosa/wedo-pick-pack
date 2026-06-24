@@ -690,6 +690,8 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
   const minimalPayload: Record<string, any> = {
+    // GC reseta o cliente para "Consumidor" quando o PUT não informa cliente_id.
+    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
     situacao_id: newStatusId,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,
@@ -764,6 +766,8 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
 
   const minimalPayload: Record<string, any> = {
+    // GC reseta o cliente para "Consumidor" quando o PUT não informa cliente_id.
+    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
     situacao_id: newStatusId,
     observacoes: obs + obsNote,
     observacoes_interna: obsInterna + operatorNote,

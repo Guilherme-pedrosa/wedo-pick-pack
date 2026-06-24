@@ -644,7 +644,7 @@ async function putStatusOnlyWithFallback(
   try {
     return await apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
-      body: JSON.stringify(minimalPayload),
+      body: JSON.stringify(flattenLinesForGC(minimalPayload)),
     });
   } catch (error) {
     if (!shouldFallbackToFullStatusPayload(error)) throw error;

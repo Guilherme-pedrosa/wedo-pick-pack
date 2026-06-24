@@ -580,6 +580,24 @@ function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<
   return recalcPagamentos(normalized);
 }
 
+// O GestãoClick SÓ registra as linhas e recalcula o valor_total em PUT quando
+// produtos/serviços são enviados em formato PLANO (sem o wrapper produto/servico).
+// Se enviados aninhados ({ produto: {...} }), o GC zera o valor do pedido (0,00).
+function flattenLinesForGC(payload: Record<string, any>): Record<string, any> {
+  const out = { ...payload };
+  if (Array.isArray(payload.produtos)) {
+    out.produtos = payload.produtos.map((e: any) =>
+      e && typeof e.produto === 'object' && e.produto ? e.produto : e
+    );
+  }
+  if (Array.isArray(payload.servicos)) {
+    out.servicos = payload.servicos.map((e: any) =>
+      e && typeof e.servico === 'object' && e.servico ? e.servico : e
+    );
+  }
+  return out;
+}
+
 async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
   const fixedPayload = withInstallmentPrecisionFallback(payload);
 

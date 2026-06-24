@@ -599,7 +599,7 @@ function flattenLinesForGC(payload: Record<string, any>): Record<string, any> {
 }
 
 async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
-  const fixedPayload = withInstallmentPrecisionFallback(payload);
+  const fixedPayload = flattenLinesForGC(withInstallmentPrecisionFallback(payload));
 
   try {
     return await apiRequest<GCUpdateResponse>(path, {
@@ -612,7 +612,7 @@ async function putStatusWithRetry(path: string, payload: Record<string, any>): P
     console.warn('[GC] Installment mismatch detected. Retrying with normalized financial payload.');
     return apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
-      body: JSON.stringify(withInstallmentPrecisionFallback(fixedPayload)),
+      body: JSON.stringify(flattenLinesForGC(withInstallmentPrecisionFallback(fixedPayload))),
     });
   }
 }

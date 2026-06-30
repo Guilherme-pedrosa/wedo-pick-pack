@@ -444,7 +444,9 @@ Deno.serve(async (req: Request) => {
     // ============================================
     console.log('[generate-os] Step 2: Creating Auvo task...');
     const auvoPayload: Record<string, unknown> = {
-      taskType: 180177,
+      // Venda de produto usa o tipo de atividade "Comercial - ENTREGA DA VENDAS" (200268).
+      // Demais (OS de serviço) seguem com o tipo padrão.
+      taskType: docKind === 'venda' ? 200268 : 180177,
       idUserFrom: Number(auvo_user_id),
       orientation,
       priority: 2,

@@ -766,6 +766,7 @@ export default function InventoryAnalysisPage() {
         if (stockKnown && estoqueBase <= 0) motivos.push('Estoque atual zerado');
         if (stockKnown && estoqueBase < stockDemandQty) motivos.push('Estoque abaixo do mínimo calculado');
         if (budgetSignalQty > 0) motivos.push('Orçamento pendente aumentou risco');
+        if (reactiveOnly) motivos.push('Item de estoque zerou após saída — repor o vendido');
         if (pcQty > 0 && effectivePcQty < demandaTotal) motivos.push('Pedido de compra em aberto insuficiente');
         // Lead time entra no cálculo do estoque de segurança, mas não deve aparecer como motivo textual na lista.
         if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');

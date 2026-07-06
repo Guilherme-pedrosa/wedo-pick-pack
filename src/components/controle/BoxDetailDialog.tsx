@@ -351,6 +351,7 @@ export default function BoxDetailDialog({
         technicianGcId: box.technician_gc_id || undefined,
         details: `Quantidade ajustada de ${item.quantidade} para ${newQty}`,
       });
+      await resetVerification();
       onItemsChanged();
     } catch {
       toast.error("Erro ao atualizar quantidade");

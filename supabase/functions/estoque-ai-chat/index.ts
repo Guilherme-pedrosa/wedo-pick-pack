@@ -481,10 +481,14 @@ Deno.serve(async (req: Request) => {
 
 
         // 2) Buscar eventos de consumo (paginado), aplicando filtros
-        const agg = new Map<string, { produto_id: string; qtd: number; valor: number; eventos: number; clientes: Set<string> }>();
+        const agg = new Map<string, { produto_id: string; qtd: number; qtd_venda: number; qtd_os: number; valor: number; eventos: number; eventos_venda: number; eventos_os: number; clientes: Set<string> }>();
         const PAGE = 1000;
         let fromRow = 0;
         let totalEventos = 0;
+        let totalVendaQtd = 0;
+        let totalOsQtd = 0;
+        let totalVendaEventos = 0;
+        let totalOsEventos = 0;
         // .in é limitado — quando a lista é grande, filtramos em memória
         const useInFilter = restrictIds !== null && restrictIds.length <= 300;
         const idSet = restrictIds !== null ? new Set(restrictIds) : null;
@@ -508,9 +512,14 @@ Deno.serve(async (req: Request) => {
             if (idSet && !idSet.has(pid)) continue;
             const qty = parseDec(r.qty);
             if (qty <= 0) continue;
+            const isVenda = String(r.source_type) === "venda";
             totalEventos++;
-            const cur = agg.get(pid) ?? { produto_id: pid, qtd: 0, valor: 0, eventos: 0, clientes: new Set<string>() };
+            if (isVenda) { totalVendaQtd += qty; totalVendaEventos++; }
+            else { totalOsQtd += qty; totalOsEventos++; }
+            const cur = agg.get(pid) ?? { produto_id: pid, qtd: 0, qtd_venda: 0, qtd_os: 0, valor: 0, eventos: 0, eventos_venda: 0, eventos_os: 0, clientes: new Set<string>() };
             cur.qtd += qty;
+            if (isVenda) { cur.qtd_venda += qty; cur.eventos_venda += 1; }
+            else { cur.qtd_os += qty; cur.eventos_os += 1; }
             cur.valor += parseDec(r.valor_custo) * qty;
             cur.eventos += 1;
             if (r.cliente_nome) cur.clientes.add(String(r.cliente_nome).toLowerCase().trim());
@@ -520,6 +529,7 @@ Deno.serve(async (req: Request) => {
           fromRow += PAGE;
           if (fromRow >= 20000) break; // teto de segurança
         }
+
 
         if (agg.size === 0) {
           return { total_pecas: 0, ranking: [], aviso: "Nenhuma saída encontrada com esses filtros." };
@@ -543,6 +553,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        const r2 = (n: number) => Math.round(n * 100) / 100;
         const ranking = [...agg.values()]
           .sort((a, b) => b.qtd - a.qtd)
           .slice(0, lim)
@@ -552,9 +563,13 @@ Deno.serve(async (req: Request) => {
             return {
               identificacao: info?.codigo ? `[${info.codigo}] ${nome}` : nome,
               grupo: info?.grupo ?? null,
-              quantidade_saida: Math.round(r.qtd * 100) / 100,
-              valor_consumido: Math.round(r.valor * 100) / 100,
+              quantidade_saida: r2(r.qtd),
+              quantidade_vendas: r2(r.qtd_venda),
+              quantidade_os: r2(r.qtd_os),
+              valor_consumido: r2(r.valor),
               eventos: r.eventos,
+              eventos_vendas: r.eventos_venda,
+              eventos_os: r.eventos_os,
               clientes_distintos: r.clientes.size,
             };
           });
@@ -562,12 +577,17 @@ Deno.serve(async (req: Request) => {
         return {
           total_pecas: agg.size,
           total_eventos: totalEventos,
+          resumo_por_tipo: {
+            vendas: { quantidade: r2(totalVendaQtd), eventos: totalVendaEventos },
+            os: { quantidade: r2(totalOsQtd), eventos: totalOsEventos },
+          },
           periodo: { inicio: data_inicio ?? "início dos registros", fim: data_fim ?? "hoje" },
           tipo: tipo ?? "todos",
           grupo_filtrado: grupo ?? null,
           ranking,
         };
       },
+
     });
 
 
@@ -588,7 +608,7 @@ Deno.serve(async (req: Request) => {
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
-        "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
+        "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. VENDAS vs OS: a resposta traz 'resumo_por_tipo' com totais de vendas e OS separados, e cada item do ranking tem 'quantidade_vendas' e 'quantidade_os'. Quando o usuário perguntar especificamente sobre VENDAS, use esses campos (ou passe tipo='venda') e relate os números de venda explicitamente — NUNCA diga que não há vendas sem antes chamar a ferramenta. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
         "Ao apresentar um ranking de saídas, liste as peças no formato [Código] Nome com a quantidade de saída e, quando útil, o valor consumido. Deixe claro o período e o tipo (vendas, OS ou todos) considerados.",
         "CADASTRO DE PRODUTO: Você pode cadastrar um produto novo com a ferramenta cadastrar_produto. Para isso colete: nome, código interno, grupo/categoria, custo, estoque inicial, localização (física e rational, se houver) e o preço de venda de CADA tabela informada pelo usuário.",
         "ANTES de chamar cadastrar_produto, mostre um resumo completo e organizado de TODOS os dados (incluindo o preço tabela a tabela) e peça a confirmação explícita do usuário. Só chame a ferramenta depois que o usuário responder confirmando (ex: 'sim', 'pode cadastrar', 'confirmar').",

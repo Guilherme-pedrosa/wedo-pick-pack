@@ -20,9 +20,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const cursor = body.cursor || { page: 1, stockMap: {} };
+    const cursor = body.cursor || { page: 1, stockMap: {}, movMap: {} };
     const page = cursor.page;
     const stockMap: Record<string, number> = cursor.stockMap || {};
+    // movMap[id] = true quando o produto é controlado por estoque (movimenta_estoque = 1)
+    const movMap: Record<string, boolean> = cursor.movMap || {};
 
     await sleep(RATE_LIMIT_MS);
 
@@ -66,6 +68,7 @@ Deno.serve(async (req: Request) => {
       const id = String(p.id);
       const estoque = parseFloat(String(p.estoque || '0'));
       stockMap[id] = isNaN(estoque) ? 0 : estoque;
+      movMap[id] = String(p.movimenta_estoque ?? '0') === '1';
     }
 
     const nextPage = page + 1;
@@ -73,8 +76,9 @@ Deno.serve(async (req: Request) => {
 
     return jsonResp({
       done,
-      cursor: done ? null : { page: nextPage, stockMap },
+      cursor: done ? null : { page: nextPage, stockMap, movMap },
       stockMap: done ? stockMap : undefined,
+      movMap: done ? movMap : undefined,
       progress: {
         page,
         totalPages,

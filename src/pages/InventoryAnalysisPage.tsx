@@ -480,6 +480,7 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 export default function InventoryAnalysisPage() {
   const [initialFilters] = useState(readPersistedAnalysisFilters);
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
+  const [movMap, setMovMap] = useState<Map<string, boolean>>(new Map());
   const [pcMap, setPcMap] = useState<Map<string, PCEntry>>(new Map());
   const [orcMap, setOrcMap] = useState<Map<string, OrcEntry>>(new Map());
   const [loadingStock, setLoadingStock] = useState(false);
@@ -699,13 +700,30 @@ export default function InventoryAnalysisPage() {
         r.source_count_180d >= 3 ||
         nonZeroMonths180 >= 2 ||
         totalQty180d >= minShelfQty;
-      const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual;
+
+      // --- Reposição REATIVA ---
+      // Item controlado por estoque no GC (movimenta_estoque = 1) que caiu a zero / abaixo
+      // do ponto de ressuprimento e teve consumo real no período: precisa repor o que saiu,
+      // mesmo sem recorrência de múltiplos clientes.
+      const isInventoryItem = movMap.get(r.produto_id) === true;
+      const inventoryNeedsRestock =
+        isInventoryItem &&
+        stockKnown &&
+        r.event_count >= 1 &&
+        estoqueBase <= reorderPoint;
+
+      const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual || inventoryNeedsRestock;
 
       const oneEventOnly = r.event_count <= 1;
       const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
 
       // --- Demanda de estoque (consumo real) e demanda total ---
-      const stockDemandQty = isStockEligible ? Math.max(maxStock, minShelfQty) : 0;
+      // Item elegível apenas por reposição reativa (zerou, sem recorrência) usa um piso
+      // enxuto (repõe o essencial) em vez do mínimo de prateleira preventivo.
+      const reactiveOnly =
+        inventoryNeedsRestock && !((hasRecentConsumption && isRecurringStock) || hasManual);
+      const shelfFloor = reactiveOnly ? Math.max(operationalMinimum, 1) : minShelfQty;
+      const stockDemandQty = isStockEligible ? Math.max(maxStock, shelfFloor) : 0;
       // orçamento NÃO soma cego: usa max com a demanda de estoque, e só p/ elegíveis
       const demandaTotal = isStockEligible ? Math.max(stockDemandQty, budgetSignalQty) : 0;
 
@@ -748,6 +766,7 @@ export default function InventoryAnalysisPage() {
         if (stockKnown && estoqueBase <= 0) motivos.push('Estoque atual zerado');
         if (stockKnown && estoqueBase < stockDemandQty) motivos.push('Estoque abaixo do mínimo calculado');
         if (budgetSignalQty > 0) motivos.push('Orçamento pendente aumentou risco');
+        if (reactiveOnly) motivos.push('Item de estoque zerou após saída — repor o vendido');
         if (pcQty > 0 && effectivePcQty < demandaTotal) motivos.push('Pedido de compra em aberto insuficiente');
         // Lead time entra no cálculo do estoque de segurança, mas não deve aparecer como motivo textual na lista.
         if (motivos.length === 0) motivos.push('Necessidade de reposição calculada');
@@ -855,7 +874,7 @@ export default function InventoryAnalysisPage() {
         source_refs: r.source_refs || [],
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, thresholds, supplierLTMap]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, movMap, pcMap, orcMap, thresholds, supplierLTMap]);
 
   // Unique groups for filter
   const uniqueGrupos = useMemo(() => {
@@ -1165,6 +1184,12 @@ export default function InventoryAnalysisPage() {
             newMap.set(id, qty as number);
           }
           setStockMap(newMap);
+          const mm = data.movMap || {};
+          const newMov = new Map<string, boolean>();
+          for (const [id, flag] of Object.entries(mm)) {
+            if (flag) newMov.set(id, true);
+          }
+          setMovMap(newMov);
           toast.success(`Estoque atualizado: ${newMap.size} produtos`);
           break;
         }

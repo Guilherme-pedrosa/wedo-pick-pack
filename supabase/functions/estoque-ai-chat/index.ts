@@ -553,6 +553,7 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        const r2 = (n: number) => Math.round(n * 100) / 100;
         const ranking = [...agg.values()]
           .sort((a, b) => b.qtd - a.qtd)
           .slice(0, lim)
@@ -562,9 +563,13 @@ Deno.serve(async (req: Request) => {
             return {
               identificacao: info?.codigo ? `[${info.codigo}] ${nome}` : nome,
               grupo: info?.grupo ?? null,
-              quantidade_saida: Math.round(r.qtd * 100) / 100,
-              valor_consumido: Math.round(r.valor * 100) / 100,
+              quantidade_saida: r2(r.qtd),
+              quantidade_vendas: r2(r.qtd_venda),
+              quantidade_os: r2(r.qtd_os),
+              valor_consumido: r2(r.valor),
               eventos: r.eventos,
+              eventos_vendas: r.eventos_venda,
+              eventos_os: r.eventos_os,
               clientes_distintos: r.clientes.size,
             };
           });
@@ -572,12 +577,17 @@ Deno.serve(async (req: Request) => {
         return {
           total_pecas: agg.size,
           total_eventos: totalEventos,
+          resumo_por_tipo: {
+            vendas: { quantidade: r2(totalVendaQtd), eventos: totalVendaEventos },
+            os: { quantidade: r2(totalOsQtd), eventos: totalOsEventos },
+          },
           periodo: { inicio: data_inicio ?? "início dos registros", fim: data_fim ?? "hoje" },
           tipo: tipo ?? "todos",
           grupo_filtrado: grupo ?? null,
           ranking,
         };
       },
+
     });
 
 

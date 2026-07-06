@@ -316,6 +316,7 @@ export default function BoxDetailDialog({
           details: `Adicionado ${qty}x "${selectedProduct.nome}"`,
         });
       handleProductSelect(null);
+      await resetVerification();
       onItemsChanged();
     } catch (e) {
       toast.error("Erro ao adicionar item");

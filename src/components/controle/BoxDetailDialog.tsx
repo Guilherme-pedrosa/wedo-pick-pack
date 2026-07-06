@@ -439,10 +439,20 @@ export default function BoxDetailDialog({
                   )}
                 </>
               )}
-              {box?.technician_name && (
+              {box?.technician_name ? (
                 <Badge variant="outline" className="ml-2 text-xs bg-primary/10 text-primary border-primary/20">
                   <UserCheck className="h-3 w-3 mr-1" />
                   {box.technician_name}
+                </Badge>
+              ) : box?.verified ? (
+                <Badge variant="outline" className="ml-2 text-xs bg-success/10 text-success border-success/20">
+                  <ClipboardCheck className="h-3 w-3 mr-1" />
+                  Conferida
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="ml-2 text-xs bg-warning/10 text-warning border-warning/20">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  {box?.needs_replenish ? "Repor peças" : "A conferir"}
                 </Badge>
               )}
             </DialogTitle>

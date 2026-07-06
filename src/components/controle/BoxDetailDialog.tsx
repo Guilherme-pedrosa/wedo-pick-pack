@@ -378,6 +378,7 @@ export default function BoxDetailDialog({
       });
 
       toast.success("Item removido");
+      await resetVerification();
       onItemsChanged();
     } catch {
       toast.error("Erro ao remover item");

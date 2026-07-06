@@ -1684,6 +1684,16 @@ export default function InventoryAnalysisPage() {
                           ) : <span className="text-amber-600 text-xs" title="Estoque não carregado">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
+                          {item.qty_venda > 0 ? (
+                            <span className="text-emerald-600 font-medium text-xs" title="Quantidade vendida (documentos de Venda)">{formatNumberBR(item.qty_venda, item.qty_venda % 1 === 0 ? 0 : 1)}un</span>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="px-2 py-1 text-right">
+                          {item.qty_os > 0 ? (
+                            <span className="text-muted-foreground text-xs" title="Quantidade baixada em OS">{formatNumberBR(item.qty_os, item.qty_os % 1 === 0 ? 0 : 1)}un</span>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="px-2 py-1 text-right">
                           {item.pc_qty > 0 ? (
                             <span className="text-blue-600 font-medium text-xs" title={item.pc_refs.map(r => `PC ${r.codigo}: ${r.qtd}un (${r.fornecedor} — ${r.situacao})`).join('\n')}>
                               {item.pc_qty}un

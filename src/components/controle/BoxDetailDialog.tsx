@@ -45,6 +45,10 @@ export interface BoxData {
   items_count?: number;
   total_value?: number;
   last_linked_at?: string | null;
+  verified?: boolean;
+  verified_at?: string | null;
+  verified_by?: string | null;
+  needs_replenish?: boolean;
 }
 
 export interface BoxItemData {
@@ -204,6 +208,59 @@ export default function BoxDetailDialog({
       });
   }, [items]);
 
+  const [verifying, setVerifying] = useState(false);
+
+  // Resets the conference flag whenever items change (box must be re-audited)
+  const resetVerification = async () => {
+    if (!box || !box.verified) return;
+    box.verified = false;
+    box.needs_replenish = true;
+    await supabase
+      .from("boxes")
+      .update({ verified: false, verified_at: null, verified_by: null, needs_replenish: true })
+      .eq("id", box.id);
+  };
+
+  const handleMarkVerified = async () => {
+    if (!box || verifying) return;
+    setVerifying(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      let operatorName = user?.email || "";
+      if (user) {
+        const { data: prof } = await supabase.from("profiles").select("name").eq("id", user.id).single();
+        if (prof?.name) operatorName = prof.name;
+      }
+      const { data, error } = await supabase
+        .from("boxes")
+        .update({
+          verified: true,
+          verified_at: new Date().toISOString(),
+          verified_by: operatorName,
+          needs_replenish: false,
+        })
+        .eq("id", box.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Falha ao conferir: permissão negada ou caixa não encontrada.");
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "entrada",
+        details: `Caixa conferida e liberada para vínculo por ${operatorName}`,
+      });
+      toast.success("Caixa conferida! Já pode vincular um técnico.");
+      onItemsChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao conferir caixa");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+
+
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
 
@@ -259,6 +316,7 @@ export default function BoxDetailDialog({
           details: `Adicionado ${qty}x "${selectedProduct.nome}"`,
         });
       handleProductSelect(null);
+      await resetVerification();
       onItemsChanged();
     } catch (e) {
       toast.error("Erro ao adicionar item");
@@ -293,6 +351,7 @@ export default function BoxDetailDialog({
         technicianGcId: box.technician_gc_id || undefined,
         details: `Quantidade ajustada de ${item.quantidade} para ${newQty}`,
       });
+      await resetVerification();
       onItemsChanged();
     } catch {
       toast.error("Erro ao atualizar quantidade");
@@ -319,6 +378,7 @@ export default function BoxDetailDialog({
       });
 
       toast.success("Item removido");
+      await resetVerification();
       onItemsChanged();
     } catch {
       toast.error("Erro ao remover item");
@@ -379,10 +439,20 @@ export default function BoxDetailDialog({
                   )}
                 </>
               )}
-              {box?.technician_name && (
+              {box?.technician_name ? (
                 <Badge variant="outline" className="ml-2 text-xs bg-primary/10 text-primary border-primary/20">
                   <UserCheck className="h-3 w-3 mr-1" />
                   {box.technician_name}
+                </Badge>
+              ) : box?.verified ? (
+                <Badge variant="outline" className="ml-2 text-xs bg-success/10 text-success border-success/20">
+                  <ClipboardCheck className="h-3 w-3 mr-1" />
+                  Conferida
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="ml-2 text-xs bg-warning/10 text-warning border-warning/20">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  {box?.needs_replenish ? "Repor peças" : "A conferir"}
                 </Badge>
               )}
             </DialogTitle>
@@ -545,7 +615,20 @@ export default function BoxDetailDialog({
             <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
               {!box.technician_name ? (
                 <>
-                  <Button variant="outline" size="sm" onClick={() => onLinkTechnician(box)} className="text-xs">
+                  {!box.verified && !isPendenciasBox && (
+                    <Button variant="default" size="sm" onClick={handleMarkVerified} disabled={verifying} className="text-xs">
+                      <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                      {verifying ? "Conferindo..." : box.needs_replenish ? "Repor e conferir" : "Conferir e liberar"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onLinkTechnician(box)}
+                    disabled={!box.verified && !isPendenciasBox}
+                    title={!box.verified && !isPendenciasBox ? "Confira a caixa antes de vincular um técnico" : undefined}
+                    className="text-xs"
+                  >
                     <UserCheck className="h-3.5 w-3.5 mr-1" />
                     Vincular técnico
                   </Button>

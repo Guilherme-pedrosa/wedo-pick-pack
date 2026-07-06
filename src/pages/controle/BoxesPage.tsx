@@ -745,7 +745,7 @@ const BoxesPage = () => {
               .select("*")
               .eq("id", selectedBox.id)
               .maybeSingle();
-            if (fresh) setSelectedBox((prev) => (prev ? { ...prev, ...fresh } : prev));
+            if (fresh) setSelectedBox((prev) => (prev ? { ...prev, ...(fresh as Partial<BoxData>) } : prev));
           }
           loadBoxes();
         }}

@@ -718,7 +718,12 @@ export default function InventoryAnalysisPage() {
       const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
 
       // --- Demanda de estoque (consumo real) e demanda total ---
-      const stockDemandQty = isStockEligible ? Math.max(maxStock, minShelfQty) : 0;
+      // Item elegível apenas por reposição reativa (zerou, sem recorrência) usa um piso
+      // enxuto (repõe o essencial) em vez do mínimo de prateleira preventivo.
+      const reactiveOnly =
+        inventoryNeedsRestock && !((hasRecentConsumption && isRecurringStock) || hasManual);
+      const shelfFloor = reactiveOnly ? Math.max(operationalMinimum, 1) : minShelfQty;
+      const stockDemandQty = isStockEligible ? Math.max(maxStock, shelfFloor) : 0;
       // orçamento NÃO soma cego: usa max com a demanda de estoque, e só p/ elegíveis
       const demandaTotal = isStockEligible ? Math.max(stockDemandQty, budgetSignalQty) : 0;
 

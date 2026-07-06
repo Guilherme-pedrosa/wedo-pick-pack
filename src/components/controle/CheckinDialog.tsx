@@ -371,7 +371,10 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
         });
       }
 
-      // Return box to stand by after check-in
+      // Items still missing (divergence) that were NOT replenished require restocking
+      const pendingReplenish = checkinItems.some((ci) => ci.divergencia > 0 && !ci.reposto);
+
+      // Return box to stand by after check-in — always needs re-conference
       await supabase
         .from("boxes")
         .update({
@@ -379,6 +382,10 @@ export default function CheckinDialog({ box, items, onClose, onCompleted }: Prop
           closed_at: null,
           technician_name: null,
           technician_gc_id: null,
+          verified: false,
+          verified_at: null,
+          verified_by: null,
+          needs_replenish: pendingReplenish,
         })
         .eq("id", box.id);
 

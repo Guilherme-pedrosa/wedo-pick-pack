@@ -615,7 +615,20 @@ export default function BoxDetailDialog({
             <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border">
               {!box.technician_name ? (
                 <>
-                  <Button variant="outline" size="sm" onClick={() => onLinkTechnician(box)} className="text-xs">
+                  {!box.verified && !isPendenciasBox && (
+                    <Button variant="default" size="sm" onClick={handleMarkVerified} disabled={verifying} className="text-xs">
+                      <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                      {verifying ? "Conferindo..." : box.needs_replenish ? "Repor e conferir" : "Conferir e liberar"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onLinkTechnician(box)}
+                    disabled={!box.verified && !isPendenciasBox}
+                    title={!box.verified && !isPendenciasBox ? "Confira a caixa antes de vincular um técnico" : undefined}
+                    className="text-xs"
+                  >
                     <UserCheck className="h-3.5 w-3.5 mr-1" />
                     Vincular técnico
                   </Button>

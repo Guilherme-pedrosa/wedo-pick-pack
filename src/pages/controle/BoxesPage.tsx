@@ -428,7 +428,13 @@ const BoxesPage = () => {
   const standByBoxes = boxes
     .filter((b) => !b.technician_name)
     .slice()
-    .sort((a, b) => boxDateKey(b, false) - boxDateKey(a, false));
+    .sort((a, b) => {
+      // Boxes still pending conference come first
+      const aPending = a.verified ? 1 : 0;
+      const bPending = b.verified ? 1 : 0;
+      if (aPending !== bPending) return aPending - bPending;
+      return boxDateKey(b, false) - boxDateKey(a, false);
+    });
 
   const formatCurrency = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 

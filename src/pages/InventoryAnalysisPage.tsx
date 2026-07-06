@@ -874,7 +874,7 @@ export default function InventoryAnalysisPage() {
         source_refs: r.source_refs || [],
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, pcMap, orcMap, thresholds, supplierLTMap]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, movMap, pcMap, orcMap, thresholds, supplierLTMap]);
 
   // Unique groups for filter
   const uniqueGrupos = useMemo(() => {

@@ -700,7 +700,19 @@ export default function InventoryAnalysisPage() {
         r.source_count_180d >= 3 ||
         nonZeroMonths180 >= 2 ||
         totalQty180d >= minShelfQty;
-      const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual;
+
+      // --- Reposição REATIVA ---
+      // Item controlado por estoque no GC (movimenta_estoque = 1) que caiu a zero / abaixo
+      // do ponto de ressuprimento e teve consumo real no período: precisa repor o que saiu,
+      // mesmo sem recorrência de múltiplos clientes.
+      const isInventoryItem = movMap.get(r.produto_id) === true;
+      const inventoryNeedsRestock =
+        isInventoryItem &&
+        stockKnown &&
+        r.event_count >= 1 &&
+        estoqueBase <= reorderPoint;
+
+      const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual || inventoryNeedsRestock;
 
       const oneEventOnly = r.event_count <= 1;
       const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;

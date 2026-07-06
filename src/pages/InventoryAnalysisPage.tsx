@@ -1165,6 +1165,12 @@ export default function InventoryAnalysisPage() {
             newMap.set(id, qty as number);
           }
           setStockMap(newMap);
+          const mm = data.movMap || {};
+          const newMov = new Map<string, boolean>();
+          for (const [id, flag] of Object.entries(mm)) {
+            if (flag) newMov.set(id, true);
+          }
+          setMovMap(newMov);
           toast.success(`Estoque atualizado: ${newMap.size} produtos`);
           break;
         }

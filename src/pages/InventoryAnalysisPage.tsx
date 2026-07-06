@@ -29,6 +29,8 @@ interface SourceRef {
 interface ConsumptionRow {
   produto_id: string;
   total_qty: number;
+  qty_venda: number;
+  qty_os: number;
   total_value: number;
   event_count: number;
   source_count: number;

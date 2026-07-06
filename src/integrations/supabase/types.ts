@@ -289,30 +289,42 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          needs_replenish: boolean
           status: string
           technician_gc_id: string | null
           technician_name: string | null
           user_id: string
+          verified: boolean
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           closed_at?: string | null
           created_at?: string
           id?: string
           name: string
+          needs_replenish?: boolean
           status?: string
           technician_gc_id?: string | null
           technician_name?: string | null
           user_id: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           closed_at?: string | null
           created_at?: string
           id?: string
           name?: string
+          needs_replenish?: boolean
           status?: string
           technician_gc_id?: string | null
           technician_name?: string | null
           user_id?: string
+          verified?: boolean
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: []
       }

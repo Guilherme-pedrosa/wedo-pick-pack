@@ -815,6 +815,8 @@ export default function InventoryAnalysisPage() {
         valor_custo: info?.valor_custo ?? null,
 
         total_qty: r.total_qty,
+        qty_venda: r.qty_venda,
+        qty_os: r.qty_os,
         total_value: r.total_value,
         event_count: r.event_count,
         source_count: r.source_count,

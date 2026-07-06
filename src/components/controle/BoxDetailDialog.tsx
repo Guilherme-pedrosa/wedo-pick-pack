@@ -621,6 +621,12 @@ export default function BoxDetailDialog({
                       {verifying ? "Conferindo..." : box.needs_replenish ? "Repor e conferir" : "Conferir e liberar"}
                     </Button>
                   )}
+                  {box.verified && !isPendenciasBox && (
+                    <Button variant="outline" size="sm" onClick={() => setReceiptOpen(true)} className="text-xs">
+                      <Printer className="h-3.5 w-3.5 mr-1" />
+                      Imprimir conferência
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

@@ -441,7 +441,7 @@ const BoxesPage = () => {
         onClick={() => loadBoxItems(box)}
       >
         <div className={`flex items-center justify-center h-10 w-10 rounded-lg shrink-0 ${
-          isOperation ? "bg-primary/10 text-primary" : "bg-warning/10 text-warning"
+          isOperation ? "bg-primary/10 text-primary" : box.verified ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
         }`}>
           <Box className="h-5 w-5" />
         </div>
@@ -451,9 +451,17 @@ const BoxesPage = () => {
             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${
               isOperation
                 ? "bg-primary/10 text-primary border-primary/20"
-                : "bg-warning/10 text-warning border-warning/20"
+                : box.verified
+                  ? "bg-success/10 text-success border-success/20"
+                  : "bg-warning/10 text-warning border-warning/20"
             }`}>
-              {isOperation ? "Em campo" : "Aguardando"}
+              {isOperation
+                ? "Em campo"
+                : box.verified
+                  ? "Conferida"
+                  : box.needs_replenish
+                    ? "Repor peças"
+                    : "A conferir"}
             </Badge>
           </div>
           <div className="flex items-center gap-3 mt-0.5">

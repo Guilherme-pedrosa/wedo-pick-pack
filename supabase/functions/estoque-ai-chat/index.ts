@@ -555,6 +555,8 @@ Deno.serve(async (req: Request) => {
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
+        "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
+        "Ao apresentar um ranking de saídas, liste as peças no formato [Código] Nome com a quantidade de saída e, quando útil, o valor consumido. Deixe claro o período e o tipo (vendas, OS ou todos) considerados.",
         "CADASTRO DE PRODUTO: Você pode cadastrar um produto novo com a ferramenta cadastrar_produto. Para isso colete: nome, código interno, grupo/categoria, custo, estoque inicial, localização (física e rational, se houver) e o preço de venda de CADA tabela informada pelo usuário.",
         "ANTES de chamar cadastrar_produto, mostre um resumo completo e organizado de TODOS os dados (incluindo o preço tabela a tabela) e peça a confirmação explícita do usuário. Só chame a ferramenta depois que o usuário responder confirmando (ex: 'sim', 'pode cadastrar', 'confirmar').",
         "Nunca invente preços de tabela: use exatamente os valores que o usuário informar para cada tabela. Se o usuário não informar alguma tabela, avise que ela ficará com o markup padrão do GestãoClick.",
@@ -562,7 +564,7 @@ Deno.serve(async (req: Request) => {
         "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
-      tools: { consultar_estoque: consultarEstoque, cadastrar_produto: cadastrarProduto },
+      tools: { consultar_estoque: consultarEstoque, cadastrar_produto: cadastrarProduto, analisar_consumo: analisarConsumo },
     });
 
     return result.toUIMessageStreamResponse({ headers: corsHeaders });

@@ -20,9 +20,11 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const cursor = body.cursor || { page: 1, stockMap: {} };
+    const cursor = body.cursor || { page: 1, stockMap: {}, movMap: {} };
     const page = cursor.page;
     const stockMap: Record<string, number> = cursor.stockMap || {};
+    // movMap[id] = true quando o produto é controlado por estoque (movimenta_estoque = 1)
+    const movMap: Record<string, boolean> = cursor.movMap || {};
 
     await sleep(RATE_LIMIT_MS);
 

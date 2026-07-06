@@ -402,6 +402,176 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    const analisarConsumo = tool({
+      description:
+        "Analisa o HISTÓRICO DE SAÍDAS / CONSUMO de peças (vendas e ordens de serviço já baixadas no estoque). Responde perguntas como 'quais produtos do grupo X tiveram mais saídas em 2026', 'quanto saiu da peça Y no período', 'quais os itens mais vendidos'. Filtra por grupo, produto (nome/código), tipo de documento e período. Retorna o ranking de peças por quantidade de saída, valor consumido, número de eventos e clientes distintos.",
+      inputSchema: z.object({
+        grupo: z.string().optional().describe("Nome (ou parte) do grupo/categoria. Ex: 'ESPECÍFICO - HOBART', 'hobart'."),
+        termo: z.string().optional().describe("Nome, código interno ou código de barras de uma peça específica."),
+        data_inicio: z.string().optional().describe("Data inicial no formato YYYY-MM-DD. Para 'em 2026' use 2026-01-01."),
+        data_fim: z.string().optional().describe("Data final no formato YYYY-MM-DD. Para 'em 2026' use 2026-12-31."),
+        tipo: z.enum(["os", "venda", "todos"]).optional().describe("Tipo de documento: 'venda', 'os' ou 'todos' (padrão)."),
+        limite: z.number().optional().describe("Quantos produtos retornar no ranking (padrão 20, máx 50)."),
+      }),
+      execute: async ({ grupo, termo, data_inicio, data_fim, tipo, limite }) => {
+        const lim = Math.min(Math.max(limite ?? 20, 1), 50);
+
+        // 1) Se houver filtro de grupo ou termo, resolver os produto_ids no índice.
+        //    Grupo é filtrado em memória (accent-insensitive, por tokens) pois o nome do
+        //    grupo tem acentos/espaços (ex: "ESPECÍFICO - HOBART").
+        let restrictIds: string[] | null = null;
+        const infoMap = new Map<string, { nome: string; codigo: string | null; grupo: string | null }>();
+        if (grupo || termo) {
+          const grupoTokens = grupo ? normalizeStr(grupo).split(/[^a-z0-9]+/).filter(Boolean) : [];
+          const matched: any[] = [];
+
+          if (grupo) {
+            // Percorre o índice em páginas e filtra por tokens do grupo.
+            const PAGE_IDX = 1000;
+            let fromIdx = 0;
+            while (true) {
+              let idxQ = supabase
+                .from("products_index")
+                .select("produto_id, nome, codigo_interno, codigo_barra, payload_min_json")
+                .eq("ativo", true)
+                .range(fromIdx, fromIdx + PAGE_IDX - 1);
+              if (termo) {
+                const t = termo.trim();
+                idxQ = idxQ.or(
+                  `codigo_interno.ilike.%${t}%,codigo_barra.ilike.%${t}%,produto_id.ilike.%${t}%,nome.ilike.%${t}%`,
+                );
+              }
+              const { data: idxRows } = await idxQ;
+              const rows = idxRows ?? [];
+              for (const r of rows) {
+                const pm = (r.payload_min_json ?? {}) as Record<string, unknown>;
+                const g = normalizeStr(pm.nome_grupo);
+                if (grupoTokens.every((tk) => g.includes(tk))) matched.push(r);
+              }
+              if (rows.length < PAGE_IDX) break;
+              fromIdx += PAGE_IDX;
+              if (fromIdx >= 20000) break;
+            }
+          } else if (termo) {
+            const t = termo.trim();
+            const { data: idxRows } = await supabase
+              .from("products_index")
+              .select("produto_id, nome, codigo_interno, codigo_barra, payload_min_json")
+              .eq("ativo", true)
+              .or(
+                `codigo_interno.ilike.%${t}%,codigo_barra.ilike.%${t}%,produto_id.ilike.%${t}%,nome.ilike.%${t}%`,
+              )
+              .limit(500);
+            matched.push(...(idxRows ?? []));
+          }
+
+          restrictIds = matched.map((r: any) => String(r.produto_id));
+          for (const r of matched) {
+            const pm = (r.payload_min_json ?? {}) as Record<string, unknown>;
+            infoMap.set(String(r.produto_id), {
+              nome: r.nome,
+              codigo: r.codigo_interno ?? null,
+              grupo: (pm.nome_grupo as string) ?? null,
+            });
+          }
+          if (restrictIds.length === 0) {
+            return { total_pecas: 0, ranking: [], aviso: "Nenhuma peça encontrada para esse grupo/termo." };
+          }
+        }
+
+
+        // 2) Buscar eventos de consumo (paginado), aplicando filtros
+        const agg = new Map<string, { produto_id: string; qtd: number; valor: number; eventos: number; clientes: Set<string> }>();
+        const PAGE = 1000;
+        let fromRow = 0;
+        let totalEventos = 0;
+        // .in é limitado — quando a lista é grande, filtramos em memória
+        const useInFilter = restrictIds !== null && restrictIds.length <= 300;
+        const idSet = restrictIds !== null ? new Set(restrictIds) : null;
+
+        while (true) {
+          let q = supabase
+            .from("inventory_consumption_events")
+            .select("produto_id, qty, valor_custo, occurred_at, source_type, cliente_nome")
+            .order("occurred_at", { ascending: false })
+            .range(fromRow, fromRow + PAGE - 1);
+          if (data_inicio) q = q.gte("occurred_at", data_inicio);
+          if (data_fim) q = q.lte("occurred_at", `${data_fim}T23:59:59`);
+          if (tipo && tipo !== "todos") q = q.eq("source_type", tipo);
+          if (useInFilter && restrictIds) q = q.in("produto_id", restrictIds);
+
+          const { data: evRows, error } = await q;
+          if (error) return { erro: error.message };
+          const rows = evRows ?? [];
+          for (const r of rows) {
+            const pid = String(r.produto_id);
+            if (idSet && !idSet.has(pid)) continue;
+            const qty = parseDec(r.qty);
+            if (qty <= 0) continue;
+            totalEventos++;
+            const cur = agg.get(pid) ?? { produto_id: pid, qtd: 0, valor: 0, eventos: 0, clientes: new Set<string>() };
+            cur.qtd += qty;
+            cur.valor += parseDec(r.valor_custo) * qty;
+            cur.eventos += 1;
+            if (r.cliente_nome) cur.clientes.add(String(r.cliente_nome).toLowerCase().trim());
+            agg.set(pid, cur);
+          }
+          if (rows.length < PAGE) break;
+          fromRow += PAGE;
+          if (fromRow >= 20000) break; // teto de segurança
+        }
+
+        if (agg.size === 0) {
+          return { total_pecas: 0, ranking: [], aviso: "Nenhuma saída encontrada com esses filtros." };
+        }
+
+        // 3) Resolver nomes para produtos que ainda não estão no infoMap
+        const missing = [...agg.keys()].filter((id) => !infoMap.has(id));
+        for (let i = 0; i < missing.length; i += 200) {
+          const batch = missing.slice(i, i + 200);
+          const { data: nmeta } = await supabase
+            .from("products_index")
+            .select("produto_id, nome, codigo_interno, payload_min_json")
+            .in("produto_id", batch);
+          for (const r of nmeta ?? []) {
+            const pm = (r.payload_min_json ?? {}) as Record<string, unknown>;
+            infoMap.set(String(r.produto_id), {
+              nome: r.nome,
+              codigo: r.codigo_interno ?? null,
+              grupo: (pm.nome_grupo as string) ?? null,
+            });
+          }
+        }
+
+        const ranking = [...agg.values()]
+          .sort((a, b) => b.qtd - a.qtd)
+          .slice(0, lim)
+          .map((r) => {
+            const info = infoMap.get(r.produto_id);
+            const nome = info?.nome ?? `Produto ${r.produto_id}`;
+            return {
+              identificacao: info?.codigo ? `[${info.codigo}] ${nome}` : nome,
+              grupo: info?.grupo ?? null,
+              quantidade_saida: Math.round(r.qtd * 100) / 100,
+              valor_consumido: Math.round(r.valor * 100) / 100,
+              eventos: r.eventos,
+              clientes_distintos: r.clientes.size,
+            };
+          });
+
+        return {
+          total_pecas: agg.size,
+          total_eventos: totalEventos,
+          periodo: { inicio: data_inicio ?? "início dos registros", fim: data_fim ?? "hoje" },
+          tipo: tipo ?? "todos",
+          grupo_filtrado: grupo ?? null,
+          ranking,
+        };
+      },
+    });
+
+
+
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       stopWhen: stepCountIs(50),
@@ -418,6 +588,8 @@ Deno.serve(async (req: Request) => {
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
+        "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
+        "Ao apresentar um ranking de saídas, liste as peças no formato [Código] Nome com a quantidade de saída e, quando útil, o valor consumido. Deixe claro o período e o tipo (vendas, OS ou todos) considerados.",
         "CADASTRO DE PRODUTO: Você pode cadastrar um produto novo com a ferramenta cadastrar_produto. Para isso colete: nome, código interno, grupo/categoria, custo, estoque inicial, localização (física e rational, se houver) e o preço de venda de CADA tabela informada pelo usuário.",
         "ANTES de chamar cadastrar_produto, mostre um resumo completo e organizado de TODOS os dados (incluindo o preço tabela a tabela) e peça a confirmação explícita do usuário. Só chame a ferramenta depois que o usuário responder confirmando (ex: 'sim', 'pode cadastrar', 'confirmar').",
         "Nunca invente preços de tabela: use exatamente os valores que o usuário informar para cada tabela. Se o usuário não informar alguma tabela, avise que ela ficará com o markup padrão do GestãoClick.",
@@ -425,7 +597,7 @@ Deno.serve(async (req: Request) => {
         "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
-      tools: { consultar_estoque: consultarEstoque, cadastrar_produto: cadastrarProduto },
+      tools: { consultar_estoque: consultarEstoque, cadastrar_produto: cadastrarProduto, analisar_consumo: analisarConsumo },
     });
 
     return result.toUIMessageStreamResponse({ headers: corsHeaders });

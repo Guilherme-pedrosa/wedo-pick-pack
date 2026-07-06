@@ -104,6 +104,8 @@ interface AnalysisItem {
   valor_custo: number | null;
 
   total_qty: number;
+  qty_venda: number;
+  qty_os: number;
   total_value: number;
   event_count: number;
   source_count: number;

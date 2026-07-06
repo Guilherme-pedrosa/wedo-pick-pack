@@ -736,8 +736,17 @@ const BoxesPage = () => {
         loadingItems={loadingItems}
         isAdmin={isAdmin}
         onClose={() => setSelectedBox(null)}
-        onItemsChanged={() => {
-          if (selectedBox) loadBoxItems(selectedBox, false);
+        onItemsChanged={async () => {
+          if (selectedBox) {
+            loadBoxItems(selectedBox, false);
+            // Refresh the open box so its verified/needs_replenish flags update in the dialog
+            const { data: fresh } = await supabase
+              .from("boxes")
+              .select("*")
+              .eq("id", selectedBox.id)
+              .maybeSingle();
+            if (fresh) setSelectedBox((prev) => (prev ? { ...prev, ...fresh } : prev));
+          }
           loadBoxes();
         }}
         onLinkTechnician={(box) => {

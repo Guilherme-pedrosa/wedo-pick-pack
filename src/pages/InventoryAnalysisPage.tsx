@@ -409,6 +409,8 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
       map.set(key, {
         produto_id: r.produto_id,
         total_qty: qty,
+        qty_venda: sourceType === 'venda' ? qty : 0,
+        qty_os: sourceType === 'venda' ? 0 : qty,
         total_value: val,
         event_count: 1,
         source_count: 1,

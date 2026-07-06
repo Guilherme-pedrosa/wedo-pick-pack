@@ -481,10 +481,14 @@ Deno.serve(async (req: Request) => {
 
 
         // 2) Buscar eventos de consumo (paginado), aplicando filtros
-        const agg = new Map<string, { produto_id: string; qtd: number; valor: number; eventos: number; clientes: Set<string> }>();
+        const agg = new Map<string, { produto_id: string; qtd: number; qtd_venda: number; qtd_os: number; valor: number; eventos: number; eventos_venda: number; eventos_os: number; clientes: Set<string> }>();
         const PAGE = 1000;
         let fromRow = 0;
         let totalEventos = 0;
+        let totalVendaQtd = 0;
+        let totalOsQtd = 0;
+        let totalVendaEventos = 0;
+        let totalOsEventos = 0;
         // .in é limitado — quando a lista é grande, filtramos em memória
         const useInFilter = restrictIds !== null && restrictIds.length <= 300;
         const idSet = restrictIds !== null ? new Set(restrictIds) : null;
@@ -508,9 +512,14 @@ Deno.serve(async (req: Request) => {
             if (idSet && !idSet.has(pid)) continue;
             const qty = parseDec(r.qty);
             if (qty <= 0) continue;
+            const isVenda = String(r.source_type) === "venda";
             totalEventos++;
-            const cur = agg.get(pid) ?? { produto_id: pid, qtd: 0, valor: 0, eventos: 0, clientes: new Set<string>() };
+            if (isVenda) { totalVendaQtd += qty; totalVendaEventos++; }
+            else { totalOsQtd += qty; totalOsEventos++; }
+            const cur = agg.get(pid) ?? { produto_id: pid, qtd: 0, qtd_venda: 0, qtd_os: 0, valor: 0, eventos: 0, eventos_venda: 0, eventos_os: 0, clientes: new Set<string>() };
             cur.qtd += qty;
+            if (isVenda) { cur.qtd_venda += qty; cur.eventos_venda += 1; }
+            else { cur.qtd_os += qty; cur.eventos_os += 1; }
             cur.valor += parseDec(r.valor_custo) * qty;
             cur.eventos += 1;
             if (r.cliente_nome) cur.clientes.add(String(r.cliente_nome).toLowerCase().trim());
@@ -520,6 +529,7 @@ Deno.serve(async (req: Request) => {
           fromRow += PAGE;
           if (fromRow >= 20000) break; // teto de segurança
         }
+
 
         if (agg.size === 0) {
           return { total_pecas: 0, ranking: [], aviso: "Nenhuma saída encontrada com esses filtros." };

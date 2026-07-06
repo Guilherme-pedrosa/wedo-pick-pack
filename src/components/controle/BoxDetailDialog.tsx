@@ -208,6 +208,59 @@ export default function BoxDetailDialog({
       });
   }, [items]);
 
+  const [verifying, setVerifying] = useState(false);
+
+  // Resets the conference flag whenever items change (box must be re-audited)
+  const resetVerification = async () => {
+    if (!box || !box.verified) return;
+    box.verified = false;
+    box.needs_replenish = true;
+    await supabase
+      .from("boxes")
+      .update({ verified: false, verified_at: null, verified_by: null, needs_replenish: true })
+      .eq("id", box.id);
+  };
+
+  const handleMarkVerified = async () => {
+    if (!box || verifying) return;
+    setVerifying(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      let operatorName = user?.email || "";
+      if (user) {
+        const { data: prof } = await supabase.from("profiles").select("name").eq("id", user.id).single();
+        if (prof?.name) operatorName = prof.name;
+      }
+      const { data, error } = await supabase
+        .from("boxes")
+        .update({
+          verified: true,
+          verified_at: new Date().toISOString(),
+          verified_by: operatorName,
+          needs_replenish: false,
+        })
+        .eq("id", box.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Falha ao conferir: permissão negada ou caixa não encontrada.");
+      await logBoxMovement({
+        boxId: box.id,
+        boxName: box.name,
+        action: "entrada",
+        details: `Caixa conferida e liberada para vínculo por ${operatorName}`,
+      });
+      toast.success("Caixa conferida! Já pode vincular um técnico.");
+      onItemsChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao conferir caixa");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+
+
   const handleAddItem = async () => {
     if (!selectedProduct || !box || qty < 1) return;
 

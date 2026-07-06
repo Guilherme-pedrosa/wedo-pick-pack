@@ -68,6 +68,7 @@ Deno.serve(async (req: Request) => {
       const id = String(p.id);
       const estoque = parseFloat(String(p.estoque || '0'));
       stockMap[id] = isNaN(estoque) ? 0 : estoque;
+      movMap[id] = String(p.movimenta_estoque ?? '0') === '1';
     }
 
     const nextPage = page + 1;
@@ -75,8 +76,9 @@ Deno.serve(async (req: Request) => {
 
     return jsonResp({
       done,
-      cursor: done ? null : { page: nextPage, stockMap },
+      cursor: done ? null : { page: nextPage, stockMap, movMap },
       stockMap: done ? stockMap : undefined,
+      movMap: done ? movMap : undefined,
       progress: {
         page,
         totalPages,

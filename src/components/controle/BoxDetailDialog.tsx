@@ -45,6 +45,10 @@ export interface BoxData {
   items_count?: number;
   total_value?: number;
   last_linked_at?: string | null;
+  verified?: boolean;
+  verified_at?: string | null;
+  verified_by?: string | null;
+  needs_replenish?: boolean;
 }
 
 export interface BoxItemData {

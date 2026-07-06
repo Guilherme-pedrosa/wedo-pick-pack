@@ -688,13 +688,13 @@ export default function BoxDetailDialog({
         onClose={() => setWriteOffItem(null)}
         onCompleted={onItemsChanged}
       />
-      {box && box.technician_name && box.technician_gc_id && (
+      {box && (box.technician_name || box.verified) && (
         <BoxHandoffReceipt
           open={receiptOpen}
           onClose={() => setReceiptOpen(false)}
           boxName={box.name}
-          technicianName={box.technician_name}
-          technicianGcId={box.technician_gc_id}
+          technicianName={box.technician_name || "Conferência (sem técnico)"}
+          technicianGcId={box.technician_gc_id || "—"}
           items={items.map(i => ({
             produto_id: i.produto_id,
             nome_produto: i.nome_produto,

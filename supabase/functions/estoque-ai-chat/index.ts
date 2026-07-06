@@ -416,25 +416,57 @@ Deno.serve(async (req: Request) => {
       execute: async ({ grupo, termo, data_inicio, data_fim, tipo, limite }) => {
         const lim = Math.min(Math.max(limite ?? 20, 1), 50);
 
-        // 1) Se houver filtro de grupo ou termo, resolver os produto_ids no índice
+        // 1) Se houver filtro de grupo ou termo, resolver os produto_ids no índice.
+        //    Grupo é filtrado em memória (accent-insensitive, por tokens) pois o nome do
+        //    grupo tem acentos/espaços (ex: "ESPECÍFICO - HOBART").
         let restrictIds: string[] | null = null;
         const infoMap = new Map<string, { nome: string; codigo: string | null; grupo: string | null }>();
         if (grupo || termo) {
-          let idxQ = supabase
-            .from("products_index")
-            .select("produto_id, nome, codigo_interno, payload_min_json")
-            .limit(3000);
-          if (grupo) idxQ = idxQ.ilike("payload_min_json->>nome_grupo", `%${grupo}%`);
-          if (termo) {
+          const grupoTokens = grupo ? normalizeStr(grupo).split(/[^a-z0-9]+/).filter(Boolean) : [];
+          const matched: any[] = [];
+
+          if (grupo) {
+            // Percorre o índice em páginas e filtra por tokens do grupo.
+            const PAGE_IDX = 1000;
+            let fromIdx = 0;
+            while (true) {
+              let idxQ = supabase
+                .from("products_index")
+                .select("produto_id, nome, codigo_interno, codigo_barra, payload_min_json")
+                .eq("ativo", true)
+                .range(fromIdx, fromIdx + PAGE_IDX - 1);
+              if (termo) {
+                const t = termo.trim();
+                idxQ = idxQ.or(
+                  `codigo_interno.ilike.%${t}%,codigo_barra.ilike.%${t}%,produto_id.ilike.%${t}%,nome.ilike.%${t}%`,
+                );
+              }
+              const { data: idxRows } = await idxQ;
+              const rows = idxRows ?? [];
+              for (const r of rows) {
+                const pm = (r.payload_min_json ?? {}) as Record<string, unknown>;
+                const g = normalizeStr(pm.nome_grupo);
+                if (grupoTokens.every((tk) => g.includes(tk))) matched.push(r);
+              }
+              if (rows.length < PAGE_IDX) break;
+              fromIdx += PAGE_IDX;
+              if (fromIdx >= 20000) break;
+            }
+          } else if (termo) {
             const t = termo.trim();
-            idxQ = idxQ.or(
-              `codigo_interno.ilike.%${t}%,codigo_barra.ilike.%${t}%,produto_id.ilike.%${t}%,nome.ilike.%${t}%`,
-            );
+            const { data: idxRows } = await supabase
+              .from("products_index")
+              .select("produto_id, nome, codigo_interno, codigo_barra, payload_min_json")
+              .eq("ativo", true)
+              .or(
+                `codigo_interno.ilike.%${t}%,codigo_barra.ilike.%${t}%,produto_id.ilike.%${t}%,nome.ilike.%${t}%`,
+              )
+              .limit(500);
+            matched.push(...(idxRows ?? []));
           }
-          const { data: idxRows } = await idxQ;
-          const rows = idxRows ?? [];
-          restrictIds = rows.map((r: any) => String(r.produto_id));
-          for (const r of rows) {
+
+          restrictIds = matched.map((r: any) => String(r.produto_id));
+          for (const r of matched) {
             const pm = (r.payload_min_json ?? {}) as Record<string, unknown>;
             infoMap.set(String(r.produto_id), {
               nome: r.nome,
@@ -446,6 +478,7 @@ Deno.serve(async (req: Request) => {
             return { total_pecas: 0, ranking: [], aviso: "Nenhuma peça encontrada para esse grupo/termo." };
           }
         }
+
 
         // 2) Buscar eventos de consumo (paginado), aplicando filtros
         const agg = new Map<string, { produto_id: string; qtd: number; valor: number; eventos: number; clientes: Set<string> }>();

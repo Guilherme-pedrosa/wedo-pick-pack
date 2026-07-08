@@ -1010,7 +1010,12 @@ export default function InventoryAnalysisPage() {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
         return item.is_stock_eligible && item.suggested_qty > 0;
       })
-      .sort((a, b) => b.risk_score - a.risk_score);
+      .sort((a, b) => {
+        const abcOrder = { A: 0, B: 1, C: 2 };
+        const abcDiff = abcOrder[a.abc_class] - abcOrder[b.abc_class];
+        if (abcDiff !== 0) return abcDiff;
+        return b.risk_score - a.risk_score;
+      });
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Orçamentos pendentes sem giro recorrente — sinal, mas NÃO compra automática
@@ -1020,7 +1025,12 @@ export default function InventoryAnalysisPage() {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
         return item.budget_without_giro;
       })
-      .sort((a, b) => b.budget_signal_qty - a.budget_signal_qty);
+      .sort((a, b) => {
+        const abcOrder = { A: 0, B: 1, C: 2 };
+        const abcDiff = abcOrder[a.abc_class] - abcOrder[b.abc_class];
+        if (abcDiff !== 0) return abcDiff;
+        return b.budget_signal_qty - a.budget_signal_qty;
+      });
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Estoque recorrente OK — elegível mas sem necessidade de compra agora
@@ -1030,7 +1040,12 @@ export default function InventoryAnalysisPage() {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
         return item.is_stock_eligible && item.suggested_qty <= 0;
       })
-      .sort((a, b) => (b.total_qty) - (a.total_qty));
+      .sort((a, b) => {
+        const abcOrder = { A: 0, B: 1, C: 2 };
+        const abcDiff = abcOrder[a.abc_class] - abcOrder[b.abc_class];
+        if (abcDiff !== 0) return abcDiff;
+        return b.total_qty - a.total_qty;
+      });
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Fetch active purchase orders from GC

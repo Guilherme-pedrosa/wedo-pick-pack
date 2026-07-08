@@ -31,6 +31,7 @@ interface ConsumptionRow {
   total_qty: number;
   qty_venda: number;
   qty_os: number;
+  qty_60d: number;
   total_value: number;
   event_count: number;
   source_count: number;
@@ -106,6 +107,7 @@ interface AnalysisItem {
   total_qty: number;
   qty_venda: number;
   qty_os: number;
+  qty_60d: number;
   total_value: number;
   event_count: number;
   source_count: number;
@@ -350,6 +352,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
   const cutoffStr = cutoff.toISOString();
 
   const now = Date.now();
+  const cut60 = now - 60 * 86400000;
   const cut90 = now - 90 * 86400000;
   const cut180 = now - 180 * 86400000;
 
@@ -379,9 +382,11 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     const occMs = r.occurred_at ? new Date(r.occurred_at).getTime() : 0;
     const in90 = occMs >= cut90;
     const in180 = occMs >= cut180;
+    const in60 = occMs >= cut60;
     if (existing) {
       existing.total_qty += qty;
       if (sourceType === 'venda') existing.qty_venda += qty; else existing.qty_os += qty;
+      if (in60) existing.qty_60d += qty;
       existing.total_value += val;
       existing.event_count += 1;
       if (in90) existing.event_count_90d += 1;
@@ -411,6 +416,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         total_qty: qty,
         qty_venda: sourceType === 'venda' ? qty : 0,
         qty_os: sourceType === 'venda' ? 0 : qty,
+        qty_60d: in60 ? qty : 0,
         total_value: val,
         event_count: 1,
         source_count: 1,
@@ -817,6 +823,7 @@ export default function InventoryAnalysisPage() {
         total_qty: r.total_qty,
         qty_venda: r.qty_venda,
         qty_os: r.qty_os,
+        qty_60d: r.qty_60d,
         total_value: r.total_value,
         event_count: r.event_count,
         source_count: r.source_count,
@@ -1652,6 +1659,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="px-2 py-1.5 text-xs">Padrão</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. 60d</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">OS</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
@@ -1697,6 +1705,11 @@ export default function InventoryAnalysisPage() {
                               item.estoque_atual
                             )
                           ) : <span className="text-amber-600 text-xs" title="Estoque não carregado">—</span>}
+                        </TableCell>
+                        <TableCell className="px-2 py-1 text-right">
+                          {item.qty_60d > 0 ? (
+                            <span className="text-violet-600 font-semibold text-xs" title="Quantidade vendida (Vendas + OS) nos últimos 60 dias">{formatNumberBR(item.qty_60d, item.qty_60d % 1 === 0 ? 0 : 1)}un</span>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
                           {item.qty_venda > 0 ? (

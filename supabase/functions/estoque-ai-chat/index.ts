@@ -1078,6 +1078,7 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       stopWhen: stepCountIs(50),
       system: [

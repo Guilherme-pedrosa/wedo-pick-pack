@@ -999,16 +999,30 @@ Deno.serve(async (req: Request) => {
         const codigoInterno = matched.map((r: any) => String(r.codigo_interno ?? "")).filter(Boolean);
 
         // 2) Buscar eventos de consumo da peça (mais recentes primeiro)
-        let evQ = supabase
-          .from("inventory_consumption_events")
-          .select("produto_id, qty, occurred_at, source_id, source_type, cliente_nome, raw")
-          .in("produto_id", [...idSet])
-          .order("occurred_at", { ascending: false })
-          .limit(60);
-        if (tipo && tipo !== "todos") evQ = evQ.eq("source_type", tipo);
-        const { data: evRows, error } = await evQ;
+        const fetchEventos = async (tipoFiltro?: "venda" | "os" | "todos") => {
+          let evQ = supabase
+            .from("inventory_consumption_events")
+            .select("produto_id, qty, occurred_at, source_id, source_type, cliente_nome, raw")
+            .in("produto_id", [...idSet])
+            .order("occurred_at", { ascending: false })
+            .limit(60);
+          if (tipoFiltro && tipoFiltro !== "todos") evQ = evQ.eq("source_type", tipoFiltro);
+          return await evQ;
+        };
+
+        let tipoConsultaEfetiva = tipo ?? "todos";
+        let { data: evRows, error } = await fetchEventos(tipoConsultaEfetiva);
         if (error) return { erro: error.message };
-        const eventos = evRows ?? [];
+        let eventos = evRows ?? [];
+        // No contexto operacional do estoque, "venda" normalmente significa saída
+        // total da peça (Venda + OS). Se não houver venda comercial direta, não
+        // podemos concluir "não vendeu" sem olhar OS também.
+        if (eventos.length === 0 && tipoConsultaEfetiva === "venda") {
+          const fallback = await fetchEventos("todos");
+          if (fallback.error) return { erro: fallback.error.message };
+          eventos = fallback.data ?? [];
+          if (eventos.length > 0) tipoConsultaEfetiva = "todos";
+        }
         if (eventos.length === 0) {
           return { peca: identificacao, encontrados: 0, aviso: "Nenhuma venda/OS registrada para essa peça no histórico." };
         }
@@ -1102,6 +1116,10 @@ Deno.serve(async (req: Request) => {
         const verificados = resultados.filter((r) => r.verificado);
         return {
           peca: identificacao,
+          tipo_consulta_efetiva: tipoConsultaEfetiva,
+          aviso_tipo: tipo === "venda" && tipoConsultaEfetiva === "todos"
+            ? "Não havia venda comercial direta no histórico filtrado; foram retornadas saídas por OS também, pois no estoque 'vendas' significa OS + venda."
+            : null,
           total_documentos_no_historico: vistos.size,
           documentos_verificados: verificados.length,
           documentos: resultados,
@@ -1131,7 +1149,7 @@ Deno.serve(async (req: Request) => {
         "Ao informar a localização, mostre a localização física e a rational quando existirem; se não houver, diga que não há localização cadastrada.",
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
-        "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. VENDAS vs OS: a resposta traz 'resumo_por_tipo' com totais de vendas e OS separados, e cada item do ranking tem 'quantidade_vendas' e 'quantidade_os'. Quando o usuário perguntar especificamente sobre VENDAS, use esses campos (ou passe tipo='venda') e relate os números de venda explicitamente — NUNCA diga que não há vendas sem antes chamar a ferramenta. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
+        "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. REGRA DO ESTOQUE: quando o usuário disser 'vendas' no contexto de estoque/análise de estoque, interprete como SAÍDAS TOTAIS = VENDAS + OS, a menos que ele diga explicitamente 'somente vendas comerciais' ou 'excluindo OS'. A resposta traz 'resumo_por_tipo' com totais separados e cada item tem 'quantidade_vendas' e 'quantidade_os'; informe o total somado e, se útil, detalhe a composição. NUNCA diga que não há vendas/saídas sem considerar OS + venda. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
         "COMPRAS / PEDIDOS DE COMPRA / REPOSIÇÃO: Você TEM acesso aos pedidos de compra, compras em aberto/finalizadas/canceladas e sugestões de reposição. Quando o usuário perguntar se tem pedido de compra para uma peça, compra em aberto, previsão/chegada, reposição, última compra, fornecedor, quantidade comprada ou situação do pedido, use consultar_pedidos_compra. NUNCA diga que não tem acesso ao módulo de Pedidos de Compra; consulte a ferramenta. Se o usuário disser 'em aberto', chame com apenas_abertos=true. Responda separando pedidos em aberto de pedidos finalizados/cancelados e cite código do pedido, data, fornecedor, situação e quantidade.",
         "IMPORTANTE — CACHE LOCAL DE COMPRAS PODE ESTAR INCOMPLETO: a ferramenta consultar_pedidos_compra lê um cache local sincronizado do GestãoClick, que pode estar DESATUALIZADO ou não conter pedidos recentes/em trânsito com situações personalizadas (ex: 'COMPRADO - AG CHEGADA'). Portanto: (1) quando for listar os pedidos de compra de uma peça, SEMPRE cruze também com a ferramenta consultar_gestaoclick (entidade 'compras') para garantir que nenhum pedido fique de fora — não confie apenas no cache local; (2) NUNCA afirme que 'não existe pedido de compra' ou que 'esse é o único pedido' sem antes confirmar via consultar_gestaoclick na fonte ao vivo; (3) se o usuário citar um número de pedido específico que você não listou, isso é um ERRO seu — refaça a busca ao vivo, não invente justificativa. É melhor consultar as duas fontes e consolidar do que dar uma lista incompleta.",
         "Ao apresentar um ranking de saídas, liste as peças no formato [Código] Nome com a quantidade de saída e, quando útil, o valor consumido. Deixe claro o período e o tipo (vendas, OS ou todos) considerados.",

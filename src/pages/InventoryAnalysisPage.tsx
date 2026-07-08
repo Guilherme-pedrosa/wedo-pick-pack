@@ -351,6 +351,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
   const cutoffStr = cutoff.toISOString();
 
   const now = Date.now();
+  const cut60 = now - 60 * 86400000;
   const cut90 = now - 90 * 86400000;
   const cut180 = now - 180 * 86400000;
 

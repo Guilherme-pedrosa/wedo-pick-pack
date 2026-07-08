@@ -381,6 +381,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
     const occMs = r.occurred_at ? new Date(r.occurred_at).getTime() : 0;
     const in90 = occMs >= cut90;
     const in180 = occMs >= cut180;
+    const in60 = occMs >= cut60;
     if (existing) {
       existing.total_qty += qty;
       if (sourceType === 'venda') existing.qty_venda += qty; else existing.qty_os += qty;

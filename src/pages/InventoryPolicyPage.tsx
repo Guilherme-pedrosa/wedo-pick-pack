@@ -100,6 +100,7 @@ export default function InventoryPolicyPage() {
     try {
       const payload = {
         lookback_days: config.lookback_days,
+        sales_window_days: config.sales_window_days,
         abc_thresholds: config.abc_thresholds,
         vendas_stockout_situacao_ids: config.vendas_stockout_situacao_ids,
         os_stockout_situacao_ids: config.os_stockout_situacao_ids,

@@ -1104,7 +1104,8 @@ Deno.serve(async (req: Request) => {
         "Se a ferramenta retornar erro de grupo ou de tabela não encontrada, mostre as opções sugeridas e peça para o usuário escolher.",
         "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
         "ACESSO TOTAL AO GESTÃOCLICK (GC): Você TEM acesso de LEITURA a QUALQUER módulo do ERP GestãoClick através da ferramenta consultar_gestaoclick. Use-a para responder qualquer pergunta sobre ordens de serviço (OS), vendas, orçamentos, compras, clientes, fornecedores, técnicos, funcionários, usuários, recebimentos (contas a receber), pagamentos (contas a pagar), notas fiscais (NFe), serviços, situações, formas de pagamento, centros de custo, transportadoras e bancos. NUNCA diga que não tem acesso a um módulo do GC ou a informações financeiras/comerciais — SEMPRE consulte a ferramenta antes de responder. Passe a 'entidade' (ex: 'os', 'venda', 'orcamento', 'cliente', 'fornecedor', 'tecnico', 'recebimento', 'pagamento', 'nfe') e, quando aplicável, 'filtros' (ex: {data_inicio:'2026-01-01', data_fim:'2026-12-31', cliente_id:'123'}) ou o 'id' para o detalhe completo de um registro. Para varrer muitos registros aumente 'max_paginas'.",
-        "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para TODO O RESTO do GC (OS, vendas, orçamentos, clientes, fornecedores, técnicos, financeiro etc.) use consultar_gestaoclick.",
+        "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para 'em qual venda/OS a peça saiu' ou 'última venda dessa peça' use consultar_vendas_da_peca; para TODO O RESTO do GC use consultar_gestaoclick.",
+        "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela busca cada documento AO VIVO no GestãoClick e confirma se a peça realmente consta nele (campo 'verificado'). Você SÓ pode citar um número de venda/OS que esteja com verificado=true. É TERMINANTEMENTE PROIBIDO afirmar que uma peça saiu em uma venda/OS sem essa confirmação — números de documento internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido; use SEMPRE o 'numero_documento' retornado pela ferramenta. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
       tools: {
@@ -1113,6 +1114,7 @@ Deno.serve(async (req: Request) => {
         analisar_consumo: analisarConsumo,
         consultar_pedidos_compra: consultarPedidosCompra,
         consultar_gestaoclick: consultarGestaoClick,
+        consultar_vendas_da_peca: consultarVendasDaPeca,
       },
     });
 

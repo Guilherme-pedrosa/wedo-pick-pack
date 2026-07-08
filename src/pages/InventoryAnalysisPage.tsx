@@ -1040,7 +1040,12 @@ export default function InventoryAnalysisPage() {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
         return item.is_stock_eligible && item.suggested_qty <= 0;
       })
-      .sort((a, b) => (b.total_qty) - (a.total_qty));
+      .sort((a, b) => {
+        const abcOrder = { A: 0, B: 1, C: 2 };
+        const abcDiff = abcOrder[a.abc_class] - abcOrder[b.abc_class];
+        if (abcDiff !== 0) return abcDiff;
+        return b.total_qty - a.total_qty;
+      });
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Fetch active purchase orders from GC

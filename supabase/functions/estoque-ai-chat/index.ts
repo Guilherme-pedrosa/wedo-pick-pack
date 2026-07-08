@@ -592,6 +592,227 @@ Deno.serve(async (req: Request) => {
 
 
 
+    const consultarPedidosCompra = tool({
+      description:
+        "Consulta pedidos de compra/reposição e sugestões de reposição por peça, código interno, nome, grupo ou fornecedor. Use para responder se existe pedido em aberto, compra em andamento, previsão de chegada, compras já feitas, últimas compras, quantidade comprada e situação do pedido de compra.",
+      inputSchema: z.object({
+        termo: z.string().optional().describe("Nome, código interno, código de barras ou ID da peça. Ex: '22.00.985P', 'MOTOR SHAFT JUNTA D15'."),
+        grupo: z.string().optional().describe("Nome ou parte do grupo/categoria. Ex: 'RATIONAL'."),
+        fornecedor: z.string().optional().describe("Nome ou parte do fornecedor."),
+        apenas_abertos: z.boolean().optional().describe("Quando true, retorna principalmente pedidos ainda não finalizados/cancelados."),
+        data_inicio: z.string().optional().describe("Data inicial de emissão no formato YYYY-MM-DD."),
+        data_fim: z.string().optional().describe("Data final de emissão no formato YYYY-MM-DD."),
+        limite: z.number().optional().describe("Quantos pedidos/linhas retornar (padrão 20, máx 80)."),
+      }),
+      execute: async ({ termo, grupo, fornecedor, apenas_abertos, data_inicio, data_fim, limite }) => {
+        const lim = Math.min(Math.max(limite ?? 20, 1), 80);
+        const qTerm = termo?.trim() ?? "";
+        const qNorm = normalizeStr(qTerm);
+        const grupoTokens = grupo ? normalizeStr(grupo).split(/[^a-z0-9]+/).filter(Boolean) : [];
+        const fornecedorNorm = fornecedor ? normalizeStr(fornecedor) : "";
+
+        const productIds = new Set<string>();
+        const productInfo = new Map<string, { nome: string; codigo: string | null; grupo: string | null }>();
+
+        if (qTerm || grupo) {
+          const PAGE_IDX = 1000;
+          let fromIdx = 0;
+          while (true) {
+            let idxQ = supabase
+              .from("products_index")
+              .select("produto_id, nome, codigo_interno, codigo_barra, payload_min_json")
+              .eq("ativo", true)
+              .range(fromIdx, fromIdx + PAGE_IDX - 1);
+            if (qTerm) {
+              idxQ = idxQ.or(
+                `codigo_interno.ilike.%${qTerm}%,codigo_barra.ilike.%${qTerm}%,produto_id.ilike.%${qTerm}%,nome.ilike.%${qTerm}%`,
+              );
+            }
+            const { data: idxRows } = await idxQ;
+            const rows = idxRows ?? [];
+            for (const r of rows) {
+              const pm = (r.payload_min_json ?? {}) as Record<string, unknown>;
+              const g = normalizeStr(pm.nome_grupo);
+              if (grupoTokens.length && !grupoTokens.every((tk) => g.includes(tk))) continue;
+              const pid = String(r.produto_id);
+              productIds.add(pid);
+              productInfo.set(pid, {
+                nome: String(r.nome ?? ""),
+                codigo: r.codigo_interno ? String(r.codigo_interno) : null,
+                grupo: (pm.nome_grupo as string) ?? null,
+              });
+            }
+            if (!grupo || rows.length < PAGE_IDX) break;
+            fromIdx += PAGE_IDX;
+            if (fromIdx >= 20000) break;
+          }
+        }
+
+        function isClosedStatus(status: unknown): boolean {
+          const s = normalizeStr(status);
+          return s.includes("finalizado") || s.includes("mercadoria chegou") || s.includes("cancelad") || s.includes("concretizado");
+        }
+
+        function matchProductLine(p: any): boolean {
+          if (!qTerm && !grupoTokens.length) return true;
+          const pid = String(p?.produto_id ?? "").trim();
+          if (pid && productIds.has(pid)) return true;
+          const name = normalizeStr(p?.nome_produto);
+          if (qNorm && name.includes(qNorm)) return true;
+          if (qNorm && normalizeStr(pid).includes(qNorm)) return true;
+          return false;
+        }
+
+        const linhas: any[] = [];
+        const resumoPorSituacao = new Map<string, { pedidos: Set<string>; quantidade: number; valor: number }>();
+        let totalPedidosInspecionados = 0;
+        let totalLinhasEncontradas = 0;
+        let qtdTotal = 0;
+        let qtdAberta = 0;
+        let qtdFechada = 0;
+        let valorTotalItens = 0;
+        const pedidosAbertos = new Set<string>();
+        const pedidosFechados = new Set<string>();
+
+        const PAGE = 1000;
+        let fromRow = 0;
+        while (true) {
+          let pcQ = supabase
+            .from("pedidos_compra")
+            .select("gc_id, codigo, fornecedor_id, nome_fornecedor, data_emissao, nome_situacao, situacao_id, numero_nfe, valor_total, payload, updated_at")
+            .order("data_emissao", { ascending: false })
+            .range(fromRow, fromRow + PAGE - 1);
+          if (data_inicio) pcQ = pcQ.gte("data_emissao", data_inicio);
+          if (data_fim) pcQ = pcQ.lte("data_emissao", data_fim);
+          if (fornecedorNorm) pcQ = pcQ.ilike("nome_fornecedor", `%${fornecedor}%`);
+          const { data: pcRows, error } = await pcQ;
+          if (error) return { erro: error.message };
+          const rows = pcRows ?? [];
+          totalPedidosInspecionados += rows.length;
+          for (const pc of rows) {
+            const status = pc.nome_situacao ?? "Sem situação";
+            const fechado = isClosedStatus(status);
+            if (apenas_abertos && fechado) continue;
+            const produtos = Array.isArray((pc.payload as any)?.produtos) ? (pc.payload as any).produtos : [];
+            for (const prod of produtos) {
+              if (!matchProductLine(prod)) continue;
+              const qtd = parseDec(prod?.quantidade);
+              const valorUnit = parseDec(prod?.valor_custo);
+              const valor = parseDec(prod?.valor_total) || qtd * valorUnit;
+              const pid = String(prod?.produto_id ?? "").trim();
+              const info = pid ? productInfo.get(pid) : null;
+              const nomeProduto = String(prod?.nome_produto ?? info?.nome ?? "Produto sem nome");
+              const identificacao = info?.codigo ? `[${info.codigo}] ${nomeProduto}` : nomeProduto;
+              const pedidoKey = String(pc.gc_id ?? pc.codigo ?? "");
+
+              totalLinhasEncontradas++;
+              qtdTotal += qtd;
+              valorTotalItens += valor;
+              if (fechado) {
+                qtdFechada += qtd;
+                pedidosFechados.add(pedidoKey);
+              } else {
+                qtdAberta += qtd;
+                pedidosAbertos.add(pedidoKey);
+              }
+              const sit = resumoPorSituacao.get(String(status)) ?? { pedidos: new Set<string>(), quantidade: 0, valor: 0 };
+              sit.pedidos.add(pedidoKey);
+              sit.quantidade += qtd;
+              sit.valor += valor;
+              resumoPorSituacao.set(String(status), sit);
+
+              if (linhas.length < lim) {
+                linhas.push({
+                  pedido_codigo: pc.codigo ?? null,
+                  pedido_gc_id: pc.gc_id ?? null,
+                  data_emissao: pc.data_emissao ?? null,
+                  situacao: status,
+                  em_aberto: !fechado,
+                  fornecedor: pc.nome_fornecedor ?? null,
+                  numero_nfe: pc.numero_nfe ?? null,
+                  produto_identificacao: identificacao,
+                  produto_id: pid || null,
+                  quantidade: Math.round(qtd * 100) / 100,
+                  valor_custo_unitario: Math.round(valorUnit * 100) / 100,
+                  valor_total_item: Math.round(valor * 100) / 100,
+                });
+              }
+            }
+          }
+          if (rows.length < PAGE) break;
+          fromRow += PAGE;
+          if (fromRow >= 12000) break;
+        }
+
+        const sugestoes: any[] = [];
+        if (qTerm || grupo) {
+          let sugQ = supabase
+            .from("inventory_purchase_suggestions")
+            .select("produto_id, nome, codigo_interno, grupo, estoque_atual, consumo_12m, consumo_3m, abc_class, xyz_class, lead_time_days, reorder_point, pc_aberta_qty, saldo_projetado, qty_sugerida, risk_score, motivos, alertas, aprovado, gc_compra_id, created_at")
+            .order("created_at", { ascending: false })
+            .limit(80);
+          const ids = [...productIds].slice(0, 300);
+          if (ids.length) sugQ = sugQ.in("produto_id", ids);
+          else if (qTerm) sugQ = sugQ.or(`codigo_interno.ilike.%${qTerm}%,nome.ilike.%${qTerm}%,produto_id.ilike.%${qTerm}%`);
+          const { data: sugRows } = await sugQ;
+          for (const s of sugRows ?? []) {
+            if (grupoTokens.length && !grupoTokens.every((tk) => normalizeStr(s.grupo).includes(tk))) continue;
+            sugestoes.push({
+              identificacao: s.codigo_interno ? `[${s.codigo_interno}] ${s.nome}` : s.nome,
+              grupo: s.grupo,
+              estoque_atual: parseDec(s.estoque_atual),
+              pc_aberta_qty: parseDec(s.pc_aberta_qty),
+              saldo_projetado: parseDec(s.saldo_projetado),
+              qty_sugerida: parseDec(s.qty_sugerida),
+              consumo_12m: parseDec(s.consumo_12m),
+              consumo_3m: parseDec(s.consumo_3m),
+              curva_abc: s.abc_class,
+              lead_time_days: parseDec(s.lead_time_days),
+              ponto_reposicao: parseDec(s.reorder_point),
+              risk_score: parseDec(s.risk_score),
+              aprovado: s.aprovado,
+              compra_gc_id: s.gc_compra_id,
+              motivos: s.motivos,
+              alertas: s.alertas,
+              gerado_em: s.created_at,
+            });
+            if (sugestoes.length >= Math.min(lim, 30)) break;
+          }
+        }
+
+        const r2 = (n: number) => Math.round(n * 100) / 100;
+        return {
+          filtros: {
+            termo: qTerm || null,
+            grupo: grupo ?? null,
+            fornecedor: fornecedor ?? null,
+            apenas_abertos: !!apenas_abertos,
+            periodo: { inicio: data_inicio ?? "início dos registros", fim: data_fim ?? "hoje" },
+          },
+          total_pedidos_inspecionados: totalPedidosInspecionados,
+          total_linhas_encontradas: totalLinhasEncontradas,
+          resumo: {
+            quantidade_total_comprada: r2(qtdTotal),
+            quantidade_em_pedidos_abertos: r2(qtdAberta),
+            quantidade_em_pedidos_fechados: r2(qtdFechada),
+            valor_total_itens: r2(valorTotalItens),
+            pedidos_abertos: pedidosAbertos.size,
+            pedidos_fechados: pedidosFechados.size,
+            existe_pedido_em_aberto: pedidosAbertos.size > 0,
+          },
+          resumo_por_situacao: [...resumoPorSituacao.entries()].map(([situacao, v]) => ({
+            situacao,
+            pedidos: v.pedidos.size,
+            quantidade: r2(v.quantidade),
+            valor: r2(v.valor),
+          })),
+          pedidos: linhas,
+          sugestoes_reposicao: sugestoes,
+          aviso: totalLinhasEncontradas === 0 ? "Nenhum pedido de compra encontrado com esses filtros." : null,
+        };
+      },
+    });
+
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       stopWhen: stepCountIs(50),
@@ -609,6 +830,7 @@ Deno.serve(async (req: Request) => {
         "Se a busca retornar várias peças, liste as opções e peça para o usuário especificar qual deseja.",
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
         "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. VENDAS vs OS: a resposta traz 'resumo_por_tipo' com totais de vendas e OS separados, e cada item do ranking tem 'quantidade_vendas' e 'quantidade_os'. Quando o usuário perguntar especificamente sobre VENDAS, use esses campos (ou passe tipo='venda') e relate os números de venda explicitamente — NUNCA diga que não há vendas sem antes chamar a ferramenta. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
+        "COMPRAS / PEDIDOS DE COMPRA / REPOSIÇÃO: Você TEM acesso aos pedidos de compra, compras em aberto/finalizadas/canceladas e sugestões de reposição. Quando o usuário perguntar se tem pedido de compra para uma peça, compra em aberto, previsão/chegada, reposição, última compra, fornecedor, quantidade comprada ou situação do pedido, use consultar_pedidos_compra. NUNCA diga que não tem acesso ao módulo de Pedidos de Compra; consulte a ferramenta. Se o usuário disser 'em aberto', chame com apenas_abertos=true. Responda separando pedidos em aberto de pedidos finalizados/cancelados e cite código do pedido, data, fornecedor, situação e quantidade.",
         "Ao apresentar um ranking de saídas, liste as peças no formato [Código] Nome com a quantidade de saída e, quando útil, o valor consumido. Deixe claro o período e o tipo (vendas, OS ou todos) considerados.",
         "CADASTRO DE PRODUTO: Você pode cadastrar um produto novo com a ferramenta cadastrar_produto. Para isso colete: nome, código interno, grupo/categoria, custo, estoque inicial, localização (física e rational, se houver) e o preço de venda de CADA tabela informada pelo usuário.",
         "ANTES de chamar cadastrar_produto, mostre um resumo completo e organizado de TODOS os dados (incluindo o preço tabela a tabela) e peça a confirmação explícita do usuário. Só chame a ferramenta depois que o usuário responder confirmando (ex: 'sim', 'pode cadastrar', 'confirmar').",
@@ -617,7 +839,12 @@ Deno.serve(async (req: Request) => {
         "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
-      tools: { consultar_estoque: consultarEstoque, cadastrar_produto: cadastrarProduto, analisar_consumo: analisarConsumo },
+      tools: {
+        consultar_estoque: consultarEstoque,
+        cadastrar_produto: cadastrarProduto,
+        analisar_consumo: analisarConsumo,
+        consultar_pedidos_compra: consultarPedidosCompra,
+      },
     });
 
     return result.toUIMessageStreamResponse({ headers: corsHeaders });

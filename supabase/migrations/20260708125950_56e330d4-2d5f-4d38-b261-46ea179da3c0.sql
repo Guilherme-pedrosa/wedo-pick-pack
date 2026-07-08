@@ -1,0 +1,1 @@
+ALTER TABLE public.inventory_policy_config ADD COLUMN IF NOT EXISTS sales_window_days integer NOT NULL DEFAULT 60;

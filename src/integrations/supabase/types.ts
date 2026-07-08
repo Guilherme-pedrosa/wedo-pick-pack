@@ -537,6 +537,7 @@ export type Database = {
           purchase_arrived_situacao_ids: Json
           purchase_crossref_situacao_ids: Json
           purchase_lt_start_situacao_id: string
+          sales_window_days: number
           updated_at: string
           updated_by: string | null
           vendas_stockout_situacao_ids: Json
@@ -551,6 +552,7 @@ export type Database = {
           purchase_arrived_situacao_ids?: Json
           purchase_crossref_situacao_ids?: Json
           purchase_lt_start_situacao_id?: string
+          sales_window_days?: number
           updated_at?: string
           updated_by?: string | null
           vendas_stockout_situacao_ids?: Json
@@ -565,6 +567,7 @@ export type Database = {
           purchase_arrived_situacao_ids?: Json
           purchase_crossref_situacao_ids?: Json
           purchase_lt_start_situacao_id?: string
+          sales_window_days?: number
           updated_at?: string
           updated_by?: string | null
           vendas_stockout_situacao_ids?: Json

@@ -107,6 +107,7 @@ interface AnalysisItem {
   total_qty: number;
   qty_venda: number;
   qty_os: number;
+  qty_60d: number;
   total_value: number;
   event_count: number;
   source_count: number;

@@ -969,6 +969,115 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    const consultarVendasDaPeca = tool({
+      description:
+        "Retorna as VENDAS e/ou ORDENS DE SERVIÇO (OS) reais de UMA peça específica, com VERIFICAÇÃO ao vivo no GestãoClick. Use SEMPRE que o usuário perguntar 'qual a última venda dessa peça', 'em qual venda/OS ela saiu', 'histórico de vendas dessa peça', 'quem comprou', etc. Cada documento retornado é buscado ao vivo no GC e CONFIRMADO (o campo 'verificado' indica se a peça realmente consta no documento). NUNCA cite um número de venda/OS que não esteja com verificado=true.",
+      inputSchema: z.object({
+        termo: z.string().describe("Nome, código interno, código de barras ou ID da peça. Ex: '40.00.091S', 'JUNTA FRAME W.GLASS'."),
+        tipo: z.enum(["venda", "os", "todos"]).optional().describe("Tipo de documento: 'venda', 'os' ou 'todos' (padrão)."),
+        limite: z.number().optional().describe("Quantos documentos (mais recentes) verificar. Padrão 5, máx 12."),
+      }),
+      execute: async ({ termo, tipo, limite }) => {
+        if (!GC_ACCESS || !GC_SECRET) return { erro: "Credenciais do GestãoClick não configuradas." };
+        const lim = Math.min(Math.max(limite ?? 5, 1), 12);
+        const q = termo.trim();
+        if (!q) return { erro: "Informe a peça." };
+
+        // 1) Resolver produto_ids da peça
+        const { data: idxRows } = await supabase
+          .from("products_index")
+          .select("produto_id, nome, codigo_interno, codigo_barra")
+          .eq("ativo", true)
+          .or(`codigo_interno.ilike.%${q}%,codigo_barra.ilike.%${q}%,produto_id.ilike.%${q}%,nome.ilike.%${q}%`)
+          .limit(20);
+        const matched = idxRows ?? [];
+        if (matched.length === 0) return { encontrados: 0, aviso: "Peça não localizada no índice." };
+
+        const idSet = new Set(matched.map((r: any) => String(r.produto_id)));
+        const info = matched[0] as any;
+        const identificacao = info.codigo_interno ? `[${info.codigo_interno}] ${info.nome}` : info.nome;
+        const codigoInterno = matched.map((r: any) => String(r.codigo_interno ?? "")).filter(Boolean);
+
+        // 2) Buscar eventos de consumo da peça (mais recentes primeiro)
+        let evQ = supabase
+          .from("inventory_consumption_events")
+          .select("produto_id, qty, occurred_at, source_id, source_type, cliente_nome")
+          .in("produto_id", [...idSet])
+          .order("occurred_at", { ascending: false })
+          .limit(60);
+        if (tipo && tipo !== "todos") evQ = evQ.eq("source_type", tipo);
+        const { data: evRows, error } = await evQ;
+        if (error) return { erro: error.message };
+        const eventos = evRows ?? [];
+        if (eventos.length === 0) {
+          return { peca: identificacao, encontrados: 0, aviso: "Nenhuma venda/OS registrada para essa peça no histórico." };
+        }
+
+        // 3) Distintos source_id (doc) preservando ordem por data desc
+        const vistos = new Set<string>();
+        const docs: { source_id: string; source_type: string; occurred_at: string; cliente_nome: string | null }[] = [];
+        for (const e of eventos) {
+          const sid = String(e.source_id ?? "");
+          if (!sid || vistos.has(sid)) continue;
+          vistos.add(sid);
+          docs.push({ source_id: sid, source_type: String(e.source_type), occurred_at: e.occurred_at, cliente_nome: e.cliente_nome });
+          if (docs.length >= lim) break;
+        }
+
+        // 4) Verificar cada doc ao vivo no GC e confirmar a linha da peça
+        function normCode(s: unknown): string { return String(s ?? "").replace(/\s+/g, "").toLowerCase(); }
+        const codeSet = new Set(codigoInterno.map((c) => normCode(c)));
+        const resultados: any[] = [];
+        for (const d of docs) {
+          const endpoint = d.source_type === "os" ? "ordens_servicos" : "vendas";
+          const det = await gcGetRaw(`/api/${endpoint}/${encodeURIComponent(d.source_id)}`);
+          const raw = det.json?.data ?? det.json;
+          const doc = raw && typeof raw === "object" && Object.keys(raw).length === 1 ? Object.values(raw)[0] as any : raw;
+          const produtos: any[] = Array.isArray(doc?.produtos) ? doc.produtos.map((p: any) => p?.produto ?? p) : [];
+          let linha: any = null;
+          for (const p of produtos) {
+            const pid = String(p?.produto_id ?? "");
+            const pcode = normCode(p?.codigo_interno ?? p?.codigo);
+            const pname = normalizeStr(p?.nome_produto ?? p?.nome);
+            if (idSet.has(pid) || (pcode && codeSet.has(pcode)) || (codigoInterno.length && codigoInterno.some((c) => pname.includes(normalizeStr(c))))) {
+              linha = p; break;
+            }
+          }
+          const codigoDoc = doc?.codigo ?? doc?.numero ?? doc?.numero_venda ?? null;
+          resultados.push({
+            tipo: d.source_type,
+            gc_id: d.source_id,
+            numero_documento: codigoDoc,
+            data: doc?.data ?? doc?.data_saida ?? doc?.data_entrada ?? d.occurred_at,
+            cliente: doc?.nome_cliente ?? doc?.cliente?.nome ?? d.cliente_nome ?? null,
+            situacao: doc?.nome_situacao ?? null,
+            verificado: !!linha,
+            quantidade: linha ? parseDec(linha.quantidade) : null,
+            valor_unitario: linha ? parseDec(linha.valor_venda ?? linha.valor) : null,
+            valor_total: linha ? parseDec(linha.valor_total) : null,
+            aviso_verificacao: linha
+              ? null
+              : (det.ok
+                ? "A peça NÃO foi encontrada nas linhas deste documento ao vivo — NÃO cite este documento como venda da peça."
+                : `Não foi possível carregar o documento ao vivo (HTTP ${det.status}).`),
+          });
+          await new Promise((r) => setTimeout(r, 350));
+        }
+
+        const verificados = resultados.filter((r) => r.verificado);
+        return {
+          peca: identificacao,
+          total_documentos_no_historico: vistos.size,
+          documentos_verificados: verificados.length,
+          documentos: resultados,
+          ultima_venda_os_confirmada: verificados[0] ?? null,
+          aviso: verificados.length === 0
+            ? "Nenhum documento pôde ser CONFIRMADO ao vivo contendo esta peça. NÃO afirme em qual venda/OS ela saiu."
+            : null,
+        };
+      },
+    });
+
     const result = streamText({
       model: gateway("google/gemini-3-flash-preview"),
       stopWhen: stepCountIs(50),
@@ -995,7 +1104,8 @@ Deno.serve(async (req: Request) => {
         "Se a ferramenta retornar erro de grupo ou de tabela não encontrada, mostre as opções sugeridas e peça para o usuário escolher.",
         "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
         "ACESSO TOTAL AO GESTÃOCLICK (GC): Você TEM acesso de LEITURA a QUALQUER módulo do ERP GestãoClick através da ferramenta consultar_gestaoclick. Use-a para responder qualquer pergunta sobre ordens de serviço (OS), vendas, orçamentos, compras, clientes, fornecedores, técnicos, funcionários, usuários, recebimentos (contas a receber), pagamentos (contas a pagar), notas fiscais (NFe), serviços, situações, formas de pagamento, centros de custo, transportadoras e bancos. NUNCA diga que não tem acesso a um módulo do GC ou a informações financeiras/comerciais — SEMPRE consulte a ferramenta antes de responder. Passe a 'entidade' (ex: 'os', 'venda', 'orcamento', 'cliente', 'fornecedor', 'tecnico', 'recebimento', 'pagamento', 'nfe') e, quando aplicável, 'filtros' (ex: {data_inicio:'2026-01-01', data_fim:'2026-12-31', cliente_id:'123'}) ou o 'id' para o detalhe completo de um registro. Para varrer muitos registros aumente 'max_paginas'.",
-        "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para TODO O RESTO do GC (OS, vendas, orçamentos, clientes, fornecedores, técnicos, financeiro etc.) use consultar_gestaoclick.",
+        "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para 'em qual venda/OS a peça saiu' ou 'última venda dessa peça' use consultar_vendas_da_peca; para TODO O RESTO do GC use consultar_gestaoclick.",
+        "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela busca cada documento AO VIVO no GestãoClick e confirma se a peça realmente consta nele (campo 'verificado'). Você SÓ pode citar um número de venda/OS que esteja com verificado=true. É TERMINANTEMENTE PROIBIDO afirmar que uma peça saiu em uma venda/OS sem essa confirmação — números de documento internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido; use SEMPRE o 'numero_documento' retornado pela ferramenta. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
       tools: {
@@ -1004,6 +1114,7 @@ Deno.serve(async (req: Request) => {
         analisar_consumo: analisarConsumo,
         consultar_pedidos_compra: consultarPedidosCompra,
         consultar_gestaoclick: consultarGestaoClick,
+        consultar_vendas_da_peca: consultarVendasDaPeca,
       },
     });
 

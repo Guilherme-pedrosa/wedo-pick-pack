@@ -73,6 +73,7 @@ export default function InventoryPolicyPage() {
       setConfig({
         id: d.id,
         lookback_days: d.lookback_days,
+        sales_window_days: d.sales_window_days ?? 60,
         abc_thresholds: d.abc_thresholds || DEFAULT_CONFIG.abc_thresholds,
         vendas_stockout_situacao_ids: d.vendas_stockout_situacao_ids || [],
         os_stockout_situacao_ids: d.os_stockout_situacao_ids || [],

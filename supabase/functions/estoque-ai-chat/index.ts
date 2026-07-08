@@ -779,6 +779,13 @@ Deno.serve(async (req: Request) => {
         }
 
         const r2 = (n: number) => Math.round(n * 100) / 100;
+        // Prioriza pedidos EM ABERTO e mais recentes antes de cortar no limite,
+        // para nunca esconder um pedido "em trânsito" (ex: COMPRADO - AG CHEGADA).
+        linhas.sort((a, b) => {
+          if (a.em_aberto !== b.em_aberto) return a.em_aberto ? -1 : 1;
+          return String(b.data_emissao ?? "").localeCompare(String(a.data_emissao ?? ""));
+        });
+        const linhasLimitadas = linhas.slice(0, lim);
         return {
           filtros: {
             termo: qTerm || null,

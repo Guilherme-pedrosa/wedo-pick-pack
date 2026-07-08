@@ -811,7 +811,7 @@ Deno.serve(async (req: Request) => {
             quantidade: r2(v.quantidade),
             valor: r2(v.valor),
           })),
-          pedidos: linhas,
+          pedidos: linhasLimitadas,
           sugestoes_reposicao: sugestoes,
           aviso: totalLinhasEncontradas === 0 ? "Nenhum pedido de compra encontrado com esses filtros." : null,
         };

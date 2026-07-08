@@ -518,8 +518,8 @@ export default function InventoryAnalysisPage() {
   const effectiveLookback = Math.max(lookbackDays, POLICY.analysisMonths * 31);
 
   const consumptionQuery = useQuery({
-    queryKey: ['inv-consumption', effectiveLookback],
-    queryFn: () => fetchConsumptionAgg(effectiveLookback),
+    queryKey: ['inv-consumption', effectiveLookback, salesWindowDays],
+    queryFn: () => fetchConsumptionAgg(effectiveLookback, salesWindowDays),
     enabled: !!configQuery.data,
   });
   const trendQuery = useQuery({ queryKey: ['inv-trend'], queryFn: fetchTrendData });

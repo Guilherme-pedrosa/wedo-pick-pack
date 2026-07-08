@@ -1013,15 +1013,25 @@ export default function InventoryAnalysisPage() {
   // regras (ROP, mínimo operacional, orçamento, lead time, bloqueios). Aqui apenas
   // filtramos quem precisa comprar (qtd líquida > 0) e ordenamos por risco operacional.
   const purchaseItems = useMemo(() => {
+    // Rank de urgência (não é a curva ABC): prioriza itens em ruptura que
+    // venderam recentemente, depois ruptura, depois venda recente.
+    const urgencyTier = (item: AnalysisItem): number => {
+      const isRuptura = item.stock_known && (item.estoque_atual ?? 0) <= 0;
+      const soldRecently = (item.qty_60d ?? 0) > 0;
+      if (isRuptura && soldRecently) return 0;
+      if (isRuptura) return 1;
+      if (soldRecently) return 2;
+      return 3;
+    };
     return analysisItems
       .filter((item) => {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
         return item.is_stock_eligible && item.suggested_qty > 0;
       })
       .sort((a, b) => {
-        const abcOrder = { A: 0, B: 1, C: 2 };
-        const abcDiff = abcOrder[a.abc_class] - abcOrder[b.abc_class];
-        if (abcDiff !== 0) return abcDiff;
+        const tierDiff = urgencyTier(a) - urgencyTier(b);
+        if (tierDiff !== 0) return tierDiff;
+        if ((b.qty_60d ?? 0) !== (a.qty_60d ?? 0)) return (b.qty_60d ?? 0) - (a.qty_60d ?? 0);
         return b.risk_score - a.risk_score;
       });
   }, [analysisItems, grupoFilter, searchTerm]);

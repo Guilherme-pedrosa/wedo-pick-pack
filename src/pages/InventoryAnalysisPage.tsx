@@ -415,6 +415,7 @@ async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow
         total_qty: qty,
         qty_venda: sourceType === 'venda' ? qty : 0,
         qty_os: sourceType === 'venda' ? 0 : qty,
+        qty_60d: in60 ? qty : 0,
         total_value: val,
         event_count: 1,
         source_count: 1,

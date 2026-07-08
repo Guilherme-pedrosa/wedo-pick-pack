@@ -1025,7 +1025,12 @@ export default function InventoryAnalysisPage() {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
         return item.budget_without_giro;
       })
-      .sort((a, b) => b.budget_signal_qty - a.budget_signal_qty);
+      .sort((a, b) => {
+        const abcOrder = { A: 0, B: 1, C: 2 };
+        const abcDiff = abcOrder[a.abc_class] - abcOrder[b.abc_class];
+        if (abcDiff !== 0) return abcDiff;
+        return b.budget_signal_qty - a.budget_signal_qty;
+      });
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Estoque recorrente OK — elegível mas sem necessidade de compra agora

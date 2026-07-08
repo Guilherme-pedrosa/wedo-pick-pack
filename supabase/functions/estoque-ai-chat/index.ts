@@ -721,22 +721,20 @@ Deno.serve(async (req: Request) => {
               sit.valor += valor;
               resumoPorSituacao.set(String(status), sit);
 
-              if (linhas.length < lim) {
-                linhas.push({
-                  pedido_codigo: pc.codigo ?? null,
-                  pedido_gc_id: pc.gc_id ?? null,
-                  data_emissao: pc.data_emissao ?? null,
-                  situacao: status,
-                  em_aberto: !fechado,
-                  fornecedor: pc.nome_fornecedor ?? null,
-                  numero_nfe: pc.numero_nfe ?? null,
-                  produto_identificacao: identificacao,
-                  produto_id: pid || null,
-                  quantidade: Math.round(qtd * 100) / 100,
-                  valor_custo_unitario: Math.round(valorUnit * 100) / 100,
-                  valor_total_item: Math.round(valor * 100) / 100,
-                });
-              }
+              linhas.push({
+                pedido_codigo: pc.codigo ?? null,
+                pedido_gc_id: pc.gc_id ?? null,
+                data_emissao: pc.data_emissao ?? null,
+                situacao: status,
+                em_aberto: !fechado,
+                fornecedor: pc.nome_fornecedor ?? null,
+                numero_nfe: pc.numero_nfe ?? null,
+                produto_identificacao: identificacao,
+                produto_id: pid || null,
+                quantidade: Math.round(qtd * 100) / 100,
+                valor_custo_unitario: Math.round(valorUnit * 100) / 100,
+                valor_total_item: Math.round(valor * 100) / 100,
+              });
             }
           }
           if (rows.length < PAGE) break;

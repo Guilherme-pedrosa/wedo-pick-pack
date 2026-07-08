@@ -971,7 +971,7 @@ Deno.serve(async (req: Request) => {
 
     const consultarVendasDaPeca = tool({
       description:
-        "Retorna as VENDAS e/ou ORDENS DE SERVIÇO (OS) reais de UMA peça específica, com VERIFICAÇÃO ao vivo no GestãoClick. Use SEMPRE que o usuário perguntar 'qual a última venda dessa peça', 'em qual venda/OS ela saiu', 'histórico de vendas dessa peça', 'quem comprou', etc. Cada documento retornado é buscado ao vivo no GC e CONFIRMADO (o campo 'verificado' indica se a peça realmente consta no documento). NUNCA cite um número de venda/OS que não esteja com verificado=true.",
+        "Retorna as VENDAS e/ou ORDENS DE SERVIÇO (OS) reais de UMA peça específica a partir do histórico de consumo sincronizado e tenta confirmar cada documento ao vivo no GestãoClick. Use SEMPRE que o usuário perguntar 'qual a última venda dessa peça', 'em qual venda/OS ela saiu', 'histórico de vendas dessa peça', 'quem comprou', etc. O campo 'verificado' indica que a peça consta no histórico sincronizado e/ou no documento ao vivo. 'verificado_ao_vivo' indica confirmação no payload atual do GC. NUNCA diga que não houve venda/OS quando houver documentos com verificado=true.",
       inputSchema: z.object({
         termo: z.string().describe("Nome, código interno, código de barras ou ID da peça. Ex: '40.00.091S', 'JUNTA FRAME W.GLASS'."),
         tipo: z.enum(["venda", "os", "todos"]).optional().describe("Tipo de documento: 'venda', 'os' ou 'todos' (padrão)."),
@@ -1001,7 +1001,7 @@ Deno.serve(async (req: Request) => {
         // 2) Buscar eventos de consumo da peça (mais recentes primeiro)
         let evQ = supabase
           .from("inventory_consumption_events")
-          .select("produto_id, qty, occurred_at, source_id, source_type, cliente_nome")
+          .select("produto_id, qty, occurred_at, source_id, source_type, cliente_nome, raw")
           .in("produto_id", [...idSet])
           .order("occurred_at", { ascending: false })
           .limit(60);
@@ -1015,35 +1015,66 @@ Deno.serve(async (req: Request) => {
 
         // 3) Distintos source_id (doc) preservando ordem por data desc
         const vistos = new Set<string>();
-        const docs: { source_id: string; source_type: string; occurred_at: string; cliente_nome: string | null }[] = [];
+        const docs: { source_id: string; source_type: string; occurred_at: string; cliente_nome: string | null; qty_historico: number; raw_historico: any | null }[] = [];
         for (const e of eventos) {
           const sid = String(e.source_id ?? "");
-          if (!sid || vistos.has(sid)) continue;
+          if (!sid) continue;
+          if (vistos.has(sid)) {
+            const existing = docs.find((d) => d.source_id === sid && d.source_type === String(e.source_type));
+            if (existing) existing.qty_historico += parseDec(e.qty);
+            continue;
+          }
           vistos.add(sid);
-          docs.push({ source_id: sid, source_type: String(e.source_type), occurred_at: e.occurred_at, cliente_nome: e.cliente_nome });
+          docs.push({
+            source_id: sid,
+            source_type: String(e.source_type),
+            occurred_at: e.occurred_at,
+            cliente_nome: e.cliente_nome,
+            qty_historico: parseDec(e.qty),
+            raw_historico: e.raw ?? null,
+          });
           if (docs.length >= lim) break;
         }
 
         // 4) Verificar cada doc ao vivo no GC e confirmar a linha da peça
         function normCode(s: unknown): string { return String(s ?? "").replace(/\s+/g, "").toLowerCase(); }
         const codeSet = new Set(codigoInterno.map((c) => normCode(c)));
+        function extractProductLines(doc: any): any[] {
+          const arrays = [
+            doc?.produtos,
+            doc?.itens,
+            doc?.items,
+            doc?.produtos_servicos,
+            doc?.servicos_produtos,
+            doc?.produtos_os,
+            doc?.produtos_venda,
+          ].filter(Array.isArray) as any[][];
+          const out: any[] = [];
+          for (const arr of arrays) {
+            for (const item of arr) out.push(item?.produto ?? item?.Produto ?? item?.item ?? item);
+          }
+          return out;
+        }
+        function lineMatchesPiece(p: any): boolean {
+          const pid = String(p?.produto_id ?? p?.id_produto ?? p?.id ?? "");
+          const pcode = normCode(p?.codigo_interno ?? p?.codigo ?? p?.codigo_produto);
+          const pname = normalizeStr(p?.nome_produto ?? p?.nome ?? p?.descricao);
+          return idSet.has(pid) || (pcode && codeSet.has(pcode)) || (codigoInterno.length > 0 && codigoInterno.some((c) => pname.includes(normalizeStr(c))));
+        }
         const resultados: any[] = [];
         for (const d of docs) {
           const endpoint = d.source_type === "os" ? "ordens_servicos" : "vendas";
           const det = await gcGetRaw(`/api/${endpoint}/${encodeURIComponent(d.source_id)}`);
           const raw = det.json?.data ?? det.json;
           const doc = raw && typeof raw === "object" && Object.keys(raw).length === 1 ? Object.values(raw)[0] as any : raw;
-          const produtos: any[] = Array.isArray(doc?.produtos) ? doc.produtos.map((p: any) => p?.produto ?? p) : [];
-          let linha: any = null;
-          for (const p of produtos) {
-            const pid = String(p?.produto_id ?? "");
-            const pcode = normCode(p?.codigo_interno ?? p?.codigo);
-            const pname = normalizeStr(p?.nome_produto ?? p?.nome);
-            if (idSet.has(pid) || (pcode && codeSet.has(pcode)) || (codigoInterno.length && codigoInterno.some((c) => pname.includes(normalizeStr(c))))) {
-              linha = p; break;
-            }
-          }
+          const produtos = extractProductLines(doc);
+          const linha = produtos.find(lineMatchesPiece) ?? null;
+          const rawLinha = d.raw_historico && typeof d.raw_historico === "object" ? d.raw_historico : null;
+          const linhaConfirmada = linha ?? rawLinha;
           const codigoDoc = doc?.codigo ?? doc?.numero ?? doc?.numero_venda ?? null;
+          const verificadoAoVivo = !!linha;
+          const confirmadoHistorico = !!rawLinha;
+          const verificado = verificadoAoVivo || confirmadoHistorico;
           resultados.push({
             tipo: d.source_type,
             gc_id: d.source_id,
@@ -1051,14 +1082,18 @@ Deno.serve(async (req: Request) => {
             data: doc?.data ?? doc?.data_saida ?? doc?.data_entrada ?? d.occurred_at,
             cliente: doc?.nome_cliente ?? doc?.cliente?.nome ?? d.cliente_nome ?? null,
             situacao: doc?.nome_situacao ?? null,
-            verificado: !!linha,
-            quantidade: linha ? parseDec(linha.quantidade) : null,
-            valor_unitario: linha ? parseDec(linha.valor_venda ?? linha.valor) : null,
-            valor_total: linha ? parseDec(linha.valor_total) : null,
+            verificado,
+            verificado_ao_vivo: verificadoAoVivo,
+            confirmado_historico: confirmadoHistorico,
+            quantidade: linha ? parseDec(linha.quantidade) : d.qty_historico,
+            valor_unitario: linhaConfirmada ? parseDec(linhaConfirmada.valor_venda ?? linhaConfirmada.valor ?? linhaConfirmada.valor_unitario) : null,
+            valor_total: linhaConfirmada ? parseDec(linhaConfirmada.valor_total) || (parseDec(linhaConfirmada.valor_venda ?? linhaConfirmada.valor ?? linhaConfirmada.valor_unitario) * d.qty_historico) : null,
             aviso_verificacao: linha
               ? null
-              : (det.ok
-                ? "A peça NÃO foi encontrada nas linhas deste documento ao vivo — NÃO cite este documento como venda da peça."
+              : (confirmadoHistorico
+                ? "Confirmado pelo histórico de consumo/movimentações sincronizado; a linha não apareceu no payload atual do documento ao vivo. Pode citar a saída, mas deixe claro que a confirmação veio do histórico sincronizado."
+                : det.ok
+                ? "A peça NÃO foi encontrada nas linhas deste documento ao vivo nem no histórico bruto — NÃO cite este documento como venda da peça."
                 : `Não foi possível carregar o documento ao vivo (HTTP ${det.status}).`),
           });
           await new Promise((r) => setTimeout(r, 350));
@@ -1072,7 +1107,7 @@ Deno.serve(async (req: Request) => {
           documentos: resultados,
           ultima_venda_os_confirmada: verificados[0] ?? null,
           aviso: verificados.length === 0
-            ? "Nenhum documento pôde ser CONFIRMADO ao vivo contendo esta peça. NÃO afirme em qual venda/OS ela saiu."
+            ? "Nenhum documento foi confirmado contendo esta peça. NÃO afirme em qual venda/OS ela saiu."
             : null,
         };
       },
@@ -1107,7 +1142,7 @@ Deno.serve(async (req: Request) => {
         "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
         "ACESSO TOTAL AO GESTÃOCLICK (GC): Você TEM acesso de LEITURA a QUALQUER módulo do ERP GestãoClick através da ferramenta consultar_gestaoclick. Use-a para responder qualquer pergunta sobre ordens de serviço (OS), vendas, orçamentos, compras, clientes, fornecedores, técnicos, funcionários, usuários, recebimentos (contas a receber), pagamentos (contas a pagar), notas fiscais (NFe), serviços, situações, formas de pagamento, centros de custo, transportadoras e bancos. NUNCA diga que não tem acesso a um módulo do GC ou a informações financeiras/comerciais — SEMPRE consulte a ferramenta antes de responder. Passe a 'entidade' (ex: 'os', 'venda', 'orcamento', 'cliente', 'fornecedor', 'tecnico', 'recebimento', 'pagamento', 'nfe') e, quando aplicável, 'filtros' (ex: {data_inicio:'2026-01-01', data_fim:'2026-12-31', cliente_id:'123'}) ou o 'id' para o detalhe completo de um registro. Para varrer muitos registros aumente 'max_paginas'.",
         "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para 'em qual venda/OS a peça saiu' ou 'última venda dessa peça' use consultar_vendas_da_peca; para TODO O RESTO do GC use consultar_gestaoclick.",
-        "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela busca cada documento AO VIVO no GestãoClick e confirma se a peça realmente consta nele (campo 'verificado'). Você SÓ pode citar um número de venda/OS que esteja com verificado=true. É TERMINANTEMENTE PROIBIDO afirmar que uma peça saiu em uma venda/OS sem essa confirmação — números de documento internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido; use SEMPRE o 'numero_documento' retornado pela ferramenta. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
+        "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela consulta o histórico de consumo/movimentações sincronizado e tenta confirmar o documento ao vivo no GestãoClick. Você SÓ pode citar uma saída se o documento vier com verificado=true. Se verificado_ao_vivo=false mas confirmado_historico=true, cite a saída como 'confirmada pelo histórico de consumo/movimentações' e NÃO invente o Nº exibido; use numero_documento somente quando retornado. É TERMINANTEMENTE PROIBIDO dizer que não houve vendas/OS/saídas quando a ferramenta retornou documentos verificados. Números internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
       tools: {

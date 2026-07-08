@@ -1660,7 +1660,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="px-2 py-1.5 text-xs">Padrão</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
-                      <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. 60d</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. {salesWindowDays}d</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">OS</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>

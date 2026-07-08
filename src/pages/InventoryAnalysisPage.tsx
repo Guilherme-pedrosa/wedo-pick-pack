@@ -346,13 +346,13 @@ async function fetchAllRows(
   return allRows;
 }
 
-async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow[]> {
+async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number = 60): Promise<ConsumptionRow[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - lookbackDays);
   const cutoffStr = cutoff.toISOString();
 
   const now = Date.now();
-  const cut60 = now - 60 * 86400000;
+  const cut60 = now - salesWindowDays * 86400000;
   const cut90 = now - 90 * 86400000;
   const cut180 = now - 180 * 86400000;
 
@@ -474,10 +474,10 @@ async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo
 async function fetchConfig() {
   const { data } = await supabase
     .from('inventory_policy_config' as any)
-    .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
+    .select('lookback_days, sales_window_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
     .order('created_at', { ascending: false })
     .limit(1);
-  return (data as any[])?.[0] || { lookback_days: 180, abc_thresholds: { A: 0.8, B: 0.95 }, purchase_crossref_situacao_ids: [] };
+  return (data as any[])?.[0] || { lookback_days: 180, sales_window_days: 60, abc_thresholds: { A: 0.8, B: 0.95 }, purchase_crossref_situacao_ids: [] };
 }
 
 async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
@@ -509,6 +509,7 @@ export default function InventoryAnalysisPage() {
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
   const lookbackDays = configQuery.data?.lookback_days || 180;
+  const salesWindowDays = configQuery.data?.sales_window_days || 60;
   const crossrefSituacaoIds: string[] = configQuery.data?.purchase_crossref_situacao_ids || [];
   const budgetSituacaoIds: string[] = configQuery.data?.budget_crossref_situacao_ids || [];
 
@@ -517,8 +518,8 @@ export default function InventoryAnalysisPage() {
   const effectiveLookback = Math.max(lookbackDays, POLICY.analysisMonths * 31);
 
   const consumptionQuery = useQuery({
-    queryKey: ['inv-consumption', effectiveLookback],
-    queryFn: () => fetchConsumptionAgg(effectiveLookback),
+    queryKey: ['inv-consumption', effectiveLookback, salesWindowDays],
+    queryFn: () => fetchConsumptionAgg(effectiveLookback, salesWindowDays),
     enabled: !!configQuery.data,
   });
   const trendQuery = useQuery({ queryKey: ['inv-trend'], queryFn: fetchTrendData });
@@ -1659,7 +1660,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="px-2 py-1.5 text-xs">Padrão</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
-                      <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. 60d</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. {salesWindowDays}d</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">OS</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
@@ -1708,7 +1709,7 @@ export default function InventoryAnalysisPage() {
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
                           {item.qty_60d > 0 ? (
-                            <span className="text-violet-600 font-semibold text-xs" title="Quantidade vendida (Vendas + OS) nos últimos 60 dias">{formatNumberBR(item.qty_60d, item.qty_60d % 1 === 0 ? 0 : 1)}un</span>
+                            <span className="text-violet-600 font-semibold text-xs" title={`Quantidade vendida (Vendas + OS) nos últimos ${salesWindowDays} dias`}>{formatNumberBR(item.qty_60d, item.qty_60d % 1 === 0 ? 0 : 1)}un</span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">

@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 interface PolicyConfig {
   id: string;
   lookback_days: number;
+  sales_window_days: number;
   abc_thresholds: { A: number; B: number };
   vendas_stockout_situacao_ids: string[];
   os_stockout_situacao_ids: string[];
@@ -30,6 +31,7 @@ interface PolicyConfig {
 
 const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
   lookback_days: 180,
+  sales_window_days: 60,
   abc_thresholds: { A: 0.80, B: 0.95 },
   vendas_stockout_situacao_ids: ['7063585'],
   os_stockout_situacao_ids: [],
@@ -71,6 +73,7 @@ export default function InventoryPolicyPage() {
       setConfig({
         id: d.id,
         lookback_days: d.lookback_days,
+        sales_window_days: d.sales_window_days ?? 60,
         abc_thresholds: d.abc_thresholds || DEFAULT_CONFIG.abc_thresholds,
         vendas_stockout_situacao_ids: d.vendas_stockout_situacao_ids || [],
         os_stockout_situacao_ids: d.os_stockout_situacao_ids || [],
@@ -97,6 +100,7 @@ export default function InventoryPolicyPage() {
     try {
       const payload = {
         lookback_days: config.lookback_days,
+        sales_window_days: config.sales_window_days,
         abc_thresholds: config.abc_thresholds,
         vendas_stockout_situacao_ids: config.vendas_stockout_situacao_ids,
         os_stockout_situacao_ids: config.os_stockout_situacao_ids,
@@ -420,6 +424,26 @@ export default function InventoryPolicyPage() {
               }}
               className="mt-1"
             />
+          </div>
+          <div>
+            <Label className="text-sm">Janela de vendas recentes (dias)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              value={config.sales_window_days}
+              onChange={e => {
+                const val = e.target.value;
+                setConfig(c => c ? { ...c, sales_window_days: val === '' ? 0 : parseInt(val) } : c);
+              }}
+              onBlur={() => {
+                if (!config.sales_window_days || config.sales_window_days < 1) {
+                  setConfig(c => c ? { ...c, sales_window_days: 60 } : c);
+                }
+              }}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Usado na coluna "Vend." (Vendas + OS) da Análise de Estoque.</p>
           </div>
           <div>
             <Label className="text-sm">Limiar A (%)</Label>

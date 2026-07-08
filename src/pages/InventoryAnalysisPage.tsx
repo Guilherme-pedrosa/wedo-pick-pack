@@ -1010,7 +1010,12 @@ export default function InventoryAnalysisPage() {
         if (!matchesAnalysisFilters(item, searchTerm, grupoFilter)) return false;
         return item.is_stock_eligible && item.suggested_qty > 0;
       })
-      .sort((a, b) => b.risk_score - a.risk_score);
+      .sort((a, b) => {
+        const abcOrder = { A: 0, B: 1, C: 2 };
+        const abcDiff = abcOrder[a.abc_class] - abcOrder[b.abc_class];
+        if (abcDiff !== 0) return abcDiff;
+        return b.risk_score - a.risk_score;
+      });
   }, [analysisItems, grupoFilter, searchTerm]);
 
   // Orçamentos pendentes sem giro recorrente — sinal, mas NÃO compra automática

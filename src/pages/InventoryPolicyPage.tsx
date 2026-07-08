@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 interface PolicyConfig {
   id: string;
   lookback_days: number;
+  sales_window_days: number;
   abc_thresholds: { A: number; B: number };
   vendas_stockout_situacao_ids: string[];
   os_stockout_situacao_ids: string[];

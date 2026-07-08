@@ -988,6 +988,8 @@ Deno.serve(async (req: Request) => {
         "Nunca invente preços de tabela: use exatamente os valores que o usuário informar para cada tabela. Se o usuário não informar alguma tabela, avise que ela ficará com o markup padrão do GestãoClick.",
         "Se a ferramenta retornar erro de grupo ou de tabela não encontrada, mostre as opções sugeridas e peça para o usuário escolher.",
         "Após cadastrar com sucesso, confirme ao usuário o produto criado (identificação) e os preços efetivamente gravados em 'precos_aplicados'.",
+        "ACESSO TOTAL AO GESTÃOCLICK (GC): Você TEM acesso de LEITURA a QUALQUER módulo do ERP GestãoClick através da ferramenta consultar_gestaoclick. Use-a para responder qualquer pergunta sobre ordens de serviço (OS), vendas, orçamentos, compras, clientes, fornecedores, técnicos, funcionários, usuários, recebimentos (contas a receber), pagamentos (contas a pagar), notas fiscais (NFe), serviços, situações, formas de pagamento, centros de custo, transportadoras e bancos. NUNCA diga que não tem acesso a um módulo do GC ou a informações financeiras/comerciais — SEMPRE consulte a ferramenta antes de responder. Passe a 'entidade' (ex: 'os', 'venda', 'orcamento', 'cliente', 'fornecedor', 'tecnico', 'recebimento', 'pagamento', 'nfe') e, quando aplicável, 'filtros' (ex: {data_inicio:'2026-01-01', data_fim:'2026-12-31', cliente_id:'123'}) ou o 'id' para o detalhe completo de um registro. Para varrer muitos registros aumente 'max_paginas'.",
+        "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para TODO O RESTO do GC (OS, vendas, orçamentos, clientes, fornecedores, técnicos, financeiro etc.) use consultar_gestaoclick.",
       ].join(" "),
       messages: await convertToModelMessages(messages),
       tools: {
@@ -995,6 +997,7 @@ Deno.serve(async (req: Request) => {
         cadastrar_produto: cadastrarProduto,
         analisar_consumo: analisarConsumo,
         consultar_pedidos_compra: consultarPedidosCompra,
+        consultar_gestaoclick: consultarGestaoClick,
       },
     });
 

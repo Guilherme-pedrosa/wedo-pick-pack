@@ -813,7 +813,157 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    const result = streamText({
+    // Mapa de entidades amigáveis -> endpoint da API do GestãoClick.
+    const GC_ENTIDADES: Record<string, string> = {
+      os: "ordens_servicos",
+      ordem_servico: "ordens_servicos",
+      ordens_servico: "ordens_servicos",
+      ordens_servicos: "ordens_servicos",
+      venda: "vendas",
+      vendas: "vendas",
+      orcamento: "orcamentos",
+      orcamentos: "orcamentos",
+      compra: "compras",
+      compras: "compras",
+      produto: "produtos",
+      produtos: "produtos",
+      servico: "servicos",
+      servicos: "servicos",
+      cliente: "clientes",
+      clientes: "clientes",
+      fornecedor: "fornecedores",
+      fornecedores: "fornecedores",
+      tecnico: "clientes",
+      tecnicos: "clientes",
+      funcionario: "funcionarios",
+      funcionarios: "funcionarios",
+      usuario: "usuarios",
+      usuarios: "usuarios",
+      recebimento: "recebimentos",
+      recebimentos: "recebimentos",
+      pagamento: "pagamentos",
+      pagamentos: "pagamentos",
+      conta_receber: "recebimentos",
+      contas_receber: "recebimentos",
+      conta_pagar: "pagamentos",
+      contas_pagar: "pagamentos",
+      nfe: "nfes",
+      nfes: "nfes",
+      nota_fiscal: "nfes",
+      grupo: "grupos_produtos",
+      grupos: "grupos_produtos",
+      forma_pagamento: "formas_pagamentos",
+      formas_pagamento: "formas_pagamentos",
+      centro_custo: "centros_custos",
+      centros_custo: "centros_custos",
+      situacao: "situacoes",
+      situacoes: "situacoes",
+      transportadora: "transportadoras",
+      transportadoras: "transportadoras",
+      banco: "bancos",
+      bancos: "bancos",
+    };
+
+    async function gcGetRaw(path: string): Promise<{ ok: boolean; status: number; json: any }> {
+      try {
+        const res = await fetch(`${GC_API_URL}${path}`, {
+          headers: {
+            "access-token": GC_ACCESS!,
+            "secret-access-token": GC_SECRET!,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        });
+        let json: any = null;
+        try { json = await res.json(); } catch { json = null; }
+        return { ok: res.ok, status: res.status, json };
+      } catch (e) {
+        return { ok: false, status: 0, json: { error: e instanceof Error ? e.message : String(e) } };
+      }
+    }
+
+    const consultarGestaoClick = tool({
+      description:
+        "Acesso GERAL de LEITURA ao ERP GestãoClick (GC). Consulta QUALQUER módulo/entidade: ordens de serviço (OS), vendas, orçamentos, compras, produtos, serviços, clientes, fornecedores, técnicos, funcionários, usuários, recebimentos (contas a receber), pagamentos (contas a pagar), notas fiscais (NFe), grupos, formas de pagamento, centros de custo, situações, transportadoras, bancos. Use para responder QUALQUER pergunta sobre dados do GC que as outras ferramentas não cubram. Pode listar com filtros ou buscar um registro específico por ID.",
+      inputSchema: z.object({
+        entidade: z.string().describe("O que consultar. Ex: 'os', 'venda', 'orcamento', 'cliente', 'fornecedor', 'tecnico', 'recebimento', 'pagamento', 'nfe', 'produto', 'servico', 'usuario', 'situacao'."),
+        id: z.string().optional().describe("ID do registro específico para trazer o detalhe completo. Se informado, ignora os filtros de lista."),
+        filtros: z.record(z.string()).optional().describe("Filtros da API do GC como pares chave/valor. Ex: {nome:'João'}, {data_inicio:'2026-01-01', data_fim:'2026-12-31'}, {cliente_id:'123'}, {situacao_id:'456'}, {codigo:'OS123'}. Passe apenas parâmetros suportados pela API do GC."),
+        pagina: z.number().optional().describe("Página da listagem (padrão 1)."),
+        max_paginas: z.number().optional().describe("Quantas páginas percorrer no máximo (padrão 1, máx 10). Use >1 para varrer mais registros."),
+      }),
+      execute: async ({ entidade, id, filtros, pagina, max_paginas }) => {
+        if (!GC_ACCESS || !GC_SECRET) {
+          return { erro: "Credenciais do GestãoClick não configuradas." };
+        }
+        const key = normalizeStr(entidade).replace(/\s+/g, "_");
+        const endpoint = GC_ENTIDADES[key] ?? GC_ENTIDADES[key.replace(/s$/, "")] ?? key;
+
+        // Detalhe por ID
+        if (id) {
+          const det = await gcGetRaw(`/api/${endpoint}/${encodeURIComponent(id)}`);
+          if (!det.ok) {
+            return { erro: `Falha ao buscar ${entidade} id ${id} (HTTP ${det.status}).`, resposta: det.json };
+          }
+          return { entidade: endpoint, id, registro: det.json?.data ?? det.json };
+        }
+
+        // Listagem com filtros e paginação
+        const baseParams = new URLSearchParams();
+        for (const [k, v] of Object.entries(filtros ?? {})) {
+          if (v != null && String(v).trim() !== "") baseParams.set(k, String(v));
+        }
+        const startPage = Math.max(pagina ?? 1, 1);
+        const maxPages = Math.min(Math.max(max_paginas ?? 1, 1), 10);
+
+        const registros: any[] = [];
+        let totalPaginas = 1;
+        let totalRegistros: number | null = null;
+        let lastErr: any = null;
+
+        for (let i = 0; i < maxPages; i++) {
+          const p = startPage + i;
+          const params = new URLSearchParams(baseParams);
+          params.set("pagina", String(p));
+          const resp = await gcGetRaw(`/api/${endpoint}?${params.toString()}`);
+          if (!resp.ok) {
+            lastErr = { status: resp.status, resposta: resp.json };
+            break;
+          }
+          const data = Array.isArray(resp.json?.data) ? resp.json.data : [];
+          for (const row of data) {
+            // GC costuma aninhar: { Cliente: {...} } etc. Achatamos quando possível.
+            const flat = row && typeof row === "object" && Object.keys(row).length === 1
+              ? (Object.values(row)[0] as any) ?? row
+              : row;
+            registros.push(flat);
+          }
+          totalPaginas = Number(resp.json?.meta?.total_paginas ?? totalPaginas);
+          if (resp.json?.meta?.total_registros != null) totalRegistros = Number(resp.json.meta.total_registros);
+          if (data.length === 0 || p >= totalPaginas) break;
+          if (i + 1 < maxPages) await new Promise((r) => setTimeout(r, 350));
+        }
+
+        if (registros.length === 0 && lastErr) {
+          return {
+            entidade: endpoint,
+            erro: `Falha ao consultar ${entidade} (HTTP ${lastErr.status}). Verifique a entidade/filtros.`,
+            resposta: lastErr.resposta,
+          };
+        }
+
+        return {
+          entidade: endpoint,
+          total_registros: totalRegistros,
+          total_paginas: totalPaginas,
+          pagina_inicial: startPage,
+          quantidade_retornada: registros.length,
+          registros: registros.slice(0, 100),
+          aviso: registros.length === 0 ? "Nenhum registro encontrado com esses filtros." : null,
+        };
+      },
+    });
+
       model: gateway("google/gemini-3-flash-preview"),
       stopWhen: stepCountIs(50),
       system: [

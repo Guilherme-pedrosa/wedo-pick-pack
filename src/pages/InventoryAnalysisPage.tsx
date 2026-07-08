@@ -1674,7 +1674,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">OS</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
-                      <TableHead className="text-right px-2 py-1.5 text-xs text-amber-600">Orç. Pond.</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-amber-600">Orçamento</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Saldo Proj.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">LT</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Est. Seg.</TableHead>
@@ -1740,10 +1740,9 @@ export default function InventoryAnalysisPage() {
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
-                          {item.budget_demand_qty > 0 ? (
+                          {item.orc_qty > 0 ? (
                             <span className="text-amber-600 font-medium text-xs" title={item.orc_refs.map(r => `ORC ${r.codigo}: ${r.qtd}un (${r.cliente})`).join('\n')}>
-                              {item.budget_demand_qty.toFixed(1)}
-                              <span className="text-[10px] text-muted-foreground block">({item.orc_qty} bruto)</span>
+                              {formatNumberBR(item.orc_qty, item.orc_qty % 1 === 0 ? 0 : 1)}un
                             </span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>

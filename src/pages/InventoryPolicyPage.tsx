@@ -426,6 +426,26 @@ export default function InventoryPolicyPage() {
             />
           </div>
           <div>
+            <Label className="text-sm">Janela de vendas recentes (dias)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              value={config.sales_window_days}
+              onChange={e => {
+                const val = e.target.value;
+                setConfig(c => c ? { ...c, sales_window_days: val === '' ? 0 : parseInt(val) } : c);
+              }}
+              onBlur={() => {
+                if (!config.sales_window_days || config.sales_window_days < 1) {
+                  setConfig(c => c ? { ...c, sales_window_days: 60 } : c);
+                }
+              }}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Usado na coluna "Vend." (Vendas + OS) da Análise de Estoque.</p>
+          </div>
+          <div>
             <Label className="text-sm">Limiar A (%)</Label>
             <Input
               type="number"

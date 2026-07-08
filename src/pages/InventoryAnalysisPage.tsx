@@ -1709,7 +1709,7 @@ export default function InventoryAnalysisPage() {
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
                           {item.qty_60d > 0 ? (
-                            <span className="text-violet-600 font-semibold text-xs" title="Quantidade vendida (Vendas + OS) nos últimos 60 dias">{formatNumberBR(item.qty_60d, item.qty_60d % 1 === 0 ? 0 : 1)}un</span>
+                            <span className="text-violet-600 font-semibold text-xs" title={`Quantidade vendida (Vendas + OS) nos últimos ${salesWindowDays} dias`}>{formatNumberBR(item.qty_60d, item.qty_60d % 1 === 0 ? 0 : 1)}un</span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">

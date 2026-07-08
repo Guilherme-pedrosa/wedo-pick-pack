@@ -346,13 +346,13 @@ async function fetchAllRows(
   return allRows;
 }
 
-async function fetchConsumptionAgg(lookbackDays: number): Promise<ConsumptionRow[]> {
+async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number = 60): Promise<ConsumptionRow[]> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - lookbackDays);
   const cutoffStr = cutoff.toISOString();
 
   const now = Date.now();
-  const cut60 = now - 60 * 86400000;
+  const cut60 = now - salesWindowDays * 86400000;
   const cut90 = now - 90 * 86400000;
   const cut180 = now - 180 * 86400000;
 

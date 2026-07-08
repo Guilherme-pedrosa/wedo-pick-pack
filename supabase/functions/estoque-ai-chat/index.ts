@@ -721,22 +721,20 @@ Deno.serve(async (req: Request) => {
               sit.valor += valor;
               resumoPorSituacao.set(String(status), sit);
 
-              if (linhas.length < lim) {
-                linhas.push({
-                  pedido_codigo: pc.codigo ?? null,
-                  pedido_gc_id: pc.gc_id ?? null,
-                  data_emissao: pc.data_emissao ?? null,
-                  situacao: status,
-                  em_aberto: !fechado,
-                  fornecedor: pc.nome_fornecedor ?? null,
-                  numero_nfe: pc.numero_nfe ?? null,
-                  produto_identificacao: identificacao,
-                  produto_id: pid || null,
-                  quantidade: Math.round(qtd * 100) / 100,
-                  valor_custo_unitario: Math.round(valorUnit * 100) / 100,
-                  valor_total_item: Math.round(valor * 100) / 100,
-                });
-              }
+              linhas.push({
+                pedido_codigo: pc.codigo ?? null,
+                pedido_gc_id: pc.gc_id ?? null,
+                data_emissao: pc.data_emissao ?? null,
+                situacao: status,
+                em_aberto: !fechado,
+                fornecedor: pc.nome_fornecedor ?? null,
+                numero_nfe: pc.numero_nfe ?? null,
+                produto_identificacao: identificacao,
+                produto_id: pid || null,
+                quantidade: Math.round(qtd * 100) / 100,
+                valor_custo_unitario: Math.round(valorUnit * 100) / 100,
+                valor_total_item: Math.round(valor * 100) / 100,
+              });
             }
           }
           if (rows.length < PAGE) break;
@@ -781,6 +779,13 @@ Deno.serve(async (req: Request) => {
         }
 
         const r2 = (n: number) => Math.round(n * 100) / 100;
+        // Prioriza pedidos EM ABERTO e mais recentes antes de cortar no limite,
+        // para nunca esconder um pedido "em trânsito" (ex: COMPRADO - AG CHEGADA).
+        linhas.sort((a, b) => {
+          if (a.em_aberto !== b.em_aberto) return a.em_aberto ? -1 : 1;
+          return String(b.data_emissao ?? "").localeCompare(String(a.data_emissao ?? ""));
+        });
+        const linhasLimitadas = linhas.slice(0, lim);
         return {
           filtros: {
             termo: qTerm || null,
@@ -806,7 +811,7 @@ Deno.serve(async (req: Request) => {
             quantidade: r2(v.quantidade),
             valor: r2(v.valor),
           })),
-          pedidos: linhas,
+          pedidos: linhasLimitadas,
           sugestoes_reposicao: sugestoes,
           aviso: totalLinhasEncontradas === 0 ? "Nenhum pedido de compra encontrado com esses filtros." : null,
         };
@@ -982,6 +987,7 @@ Deno.serve(async (req: Request) => {
         "Se não encontrar nada, informe que a peça não foi localizada no estoque.",
         "HISTÓRICO DE SAÍDAS / CONSUMO: Você TEM acesso ao histórico de saídas (vendas e OS já baixadas). Quando o usuário perguntar sobre saídas, consumo, itens mais vendidos, quanto saiu de uma peça, ou desempenho por grupo/período, use a ferramenta analisar_consumo. Traduza períodos em datas: 'em 2026' → data_inicio 2026-01-01 e data_fim 2026-12-31; 'últimos 3 meses' → calcule as datas. Para perguntas por grupo, passe o parâmetro 'grupo'. VENDAS vs OS: a resposta traz 'resumo_por_tipo' com totais de vendas e OS separados, e cada item do ranking tem 'quantidade_vendas' e 'quantidade_os'. Quando o usuário perguntar especificamente sobre VENDAS, use esses campos (ou passe tipo='venda') e relate os números de venda explicitamente — NUNCA diga que não há vendas sem antes chamar a ferramenta. NUNCA diga que não tem acesso a histórico de vendas/saídas — use essa ferramenta.",
         "COMPRAS / PEDIDOS DE COMPRA / REPOSIÇÃO: Você TEM acesso aos pedidos de compra, compras em aberto/finalizadas/canceladas e sugestões de reposição. Quando o usuário perguntar se tem pedido de compra para uma peça, compra em aberto, previsão/chegada, reposição, última compra, fornecedor, quantidade comprada ou situação do pedido, use consultar_pedidos_compra. NUNCA diga que não tem acesso ao módulo de Pedidos de Compra; consulte a ferramenta. Se o usuário disser 'em aberto', chame com apenas_abertos=true. Responda separando pedidos em aberto de pedidos finalizados/cancelados e cite código do pedido, data, fornecedor, situação e quantidade.",
+        "IMPORTANTE — CACHE LOCAL DE COMPRAS PODE ESTAR INCOMPLETO: a ferramenta consultar_pedidos_compra lê um cache local sincronizado do GestãoClick, que pode estar DESATUALIZADO ou não conter pedidos recentes/em trânsito com situações personalizadas (ex: 'COMPRADO - AG CHEGADA'). Portanto: (1) quando for listar os pedidos de compra de uma peça, SEMPRE cruze também com a ferramenta consultar_gestaoclick (entidade 'compras') para garantir que nenhum pedido fique de fora — não confie apenas no cache local; (2) NUNCA afirme que 'não existe pedido de compra' ou que 'esse é o único pedido' sem antes confirmar via consultar_gestaoclick na fonte ao vivo; (3) se o usuário citar um número de pedido específico que você não listou, isso é um ERRO seu — refaça a busca ao vivo, não invente justificativa. É melhor consultar as duas fontes e consolidar do que dar uma lista incompleta.",
         "Ao apresentar um ranking de saídas, liste as peças no formato [Código] Nome com a quantidade de saída e, quando útil, o valor consumido. Deixe claro o período e o tipo (vendas, OS ou todos) considerados.",
         "CADASTRO DE PRODUTO: Você pode cadastrar um produto novo com a ferramenta cadastrar_produto. Para isso colete: nome, código interno, grupo/categoria, custo, estoque inicial, localização (física e rational, se houver) e o preço de venda de CADA tabela informada pelo usuário.",
         "ANTES de chamar cadastrar_produto, mostre um resumo completo e organizado de TODOS os dados (incluindo o preço tabela a tabela) e peça a confirmação explícita do usuário. Só chame a ferramenta depois que o usuário responder confirmando (ex: 'sim', 'pode cadastrar', 'confirmar').",

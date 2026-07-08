@@ -1353,7 +1353,7 @@ export default function InventoryAnalysisPage() {
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.estoque_atual ?? '',
       i.pc_qty,
-      formatNumberBR(i.budget_demand_qty, 2),
+      formatNumberBR(i.orc_qty, 2),
       i.projected_available !== null ? formatNumberBR(i.projected_available, 1) : '',
       formatNumberBR(i.lead_time_days, 0),
       i.safety_stock,

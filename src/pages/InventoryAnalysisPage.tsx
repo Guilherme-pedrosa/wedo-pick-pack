@@ -717,14 +717,19 @@ export default function InventoryAnalysisPage() {
 
       // --- Reposição REATIVA ---
       // Item controlado por estoque no GC (movimenta_estoque = 1) que caiu a zero / abaixo
-      // do ponto de ressuprimento e teve consumo real no período: precisa repor o que saiu,
-      // mesmo sem recorrência de múltiplos clientes.
+      // do ponto de ressuprimento: precisa repor o que saiu, mesmo sem recorrência de
+      // múltiplos clientes. PORÉM só é reativo se a peça REALMENTE girou recentemente
+      // OU se zerou de fato. Um equipamento parado há meses (sem consumo recente) e com
+      // estoque > 0 NÃO deve ser sugerido só porque o ROP calculado sobre uma venda antiga
+      // ficou acima do estoque atual.
       const isInventoryItem = movMap.get(r.produto_id) === true;
       const inventoryNeedsRestock =
         isInventoryItem &&
         stockKnown &&
         r.event_count >= 1 &&
-        estoqueBase <= reorderPoint;
+        estoqueBase <= reorderPoint &&
+        (hasRecentConsumption || estoqueBase <= 0);
+
 
       const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual || inventoryNeedsRestock;
 

@@ -1138,9 +1138,10 @@ export default function InventoryAnalysisPage() {
         statusIds = [aguardando.id];
       }
 
-      // Date range: same lookback as consumption analysis
+      // Date range: mesma janela de VENDAS RECENTES (dias do preenchimento), não o lookback.
+      // Orçamento parado além dessa janela não conta como demanda pendente.
       const now = new Date();
-      const start = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+      const start = new Date(now.getTime() - salesWindowDays * 24 * 60 * 60 * 1000);
 
       const allOrcs: GCOrcamento[] = [];
       for (const sid of statusIds) {

@@ -458,18 +458,25 @@ async function fetchTrendData(): Promise<any[]> {
 async function fetchProductNames(ids: string[]): Promise<Map<string, ProductInfo>> {
   const map = new Map<string, ProductInfo>();
   if (ids.length === 0) return map;
-  const { data } = await supabase
-    .from('products_index')
-    .select('produto_id, nome, codigo_interno, fornecedor_id, payload_min_json')
-    .in('produto_id', ids);
-  for (const p of (data || [])) {
-    const payload = (p as any).payload_min_json;
-    const grupo = payload?.nome_grupo || null;
-    const valorCusto = payload?.valor_custo ? parseFloat(payload.valor_custo) : null;
-    map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null, grupo, valor_custo: valorCusto });
+  // PostgREST tem limite de tamanho de URL: com centenas de IDs a query .in()
+  // estoura e retorna parcial/vazio. Buscar em lotes evita nomes faltando.
+  const CHUNK = 150;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const { data } = await supabase
+      .from('products_index')
+      .select('produto_id, nome, codigo_interno, fornecedor_id, payload_min_json')
+      .in('produto_id', chunk);
+    for (const p of (data || [])) {
+      const payload = (p as any).payload_min_json;
+      const grupo = payload?.nome_grupo || null;
+      const valorCusto = payload?.valor_custo ? parseFloat(payload.valor_custo) : null;
+      map.set(p.produto_id, { produto_id: p.produto_id, nome: p.nome, codigo_interno: p.codigo_interno, fornecedor_id: (p as any).fornecedor_id || null, grupo, valor_custo: valorCusto });
+    }
   }
   return map;
 }
+
 
 async function fetchConfig() {
   const { data } = await supabase

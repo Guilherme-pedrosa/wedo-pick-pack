@@ -612,6 +612,11 @@ Deno.serve(async (req: Request) => {
       if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
       if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
+      // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
+      if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
+        osPayload.desconto_valor = orcamento.desconto_valor;
+      }
+      if (orcamento.desconto_tipo) osPayload.desconto_tipo = orcamento.desconto_tipo;
 
       console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 
@@ -686,8 +691,13 @@ Deno.serve(async (req: Request) => {
       if (orcamento.valor_total) vendaPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) vendaPayload.pagamentos = orcamento.pagamentos;
       if (gc_usuario_id) vendaPayload.usuario_id = gc_usuario_id;
+      // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
+      if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
+        vendaPayload.desconto_valor = orcamento.desconto_valor;
+      }
+      if (orcamento.desconto_tipo) vendaPayload.desconto_tipo = orcamento.desconto_tipo;
 
-      console.log(`[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? 'n/a'}, situacao=${VENDA_SITUACAO_ID}`);
+      console.log(`[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? 'n/a'}, desconto=${vendaPayload.desconto_valor ?? '0'} (${vendaPayload.desconto_tipo ?? 'n/a'}), situacao=${VENDA_SITUACAO_ID}`);
 
       gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(vendaPayload));
       osId = gcResult?.data?.id;
@@ -730,6 +740,11 @@ Deno.serve(async (req: Request) => {
         atributos: orcForUpdate.atributos || [],
         equipamentos: orcForUpdate.equipamentos || [],
       };
+      // Preserve header-level discount on the orçamento status update
+      if (orcForUpdate.desconto_valor != null && String(orcForUpdate.desconto_valor).trim() !== '') {
+        orcUpdatePayload.desconto_valor = orcForUpdate.desconto_valor;
+      }
+      if (orcForUpdate.desconto_tipo) orcUpdatePayload.desconto_tipo = orcForUpdate.desconto_tipo;
       // Preserve pagamentos to avoid total vs parcelas mismatch
       if (orcForUpdate.pagamentos?.length) orcUpdatePayload.pagamentos = orcForUpdate.pagamentos;
       if (orcForUpdate.vendedor_id) orcUpdatePayload.vendedor_id = orcForUpdate.vendedor_id;

@@ -740,6 +740,11 @@ Deno.serve(async (req: Request) => {
         atributos: orcForUpdate.atributos || [],
         equipamentos: orcForUpdate.equipamentos || [],
       };
+      // Preserve header-level discount on the orçamento status update
+      if (orcForUpdate.desconto_valor != null && String(orcForUpdate.desconto_valor).trim() !== '') {
+        orcUpdatePayload.desconto_valor = orcForUpdate.desconto_valor;
+      }
+      if (orcForUpdate.desconto_tipo) orcUpdatePayload.desconto_tipo = orcForUpdate.desconto_tipo;
       // Preserve pagamentos to avoid total vs parcelas mismatch
       if (orcForUpdate.pagamentos?.length) orcUpdatePayload.pagamentos = orcForUpdate.pagamentos;
       if (orcForUpdate.vendedor_id) orcUpdatePayload.vendedor_id = orcForUpdate.vendedor_id;

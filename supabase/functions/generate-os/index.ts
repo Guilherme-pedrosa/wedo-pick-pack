@@ -612,6 +612,11 @@ Deno.serve(async (req: Request) => {
       if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
       if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
+      // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
+      if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
+        osPayload.desconto_valor = orcamento.desconto_valor;
+      }
+      if (orcamento.desconto_tipo) osPayload.desconto_tipo = orcamento.desconto_tipo;
 
       console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 

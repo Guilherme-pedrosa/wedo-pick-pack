@@ -126,6 +126,20 @@ function formatQty(value: number | undefined): string {
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatGenerationError(message: string): string {
+  const compact = String(message || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/Auvo/i.test(compact) && /(?:502|503|504|Bad Gateway|gateway|proxy|invalid response)/i.test(compact)) {
+    return 'O Auvo está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+  }
+  if (/Gest[aã]oClick|GC/i.test(compact) && /(?:502|503|504|Bad Gateway|gateway|proxy)/i.test(compact)) {
+    return 'O GestãoClick está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+  }
+  if (/<!DOCTYPE|<html|Server Error|Full response/i.test(message)) {
+    return 'A integração retornou uma resposta inválida. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+  }
+  return compact || 'Erro desconhecido na geração. A OS/Venda NÃO foi gerada.';
+}
+
 export default function RastreadorPage() {
   const [selectedSituacoes, setSelectedSituacoes] = useState<string[]>([]);
   const [selectedSituacoesCompra, setSelectedSituacoesCompra] = useState<string[]>(() => {
@@ -309,7 +323,7 @@ export default function RastreadorPage() {
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      const msg = formatGenerationError(err instanceof Error ? err.message : 'Erro desconhecido');
       setGenerationResult({ success: false, error: msg });
 
       // Log failed generation

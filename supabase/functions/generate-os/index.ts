@@ -10,6 +10,37 @@ const AUVO_API_URL = 'https://api.auvo.com.br/v2';
 // ---------- helpers ----------
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+function compactApiMessage(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function friendlyErrorMessage(message: string): string {
+  const raw = String(message || '').trim();
+  const compact = compactApiMessage(raw);
+  const source = compact || raw;
+
+  if (/Auvo/i.test(source) && /(?:502|503|504|Bad Gateway|invalid response|gateway|proxy)/i.test(source)) {
+    return 'O Auvo está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+  }
+  if (/GC|Gest[aã]oClick/i.test(source)) {
+    if (/(?:401|403|unauthori|autoriz)/i.test(source)) {
+      return 'Sem autorização no GestãoClick. Verifique as credenciais da integração.';
+    }
+    if (/(?:502|503|504|Bad Gateway|gateway|proxy)/i.test(source)) {
+      return 'O GestãoClick está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+    }
+  }
+  if (/Auvo login failed/i.test(source)) {
+    return 'Não foi possível autenticar no Auvo. Verifique as credenciais da integração.';
+  }
+  if (/Full response|<!DOCTYPE|<html|Server Error/i.test(raw)) {
+    return 'A integração retornou uma resposta inválida. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+  }
+
+  return source.slice(0, 500) || 'Erro desconhecido na geração. A OS/Venda NÃO foi gerada.';
+}
+
 async function gcRequest(path: string, method: string, body?: unknown) {
   const GC_ACCESS_TOKEN = Deno.env.get('GC_ACCESS_TOKEN')!;
   const GC_SECRET_TOKEN = Deno.env.get('GC_SECRET_TOKEN')!;
@@ -31,7 +62,8 @@ async function gcRequest(path: string, method: string, body?: unknown) {
   let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
   if (!res.ok && res.status !== 200) {
-    throw new Error(`GC ${method} ${path} → ${res.status}: ${text.slice(0, 300)}`);
+    const apiMsg = compactApiMessage(json?.data?.mensagem || json?.data?.erro || json?.error || json?.raw || text);
+    throw new Error(`GestãoClick ${method} ${path} retornou erro ${res.status}${apiMsg ? `: ${apiMsg.slice(0, 240)}` : ''}`);
   }
   return json;
 }
@@ -786,7 +818,8 @@ Deno.serve(async (req: Request) => {
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+    const message = friendlyErrorMessage(rawMessage);
     console.error('[generate-os] Error:', message);
     return new Response(
       JSON.stringify({ error: message }),

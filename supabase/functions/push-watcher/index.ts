@@ -16,22 +16,35 @@ const corsHeaders = {
     'authorization, x-client-info, apikey, content-type',
 };
 
-const PROJECT_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON = Deno.env.get('SUPABASE_ANON_KEY')!;
+const PROJECT_URL = Deno.env.get('SUPABASE_URL');
+const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const ANON = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ?? '';
+const GC_API_URL = 'https://api.gestaoclick.com';
 
 async function gc(path: string): Promise<any> {
-  const res = await fetch(`${PROJECT_URL}/functions/v1/gc-proxy`, {
-    method: 'POST',
+  const GC_ACCESS_TOKEN = Deno.env.get('GC_ACCESS_TOKEN');
+  const GC_SECRET_TOKEN = Deno.env.get('GC_SECRET_TOKEN');
+
+  if (!GC_ACCESS_TOKEN || !GC_SECRET_TOKEN) {
+    throw new Error('Credenciais do GestãoClick não configuradas');
+  }
+
+  const res = await fetch(`${GC_API_URL}${path}`, {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${SERVICE_KEY}`,
-      apikey: ANON,
+      'access-token': GC_ACCESS_TOKEN,
+      'secret-access-token': GC_SECRET_TOKEN,
+      Accept: 'application/json',
     },
-    body: JSON.stringify({ path, method: 'GET' }),
   });
-  if (!res.ok) throw new Error(`gc-proxy ${res.status}`);
-  return await res.json();
+  const text = await res.text();
+  let json: any;
+  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  if (!res.ok || json?.status === 'error' || (json?.code && Number(json.code) >= 400)) {
+    const apiMsg = json?.data?.mensagem || json?.data?.erro || json?.error || '';
+    throw new Error(`GC ${res.status}${apiMsg ? `: ${apiMsg}` : ''}`);
+  }
+  return json;
 }
 
 interface QueueEntry {
@@ -117,6 +130,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
+    if (!PROJECT_URL || !SERVICE_KEY) {
+      throw new Error('Backend credentials not configured');
+    }
+
     const admin = createClient(PROJECT_URL, SERVICE_KEY);
 
     // 1) Coleta união de status configurados em todos os profiles

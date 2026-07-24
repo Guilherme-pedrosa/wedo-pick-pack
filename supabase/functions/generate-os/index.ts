@@ -821,7 +821,7 @@ Deno.serve(async (req: Request) => {
 
       console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 
-      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(osPayload)));
+      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(osPayload))));
       osId = gcResult?.data?.id;
       osCodigo = gcResult?.data?.codigo;
       console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
@@ -890,7 +890,7 @@ Deno.serve(async (req: Request) => {
 
       console.log(`[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? 'n/a'}, desconto=${vendaPayload.desconto_valor ?? '0'} (${vendaPayload.desconto_tipo ?? 'n/a'}), situacao=${VENDA_SITUACAO_ID}`);
 
-      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(vendaPayload)));
+      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(vendaPayload))));
       osId = gcResult?.data?.id;
       osCodigo = gcResult?.data?.codigo;
       console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);
@@ -943,7 +943,7 @@ Deno.serve(async (req: Request) => {
       if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
       if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
 
-      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(orcUpdatePayload));
+      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(normalizeGCMoneyPayload(orcUpdatePayload)));
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);
     } catch (orcErr) {
       const orcMsg = orcErr instanceof Error ? orcErr.message : String(orcErr);

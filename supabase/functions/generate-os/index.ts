@@ -62,7 +62,7 @@ async function gcRequest(path: string, method: string, body?: unknown) {
   let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
   if (!res.ok && res.status !== 200) {
-    const apiMsg = compactApiMessage(json?.data?.mensagem || json?.data?.erro || json?.error || json?.raw || text);
+    const apiMsg = compactApiMessage(json?.message || json?.data?.mensagem || json?.data?.erro || json?.error || json?.raw || text);
     throw new Error(`GestãoClick ${method} ${path} retornou erro ${res.status}${apiMsg ? `: ${apiMsg.slice(0, 240)}` : ''}`);
   }
   return json;
@@ -211,6 +211,77 @@ function normalizePaymentsToDeclaredTotal<T extends Record<string, any>>(payload
   });
 
   return { ...payload, pagamentos: payments };
+}
+
+function getLinePayload(entry: any, key: 'produto' | 'servico'): Record<string, any> | null {
+  const line = entry?.[key] ?? entry;
+  return line && typeof line === 'object' ? line : null;
+}
+
+function computeGCDocumentLineTotalCents(payload: Record<string, any>): number | null {
+  let total = 0;
+  let hasLine = false;
+
+  const addLines = (items: any[] | undefined, key: 'produto' | 'servico') => {
+    if (!Array.isArray(items)) return;
+    for (const entry of items) {
+      const line = getLinePayload(entry, key);
+      if (!line) continue;
+
+      const qty = parseMoney(line.quantidade || 0);
+      const unit = parseMoney(line.valor_venda || 0);
+      if (qty <= 0) continue;
+
+      let lineTotal = qty * unit;
+      const discountType = String(line.tipo_desconto || 'R$').trim();
+      const fixedDiscount = parseMoney(line.desconto_valor);
+      const percentDiscount = parseMoney(line.desconto_porcentagem);
+
+      if (discountType === '%' && percentDiscount > 0) {
+        lineTotal = lineTotal * (1 - percentDiscount / 100);
+      } else if (fixedDiscount > 0) {
+        lineTotal -= fixedDiscount;
+      }
+
+      total += Math.max(0, lineTotal);
+      hasLine = true;
+    }
+  };
+
+  addLines(payload.produtos, 'produto');
+  addLines(payload.servicos, 'servico');
+
+  return hasLine ? Math.round(total * 100) : null;
+}
+
+function applyGCRoundingDiscount<T extends Record<string, any>>(payload: T): T {
+  const declaredCents = Math.round(parseMoney(payload.valor_total) * 100);
+  if (declaredCents <= 0) return payload;
+
+  const lineTotalCents = computeGCDocumentLineTotalCents(payload);
+  if (lineTotalCents == null) return payload;
+
+  const headerDiscountType = String(payload.tipo_desconto || payload.desconto_tipo || 'R$').trim();
+  const headerDiscountCents = Math.round(parseMoney(payload.desconto_valor) * 100);
+  const headerPercent = parseMoney(payload.desconto_porcentagem);
+
+  if (headerDiscountType === '%' && headerPercent > 0) return payload;
+
+  const currentComputedCents = lineTotalCents - headerDiscountCents;
+  const missingDiscountCents = currentComputedCents - declaredCents;
+
+  if (missingDiscountCents <= 0) return payload;
+
+  const nextDiscount = formatMoney((headerDiscountCents + missingDiscountCents) / 100);
+  console.warn(`[generate-os] Ajuste financeiro GC: linhas=${formatMoney(lineTotalCents / 100)}, declarado=${formatMoney(declaredCents / 100)}, desconto_cabecalho=${nextDiscount}`);
+
+  return {
+    ...payload,
+    tipo_desconto: 'R$',
+    desconto_tipo: 'R$',
+    desconto_valor: nextDiscount,
+    desconto_porcentagem: '0.00',
+  };
 }
 
 // ---------- GC: Discover OS attribute IDs ----------
@@ -655,11 +726,12 @@ Deno.serve(async (req: Request) => {
       if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
         osPayload.desconto_valor = orcamento.desconto_valor;
       }
+      if (orcamento.tipo_desconto) osPayload.tipo_desconto = orcamento.tipo_desconto;
       if (orcamento.desconto_tipo) osPayload.desconto_tipo = orcamento.desconto_tipo;
 
       console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 
-      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(osPayload));
+      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(osPayload)));
       osId = gcResult?.data?.id;
       osCodigo = gcResult?.data?.codigo;
       console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
@@ -723,11 +795,12 @@ Deno.serve(async (req: Request) => {
       if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
         vendaPayload.desconto_valor = orcamento.desconto_valor;
       }
+      if (orcamento.tipo_desconto) vendaPayload.tipo_desconto = orcamento.tipo_desconto;
       if (orcamento.desconto_tipo) vendaPayload.desconto_tipo = orcamento.desconto_tipo;
 
       console.log(`[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? 'n/a'}, desconto=${vendaPayload.desconto_valor ?? '0'} (${vendaPayload.desconto_tipo ?? 'n/a'}), situacao=${VENDA_SITUACAO_ID}`);
 
-      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(vendaPayload));
+      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(vendaPayload)));
       osId = gcResult?.data?.id;
       osCodigo = gcResult?.data?.codigo;
       console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);

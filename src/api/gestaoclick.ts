@@ -709,7 +709,7 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
 }
 
 function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<string, any> {
-  const normalized = {
+  const normalized: Record<string, any> = {
     ...payload,
     produtos: normalizeLineMoney(normalizeLineUnitPrice(payload.produtos, 'produto'), 'produto') || payload.produtos,
     servicos: normalizeLineMoney(normalizeLineUnitPrice(payload.servicos, 'servico'), 'servico') || payload.servicos,

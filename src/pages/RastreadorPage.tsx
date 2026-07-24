@@ -128,6 +128,14 @@ function formatQty(value: number | undefined): string {
 
 function formatGenerationError(message: string): string {
   const compact = String(message || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/Gest[aã]oClick|GC/i.test(compact) && /(?:400|Bad Request)/i.test(compact)) {
+    const detailMatch = compact.match(/(?:retornou erro\s*400|400|Bad Request)\s*:\s*(.+)$/i);
+    const detail = detailMatch?.[1]?.trim();
+    if (detail && !/^Bad Request$/i.test(detail)) {
+      return `GestãoClick rejeitou a geração: ${detail}`;
+    }
+    return 'GestãoClick rejeitou a geração, mas não devolveu o motivo detalhado. A OS/Venda NÃO foi gerada; verifique o log desta tentativa.';
+  }
   if (/Auvo/i.test(compact) && /(?:502|503|504|Bad Gateway|gateway|proxy|invalid response)/i.test(compact)) {
     return 'O Auvo está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
   }
@@ -254,11 +262,30 @@ export default function RastreadorPage() {
         // Try to parse the response body for duplicate info
         let errorBody: any = null;
         try {
-          if (error.context?.body) {
-            const reader = error.context.body.getReader?.();
-            if (reader) {
-              const { value } = await reader.read();
-              errorBody = JSON.parse(new TextDecoder().decode(value));
+          const contextBody = (error as any).context?.body;
+          if (contextBody) {
+            if (typeof contextBody === 'string') {
+              errorBody = JSON.parse(contextBody);
+            } else if (typeof contextBody?.text === 'function') {
+              errorBody = JSON.parse(await contextBody.text());
+            } else if (typeof contextBody?.getReader === 'function') {
+              const reader = contextBody.getReader();
+              const chunks: Uint8Array[] = [];
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (value) chunks.push(value);
+              }
+              const size = chunks.reduce((total, chunk) => total + chunk.length, 0);
+              const merged = new Uint8Array(size);
+              let offset = 0;
+              for (const chunk of chunks) {
+                merged.set(chunk, offset);
+                offset += chunk.length;
+              }
+              errorBody = JSON.parse(new TextDecoder().decode(merged));
+            } else if (typeof contextBody === 'object') {
+              errorBody = contextBody;
             }
           }
         } catch { /* ignore parse errors */ }

@@ -270,7 +270,7 @@ function applyGCRoundingDiscount<T extends Record<string, any>>(payload: T): T {
   const currentComputedCents = lineTotalCents - headerDiscountCents;
   const missingDiscountCents = currentComputedCents - declaredCents;
 
-  if (missingDiscountCents <= 0) return payload;
+  if (missingDiscountCents <= 0 || missingDiscountCents > 100) return payload;
 
   const nextDiscount = formatMoney((headerDiscountCents + missingDiscountCents) / 100);
   console.warn(`[generate-os] Ajuste financeiro GC: linhas=${formatMoney(lineTotalCents / 100)}, declarado=${formatMoney(declaredCents / 100)}, desconto_cabecalho=${nextDiscount}`);

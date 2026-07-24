@@ -1,6 +1,7 @@
 import { GCOrdemServico, GCVenda, GCSituacao, GCMeta, GCProdutoItem, GCOrdemCompra } from './types';
 import { listOrdensCompra } from './compras';
 import { MOCK_OS, MOCK_VENDAS, MOCK_STATUS_OS, MOCK_STATUS_VENDA } from './mockData';
+import { scopeSituationCatalog, scopeSituationIds } from './situationScopes';
 import { supabase } from '@/integrations/supabase/client';
 
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
@@ -149,11 +150,17 @@ export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string)
 
 /** Fetch OS for multiple situacao_ids in parallel, merging & deduplicating results */
 export async function listOSMultiStatus(situacaoIds: string[], pesquisa?: string): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
+  const scopedIds = isUsingMock()
+    ? [...new Set(situacaoIds)]
+    : scopeSituationIds(situacaoIds, 'os');
   if (situacaoIds.length === 0) return listOS(undefined, 1, pesquisa);
-  if (situacaoIds.length === 1) return listOS(situacaoIds[0], 1, pesquisa);
+  if (scopedIds.length === 0) {
+    return { data: [], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } };
+  }
+  if (scopedIds.length === 1) return listOS(scopedIds[0], 1, pesquisa);
 
   const results = await Promise.all(
-    situacaoIds.map(sid => listOS(sid, 1, pesquisa).catch(() => ({ data: [] as GCOrdemServico[], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } })))
+    scopedIds.map(sid => listOS(sid, 1, pesquisa).catch(() => ({ data: [] as GCOrdemServico[], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } })))
   );
 
   const seen = new Set<string>();
@@ -202,11 +209,17 @@ export async function listVendas(situacaoId?: string, pagina = 1, pesquisa?: str
 
 /** Fetch Vendas for multiple situacao_ids in parallel, merging & deduplicating results */
 export async function listVendasMultiStatus(situacaoIds: string[], pesquisa?: string): Promise<{ data: GCVenda[]; meta: GCMeta }> {
+  const scopedIds = isUsingMock()
+    ? [...new Set(situacaoIds)]
+    : scopeSituationIds(situacaoIds, 'venda');
   if (situacaoIds.length === 0) return listVendas(undefined, 1, pesquisa);
-  if (situacaoIds.length === 1) return listVendas(situacaoIds[0], 1, pesquisa);
+  if (scopedIds.length === 0) {
+    return { data: [], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } };
+  }
+  if (scopedIds.length === 1) return listVendas(scopedIds[0], 1, pesquisa);
 
   const results = await Promise.all(
-    situacaoIds.map(sid => listVendas(sid, 1, pesquisa).catch(() => ({ data: [] as GCVenda[], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } })))
+    scopedIds.map(sid => listVendas(sid, 1, pesquisa).catch(() => ({ data: [] as GCVenda[], meta: { pagina_atual: 1, total_paginas: 1, total_registros: 0 } })))
   );
 
   const seen = new Set<string>();
@@ -249,7 +262,7 @@ export async function getStatusOS(): Promise<GCSituacao[]> {
     return [...MOCK_STATUS_OS];
   }
   const res = await apiRequest<{ data: GCSituacao[] }>('/api/situacoes_ordens_servicos');
-  return res.data;
+  return scopeSituationCatalog(res.data, 'os');
 }
 
 export async function getStatusVendas(): Promise<GCSituacao[]> {
@@ -258,7 +271,7 @@ export async function getStatusVendas(): Promise<GCSituacao[]> {
     return [...MOCK_STATUS_VENDA];
   }
   const res = await apiRequest<{ data: GCSituacao[] }>('/api/situacoes_vendas');
-  return res.data;
+  return scopeSituationCatalog(res.data, 'venda');
 }
 
 // --- UPDATE STATUS ---
@@ -386,799 +399,4 @@ function normalizeLineUnitPrice<T extends Record<string, any>>(
     const declaredLineCents = Math.round(lineTotal * 100);
     const computedLineCents = computeLineTotalCents(line);
 
-    // Fix small rounding drift from fractional quantities without changing the
-    // order total. Example OS 9742: qty 1,500 √ó unit 145,73 is validated by GC as
-    // 218,60 by our calc path, but the GC-declared line total is 218,59. When the
-    // difference is below R$ 0,50, always trust Gest√£oClick's valor_total and send
-    // the exact gross unit implied by that value so the PUT validates the stored
-    // total instead of our recomputed total.
-    const hasLineRoundingDrift =
-      qty > 0 &&
-      lineTotal >= 0 &&
-      computedLineCents != null &&
-      computedLineCents !== declaredLineCents &&
-      Math.abs(computedLineCents - declaredLineCents) < 50;
-
-    if (hasLineRoundingDrift) {
-      const expectedUnit = computeExpectedLineGrossUnitPrice(line);
-      if (expectedUnit != null && Number.isFinite(expectedUnit) && expectedUnit >= 0) {
-        return {
-          ...entry,
-          [key]: {
-            ...line,
-            valor_venda: formatCurrency(expectedUnit, 6),
-          },
-        };
-      }
-    }
-
-    // Only intervene in the exact double-discount scenario:
-    // valor_venda is effectively zero, but the line carries a fixed discount
-    // and a positive line total. Without this fix the ERP would subtract the
-    // discount twice on PUT.
-    const isDoubleDiscountBug =
-      qty > 0 &&
-      fixedDiscount > 0 &&
-      currentUnit < 0.005 &&
-      lineTotal > 0;
-
-    if (!isDoubleDiscountBug) return entry;
-
-    const grossUnit = (lineTotal + fixedDiscount) / qty;
-    if (!Number.isFinite(grossUnit) || grossUnit <= 0) return entry;
-
-    return {
-      ...entry,
-      [key]: {
-        ...line,
-        valor_venda: formatCurrency(grossUnit, 4),
-      },
-    };
-  });
-}
-
-function isInstallmentMismatchError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : '';
-  return message.includes('valor do pedido') && message.includes('valor das parcelas');
-}
-
-/** Read the valor from a pagamento entry, handling both flat {valor} and nested {pagamento:{valor}} */
-function getPagamentoValor(p: any): number {
-  if (p?.pagamento?.valor != null) return parseCurrency(p.pagamento.valor);
-  return parseCurrency(p?.valor);
-}
-
-/** Set the valor on a pagamento entry, preserving whichever structure it uses */
-function setPagamentoValor(p: any, newValor: string): any {
-  if (p?.pagamento && typeof p.pagamento === 'object') {
-    return { ...p, pagamento: { ...p.pagamento, valor: newValor } };
-  }
-  return { ...p, valor: newValor };
-}
-
-function computeLineTotalCents(line: Record<string, any>): number | null {
-  const qty = parseScaledDecimal(line?.quantidade);
-  const unit = parseScaledDecimal(line?.valor_venda);
-  if (qty <= 0n || unit < 0n || String(line?.valor_venda ?? '').trim() === '') return null;
-
-  const fixedDiscount = parseScaledDecimal(line?.desconto_valor);
-  const percentDiscount = parseScaledDecimal(line?.desconto_porcentagem);
-  const maxPercent = 100n * FINANCIAL_FACTOR;
-
-  let amountNumerator = qty * unit;
-  let amountDenominator = FINANCIAL_FACTOR * FINANCIAL_FACTOR;
-
-  if (percentDiscount > 0n) {
-    if (percentDiscount >= maxPercent) {
-      amountNumerator = 0n;
-    } else {
-      amountNumerator *= maxPercent - percentDiscount;
-      amountDenominator *= maxPercent;
-    }
-  }
-
-  const centsNumerator = (amountNumerator * 100n * FINANCIAL_FACTOR) - (fixedDiscount * 100n * amountDenominator);
-  const centsDenominator = amountDenominator * FINANCIAL_FACTOR;
-  const cents = roundFractionToInt(centsNumerator, centsDenominator);
-  return Number(cents);
-}
-
-/**
- * Compute the order total the same way Gest√£oClick's PUT validator does after
- * our line-unit normalization: calculate each line from quantidade √ó valor_venda,
- * round each line to cents, then sum.
- */
-function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
-  const lineSumCents = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
-    if (!Array.isArray(arr)) return 0;
-    return arr.reduce((s, entry) => {
-      const line = entry?.[key] || entry;
-      const computed = computeLineTotalCents(line);
-      if (computed != null) return s + computed;
-
-      const declared = line?.valor_total;
-      if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
-        return s + Math.round(parseCurrency(declared) * 100);
-      }
-      return s;
-    }, 0);
-  };
-
-  const produtosCents = lineSumCents(payload.produtos, 'produto');
-  const servicosCents = lineSumCents(payload.servicos, 'servico');
-  if (produtosCents <= 0 && servicosCents <= 0) return null;
-
-  const descontoCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
-  const descontoPct = parseCurrency(payload.desconto_porcentagem);
-  const freteCents = Math.round(parseCurrency(payload.valor_frete) * 100);
-
-  let subtotalCents = produtosCents + servicosCents;
-  if (descontoPct > 0 && descontoPct < 100) {
-    subtotalCents = Math.round(subtotalCents * (1 - descontoPct / 100));
-  }
-  const totalCents = subtotalCents - descontoCents + freteCents;
-  return totalCents > 0 ? totalCents : null;
-}
-
-function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
-  const declaredTotalCents = Math.round(parseCurrency(payload.valor_total) * 100);
-  const recomputedCents = computeRecomputedTotalCents(payload);
-
-  // The document's valor_total is authoritative. Do not "fix" a stored 5361,41
-  // into 5361,42; instead line-unit normalization above must make GC validate
-  // the stored total.
-  const targetCents = declaredTotalCents > 0 ? declaredTotalCents : (recomputedCents ?? 0);
-
-  if (targetCents <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
-    return payload;
-  }
-
-  const nextPayload = payload;
-
-  const parcCentsList = nextPayload.pagamentos.map((p: any) => Math.round(getPagamentoValor(p) * 100));
-  const parcTotalCents = parcCentsList.reduce((s: number, c: number) => s + c, 0);
-
-  // Already exact to the cent ‚Äî no adjustment needed
-  if (parcTotalCents === targetCents) return nextPayload;
-
-  console.warn(`[GC] Pagamentos total (${parcTotalCents / 100}) ‚â† alvo (${targetCents / 100}). Diff=${(targetCents - parcTotalCents) / 100}. Redistribuindo.`);
-
-  if (nextPayload.pagamentos.length === 1) {
-    return {
-      ...nextPayload,
-      pagamentos: [setPagamentoValor(nextPayload.pagamentos[0], formatCurrency(targetCents / 100))],
-    };
-  }
-
-  // Distribute in cents proportionally; assign rounding remainder to last parcel
-  const baseCents = parcTotalCents > 0 ? parcCentsList : nextPayload.pagamentos.map(() => Math.floor(targetCents / nextPayload.pagamentos.length));
-  const baseSum = baseCents.reduce((s: number, c: number) => s + c, 0) || 1;
-
-  let distributedCents = 0;
-  const newCentsList: number[] = nextPayload.pagamentos.map((_: any, i: number) => {
-    if (i === nextPayload.pagamentos.length - 1) {
-      return targetCents - distributedCents;
-    }
-    const portion = Math.round((baseCents[i] * targetCents) / baseSum);
-    distributedCents += portion;
-    return portion;
-  });
-
-  const adjusted = nextPayload.pagamentos.map((p: any, i: number) =>
-    setPagamentoValor(p, formatCurrency(newCentsList[i] / 100))
-  );
-
-  return { ...nextPayload, pagamentos: adjusted };
-}
-
-function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<string, any> {
-  const normalized = {
-    ...payload,
-    produtos: normalizeLineUnitPrice(payload.produtos, 'produto') || payload.produtos,
-    servicos: normalizeLineUnitPrice(payload.servicos, 'servico') || payload.servicos,
-  };
-  return recalcPagamentos(normalized);
-}
-
-// O Gest√£oClick S√ì registra as linhas e recalcula o valor_total em PUT quando
-// produtos/servi√ßos s√£o enviados em formato PLANO (sem o wrapper produto/servico).
-// Se enviados aninhados ({ produto: {...} }), o GC zera o valor do pedido (0,00).
-function flattenLinesForGC(payload: Record<string, any>): Record<string, any> {
-  const out = { ...payload };
-  if (Array.isArray(payload.produtos)) {
-    out.produtos = payload.produtos.map((e: any) =>
-      e && typeof e.produto === 'object' && e.produto ? e.produto : e
-    );
-  }
-  if (Array.isArray(payload.servicos)) {
-    out.servicos = payload.servicos.map((e: any) =>
-      e && typeof e.servico === 'object' && e.servico ? e.servico : e
-    );
-  }
-  return out;
-}
-
-async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
-  const fixedPayload = flattenLinesForGC(withInstallmentPrecisionFallback(payload));
-
-  try {
-    return await apiRequest<GCUpdateResponse>(path, {
-      method: 'PUT',
-      body: JSON.stringify(fixedPayload),
-    });
-  } catch (error) {
-    if (!isInstallmentMismatchError(error)) throw error;
-
-    console.warn('[GC] Installment mismatch detected. Retrying with normalized financial payload.');
-    return apiRequest<GCUpdateResponse>(path, {
-      method: 'PUT',
-      body: JSON.stringify(flattenLinesForGC(withInstallmentPrecisionFallback(fixedPayload))),
-    });
-  }
-}
-
-function shouldFallbackToFullStatusPayload(error: unknown): boolean {
-  // O PUT m√≠nimo do GC ainda valida o financeiro existente. Quando ele reclama
-  // de parcelas, reenviamos o documento completo normalizado em centavos,
-  // usando `valor_total` das linhas como fonte ‚Äî sem recalcular por quantidade
-  // com 3 casas decimais.
-  if (isInstallmentMismatchError(error)) return true;
-
-  const message = error instanceof Error ? error.message.toLowerCase() : '';
-  return (
-    message.includes('obrigat') ||
-    message.includes('required') ||
-    message.includes('necess') ||
-    message.includes('inv√°lid') ||
-    message.includes('invalid') ||
-    message.includes('n√£o informado') ||
-    message.includes('nao informado')
-  );
-}
-
-async function putStatusOnlyWithFallback(
-  path: string,
-  minimalPayload: Record<string, any>,
-  fullPayload: Record<string, any>
-): Promise<GCUpdateResponse> {
-  try {
-    return await apiRequest<GCUpdateResponse>(path, {
-      method: 'PUT',
-      body: JSON.stringify(flattenLinesForGC(minimalPayload)),
-    });
-  } catch (error) {
-    if (!shouldFallbackToFullStatusPayload(error)) throw error;
-
-    console.warn('[GC] PUT m√≠nimo de status recusado. Reenviando payload completo preservado.');
-    return putStatusWithRetry(path, fullPayload);
-  }
-}
-
-export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string, customNote?: string): Promise<void> {
-  if (isUsingMock()) {
-    await mockDelay();
-    return;
-  }
-
-  const latestOrder = await fetchLatestForStatusUpdate<GCOrdemServico & Record<string, any>>(
-    `/api/ordens_servicos/${id}`,
-    rawOrder as GCOrdemServico & Record<string, any>
-  );
-
-  const obsInterna = latestOrder.observacoes_interna || rawOrder.observacoes_interna || '';
-  const separator = obsInterna.trim() ? '\n' : '';
-  const now = new Date().toLocaleString('pt-BR');
-  const operatorNote = customNote
-    ? `${separator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${separator}[WeDo Checkout] Separa√ß√£o realizada por: ${operatorName} em ${now}`
-    : '';
-
-  const obs = latestOrder.observacoes || rawOrder.observacoes || '';
-  const obsSeparator = obs.trim() ? '\n' : '';
-  const obsNote = customNote
-    ? `${obsSeparator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${obsSeparator}[WeDo Checkout] Separa√ß√£o por: ${operatorName} em ${now}`
-    : '';
-
-  const payload: Record<string, any> = {
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    codigo: latestOrder.codigo ?? rawOrder.codigo,
-    data: latestOrder.data_entrada || latestOrder.data || rawOrder.data_entrada || rawOrder.data,
-    situacao_id: newStatusId,
-    vendedor_id: latestOrder.vendedor_id ?? rawOrder.vendedor_id,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    valor_total: latestOrder.valor_total ?? rawOrder.valor_total,
-    valor_frete: latestOrder.valor_frete || rawOrder.valor_frete || '0.00',
-    condicao_pagamento: latestOrder.condicao_pagamento || rawOrder.condicao_pagamento || 'a_vista',
-    produtos: latestOrder.produtos || rawOrder.produtos,
-    servicos: latestOrder.servicos || rawOrder.servicos || [],
-    atributos: latestOrder.atributos || rawOrder.atributos || [],
-    equipamentos: latestOrder.equipamentos || rawOrder.equipamentos || [],
-  };
-
-  // Preserve pagamentos + desconto to avoid total vs parcelas mismatch
-  if (latestOrder.pagamentos?.length) payload.pagamentos = latestOrder.pagamentos;
-  else if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
-  if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
-  if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
-
-  if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
-
-  const minimalPayload: Record<string, any> = {
-    // GC reseta o cliente para "Consumidor" quando o PUT n√£o informa cliente_id.
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    situacao_id: newStatusId,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    // GC zera o valor do pedido (0,00) quando o PUT n√£o reenvia as linhas/valores.
-    valor_total: payload.valor_total,
-    valor_frete: payload.valor_frete,
-    condicao_pagamento: payload.condicao_pagamento,
-    produtos: payload.produtos,
-    servicos: payload.servicos,
-  };
-  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
-  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
-  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
-  if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
-
-  const putResponse = await putStatusOnlyWithFallback(`/api/ordens_servicos/${id}`, minimalPayload, payload);
-
-  const expectedStatus = normalizeStatusId(newStatusId);
-  const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
-
-  if (returnedStatus && returnedStatus !== expectedStatus) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-
-  const confirmed = await confirmStatusApplied('os', id, expectedStatus);
-  if (!confirmed) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-}
-
-export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string, gcUsuarioId?: string, customNote?: string): Promise<void> {
-  if (isUsingMock()) {
-    await mockDelay();
-    return;
-  }
-
-  const latestOrder = await fetchLatestForStatusUpdate<GCVenda & Record<string, any>>(
-    `/api/vendas/${id}`,
-    rawOrder as GCVenda & Record<string, any>
-  );
-
-  const obsInterna = latestOrder.observacoes_interna || (rawOrder as any).observacoes_interna || '';
-  const separator = obsInterna.trim() ? '\n' : '';
-  const now = new Date().toLocaleString('pt-BR');
-  const operatorNote = customNote
-    ? `${separator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${separator}[WeDo Checkout] Separa√ß√£o realizada por: ${operatorName} em ${now}`
-    : '';
-
-  const obs = latestOrder.observacoes || (rawOrder as any).observacoes || '';
-  const obsSeparator = obs.trim() ? '\n' : '';
-  const obsNote = customNote
-    ? `${obsSeparator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${obsSeparator}[WeDo Checkout] Separa√ß√£o por: ${operatorName} em ${now}`
-    : '';
-
-  const payload: Record<string, any> = {
-    tipo: latestOrder.tipo || (rawOrder as any).tipo || 'produto',
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    codigo: latestOrder.codigo ?? rawOrder.codigo,
-    data: latestOrder.data || rawOrder.data,
-    situacao_id: newStatusId,
-    vendedor_id: latestOrder.vendedor_id ?? rawOrder.vendedor_id,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    valor_total: latestOrder.valor_total ?? rawOrder.valor_total,
-    valor_frete: latestOrder.valor_frete || rawOrder.valor_frete || '0.00',
-    condicao_pagamento: latestOrder.condicao_pagamento || rawOrder.condicao_pagamento || 'a_vista',
-    produtos: latestOrder.produtos || rawOrder.produtos,
-    servicos: latestOrder.servicos || rawOrder.servicos || [],
-  };
-
-  // Preserve pagamentos + desconto to avoid total vs parcelas mismatch
-  if (latestOrder.pagamentos?.length) payload.pagamentos = latestOrder.pagamentos;
-  else if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
-  if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
-  if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
-
-  if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
-
-  const minimalPayload: Record<string, any> = {
-    tipo: payload.tipo,
-    // GC reseta o cliente para "Consumidor" quando o PUT n√£o informa cliente_id.
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    situacao_id: newStatusId,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    // GC zera o valor do pedido (0,00) quando o PUT n√£o reenvia as linhas/valores.
-    valor_total: payload.valor_total,
-    valor_frete: payload.valor_frete,
-    condicao_pagamento: payload.condicao_pagamento,
-    produtos: payload.produtos,
-    servicos: payload.servicos,
-  };
-  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
-  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
-  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
-  if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
-
-  const putResponse = await putStatusOnlyWithFallback(`/api/vendas/${id}`, minimalPayload, payload);
-
-  const expectedStatus = normalizeStatusId(newStatusId);
-  const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
-
-  if (returnedStatus && returnedStatus !== expectedStatus) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-
-  const confirmed = await confirmStatusApplied('venda', id, expectedStatus);
-  if (!confirmed) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-}
-
-// --- STOCK CHECK ---
-export interface ProductStockInfo {
-  produto_id: string;
-  estoque: number;
-  valor_custo: number;
-}
-
-export interface StockConflictPO {
-  codigo: string;
-  nome_fornecedor: string;
-  qtd: number;
-  situacao: string;
-}
-
-export interface StockConflict {
-  nome_produto: string;
-  produto_id: string;
-  estoque: number;
-  demanda_total: number;
-  pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
-  pedidos_compra: StockConflictPO[];
-}
-
-export interface BelowCostWarning {
-  produto_id: string;
-  nome_produto: string;
-  valor_custo: number;
-  custo_com_imposto: number;
-  valor_venda: number;
-  pedidos: Array<{ codigo: string; nome_cliente: string; qtd: number }>;
-}
-
-export interface StockScanResult {
-  fullStockOrders: Set<string>;
-  conflicts: StockConflict[];
-  belowCostWarnings: BelowCostWarning[];
-}
-
-export async function getProductStock(produtoId: string, variacaoId?: string): Promise<ProductStockInfo | null> {
-  const MAX_ATTEMPTS = 3;
-  let lastErr: unknown = null;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    try {
-      const res = await apiRequest<{
-        data: {
-          id: string;
-          estoque: string | number;
-          valor_custo?: string | number;
-          variacoes?: Array<{ variacao: { id: string | number; estoque: string | number } }>;
-        };
-      }>(`/api/produtos/${produtoId}`);
-
-      const data = res?.data;
-      if (!data) throw new Error('EMPTY_RESPONSE');
-
-      // Prefer variation stock when variacao_id is given (or when product has a single variation
-      // that holds the real stock instead of the parent ‚Äî common GC quirk)
-      let estoqueRaw: string | number = data.estoque ?? 0;
-      const variacoes = data.variacoes ?? [];
-      if (variacoes.length > 0) {
-        const vid = variacaoId ? String(variacaoId) : '';
-        const byId = vid ? variacoes.find(v => String(v.variacao?.id) === vid) : undefined;
-        const single = !byId && variacoes.length === 1 ? variacoes[0] : undefined;
-        const chosen = byId ?? single;
-        if (chosen) estoqueRaw = chosen.variacao.estoque ?? estoqueRaw;
-      }
-
-      const estoque = typeof estoqueRaw === 'number' ? estoqueRaw : parseFloat(String(estoqueRaw).replace(',', '.') || '0');
-      const valorCusto = typeof data.valor_custo === 'number'
-        ? data.valor_custo
-        : parseFloat(String(data.valor_custo ?? '0').replace(',', '.') || '0');
-      return { produto_id: String(data.id ?? produtoId), estoque: isNaN(estoque) ? 0 : estoque, valor_custo: isNaN(valorCusto) ? 0 : valorCusto };
-    } catch (err) {
-      lastErr = err;
-      const msg = err instanceof Error ? err.message : String(err);
-      const retryable = /Failed to send|NETWORK|TIMEOUT|RATE_LIMIT|fetch/i.test(msg);
-      if (!retryable || attempt === MAX_ATTEMPTS - 1) break;
-      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
-    }
-  }
-  console.warn(`[STOCK] Failed to fetch stock for product ${produtoId}:`, lastErr instanceof Error ? lastErr.message : lastErr);
-  return null;
-}
-
-/** Check stock for a list of orders. Returns Set of order IDs that have full stock + conflicts. */
-export async function checkStockForOrders(
-  orders: Array<GCOrdemServico | GCVenda>,
-  onProgress?: (checked: number, total: number) => void,
-): Promise<StockScanResult> {
-  // Collect all unique produto_ids across all orders (track variacao_id seen for each pid)
-  const productOrderMap = new Map<string, { orderId: string; orderCodigo: string; orderCliente: string; qty: number; nome: string }[]>();
-  const variacaoIdByPid = new Map<string, string>();
-
-  for (const order of orders) {
-    for (const p of order.produtos || []) {
-      const pid = p.produto.produto_id;
-      const vid = String((p.produto as any).variacao_id ?? '').trim();
-      if (vid && !variacaoIdByPid.has(pid)) variacaoIdByPid.set(pid, vid);
-      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
-      if (!productOrderMap.has(pid)) productOrderMap.set(pid, []);
-      productOrderMap.get(pid)!.push({
-        orderId: order.id,
-        orderCodigo: order.codigo,
-        orderCliente: order.nome_cliente,
-        qty,
-        nome: p.produto.nome_produto,
-      });
-    }
-  }
-
-  const uniqueIds = [...productOrderMap.keys()];
-  const stockMap = new Map<string, number>();
-  const costMap = new Map<string, number>();
-  const total = uniqueIds.length;
-  let checked = 0;
-
-  // Fetch 3 at a time (rate limit)
-  for (let i = 0; i < uniqueIds.length; i += 3) {
-    const batch = uniqueIds.slice(i, i + 3);
-    const results = await Promise.all(batch.map(id => getProductStock(id, variacaoIdByPid.get(id))));
-    batch.forEach((id, idx) => {
-      const r = results[idx];
-      if (r) {
-        stockMap.set(id, r.estoque);
-        costMap.set(id, r.valor_custo);
-      }
-    });
-    checked += batch.length;
-    onProgress?.(checked, total);
-    if (i + 3 < uniqueIds.length) {
-      await new Promise(r => setTimeout(r, 1100)); // respect rate limit
-    }
-  }
-
-  // Determine which orders have full stock
-  const fullStockOrders = new Set<string>();
-  for (const order of orders) {
-    const allInStock = (order.produtos || []).every(p => {
-      const pid = p.produto.produto_id;
-      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
-      const available = stockMap.get(pid) ?? 0;
-      return available >= qty;
-    });
-    if (allInStock) fullStockOrders.add(order.id);
-  }
-
-  // Detect conflicts: products where total demand across orders > stock
-  const conflicts: StockConflict[] = [];
-  const conflictPids = new Set<string>();
-  for (const [pid, entries] of productOrderMap) {
-    const stock = stockMap.get(pid) ?? 0;
-    const totalDemand = entries.reduce((s, e) => s + e.qty, 0);
-    if (totalDemand > stock && entries.length > 1) {
-      conflictPids.add(pid);
-      conflicts.push({
-        produto_id: pid,
-        nome_produto: entries[0].nome,
-        estoque: stock,
-        demanda_total: totalDemand,
-        pedidos: entries.map(e => ({ codigo: e.orderCodigo, nome_cliente: e.orderCliente, qtd: e.qty })),
-        pedidos_compra: [],
-      });
-    }
-  }
-
-  // If there are conflicts, fetch purchase orders to check coverage
-  if (conflicts.length > 0) {
-    try {
-      onProgress?.(checked, total); // signal we're checking POs
-      const poMap = new Map<string, StockConflictPO[]>();
-      let page = 1;
-      while (true) {
-        const res = await listOrdensCompra(undefined, page);
-        for (const po of res.data) {
-          for (const p of po.produtos || []) {
-            const pid = p.produto.produto_id;
-            if (conflictPids.has(pid)) {
-              const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
-              if (!poMap.has(pid)) poMap.set(pid, []);
-              poMap.get(pid)!.push({
-                codigo: po.codigo,
-                nome_fornecedor: po.nome_fornecedor,
-                qtd: qty,
-                situacao: po.nome_situacao,
-              });
-            }
-          }
-        }
-        if (page >= res.meta.total_paginas) break;
-        page++;
-      }
-      // Attach PO data to conflicts
-      for (const c of conflicts) {
-        c.pedidos_compra = poMap.get(c.produto_id) || [];
-      }
-    } catch (e) {
-      console.warn('[STOCK SCAN] Failed to fetch purchase orders for conflicts:', e);
-    }
-  }
-
-  // Detect below-cost warnings: items where valor_venda < valor_custo + 16% tax
-  // Exclude consignment clients (e.g. Ecolab) ‚Äî their pricing follows different rules
-  const CONSIGNMENT_CLIENT_PATTERNS = ['ecolab'];
-  const TAX_RATE = 0.16;
-  const belowCostWarnings: BelowCostWarning[] = [];
-  const belowCostMap = new Map<string, BelowCostWarning>();
-
-  for (const order of orders) {
-    // Skip consignment clients
-    const clientLower = order.nome_cliente.toLowerCase();
-    if (CONSIGNMENT_CLIENT_PATTERNS.some(p => clientLower.includes(p))) continue;
-
-    for (const p of order.produtos || []) {
-      const pid = p.produto.produto_id;
-      const custo = costMap.get(pid) ?? 0;
-      if (custo <= 0) continue;
-
-      const valorVendaRaw = String(p.produto.valor_venda ?? '');
-      let valorVenda = 0;
-      if (valorVendaRaw.includes(',') && valorVendaRaw.includes('.')) {
-        valorVenda = parseFloat(valorVendaRaw.replace(/\./g, '').replace(',', '.')) || 0;
-      } else if (valorVendaRaw.includes(',')) {
-        valorVenda = parseFloat(valorVendaRaw.replace(',', '.')) || 0;
-      } else {
-        valorVenda = parseFloat(valorVendaRaw) || 0;
-      }
-
-      const custoComImposto = custo * (1 + TAX_RATE);
-      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
-
-      if (valorVenda > 0 && valorVenda < custoComImposto) {
-        const existing = belowCostMap.get(pid);
-        if (existing) {
-          if (!existing.pedidos.some(pe => pe.codigo === order.codigo)) {
-            existing.pedidos.push({ codigo: order.codigo, nome_cliente: order.nome_cliente, qtd: qty });
-          }
-        } else {
-          const warning: BelowCostWarning = {
-            produto_id: pid,
-            nome_produto: p.produto.nome_produto,
-            valor_custo: custo,
-            custo_com_imposto: custoComImposto,
-            valor_venda: valorVenda,
-            pedidos: [{ codigo: order.codigo, nome_cliente: order.nome_cliente, qtd: qty }],
-          };
-          belowCostMap.set(pid, warning);
-          belowCostWarnings.push(warning);
-        }
-      }
-    }
-  }
-
-  return { fullStockOrders, conflicts, belowCostWarnings };
-}
-
-// --- PRODUCT DETAILS (for barcode enrichment) ---
-interface GCProductExtraField {
-  id: string;
-  atributo_id: string;
-  descricao: string;
-  conteudo: string;
-  tipo?: string;
-}
-
-interface GCProductDetail {
-  id: string;
-  codigo_barra: string;
-  codigo_interno: string;
-  nome: string;
-  variacoes?: Array<{ variacao: { id: string; codigo: string } }>;
-  campos_extras?: GCProductExtraField[];
-  atributos?: Array<{ atributo: GCProductExtraField }>;
-}
-
-async function getProductDetail(produtoId: string): Promise<GCProductDetail | null> {
-  try {
-    const res = await apiRequest<{ data: GCProductDetail }>(`/api/produtos/${produtoId}`);
-    return res.data;
-  } catch {
-    return null;
-  }
-}
-
-export async function enrichOrderProducts(
-  produtos: Array<{ produto: GCProdutoItem }>
-): Promise<Array<{ produto: GCProdutoItem }>> {
-  if (isUsingMock() || !produtos?.length) return produtos;
-
-  // Deduplicate produto_ids
-  const uniqueIds = [...new Set(produtos.map(p => p.produto.produto_id))];
-  
-  // Fetch product details in batches of 3 (respect API rate limit of 3 req/s)
-  const detailMap = new Map<string, GCProductDetail>();
-  for (let i = 0; i < uniqueIds.length; i += 3) {
-    const batch = uniqueIds.slice(i, i + 3);
-    const results = await Promise.all(batch.map(id => getProductDetail(id)));
-    results.forEach(d => { if (d) detailMap.set(d.id, d); });
-    if (i + 3 < uniqueIds.length) {
-      await new Promise(r => setTimeout(r, 1100)); // respect rate limit
-    }
-  }
-
-  return produtos.map(({ produto }) => {
-    const detail = detailMap.get(produto.produto_id);
-    if (!detail) return { produto };
-
-    // Find variation code if applicable
-    let codigoBarras = detail.codigo_barra || '';
-    const codigoProduto = detail.codigo_interno || '';
-
-    if (produto.variacao_id && detail.variacoes) {
-      const variacao = detail.variacoes.find(v => v.variacao.id === produto.variacao_id);
-      if (variacao?.variacao.codigo) {
-        if (!codigoBarras) codigoBarras = '';
-      }
-    }
-
-    // Extract location fields from atributos (API returns atributos with nested atributo objects)
-    let localizacao_fisica = '';
-    let localizacao_rational = '';
-    
-    // Try atributos first (actual API format)
-    if (detail.atributos && Array.isArray(detail.atributos)) {
-      for (const item of detail.atributos) {
-        const campo: GCProductExtraField = 'atributo' in item ? item.atributo : item as any;
-        const desc = (campo.descricao || '').toLowerCase().trim();
-        if (desc.includes('localiza√ß√£o f√≠sica') || desc.includes('localizacao fisica')) {
-          localizacao_fisica = campo.conteudo || '';
-        } else if (desc.includes('localiza√ß√£o rational') || desc.includes('localizacao rational')) {
-          localizacao_rational = campo.conteudo || '';
-        }
-      }
-    }
-    // Fallback to campos_extras if present
-    if (!localizacao_fisica && !localizacao_rational && detail.campos_extras && Array.isArray(detail.campos_extras)) {
-      for (const campo of detail.campos_extras) {
-        const desc = (campo.descricao || '').toLowerCase().trim();
-        if (desc.includes('localiza√ß√£o f√≠sica') || desc.includes('localizacao fisica')) {
-          localizacao_fisica = campo.conteudo || '';
-        } else if (desc.includes('localiza√ß√£o rational') || desc.includes('localizacao rational')) {
-          localizacao_rational = campo.conteudo || '';
-        }
-      }
-    }
-
-    return {
-      produto: {
-        ...produto,
-        codigo_produto: codigoProduto,
-        codigo_barras: codigoBarras,
-        localizacao_fisica: localizacao_fisica || undefined,
-        localizacao_rational: localizacao_rational || undefined,
-      },
-    };
-  });
-}
+    // Fix small rounding drift from fractional quantities without changiÁŒw∂âûÀk∫wµÁAÈï…ÑÅºÅŸÖ±Ω»ÅëºÅ¡ïë•ëºÄ†¿∞¿¿§Å≈’ÖπëºÅºÅAUPÅªçºÅ…ïïπŸ•ÑÅÖÃÅ±•π°ÖÃΩŸÖ±Ω…ïÃ∏4(ÄÄÄÅŸÖ±Ω…}—Ω—Ö∞ËÅ¡ÖÂ±ΩÖêπŸÖ±Ω…}—Ω—Ö∞∞4(ÄÄÄÅŸÖ±Ω…}ô…ï—îËÅ¡ÖÂ±ΩÖêπŸÖ±Ω…}ô…ï—î∞4(ÄÄÄÅçΩπë•çÖΩ}¡ÖùÖµïπ—ºËÅ¡ÖÂ±ΩÖêπçΩπë•çÖΩ}¡ÖùÖµïπ—º∞4(ÄÄÄÅ¡…Ωë’—ΩÃËÅ¡ÖÂ±ΩÖêπ¡…Ωë’—ΩÃ∞4(ÄÄÄÅÕï…Ÿ•çΩÃËÅ¡ÖÂ±ΩÖêπÕï…Ÿ•çΩÃ∞4(ÄÅÙÏ4(ÄÅ•òÄ°¡ÖÂ±ΩÖêπ¡ÖùÖµïπ—ΩÃ§Åµ•π•µÖ±AÖÂ±ΩÖêπ¡ÖùÖµïπ—ΩÃÄÙÅ¡ÖÂ±ΩÖêπ¡ÖùÖµïπ—ΩÃÏ4(ÄÅ•òÄ°¡ÖÂ±ΩÖêπëïÕçΩπ—Ω}ŸÖ±Ω»ÄÑÙÅπ’±∞§Åµ•π•µÖ±AÖÂ±ΩÖêπëïÕçΩπ—Ω}ŸÖ±Ω»ÄÙÅ¡ÖÂ±ΩÖêπëïÕçΩπ—Ω}ŸÖ±Ω»Ï4(ÄÅ•òÄ°¡ÖÂ±ΩÖêπëïÕçΩπ—Ω}¡Ω…çïπ—Öùï¥ÄÑÙÅπ’±∞§Åµ•π•µÖ±AÖÂ±ΩÖêπëïÕçΩπ—Ω}¡Ω…çïπ—Öùï¥ÄÙÅ¡ÖÂ±ΩÖêπëïÕçΩπ—Ω}¡Ω…çïπ—Öùï¥Ï4(ÄÅ•òÄ°ùçUÕ’Ö…•Ω%ê§Åµ•π•µÖ±AÖÂ±ΩÖêπ’Õ’Ö…•Ω}•êÄÙÅùçUÕ’Ö…•Ω%êÏ4(4(ÄÅçΩπÕ–Å¡’—IïÕ¡ΩπÕîÄÙÅÖ›Ö•–Å¡’—M—Ö—’Õ=π±Â]•—°Ö±±âÖç¨°ÄΩÖ¡§ΩŸïπëÖÃºëÌ•ëıÄ∞Åµ•π•µÖ±AÖÂ±ΩÖê∞Å¡ÖÂ±ΩÖê§Ï4(4(ÄÅçΩπÕ–Åï·¡ïç—ïëM—Ö—’ÃÄÙÅπΩ…µÖ±•ÈïM—Ö—’Õ%ê°πï›M—Ö—’Õ%ê§Ï4(ÄÅçΩπÕ–Å…ï—’…πïëM—Ö—’ÃÄÙÅπΩ…µÖ±•ÈïM—Ö—’Õ%ê°¡’—IïÕ¡ΩπÕî¸πëÖ—Ñ¸πÕ•—’ÖçÖΩ}•êÄ¸¸Å¡’—IïÕ¡ΩπÕî¸πÕ•—’ÖçÖΩ}•ê§Ï4(4(ÄÅ•òÄ°…ï—’…πïëM—Ö—’ÃÄòòÅ…ï—’…πïëM—Ö—’ÃÄÑÙÙÅï·¡ïç—ïëM—Ö—’Ã§ÅÏ4(ÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»†ùMQQUM}9=Q}AA1%ú§Ï4(ÄÅÙ4(4(ÄÅçΩπÕ–ÅçΩπô•…µïêÄÙÅÖ›Ö•–ÅçΩπô•…µM—Ö—’Õ¡¡±•ïê†ùŸïπëÑú∞Å•ê∞Åï·¡ïç—ïëM—Ö—’Ã§Ï4(ÄÅ•òÄ†ÖçΩπô•…µïê§ÅÏ4(ÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»†ùMQQUM}9=Q}AA1%ú§Ï4(ÄÅÙ4)Ù4(4(ººÄ¥¥¥ÅMQ=,Å!,Ä¥¥¥4)ï·¡Ω…–Å•π—ï…ôÖçîÅA…Ωë’ç—M—Ωç≠%πôºÅÏ4(ÄÅ¡…Ωë’—Ω}•êËÅÕ—…•πúÏ4(ÄÅïÕ—Ω≈’îËÅπ’µâï»Ï4(ÄÅŸÖ±Ω…}ç’Õ—ºËÅπ’µâï»Ï4)Ù4(4)ï·¡Ω…–Å•π—ï…ôÖçîÅM—Ωç≠Ωπô±•ç—A<ÅÏ4(ÄÅçΩë•ùºËÅÕ—…•πúÏ4(ÄÅπΩµï}ôΩ…πïçïëΩ»ËÅÕ—…•πúÏ4(ÄÅ≈—êËÅπ’µâï»Ï4(ÄÅÕ•—’ÖçÖºËÅÕ—…•πúÏ4)Ù4(4)ï·¡Ω…–Å•π—ï…ôÖçîÅM—Ωç≠Ωπô±•ç–ÅÏ4(ÄÅπΩµï}¡…Ωë’—ºËÅÕ—…•πúÏ4(ÄÅ¡…Ωë’—Ω}•êËÅÕ—…•πúÏ4(ÄÅïÕ—Ω≈’îËÅπ’µâï»Ï4(ÄÅëïµÖπëÖ}—Ω—Ö∞ËÅπ’µâï»Ï4(ÄÅ¡ïë•ëΩÃËÅ……Ö‰ÒÏÅçΩë•ùºËÅÕ—…•πúÏÅπΩµï}ç±•ïπ—îËÅÕ—…•πúÏÅ≈—êËÅπ’µâï»ÅÙ¯Ï4(ÄÅ¡ïë•ëΩÕ}çΩµ¡…ÑËÅM—Ωç≠Ωπô±•ç—A=mtÏ4)Ù4(4)ï·¡Ω…–Å•π—ï…ôÖçîÅ	ï±Ω›ΩÕ—]Ö…π•πúÅÏ4(ÄÅ¡…Ωë’—Ω}•êËÅÕ—…•πúÏ4(ÄÅπΩµï}¡…Ωë’—ºËÅÕ—…•πúÏ4(ÄÅŸÖ±Ω…}ç’Õ—ºËÅπ’µâï»Ï4(ÄÅç’Õ—Ω}çΩµ}•µ¡ΩÕ—ºËÅπ’µâï»Ï4(ÄÅŸÖ±Ω…}ŸïπëÑËÅπ’µâï»Ï4(ÄÅ¡ïë•ëΩÃËÅ……Ö‰ÒÏÅçΩë•ùºËÅÕ—…•πúÏÅπΩµï}ç±•ïπ—îËÅÕ—…•πúÏÅ≈—êËÅπ’µâï»ÅÙ¯Ï4)Ù4(4)ï·¡Ω…–Å•π—ï…ôÖçîÅM—Ωç≠MçÖπIïÕ’±–ÅÏ4(ÄÅô’±±M—Ωç≠=…ëï…ÃËÅMï–ÒÕ—…•πú¯Ï4(ÄÅçΩπô±•ç—ÃËÅM—Ωç≠Ωπô±•ç—mtÏ4(ÄÅâï±Ω›ΩÕ—]Ö…π•πùÃËÅ	ï±Ω›ΩÕ—]Ö…π•πùmtÏ4)Ù4(4)ï·¡Ω…–ÅÖÕÂπåÅô’πç—•Ω∏Åùï—A…Ωë’ç—M—Ωç¨°¡…Ωë’—Ω%êËÅÕ—…•πú∞ÅŸÖ…•ÖçÖΩ%ê¸ËÅÕ—…•πú§ËÅA…Ωµ•ÕîÒA…Ωë’ç—M—Ωç≠%πôºÅÅπ’±∞¯ÅÏ4(ÄÅçΩπÕ–Å5a}QQ5AQLÄÙÄÃÏ4(ÄÅ±ï–Å±ÖÕ—…»ËÅ’π≠πΩ›∏ÄÙÅπ’±∞Ï4(ÄÅôΩ»Ä°±ï–ÅÖ——ïµ¡–ÄÙÄ¿ÏÅÖ——ïµ¡–ÄÅ5a}QQ5AQLÏÅÖ——ïµ¡–¨¨§ÅÏ4(ÄÄÄÅ—…‰ÅÏ4(ÄÄÄÄÄÅçΩπÕ–Å…ïÃÄÙÅÖ›Ö•–ÅÖ¡•Iï≈’ïÕ–ÒÏ4(ÄÄÄÄÄÄÄÅëÖ—ÑËÅÏ4(ÄÄÄÄÄÄÄÄÄÅ•êËÅÕ—…•πúÏ4(ÄÄÄÄÄÄÄÄÄÅïÕ—Ω≈’îËÅÕ—…•πúÅÅπ’µâï»Ï4(ÄÄÄÄÄÄÄÄÄÅŸÖ±Ω…}ç’Õ—º¸ËÅÕ—…•πúÅÅπ’µâï»Ï4(ÄÄÄÄÄÄÄÄÄÅŸÖ…•ÖçΩïÃ¸ËÅ……Ö‰ÒÏÅŸÖ…•ÖçÖºËÅÏÅ•êËÅÕ—…•πúÅÅπ’µâï»ÏÅïÕ—Ω≈’îËÅÕ—…•πúÅÅπ’µâï»ÅÙÅÙ¯Ï4(ÄÄÄÄÄÄÄÅÙÏ4(ÄÄÄÄÄÅÙ¯°ÄΩÖ¡§Ω¡…Ωë’—ΩÃºëÌ¡…Ωë’—Ω%ëıÄ§Ï4(4(ÄÄÄÄÄÅçΩπÕ–ÅëÖ—ÑÄÙÅ…ïÃ¸πëÖ—ÑÏ4(ÄÄÄÄÄÅ•òÄ†ÖëÖ—Ñ§Å—°…Ω‹Åπï‹Å……Ω»†ù5AQe}IMA=9Mú§Ï4(4(ÄÄÄÄÄÄººÅA…ïôï»ÅŸÖ…•Ö—•Ω∏ÅÕ—Ωç¨Å›°ï∏ÅŸÖ…•ÖçÖΩ}•êÅ•ÃÅù•Ÿï∏Ä°Ω»Å›°ï∏Å¡…Ωë’ç–Å°ÖÃÅÑÅÕ•πù±îÅŸÖ…•Ö—•Ω∏4(ÄÄÄÄÄÄººÅ—°Ö–Å°Ω±ëÃÅ—°îÅ…ïÖ∞ÅÕ—Ωç¨Å•πÕ—ïÖêÅΩòÅ—°îÅ¡Ö…ïπ–ÉäPÅçΩµµΩ∏ÅÅ≈’•…¨§4(ÄÄÄÄÄÅ±ï–ÅïÕ—Ω≈’ïIÖ‹ËÅÕ—…•πúÅÅπ’µâï»ÄÙÅëÖ—ÑπïÕ—Ω≈’îÄ¸¸Ä¿Ï4(ÄÄÄÄÄÅçΩπÕ–ÅŸÖ…•ÖçΩïÃÄÙÅëÖ—ÑπŸÖ…•ÖçΩïÃÄ¸¸ÅmtÏ4(ÄÄÄÄÄÅ•òÄ°ŸÖ…•ÖçΩïÃπ±ïπù—†Ä¯Ä¿§ÅÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–ÅŸ•êÄÙÅŸÖ…•ÖçÖΩ%êÄ¸ÅM—…•πú°ŸÖ…•ÖçÖΩ%ê§ÄËÄúúÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–ÅâÂ%êÄÙÅŸ•êÄ¸ÅŸÖ…•ÖçΩïÃπô•πê°ÿÄÙ¯ÅM—…•πú°ÿπŸÖ…•ÖçÖº¸π•ê§ÄÙÙÙÅŸ•ê§ÄËÅ’πëïô•πïêÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–ÅÕ•πù±îÄÙÄÖâÂ%êÄòòÅŸÖ…•ÖçΩïÃπ±ïπù—†ÄÙÙÙÄƒÄ¸ÅŸÖ…•ÖçΩïÕl¡tÄËÅ’πëïô•πïêÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–Åç°ΩÕï∏ÄÙÅâÂ%êÄ¸¸ÅÕ•πù±îÏ4(ÄÄÄÄÄÄÄÅ•òÄ°ç°ΩÕï∏§ÅïÕ—Ω≈’ïIÖ‹ÄÙÅç°ΩÕï∏πŸÖ…•ÖçÖºπïÕ—Ω≈’îÄ¸¸ÅïÕ—Ω≈’ïIÖ‹Ï4(ÄÄÄÄÄÅÙ4(4(ÄÄÄÄÄÅçΩπÕ–ÅïÕ—Ω≈’îÄÙÅ—Â¡ïΩòÅïÕ—Ω≈’ïIÖ‹ÄÙÙÙÄùπ’µâï»úÄ¸ÅïÕ—Ω≈’ïIÖ‹ÄËÅ¡Ö…Õï±ΩÖ–°M—…•πú°ïÕ—Ω≈’ïIÖ‹§π…ï¡±Öçî†ú∞ú∞Äú∏ú§ÅÒÄú¿ú§Ï4(ÄÄÄÄÄÅçΩπÕ–ÅŸÖ±Ω…’Õ—ºÄÙÅ—Â¡ïΩòÅëÖ—ÑπŸÖ±Ω…}ç’Õ—ºÄÙÙÙÄùπ’µâï»ú4(ÄÄÄÄÄÄÄÄ¸ÅëÖ—ÑπŸÖ±Ω…}ç’Õ—º4(ÄÄÄÄÄÄÄÄËÅ¡Ö…Õï±ΩÖ–°M—…•πú°ëÖ—ÑπŸÖ±Ω…}ç’Õ—ºÄ¸¸Äú¿ú§π…ï¡±Öçî†ú∞ú∞Äú∏ú§ÅÒÄú¿ú§Ï4(ÄÄÄÄÄÅ…ï—’…∏ÅÏÅ¡…Ωë’—Ω}•êËÅM—…•πú°ëÖ—Ñπ•êÄ¸¸Å¡…Ωë’—Ω%ê§∞ÅïÕ—Ω≈’îËÅ•Õ9Ö8°ïÕ—Ω≈’î§Ä¸Ä¿ÄËÅïÕ—Ω≈’î∞ÅŸÖ±Ω…}ç’Õ—ºËÅ•Õ9Ö8°ŸÖ±Ω…’Õ—º§Ä¸Ä¿ÄËÅŸÖ±Ω…’Õ—ºÅÙÏ4(ÄÄÄÅÙÅçÖ—ç†Ä°ï…»§ÅÏ4(ÄÄÄÄÄÅ±ÖÕ—…»ÄÙÅï…»Ï4(ÄÄÄÄÄÅçΩπÕ–ÅµÕúÄÙÅï…»Å•πÕ—ÖπçïΩòÅ……Ω»Ä¸Åï…»πµïÕÕÖùîÄËÅM—…•πú°ï…»§Ï4(ÄÄÄÄÄÅçΩπÕ–Å…ï—…ÂÖâ±îÄÙÄΩÖ•±ïêÅ—ºÅÕïπëÒ9Q]=I-ÒQ%5=UQÒIQ}1%5%QÒôï—ç†Ω§π—ïÕ–°µÕú§Ï4(ÄÄÄÄÄÅ•òÄ†Ö…ï—…ÂÖâ±îÅÒÅÖ——ïµ¡–ÄÙÙÙÅ5a}QQ5AQLÄ¥Äƒ§Åâ…ïÖ¨Ï4(ÄÄÄÄÄÅÖ›Ö•–Åπï‹ÅA…Ωµ•Õî°»ÄÙ¯ÅÕï—Q•µïΩ’–°»∞Ä‹¿¿Ä®Ä°Ö——ïµ¡–Ä¨Äƒ§§§Ï4(ÄÄÄÅÙ4(ÄÅÙ4(ÄÅçΩπÕΩ±îπ›Ö…∏°ÅmMQ=-tÅÖ•±ïêÅ—ºÅôï—ç†ÅÕ—Ωç¨ÅôΩ»Å¡…Ωë’ç–ÄëÌ¡…Ωë’—Ω%ëÙÈÄ∞Å±ÖÕ—…»Å•πÕ—ÖπçïΩòÅ……Ω»Ä¸Å±ÖÕ—…»πµïÕÕÖùîÄËÅ±ÖÕ—…»§Ï4(ÄÅ…ï—’…∏Åπ’±∞Ï4)Ù4(4(º®®Å°ïç¨ÅÕ—Ωç¨ÅôΩ»ÅÑÅ±•Õ–ÅΩòÅΩ…ëï…Ã∏ÅIï—’…πÃÅMï–ÅΩòÅΩ…ëï»Å%ÃÅ—°Ö–Å°ÖŸîÅô’±∞ÅÕ—Ωç¨Ä¨ÅçΩπô±•ç—Ã∏Ä®º4)ï·¡Ω…–ÅÖÕÂπåÅô’πç—•Ω∏Åç°ïç≠M—Ωç≠Ω…=…ëï…Ã†4(ÄÅΩ…ëï…ÃËÅ……Ö‰Ò=…ëïµMï…Ÿ•çºÅÅYïπëÑ¯∞4(ÄÅΩπA…Ωù…ïÕÃ¸ËÄ°ç°ïç≠ïêËÅπ’µâï»∞Å—Ω—Ö∞ËÅπ’µâï»§ÄÙ¯ÅŸΩ•ê∞4(§ËÅA…Ωµ•ÕîÒM—Ωç≠MçÖπIïÕ’±–¯ÅÏ4(ÄÄººÅΩ±±ïç–ÅÖ±∞Å’π•≈’îÅ¡…Ωë’—Ω}•ëÃÅÖç…ΩÕÃÅÖ±∞ÅΩ…ëï…ÃÄ°—…Öç¨ÅŸÖ…•ÖçÖΩ}•êÅÕïï∏ÅôΩ»ÅïÖç†Å¡•ê§4(ÄÅçΩπÕ–Å¡…Ωë’ç—=…ëï…5Ö¿ÄÙÅπï‹Å5Ö¿ÒÕ—…•πú∞ÅÏÅΩ…ëï…%êËÅÕ—…•πúÏÅΩ…ëï…Ωë•ùºËÅÕ—…•πúÏÅΩ…ëï…±•ïπ—îËÅÕ—…•πúÏÅ≈—‰ËÅπ’µâï»ÏÅπΩµîËÅÕ—…•πúÅımt¯†§Ï4(ÄÅçΩπÕ–ÅŸÖ…•ÖçÖΩ%ë	ÂA•êÄÙÅπï‹Å5Ö¿ÒÕ—…•πú∞ÅÕ—…•πú¯†§Ï4(4(ÄÅôΩ»Ä°çΩπÕ–ÅΩ…ëï»ÅΩòÅΩ…ëï…Ã§ÅÏ4(ÄÄÄÅôΩ»Ä°çΩπÕ–Å¿ÅΩòÅΩ…ëï»π¡…Ωë’—ΩÃÅÒÅmt§ÅÏ4(ÄÄÄÄÄÅçΩπÕ–Å¡•êÄÙÅ¿π¡…Ωë’—ºπ¡…Ωë’—Ω}•êÏ4(ÄÄÄÄÄÅçΩπÕ–ÅŸ•êÄÙÅM—…•πú†°¿π¡…Ωë’—ºÅÖÃÅÖπ‰§πŸÖ…•ÖçÖΩ}•êÄ¸¸Äúú§π—…•¥†§Ï4(ÄÄÄÄÄÅ•òÄ°Ÿ•êÄòòÄÖŸÖ…•ÖçÖΩ%ë	ÂA•êπ°ÖÃ°¡•ê§§ÅŸÖ…•ÖçÖΩ%ë	ÂA•êπÕï–°¡•ê∞ÅŸ•ê§Ï4(ÄÄÄÄÄÅçΩπÕ–Å≈—‰ÄÙÅ—Â¡ïΩòÅ¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄÙÙÙÄùπ’µâï»úÄ¸Å¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄËÅ¡Ö…Õï±ΩÖ–°M—…•πú°¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëî§§ÅÒÄ¿Ï4(ÄÄÄÄÄÅ•òÄ†Ö¡…Ωë’ç—=…ëï…5Ö¿π°ÖÃ°¡•ê§§Å¡…Ωë’ç—=…ëï…5Ö¿πÕï–°¡•ê∞Åmt§Ï4(ÄÄÄÄÄÅ¡…Ωë’ç—=…ëï…5Ö¿πùï–°¡•ê§Ñπ¡’Õ†°Ï4(ÄÄÄÄÄÄÄÅΩ…ëï…%êËÅΩ…ëï»π•ê∞4(ÄÄÄÄÄÄÄÅΩ…ëï…Ωë•ùºËÅΩ…ëï»πçΩë•ùº∞4(ÄÄÄÄÄÄÄÅΩ…ëï…±•ïπ—îËÅΩ…ëï»ππΩµï}ç±•ïπ—î∞4(ÄÄÄÄÄÄÄÅ≈—‰∞4(ÄÄÄÄÄÄÄÅπΩµîËÅ¿π¡…Ωë’—ºππΩµï}¡…Ωë’—º∞4(ÄÄÄÄÄÅÙ§Ï4(ÄÄÄÅÙ4(ÄÅÙ4(4(ÄÅçΩπÕ–Å’π•≈’ï%ëÃÄÙÅl∏∏π¡…Ωë’ç—=…ëï…5Ö¿π≠ïÂÃ†•tÏ4(ÄÅçΩπÕ–ÅÕ—Ωç≠5Ö¿ÄÙÅπï‹Å5Ö¿ÒÕ—…•πú∞Åπ’µâï»¯†§Ï4(ÄÅçΩπÕ–ÅçΩÕ—5Ö¿ÄÙÅπï‹Å5Ö¿ÒÕ—…•πú∞Åπ’µâï»¯†§Ï4(ÄÅçΩπÕ–Å—Ω—Ö∞ÄÙÅ’π•≈’ï%ëÃπ±ïπù—†Ï4(ÄÅ±ï–Åç°ïç≠ïêÄÙÄ¿Ï4(4(ÄÄººÅï—ç†ÄÃÅÖ–ÅÑÅ—•µîÄ°…Ö—îÅ±•µ•–§4(ÄÅôΩ»Ä°±ï–Å§ÄÙÄ¿ÏÅ§ÄÅ’π•≈’ï%ëÃπ±ïπù—†ÏÅ§Ä¨ÙÄÃ§ÅÏ4(ÄÄÄÅçΩπÕ–ÅâÖ—ç†ÄÙÅ’π•≈’ï%ëÃπÕ±•çî°§∞Å§Ä¨ÄÃ§Ï4(ÄÄÄÅçΩπÕ–Å…ïÕ’±—ÃÄÙÅÖ›Ö•–ÅA…Ωµ•ÕîπÖ±∞°âÖ—ç†πµÖ¿°•êÄÙ¯Åùï—A…Ωë’ç—M—Ωç¨°•ê∞ÅŸÖ…•ÖçÖΩ%ë	ÂA•êπùï–°•ê§§§§Ï4(ÄÄÄÅâÖ—ç†πôΩ…Öç††°•ê∞Å•ë‡§ÄÙ¯ÅÏ4(ÄÄÄÄÄÅçΩπÕ–Å»ÄÙÅ…ïÕ’±—Õm•ë·tÏ4(ÄÄÄÄÄÅ•òÄ°»§ÅÏ4(ÄÄÄÄÄÄÄÅÕ—Ωç≠5Ö¿πÕï–°•ê∞Å»πïÕ—Ω≈’î§Ï4(ÄÄÄÄÄÄÄÅçΩÕ—5Ö¿πÕï–°•ê∞Å»πŸÖ±Ω…}ç’Õ—º§Ï4(ÄÄÄÄÄÅÙ4(ÄÄÄÅÙ§Ï4(ÄÄÄÅç°ïç≠ïêÄ¨ÙÅâÖ—ç†π±ïπù—†Ï4(ÄÄÄÅΩπA…Ωù…ïÕÃ¸∏°ç°ïç≠ïê∞Å—Ω—Ö∞§Ï4(ÄÄÄÅ•òÄ°§Ä¨ÄÃÄÅ’π•≈’ï%ëÃπ±ïπù—†§ÅÏ4(ÄÄÄÄÄÅÖ›Ö•–Åπï‹ÅA…Ωµ•Õî°»ÄÙ¯ÅÕï—Q•µïΩ’–°»∞Äƒƒ¿¿§§ÏÄººÅ…ïÕ¡ïç–Å…Ö—îÅ±•µ•–4(ÄÄÄÅÙ4(ÄÅÙ4(4(ÄÄººÅï—ï…µ•πîÅ›°•ç†ÅΩ…ëï…ÃÅ°ÖŸîÅô’±∞ÅÕ—Ωç¨4(ÄÅçΩπÕ–Åô’±±M—Ωç≠=…ëï…ÃÄÙÅπï‹ÅMï–ÒÕ—…•πú¯†§Ï4(ÄÅôΩ»Ä°çΩπÕ–ÅΩ…ëï»ÅΩòÅΩ…ëï…Ã§ÅÏ4(ÄÄÄÅçΩπÕ–ÅÖ±±%πM—Ωç¨ÄÙÄ°Ω…ëï»π¡…Ωë’—ΩÃÅÒÅmt§πïŸï…‰°¿ÄÙ¯ÅÏ4(ÄÄÄÄÄÅçΩπÕ–Å¡•êÄÙÅ¿π¡…Ωë’—ºπ¡…Ωë’—Ω}•êÏ4(ÄÄÄÄÄÅçΩπÕ–Å≈—‰ÄÙÅ—Â¡ïΩòÅ¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄÙÙÙÄùπ’µâï»úÄ¸Å¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄËÅ¡Ö…Õï±ΩÖ–°M—…•πú°¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëî§§ÅÒÄ¿Ï4(ÄÄÄÄÄÅçΩπÕ–ÅÖŸÖ•±Öâ±îÄÙÅÕ—Ωç≠5Ö¿πùï–°¡•ê§Ä¸¸Ä¿Ï4(ÄÄÄÄÄÅ…ï—’…∏ÅÖŸÖ•±Öâ±îÄ¯ÙÅ≈—‰Ï4(ÄÄÄÅÙ§Ï4(ÄÄÄÅ•òÄ°Ö±±%πM—Ωç¨§Åô’±±M—Ωç≠=…ëï…ÃπÖëê°Ω…ëï»π•ê§Ï4(ÄÅÙ4(4(ÄÄººÅï—ïç–ÅçΩπô±•ç—ÃËÅ¡…Ωë’ç—ÃÅ›°ï…îÅ—Ω—Ö∞ÅëïµÖπêÅÖç…ΩÕÃÅΩ…ëï…ÃÄ¯ÅÕ—Ωç¨4(ÄÅçΩπÕ–ÅçΩπô±•ç—ÃËÅM—Ωç≠Ωπô±•ç—mtÄÙÅmtÏ4(ÄÅçΩπÕ–ÅçΩπô±•ç—A•ëÃÄÙÅπï‹ÅMï–ÒÕ—…•πú¯†§Ï4(ÄÅôΩ»Ä°çΩπÕ–Åm¡•ê∞Åïπ—…•ïÕtÅΩòÅ¡…Ωë’ç—=…ëï…5Ö¿§ÅÏ4(ÄÄÄÅçΩπÕ–ÅÕ—Ωç¨ÄÙÅÕ—Ωç≠5Ö¿πùï–°¡•ê§Ä¸¸Ä¿Ï4(ÄÄÄÅçΩπÕ–Å—Ω—Ö±ïµÖπêÄÙÅïπ—…•ïÃπ…ïë’çî†°Ã∞Åî§ÄÙ¯ÅÃÄ¨Åîπ≈—‰∞Ä¿§Ï4(ÄÄÄÅ•òÄ°—Ω—Ö±ïµÖπêÄ¯ÅÕ—Ωç¨ÄòòÅïπ—…•ïÃπ±ïπù—†Ä¯Äƒ§ÅÏ4(ÄÄÄÄÄÅçΩπô±•ç—A•ëÃπÖëê°¡•ê§Ï4(ÄÄÄÄÄÅçΩπô±•ç—Ãπ¡’Õ†°Ï4(ÄÄÄÄÄÄÄÅ¡…Ωë’—Ω}•êËÅ¡•ê∞4(ÄÄÄÄÄÄÄÅπΩµï}¡…Ωë’—ºËÅïπ—…•ïÕl¡tππΩµî∞4(ÄÄÄÄÄÄÄÅïÕ—Ω≈’îËÅÕ—Ωç¨∞4(ÄÄÄÄÄÄÄÅëïµÖπëÖ}—Ω—Ö∞ËÅ—Ω—Ö±ïµÖπê∞4(ÄÄÄÄÄÄÄÅ¡ïë•ëΩÃËÅïπ—…•ïÃπµÖ¿°îÄÙ¯Ä°ÏÅçΩë•ùºËÅîπΩ…ëï…Ωë•ùº∞ÅπΩµï}ç±•ïπ—îËÅîπΩ…ëï…±•ïπ—î∞Å≈—êËÅîπ≈—‰ÅÙ§§∞4(ÄÄÄÄÄÄÄÅ¡ïë•ëΩÕ}çΩµ¡…ÑËÅmt∞4(ÄÄÄÄÄÅÙ§Ï4(ÄÄÄÅÙ4(ÄÅÙ4(4(ÄÄººÅ%òÅ—°ï…îÅÖ…îÅçΩπô±•ç—Ã∞Åôï—ç†Å¡’…ç°ÖÕîÅΩ…ëï…ÃÅ—ºÅç°ïç¨ÅçΩŸï…Öùî4(ÄÅ•òÄ°çΩπô±•ç—Ãπ±ïπù—†Ä¯Ä¿§ÅÏ4(ÄÄÄÅ—…‰ÅÏ4(ÄÄÄÄÄÅΩπA…Ωù…ïÕÃ¸∏°ç°ïç≠ïê∞Å—Ω—Ö∞§ÏÄººÅÕ•ùπÖ∞Å›îù…îÅç°ïç≠•πúÅA=Ã4(ÄÄÄÄÄÅçΩπÕ–Å¡Ω5Ö¿ÄÙÅπï‹Å5Ö¿ÒÕ—…•πú∞ÅM—Ωç≠Ωπô±•ç—A=mt¯†§Ï4(ÄÄÄÄÄÅ±ï–Å¡ÖùîÄÙÄƒÏ4(ÄÄÄÄÄÅ›°•±îÄ°—…’î§ÅÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–Å…ïÃÄÙÅÖ›Ö•–Å±•Õ—=…ëïπÕΩµ¡…Ñ°’πëïô•πïê∞Å¡Öùî§Ï4(ÄÄÄÄÄÄÄÅôΩ»Ä°çΩπÕ–Å¡ºÅΩòÅ…ïÃπëÖ—Ñ§ÅÏ4(ÄÄÄÄÄÄÄÄÄÅôΩ»Ä°çΩπÕ–Å¿ÅΩòÅ¡ºπ¡…Ωë’—ΩÃÅÒÅmt§ÅÏ4(ÄÄÄÄÄÄÄÄÄÄÄÅçΩπÕ–Å¡•êÄÙÅ¿π¡…Ωë’—ºπ¡…Ωë’—Ω}•êÏ4(ÄÄÄÄÄÄÄÄÄÄÄÅ•òÄ°çΩπô±•ç—A•ëÃπ°ÖÃ°¡•ê§§ÅÏ4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÅçΩπÕ–Å≈—‰ÄÙÅ—Â¡ïΩòÅ¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄÙÙÙÄùπ’µâï»úÄ¸Å¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄËÅ¡Ö…Õï±ΩÖ–°M—…•πú°¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëî§§ÅÒÄ¿Ï4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÅ•òÄ†Ö¡Ω5Ö¿π°ÖÃ°¡•ê§§Å¡Ω5Ö¿πÕï–°¡•ê∞Åmt§Ï4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÅ¡Ω5Ö¿πùï–°¡•ê§Ñπ¡’Õ†°Ï4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅçΩë•ùºËÅ¡ºπçΩë•ùº∞4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅπΩµï}ôΩ…πïçïëΩ»ËÅ¡ºππΩµï}ôΩ…πïçïëΩ»∞4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅ≈—êËÅ≈—‰∞4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÕ•—’ÖçÖºËÅ¡ºππΩµï}Õ•—’ÖçÖº∞4(ÄÄÄÄÄÄÄÄÄÄÄÄÄÅÙ§Ï4(ÄÄÄÄÄÄÄÄÄÄÄÅÙ4(ÄÄÄÄÄÄÄÄÄÅÙ4(ÄÄÄÄÄÄÄÅÙ4(ÄÄÄÄÄÄÄÅ•òÄ°¡ÖùîÄ¯ÙÅ…ïÃπµï—Ñπ—Ω—Ö±}¡Öù•πÖÃ§Åâ…ïÖ¨Ï4(ÄÄÄÄÄÄÄÅ¡Öùî¨¨Ï4(ÄÄÄÄÄÅÙ4(ÄÄÄÄÄÄººÅ——Öç†ÅA<ÅëÖ—ÑÅ—ºÅçΩπô±•ç—Ã4(ÄÄÄÄÄÅôΩ»Ä°çΩπÕ–ÅåÅΩòÅçΩπô±•ç—Ã§ÅÏ4(ÄÄÄÄÄÄÄÅåπ¡ïë•ëΩÕ}çΩµ¡…ÑÄÙÅ¡Ω5Ö¿πùï–°åπ¡…Ωë’—Ω}•ê§ÅÒÅmtÏ4(ÄÄÄÄÄÅÙ4(ÄÄÄÅÙÅçÖ—ç†Ä°î§ÅÏ4(ÄÄÄÄÄÅçΩπÕΩ±îπ›Ö…∏†ùmMQ=,ÅM9tÅÖ•±ïêÅ—ºÅôï—ç†Å¡’…ç°ÖÕîÅΩ…ëï…ÃÅôΩ»ÅçΩπô±•ç—ÃËú∞Åî§Ï4(ÄÄÄÅÙ4(ÄÅÙ4(4(ÄÄººÅï—ïç–Åâï±Ω‹µçΩÕ–Å›Ö…π•πùÃËÅ•—ïµÃÅ›°ï…îÅŸÖ±Ω…}ŸïπëÑÄÅŸÖ±Ω…}ç’Õ—ºÄ¨ÄƒÿîÅ—Ö‡4(ÄÄººÅ·ç±’ëîÅçΩπÕ•ùπµïπ–Åç±•ïπ—ÃÄ°îπú∏ÅçΩ±Öà§ÉäPÅ—°ï•»Å¡…•ç•πúÅôΩ±±Ω›ÃÅë•ôôï…ïπ–Å…’±ïÃ4(ÄÅçΩπÕ–Å=9M%959Q}1%9Q}AQQI9LÄÙÅlùïçΩ±ÖàùtÏ4(ÄÅçΩπÕ–ÅQa}IQÄÙÄ¿∏ƒÿÏ4(ÄÅçΩπÕ–Åâï±Ω›ΩÕ—]Ö…π•πùÃËÅ	ï±Ω›ΩÕ—]Ö…π•πùmtÄÙÅmtÏ4(ÄÅçΩπÕ–Åâï±Ω›ΩÕ—5Ö¿ÄÙÅπï‹Å5Ö¿ÒÕ—…•πú∞Å	ï±Ω›ΩÕ—]Ö…π•πú¯†§Ï4(4(ÄÅôΩ»Ä°çΩπÕ–ÅΩ…ëï»ÅΩòÅΩ…ëï…Ã§ÅÏ4(ÄÄÄÄººÅM≠•¿ÅçΩπÕ•ùπµïπ–Åç±•ïπ—Ã4(ÄÄÄÅçΩπÕ–Åç±•ïπ—1Ω›ï»ÄÙÅΩ…ëï»ππΩµï}ç±•ïπ—îπ—Ω1Ω›ï…ÖÕî†§Ï4(ÄÄÄÅ•òÄ°=9M%959Q}1%9Q}AQQI9LπÕΩµî°¿ÄÙ¯Åç±•ïπ—1Ω›ï»π•πç±’ëïÃ°¿§§§ÅçΩπ—•π’îÏ4(4(ÄÄÄÅôΩ»Ä°çΩπÕ–Å¿ÅΩòÅΩ…ëï»π¡…Ωë’—ΩÃÅÒÅmt§ÅÏ4(ÄÄÄÄÄÅçΩπÕ–Å¡•êÄÙÅ¿π¡…Ωë’—ºπ¡…Ωë’—Ω}•êÏ4(ÄÄÄÄÄÅçΩπÕ–Åç’Õ—ºÄÙÅçΩÕ—5Ö¿πùï–°¡•ê§Ä¸¸Ä¿Ï4(ÄÄÄÄÄÅ•òÄ°ç’Õ—ºÄÙÄ¿§ÅçΩπ—•π’îÏ4(4(ÄÄÄÄÄÅçΩπÕ–ÅŸÖ±Ω…YïπëÖIÖ‹ÄÙÅM—…•πú°¿π¡…Ωë’—ºπŸÖ±Ω…}ŸïπëÑÄ¸¸Äúú§Ï4(ÄÄÄÄÄÅ±ï–ÅŸÖ±Ω…YïπëÑÄÙÄ¿Ï4(ÄÄÄÄÄÅ•òÄ°ŸÖ±Ω…YïπëÖIÖ‹π•πç±’ëïÃ†ú∞ú§ÄòòÅŸÖ±Ω…YïπëÖIÖ‹π•πç±’ëïÃ†ú∏ú§§ÅÏ4(ÄÄÄÄÄÄÄÅŸÖ±Ω…YïπëÑÄÙÅ¡Ö…Õï±ΩÖ–°ŸÖ±Ω…YïπëÖIÖ‹π…ï¡±Öçî†Ωp∏Ωú∞Äúú§π…ï¡±Öçî†ú∞ú∞Äú∏ú§§ÅÒÄ¿Ï4(ÄÄÄÄÄÅÙÅï±ÕîÅ•òÄ°ŸÖ±Ω…YïπëÖIÖ‹π•πç±’ëïÃ†ú∞ú§§ÅÏ4(ÄÄÄÄÄÄÄÅŸÖ±Ω…YïπëÑÄÙÅ¡Ö…Õï±ΩÖ–°ŸÖ±Ω…YïπëÖIÖ‹π…ï¡±Öçî†ú∞ú∞Äú∏ú§§ÅÒÄ¿Ï4(ÄÄÄÄÄÅÙÅï±ÕîÅÏ4(ÄÄÄÄÄÄÄÅŸÖ±Ω…YïπëÑÄÙÅ¡Ö…Õï±ΩÖ–°ŸÖ±Ω…YïπëÖIÖ‹§ÅÒÄ¿Ï4(ÄÄÄÄÄÅÙ4(4(ÄÄÄÄÄÅçΩπÕ–Åç’Õ—ΩΩµ%µ¡ΩÕ—ºÄÙÅç’Õ—ºÄ®Ä†ƒÄ¨ÅQa}IQ§Ï4(ÄÄÄÄÄÅçΩπÕ–Å≈—‰ÄÙÅ—Â¡ïΩòÅ¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄÙÙÙÄùπ’µâï»úÄ¸Å¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëîÄËÅ¡Ö…Õï±ΩÖ–°M—…•πú°¿π¡…Ωë’—ºπ≈’Öπ—•ëÖëî§§ÅÒÄ¿Ï4(4(ÄÄÄÄÄÅ•òÄ°ŸÖ±Ω…YïπëÑÄ¯Ä¿ÄòòÅŸÖ±Ω…YïπëÑÄÅç’Õ—ΩΩµ%µ¡ΩÕ—º§ÅÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–Åï·•Õ—•πúÄÙÅâï±Ω›ΩÕ—5Ö¿πùï–°¡•ê§Ï4(ÄÄÄÄÄÄÄÅ•òÄ°ï·•Õ—•πú§ÅÏ4(ÄÄÄÄÄÄÄÄÄÅ•òÄ†Öï·•Õ—•πúπ¡ïë•ëΩÃπÕΩµî°¡îÄÙ¯Å¡îπçΩë•ùºÄÙÙÙÅΩ…ëï»πçΩë•ùº§§ÅÏ4(ÄÄÄÄÄÄÄÄÄÄÄÅï·•Õ—•πúπ¡ïë•ëΩÃπ¡’Õ†°ÏÅçΩë•ùºËÅΩ…ëï»πçΩë•ùº∞ÅπΩµï}ç±•ïπ—îËÅΩ…ëï»ππΩµï}ç±•ïπ—î∞Å≈—êËÅ≈—‰ÅÙ§Ï4(ÄÄÄÄÄÄÄÄÄÅÙ4(ÄÄÄÄÄÄÄÅÙÅï±ÕîÅÏ4(ÄÄÄÄÄÄÄÄÄÅçΩπÕ–Å›Ö…π•πúËÅ	ï±Ω›ΩÕ—]Ö…π•πúÄÙÅÏ4(ÄÄÄÄÄÄÄÄÄÄÄÅ¡…Ωë’—Ω}•êËÅ¡•ê∞4(ÄÄÄÄÄÄÄÄÄÄÄÅπΩµï}¡…Ωë’—ºËÅ¿π¡…Ωë’—ºππΩµï}¡…Ωë’—º∞4(ÄÄÄÄÄÄÄÄÄÄÄÅŸÖ±Ω…}ç’Õ—ºËÅç’Õ—º∞4(ÄÄÄÄÄÄÄÄÄÄÄÅç’Õ—Ω}çΩµ}•µ¡ΩÕ—ºËÅç’Õ—ΩΩµ%µ¡ΩÕ—º∞4(ÄÄÄÄÄÄÄÄÄÄÄÅŸÖ±Ω…}ŸïπëÑËÅŸÖ±Ω…YïπëÑ∞4(ÄÄÄÄÄÄÄÄÄÄÄÅ¡ïë•ëΩÃËÅmÏÅçΩë•ùºËÅΩ…ëï»πçΩë•ùº∞ÅπΩµï}ç±•ïπ—îËÅΩ…ëï»ππΩµï}ç±•ïπ—î∞Å≈—êËÅ≈—‰Åıt∞4(ÄÄÄÄÄÄÄÄÄÅÙÏ4(ÄÄÄÄÄÄÄÄÄÅâï±Ω›ΩÕ—5Ö¿πÕï–°¡•ê∞Å›Ö…π•πú§Ï4(ÄÄÄÄÄÄÄÄÄÅâï±Ω›ΩÕ—]Ö…π•πùÃπ¡’Õ†°›Ö…π•πú§Ï4(ÄÄÄÄÄÄÄÅÙ4(ÄÄÄÄÄÅÙ4(ÄÄÄÅÙ4(ÄÅÙ4(4(ÄÅ…ï—’…∏ÅÏÅô’±±M—Ωç≠=…ëï…Ã∞ÅçΩπô±•ç—Ã∞Åâï±Ω›ΩÕ—]Ö…π•πùÃÅÙÏ4)Ù4(4(ººÄ¥¥¥ÅAI=UPÅQ%1LÄ°ôΩ»ÅâÖ…çΩëîÅïπ…•ç°µïπ–§Ä¥¥¥4)•π—ï…ôÖçîÅA…Ωë’ç—·—…Ö•ï±êÅÏ4(ÄÅ•êËÅÕ—…•πúÏ4(ÄÅÖ—…•â’—Ω}•êËÅÕ—…•πúÏ4(ÄÅëïÕç…•çÖºËÅÕ—…•πúÏ4(ÄÅçΩπ—ï’ëºËÅÕ—…•πúÏ4(ÄÅ—•¡º¸ËÅÕ—…•πúÏ4)Ù4(4)•π—ï…ôÖçîÅA…Ωë’ç—ï—Ö•∞ÅÏ4(ÄÅ•êËÅÕ—…•πúÏ4(ÄÅçΩë•ùΩ}âÖ……ÑËÅÕ—…•πúÏ4(ÄÅçΩë•ùΩ}•π—ï…πºËÅÕ—…•πúÏ4(ÄÅπΩµîËÅÕ—…•πúÏ4(ÄÅŸÖ…•ÖçΩïÃ¸ËÅ……Ö‰ÒÏÅŸÖ…•ÖçÖºËÅÏÅ•êËÅÕ—…•πúÏÅçΩë•ùºËÅÕ—…•πúÅÙÅÙ¯Ï4(ÄÅçÖµ¡ΩÕ}ï·—…ÖÃ¸ËÅA…Ωë’ç—·—…Ö•ï±ëmtÏ4(ÄÅÖ—…•â’—ΩÃ¸ËÅ……Ö‰ÒÏÅÖ—…•â’—ºËÅA…Ωë’ç—·—…Ö•ï±êÅÙ¯Ï4)Ù4(4)ÖÕÂπåÅô’πç—•Ω∏Åùï—A…Ωë’ç—ï—Ö•∞°¡…Ωë’—Ω%êËÅÕ—…•πú§ËÅA…Ωµ•ÕîÒA…Ωë’ç—ï—Ö•∞ÅÅπ’±∞¯ÅÏ4(ÄÅ—…‰ÅÏ4(ÄÄÄÅçΩπÕ–Å…ïÃÄÙÅÖ›Ö•–ÅÖ¡•Iï≈’ïÕ–ÒÏÅëÖ—ÑËÅA…Ωë’ç—ï—Ö•∞ÅÙ¯°ÄΩÖ¡§Ω¡…Ωë’—ΩÃºëÌ¡…Ωë’—Ω%ëıÄ§Ï4(ÄÄÄÅ…ï—’…∏Å…ïÃπëÖ—ÑÏ4(ÄÅÙÅçÖ—ç†ÅÏ4(ÄÄÄÅ…ï—’…∏Åπ’±∞Ï4(ÄÅÙ4)Ù4(4)ï·¡Ω…–ÅÖÕÂπåÅô’πç—•Ω∏Åïπ…•ç°=…ëï…A…Ωë’ç—Ã†4(ÄÅ¡…Ωë’—ΩÃËÅ……Ö‰ÒÏÅ¡…Ωë’—ºËÅA…Ωë’—Ω%—ï¥ÅÙ¯4(§ËÅA…Ωµ•ÕîÒ……Ö‰ÒÏÅ¡…Ωë’—ºËÅA…Ωë’—Ω%—ï¥ÅÙ¯¯ÅÏ4(ÄÅ•òÄ°•ÕUÕ•πù5Ωç¨†§ÅÒÄÖ¡…Ωë’—ΩÃ¸π±ïπù—†§Å…ï—’…∏Å¡…Ωë’—ΩÃÏ4(4(ÄÄººÅïë’¡±•çÖ—îÅ¡…Ωë’—Ω}•ëÃ4(ÄÅçΩπÕ–Å’π•≈’ï%ëÃÄÙÅl∏∏ππï‹ÅMï–°¡…Ωë’—ΩÃπµÖ¿°¿ÄÙ¯Å¿π¡…Ωë’—ºπ¡…Ωë’—Ω}•ê§•tÏ4(ÄÄ4(ÄÄººÅï—ç†Å¡…Ωë’ç–Åëï—Ö•±ÃÅ•∏ÅâÖ—ç°ïÃÅΩòÄÃÄ°…ïÕ¡ïç–ÅA$Å…Ö—îÅ±•µ•–ÅΩòÄÃÅ…ïƒΩÃ§4(ÄÅçΩπÕ–Åëï—Ö•±5Ö¿ÄÙÅπï‹Å5Ö¿ÒÕ—…•πú∞ÅA…Ωë’ç—ï—Ö•∞¯†§Ï4(ÄÅôΩ»Ä°±ï–Å§ÄÙÄ¿ÏÅ§ÄÅ’π•≈’ï%ëÃπ±ïπù—†ÏÅ§Ä¨ÙÄÃ§ÅÏ4(ÄÄÄÅçΩπÕ–ÅâÖ—ç†ÄÙÅ’π•≈’ï%ëÃπÕ±•çî°§∞Å§Ä¨ÄÃ§Ï4(ÄÄÄÅçΩπÕ–Å…ïÕ’±—ÃÄÙÅÖ›Ö•–ÅA…Ωµ•ÕîπÖ±∞°âÖ—ç†πµÖ¿°•êÄÙ¯Åùï—A…Ωë’ç—ï—Ö•∞°•ê§§§Ï4(ÄÄÄÅ…ïÕ’±—ÃπôΩ…Öç†°êÄÙ¯ÅÏÅ•òÄ°ê§Åëï—Ö•±5Ö¿πÕï–°êπ•ê∞Åê§ÏÅÙ§Ï4(ÄÄÄÅ•òÄ°§Ä¨ÄÃÄÅ’π•≈’ï%ëÃπ±ïπù—†§ÅÏ4(ÄÄÄÄÄÅÖ›Ö•–Åπï‹ÅA…Ωµ•Õî°»ÄÙ¯ÅÕï—Q•µïΩ’–°»∞Äƒƒ¿¿§§ÏÄººÅ…ïÕ¡ïç–Å…Ö—îÅ±•µ•–4(ÄÄÄÅÙ4(ÄÅÙ4(4(ÄÅ…ï—’…∏Å¡…Ωë’—ΩÃπµÖ¿†°ÏÅ¡…Ωë’—ºÅÙ§ÄÙ¯ÅÏ4(ÄÄÄÅçΩπÕ–Åëï—Ö•∞ÄÙÅëï—Ö•±5Ö¿πùï–°¡…Ωë’—ºπ¡…Ωë’—Ω}•ê§Ï4(ÄÄÄÅ•òÄ†Öëï—Ö•∞§Å…ï—’…∏ÅÏÅ¡…Ωë’—ºÅÙÏ4(4(ÄÄÄÄººÅ•πêÅŸÖ…•Ö—•Ω∏ÅçΩëîÅ•òÅÖ¡¡±•çÖâ±î4(ÄÄÄÅ±ï–ÅçΩë•ùΩ	Ö……ÖÃÄÙÅëï—Ö•∞πçΩë•ùΩ}âÖ……ÑÅÒÄúúÏ4(ÄÄÄÅçΩπÕ–ÅçΩë•ùΩA…Ωë’—ºÄÙÅëï—Ö•∞πçΩë•ùΩ}•π—ï…πºÅÒÄúúÏ4(4(ÄÄÄÅ•òÄ°¡…Ωë’—ºπŸÖ…•ÖçÖΩ}•êÄòòÅëï—Ö•∞πŸÖ…•ÖçΩïÃ§ÅÏ4(ÄÄÄÄÄÅçΩπÕ–ÅŸÖ…•ÖçÖºÄÙÅëï—Ö•∞πŸÖ…•ÖçΩïÃπô•πê°ÿÄÙ¯ÅÿπŸÖ…•ÖçÖºπ•êÄÙÙÙÅ¡…Ωë’—ºπŸÖ…•ÖçÖΩ}•ê§Ï4(ÄÄÄÄÄÅ•òÄ°ŸÖ…•ÖçÖº¸πŸÖ…•ÖçÖºπçΩë•ùº§ÅÏ4(ÄÄÄÄÄÄÄÅ•òÄ†ÖçΩë•ùΩ	Ö……ÖÃ§ÅçΩë•ùΩ	Ö……ÖÃÄÙÄúúÏ4(ÄÄÄÄÄÅÙ4(ÄÄÄÅÙ4(4(ÄÄÄÄººÅ·—…Öç–Å±ΩçÖ—•Ω∏Åô•ï±ëÃÅô…Ω¥ÅÖ—…•â’—ΩÃÄ°A$Å…ï—’…πÃÅÖ—…•â’—ΩÃÅ›•—†ÅπïÕ—ïêÅÖ—…•â’—ºÅΩâ©ïç—Ã§4(ÄÄÄÅ±ï–Å±ΩçÖ±•ÈÖçÖΩ}ô•Õ•çÑÄÙÄúúÏ4(ÄÄÄÅ±ï–Å±ΩçÖ±•ÈÖçÖΩ}…Ö—•ΩπÖ∞ÄÙÄúúÏ4(ÄÄÄÄ4(ÄÄÄÄººÅQ…‰ÅÖ—…•â’—ΩÃÅô•…Õ–Ä°Öç—’Ö∞ÅA$ÅôΩ…µÖ–§4(ÄÄÄÅ•òÄ°ëï—Ö•∞πÖ—…•â’—ΩÃÄòòÅ……Ö‰π•Õ……Ö‰°ëï—Ö•∞πÖ—…•â’—ΩÃ§§ÅÏ4(ÄÄÄÄÄÅôΩ»Ä°çΩπÕ–Å•—ï¥ÅΩòÅëï—Ö•∞πÖ—…•â’—ΩÃ§ÅÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–ÅçÖµ¡ºËÅA…Ωë’ç—·—…Ö•ï±êÄÙÄùÖ—…•â’—ºúÅ•∏Å•—ï¥Ä¸Å•—ï¥πÖ—…•â’—ºÄËÅ•—ï¥ÅÖÃÅÖπ‰Ï4(ÄÄÄÄÄÄÄÅçΩπÕ–ÅëïÕåÄÙÄ°çÖµ¡ºπëïÕç…•çÖºÅÒÄúú§π—Ω1Ω›ï…ÖÕî†§π—…•¥†§Ï4(ÄÄÄÄÄÄÄÅ•òÄ°ëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈáüçºÅõµÕ•çÑú§ÅÒÅëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈÖçÖºÅô•Õ•çÑú§§ÅÏ4(ÄÄÄÄÄÄÄÄÄÅ±ΩçÖ±•ÈÖçÖΩ}ô•Õ•çÑÄÙÅçÖµ¡ºπçΩπ—ï’ëºÅÒÄúúÏ4(ÄÄÄÄÄÄÄÅÙÅï±ÕîÅ•òÄ°ëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈáüçºÅ…Ö—•ΩπÖ∞ú§ÅÒÅëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈÖçÖºÅ…Ö—•ΩπÖ∞ú§§ÅÏ4(ÄÄÄÄÄÄÄÄÄÅ±ΩçÖ±•ÈÖçÖΩ}…Ö—•ΩπÖ∞ÄÙÅçÖµ¡ºπçΩπ—ï’ëºÅÒÄúúÏ4(ÄÄÄÄÄÄÄÅÙ4(ÄÄÄÄÄÅÙ4(ÄÄÄÅÙ4(ÄÄÄÄººÅÖ±±âÖç¨Å—ºÅçÖµ¡ΩÕ}ï·—…ÖÃÅ•òÅ¡…ïÕïπ–4(ÄÄÄÅ•òÄ†Ö±ΩçÖ±•ÈÖçÖΩ}ô•Õ•çÑÄòòÄÖ±ΩçÖ±•ÈÖçÖΩ}…Ö—•ΩπÖ∞ÄòòÅëï—Ö•∞πçÖµ¡ΩÕ}ï·—…ÖÃÄòòÅ……Ö‰π•Õ……Ö‰°ëï—Ö•∞πçÖµ¡ΩÕ}ï·—…ÖÃ§§ÅÏ4(ÄÄÄÄÄÅôΩ»Ä°çΩπÕ–ÅçÖµ¡ºÅΩòÅëï—Ö•∞πçÖµ¡ΩÕ}ï·—…ÖÃ§ÅÏ4(ÄÄÄÄÄÄÄÅçΩπÕ–ÅëïÕåÄÙÄ°çÖµ¡ºπëïÕç…•çÖºÅÒÄúú§π—Ω1Ω›ï…ÖÕî†§π—…•¥†§Ï4(ÄÄÄÄÄÄÄÅ•òÄ°ëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈáüçºÅõµÕ•çÑú§ÅÒÅëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈÖçÖºÅô•Õ•çÑú§§ÅÏ4(ÄÄÄÄÄÄÄÄÄÅ±ΩçÖ±•ÈÖçÖΩ}ô•Õ•çÑÄÙÅçÖµ¡ºπçΩπ—ï’ëºÅÒÄúúÏ4(ÄÄÄÄÄÄÄÅÙÅï±ÕîÅ•òÄ°ëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈáüçºÅ…Ö—•ΩπÖ∞ú§ÅÒÅëïÕåπ•πç±’ëïÃ†ù±ΩçÖ±•ÈÖçÖºÅ…Ö—•ΩπÖ∞ú§§ÅÏ4(ÄÄÄÄÄÄÄÄÄÅ±ΩçÖ±•ÈÖçÖΩ}…Ö—•ΩπÖ∞ÄÙÅçÖµ¡ºπçΩπ—ï’ëºÅÒÄúúÏ4(ÄÄÄÄÄÄÄÅÙ4(ÄÄÄÄÄÅÙ4(ÄÄÄÅÙ4(4(ÄÄÄÅ…ï—’…∏ÅÏ4(ÄÄÄÄÄÅ¡…Ωë’—ºËÅÏ4(ÄÄÄÄÄÄÄÄ∏∏π¡…Ωë’—º∞4(ÄÄÄÄÄÄÄÅçΩë•ùΩ}¡…Ωë’—ºËÅçΩë•ùΩA…Ωë’—º∞4(ÄÄÄÄÄÄÄÅçΩë•ùΩ}âÖ……ÖÃËÅçΩë•ùΩ	Ö……ÖÃ∞4(ÄÄÄÄÄÄÄÅ±ΩçÖ±•ÈÖçÖΩ}ô•Õ•çÑËÅ±ΩçÖ±•ÈÖçÖΩ}ô•Õ•çÑÅÒÅ’πëïô•πïê∞4(ÄÄÄÄÄÄÄÅ±ΩçÖ±•ÈÖçÖΩ}…Ö—•ΩπÖ∞ËÅ±ΩçÖ±•ÈÖçÖΩ}…Ö—•ΩπÖ∞ÅÒÅ’πëïô•πïê∞4(ÄÄÄÄÄÅÙ∞4(ÄÄÄÅÙÏ4(ÄÅÙ§Ï4)Ù4(

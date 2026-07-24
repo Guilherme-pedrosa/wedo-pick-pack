@@ -21,7 +21,7 @@ export default function OrcamentosPanel() {
   const [loadingOrc, setLoadingOrc] = useState(false);
   const [hydrated, setHydrated] = useState(useComprasStore.persist.hasHydrated());
 
-  const STATUS_ORC_CACHE = 'wedo-cache-status-orcamentos';
+  const STATUS_ORC_CACHE = 'wedo-cache-status-orcamentos-v2';
   const STATUS_COMP_CACHE = 'wedo-cache-status-compras';
   const readCache = <T,>(k: string): T | undefined => {
     try { const r = localStorage.getItem(k); return r ? JSON.parse(r) as T : undefined; } catch { return undefined; }

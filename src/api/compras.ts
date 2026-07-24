@@ -8,6 +8,7 @@ import {
   MOCK_STATUS_ORCAMENTO, MOCK_ORCAMENTOS, MOCK_PRODUTOS_DETALHE, MOCK_FORNECEDORES,
   MOCK_STATUS_COMPRA, MOCK_ORDENS_COMPRA,
 } from './mockData';
+import { scopeSituationCatalog } from './situationScopes';
 import { supabase } from '@/integrations/supabase/client';
 
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
@@ -268,7 +269,7 @@ function makeProdutoKey(produtoId: string | number | null | undefined, variacaoI
 export async function getStatusOrcamentos(): Promise<GCSituacao[]> {
   if (isUsingMock()) { await mockDelay(); return [...MOCK_STATUS_ORCAMENTO]; }
   const res = await apiRequest<{ data: GCSituacao[] }>('/api/situacoes_orcamentos');
-  return res.data;
+  return scopeSituationCatalog(res.data, 'orcamento');
 }
 
 // --- LIST ORCAMENTOS ---
@@ -399,74 +400,7 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1, extraQue
             id: String(produto?.id ?? ''),
             produto_id: String(produto?.produto_id ?? produto?.id_produto ?? ''),
             variacao_id: String(produto?.variacao_id ?? produto?.estoque_id ?? ''),
-            nome_produto: String(produto?.nome_produto ?? produto?.nome ?? produto?.descricao ?? ''),
-            codigo_produto: String(produto?.codigo_produto ?? produto?.codigo_interno ?? produto?.codigo ?? ''),
-            codigo_barras: String(produto?.codigo_barras ?? produto?.codigo_barra ?? ''),
-            codigo_barra: String(produto?.codigo_barra ?? produto?.codigo_barras ?? ''),
-            quantidade: produto?.quantidade ?? '0',
-            valor_custo: String(produto?.valor_custo ?? produto?.valor_unitario ?? produto?.valor ?? '0'),
-          },
-        };
-      }),
-    };
-  });
-
-  return { data, meta: raw.meta };
-}
-
-// --- MAIN ENGINE ---
-export async function buildListaCompras(
-  situacaoOrcIds: string[],
-  situacaoCompraIds: string[],
-  onProgress?: (step: string, checked: number, total: number) => void,
-): Promise<ComprasResult> {
-
-  // PHASE 1: Fetch all approved budgets
-  onProgress?.('Buscando orçamentos aprovados…', 0, 1);
-  const allOrcamentos: GCOrcamento[] = [];
-  const situacaoOrcSet = new Set(situacaoOrcIds);
-  for (const sid of situacaoOrcIds) {
-    let page = 1;
-    while (true) {
-      const res = await listOrcamentos(sid, page);
-      // Client-side filter: GestãoClick API may ignore situacao_id param
-      const filtered = res.data.filter(o => situacaoOrcSet.has(String(o.situacao_id)));
-      allOrcamentos.push(...filtered);
-      console.log(`[COMPRAS] listOrcamentos sid=${sid} page=${page}: ${res.data.length} returned, ${filtered.length} after filter`);
-      if (page >= res.meta.total_paginas) break;
-      page++;
-      if (!isUsingMock()) await new Promise(r => setTimeout(r, 400));
-    }
-  }
-
-  // PHASE 1b: Build reverse OS index and detect converted budgets
-  onProgress?.('Construindo índice de OS…', 0, 1);
-  const { index: osIndex, totalVinculos, reservedDemand } = await buildOSIndex(
-    (step, checked, total) => onProgress?.(step, checked, total),
-  );
-  console.log(`[COMPRAS] OS Index ready: ${totalVinculos} vínculos`);
-
-  onProgress?.('Filtrando orçamentos já convertidos…', 0, allOrcamentos.length);
-  const convertedById = new Map<string, OrcamentoConvertidoWarning>();
-  const orcamentosElegiveis: GCOrcamento[] = [];
-
-  for (let i = 0; i < allOrcamentos.length; i++) {
-    const o = allOrcamentos[i];
-    const byFlags = hasConvertedBudgetByFlags(o);
-    const osMatch = osIndex[String(o.codigo)];
-
-    if (byFlags || osMatch) {
-      if (!convertedById.has(o.id)) {
-        const reason = byFlags ? 'flag' as const : 'os_index' as const;
-        const linkNumber = osMatch?.os_codigo ?? null;
-        const linkId = osMatch?.os_id ?? null;
-        const linkSituacao = osMatch?.nome_situacao ?? null;
-
-        let warning = '';
-        if (osMatch) {
-          warning = `Orçamento #${o.codigo} → já é OS #${osMatch.os_codigo} [${osMatch.nome_situacao}]`;
-        } else {
-          warning = `Orçamento #${o.codigo} → convertido (flag financeiro/estoque)`;
+            nome_produto: String(produto?.nome_produto ?? produto?.nome ?? produto?.descricao ?? '')��m�G����ƭy�ro/estoque)`;
         }
 
         convertedById.set(o.id, {

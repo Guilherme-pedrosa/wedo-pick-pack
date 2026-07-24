@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getStatusOS, getStatusVendas } from '@/api/gestaoclick';
 import { getStatusCompras, getStatusOrcamentos } from '@/api/compras';
+import { retainAvailableSituationIds } from '@/api/situationScopes';
 import { logSystemAction } from '@/lib/systemLog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -96,18 +97,58 @@ export default function InventoryPolicyPage() {
 
   const handleSave = async () => {
     if (!config) return;
+    if (
+      !vendaStatuses.data
+      || !osStatuses.data
+      || !compraStatuses.data
+      || !orcamentoStatuses.data
+    ) {
+      toast.error('Aguarde o carregamento das situações antes de salvar.');
+      return;
+    }
+
+    const safeConfig: PolicyConfig = {
+      ...config,
+      vendas_stockout_situacao_ids: retainAvailableSituationIds(
+        config.vendas_stockout_situacao_ids,
+        vendaStatuses.data,
+      ),
+      os_stockout_situacao_ids: retainAvailableSituationIds(
+        config.os_stockout_situacao_ids,
+        osStatuses.data,
+      ),
+      purchase_lt_start_situacao_id: retainAvailableSituationIds(
+        config.purchase_lt_start_situacao_id
+          ? [config.purchase_lt_start_situacao_id]
+          : [],
+        compraStatuses.data,
+      )[0] ?? '',
+      purchase_arrived_situacao_ids: retainAvailableSituationIds(
+        config.purchase_arrived_situacao_ids,
+        compraStatuses.data,
+      ),
+      purchase_crossref_situacao_ids: retainAvailableSituationIds(
+        config.purchase_crossref_situacao_ids,
+        compraStatuses.data,
+      ),
+      budget_crossref_situacao_ids: retainAvailableSituationIds(
+        config.budget_crossref_situacao_ids,
+        orcamentoStatuses.data,
+      ),
+    };
+
     setSaving(true);
     try {
       const payload = {
-        lookback_days: config.lookback_days,
-        sales_window_days: config.sales_window_days,
-        abc_thresholds: config.abc_thresholds,
-        vendas_stockout_situacao_ids: config.vendas_stockout_situacao_ids,
-        os_stockout_situacao_ids: config.os_stockout_situacao_ids,
-        purchase_lt_start_situacao_id: config.purchase_lt_start_situacao_id,
-        purchase_arrived_situacao_ids: config.purchase_arrived_situacao_ids,
-        purchase_crossref_situacao_ids: config.purchase_crossref_situacao_ids,
-        budget_crossref_situacao_ids: config.budget_crossref_situacao_ids,
+        lookback_days: safeConfig.lookback_days,
+        sales_window_days: safeConfig.sales_window_days,
+        abc_thresholds: safeConfig.abc_thresholds,
+        vendas_stockout_situacao_ids: safeConfig.vendas_stockout_situacao_ids,
+        os_stockout_situacao_ids: safeConfig.os_stockout_situacao_ids,
+        purchase_lt_start_situacao_id: safeConfig.purchase_lt_start_situacao_id,
+        purchase_arrived_situacao_ids: safeConfig.purchase_arrived_situacao_ids,
+        purchase_crossref_situacao_ids: safeConfig.purchase_crossref_situacao_ids,
+        budget_crossref_situacao_ids: safeConfig.budget_crossref_situacao_ids,
         updated_at: new Date().toISOString(),
       };
 
@@ -118,6 +159,7 @@ export default function InventoryPolicyPage() {
 
       if (error) throw error;
 
+      setConfig(safeConfig);
       toast.success('Política de estoque salva!');
       logSystemAction({
         module: 'inventory',
@@ -469,7 +511,18 @@ export default function InventoryPolicyPage() {
       </Card>
 
       {/* Save */}
-      <Button onClick={handleSave} className="w-full gap-2" size="lg" disabled={saving}>
+      <Button
+        onClick={handleSave}
+        className="w-full gap-2"
+        size="lg"
+        disabled={
+          saving
+          || osStatuses.isLoading
+          || vendaStatuses.isLoading
+          || compraStatuses.isLoading
+          || orcamentoStatuses.isLoading
+        }
+      >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         {saving ? 'Salvando...' : 'Salvar Política'}
       </Button>

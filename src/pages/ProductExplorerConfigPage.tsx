@@ -10,6 +10,7 @@ import { Loader2, Save, ArrowLeft, Wrench, FileText, ShoppingCart, Receipt, Cale
 import { toast } from 'sonner';
 import { getStatusOS, getStatusVendas } from '@/api/gestaoclick';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
+import { retainAvailableSituationIds } from '@/api/situationScopes';
 import { getExplorerConfig, setExplorerConfig, ExplorerConfig } from '@/lib/explorerConfig';
 import { clearExplorerIndex } from '@/api/produtoExplorer';
 import { logSystemAction } from '@/lib/systemLog';
@@ -29,10 +30,10 @@ export default function ProductExplorerConfigPage() {
   useEffect(() => {
     logSystemAction({ module: 'compras', action: 'Acessou Configuração do Explorador de Peças' });
     const CACHE_KEYS = {
-      os: 'wedo-cache-status-os',
-      orc: 'wedo-cache-status-orcamentos',
+      os: 'wedo-cache-status-os-v2',
+      orc: 'wedo-cache-status-orcamentos-v2',
       comp: 'wedo-cache-status-compras',
-      vend: 'wedo-cache-status-vendas',
+      vend: 'wedo-cache-status-vendas-v2',
     };
     const readCache = (k: string): SitOption[] => {
       try { const raw = localStorage.getItem(k); return raw ? JSON.parse(raw) : []; } catch { return []; }
@@ -94,17 +95,33 @@ export default function ProductExplorerConfigPage() {
   function save() {
     setSaving(true);
     try {
-      setExplorerConfig(cfg);
+      const safeCfg: ExplorerConfig = {
+        ...cfg,
+        osSituacaoIds: osList.length > 0
+          ? retainAvailableSituationIds(cfg.osSituacaoIds, osList)
+          : cfg.osSituacaoIds,
+        orcSituacaoIds: orcList.length > 0
+          ? retainAvailableSituationIds(cfg.orcSituacaoIds, orcList)
+          : cfg.orcSituacaoIds,
+        compraSituacaoIds: compraList.length > 0
+          ? retainAvailableSituationIds(cfg.compraSituacaoIds, compraList)
+          : cfg.compraSituacaoIds,
+        vendaSituacaoIds: vendaList.length > 0
+          ? retainAvailableSituationIds(cfg.vendaSituacaoIds, vendaList)
+          : cfg.vendaSituacaoIds,
+      };
+      setCfg(safeCfg);
+      setExplorerConfig(safeCfg);
       clearExplorerIndex();
       toast.success('Configuração salva. O índice será reconstruído.');
       logSystemAction({
         module: 'compras',
         action: 'Salvou configuração do Explorador de Peças',
         details: {
-          os: cfg.osSituacaoIds.length,
-          orc: cfg.orcSituacaoIds.length,
-          compra: cfg.compraSituacaoIds.length,
-          venda: cfg.vendaSituacaoIds.length,
+          os: safeCfg.osSituacaoIds.length,
+          orc: safeCfg.orcSituacaoIds.length,
+          compra: safeCfg.compraSituacaoIds.length,
+          venda: safeCfg.vendaSituacaoIds.length,
         },
       });
       navigate('/produtos/explorar');

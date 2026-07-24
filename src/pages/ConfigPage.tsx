@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, isUsingMock } from '@/api/gestaoclick';
+import { retainAvailableSituationIds } from '@/api/situationScopes';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -119,16 +120,26 @@ export default function ConfigPage() {
   };
 
   const handleSave = async () => {
+    if (!osStatuses.data || !vendaStatuses.data) {
+      toast.error('Aguarde o carregamento das situações antes de salvar.');
+      return;
+    }
+
     setSaving(true);
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error('AUTH_REQUIRED');
 
+      const safeOsStatusToShow = retainAvailableSituationIds(osStatusToShow, osStatuses.data);
+      const safeVendaStatusToShow = retainAvailableSituationIds(vendaStatusToShow, vendaStatuses.data);
+      const safeDefaultOSStatus = retainAvailableSituationIds([defaultOSStatus], osStatuses.data)[0] || '';
+      const safeDefaultVendaStatus = retainAvailableSituationIds([defaultVendaStatus], vendaStatuses.data)[0] || '';
+
       const payload = {
-        os_status_to_show: osStatusToShow,
-        venda_status_to_show: vendaStatusToShow,
-        default_os_conclusion_status: defaultOSStatus,
-        default_venda_conclusion_status: defaultVendaStatus,
+        os_status_to_show: safeOsStatusToShow,
+        venda_status_to_show: safeVendaStatusToShow,
+        default_os_conclusion_status: safeDefaultOSStatus,
+        default_venda_conclusion_status: safeDefaultVendaStatus,
       };
 
       console.log('[ConfigPage] Saving config:', JSON.stringify(payload));
@@ -158,7 +169,7 @@ export default function ConfigPage() {
         defaultVendaConclusionStatus: saved.default_venda_conclusion_status ?? '',
       });
       toast.success('Configurações salvas com sucesso!');
-      logSystemAction({ module: "config", action: "Configurações salvas", details: { osStatusCount: osStatusToShow.length, vendaStatusCount: vendaStatusToShow.length } });
+      logSystemAction({ module: "config", action: "Configurações salvas", details: { osStatusCount: safeOsStatusToShow.length, vendaStatusCount: safeVendaStatusToShow.length } });
     } catch (err: unknown) {
       console.error('[ConfigPage] Save error:', err);
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
@@ -315,7 +326,12 @@ export default function ConfigPage() {
         </Tabs>
       </Card>
 
-      <Button onClick={handleSave} className="w-full gap-2" size="lg" disabled={saving}>
+      <Button
+        onClick={handleSave}
+        className="w-full gap-2"
+        size="lg"
+        disabled={saving || osStatuses.isLoading || vendaStatuses.isLoading}
+      >
         {saving && <Loader2 className="h-4 w-4 animate-spin" />}
         💾 {saving ? 'Salvando...' : 'Salvar Configurações'}
       </Button>

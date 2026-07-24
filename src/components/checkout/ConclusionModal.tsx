@@ -40,17 +40,14 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const concludeSession = useCheckoutStore(s => s.concludeSession);
   const queryClient = useQueryClient();
 
-  const defaultStatus = session?.tipo === 'os'
+  const configuredDefaultStatus = session?.tipo === 'os'
     ? config.defaultOSConclusionStatus
     : config.defaultVendaConclusionStatus;
 
-  const hasDefault = !!defaultStatus;
   const [selectedStatus, setSelectedStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [observations, setObservations] = useState('');
   const [acceptedTerm, setAcceptedTerm] = useState(false);
-
-  const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
 
   const statusQuery = useQuery({
     queryKey: ['statuses-conclusion', session?.tipo],
@@ -58,6 +55,11 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
     enabled: open,
   });
 
+  const defaultStatus = statusQuery.data?.some((s) => s.id === configuredDefaultStatus)
+    ? configuredDefaultStatus
+    : '';
+  const hasDefault = !!defaultStatus;
+  const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
   const configuredStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome || (hasDefault ? `Status #${defaultStatus}` : '');
 
   if (!session) return null;
@@ -78,6 +80,10 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const handleConfirm = async () => {
     if (!effectiveStatus) {
       toast.error('Selecione um status');
+      return;
+    }
+    if (!statusQuery.data?.some((status) => status.id === effectiveStatus)) {
+      toast.error('A situação selecionada não pertence a este tipo de documento.');
       return;
     }
     setSubmitting(true);
@@ -207,7 +213,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           )}
         </div>
 
-        {defaultStatus ? (
+        {hasDefault ? (
           <div className="space-y-2">
             <label className="text-sm font-medium">Novo status no GestãoClick:</label>
             <div className="bg-muted rounded-md px-3 py-2 text-sm font-medium">

@@ -312,6 +312,57 @@ function formatCurrency(value: number, decimals = 2): string {
   return roundTo(value, decimals).toFixed(decimals);
 }
 
+const MONEY_FIELDS = ['valor_venda', 'valor_custo', 'valor_total', 'desconto_valor', 'valor_frete', 'valor'];
+
+function normalizeMoneyValue(value: unknown): string {
+  return formatCurrency(parseCurrency(value), 2);
+}
+
+function normalizeLineMoney<T extends Record<string, any>>(
+  items: T[] | undefined,
+  key: 'produto' | 'servico'
+): T[] | undefined {
+  if (!Array.isArray(items)) return items;
+
+  return items.map((entry) => {
+    const line = entry?.[key] || entry;
+    if (!line || typeof line !== 'object') return entry;
+
+    const normalizedLine = { ...line };
+    for (const field of MONEY_FIELDS) {
+      if (normalizedLine[field] != null && String(normalizedLine[field]).trim() !== '') {
+        normalizedLine[field] = normalizeMoneyValue(normalizedLine[field]);
+      }
+    }
+    if (normalizedLine.desconto_porcentagem != null && String(normalizedLine.desconto_porcentagem).trim() !== '') {
+      normalizedLine.desconto_porcentagem = normalizeMoneyValue(normalizedLine.desconto_porcentagem);
+    }
+
+    if (entry?.[key] && typeof entry[key] === 'object') {
+      return { ...entry, [key]: normalizedLine };
+    }
+
+    return normalizedLine as T;
+  });
+}
+
+function normalizePaymentsMoney(payments: any[] | undefined): any[] | undefined {
+  if (!Array.isArray(payments)) return payments;
+  return payments.map((payment) => {
+    if (payment?.pagamento && typeof payment.pagamento === 'object') {
+      return {
+        ...payment,
+        pagamento: {
+          ...payment.pagamento,
+          valor: normalizeMoneyValue(payment.pagamento.valor),
+        },
+      };
+    }
+    if (payment?.valor != null) return { ...payment, valor: normalizeMoneyValue(payment.valor) };
+    return payment;
+  });
+}
+
 const FINANCIAL_SCALE = 4n;
 const FINANCIAL_FACTOR = 10n ** FINANCIAL_SCALE;
 
@@ -419,7 +470,7 @@ function normalizeLineUnitPrice<T extends Record<string, any>>(
           ...entry,
           [key]: {
             ...line,
-            valor_venda: formatCurrency(expectedUnit, 6),
+            valor_venda: formatCurrency(expectedUnit, 2),
           },
         };
       }
@@ -444,10 +495,83 @@ function normalizeLineUnitPrice<T extends Record<string, any>>(
       ...entry,
       [key]: {
         ...line,
-        valor_venda: formatCurrency(grossUnit, 4),
+        valor_venda: formatCurrency(grossUnit, 2),
       },
     };
   });
+}
+
+function computeNormalizedDocumentTotalCents(payload: Record<string, any>): number | null {
+  let totalCents = 0;
+  let hasLine = false;
+
+  const addLines = (items: any[] | undefined, key: 'produto' | 'servico') => {
+    if (!Array.isArray(items)) return;
+
+    for (const entry of items) {
+      const line = entry?.[key] || entry;
+      if (!line || typeof line !== 'object') continue;
+
+      const qty = parseCurrency(line.quantidade);
+      const unit = parseCurrency(line.valor_venda);
+      if (qty <= 0 || String(line.valor_venda ?? '').trim() === '') continue;
+
+      let lineTotal = qty * unit;
+      const discountType = String(line.tipo_desconto || line.desconto_tipo || 'R$').trim();
+      const fixedDiscount = parseCurrency(line.desconto_valor);
+      const percentDiscount = parseCurrency(line.desconto_porcentagem);
+
+      if (discountType === '%' && percentDiscount > 0) {
+        lineTotal *= 1 - percentDiscount / 100;
+      } else if (fixedDiscount > 0) {
+        lineTotal -= fixedDiscount;
+      }
+
+      totalCents += Math.round(Math.max(0, lineTotal) * 100);
+      hasLine = true;
+    }
+  };
+
+  addLines(payload.produtos, 'produto');
+  addLines(payload.servicos, 'servico');
+
+  if (!hasLine) return null;
+
+  const headerDiscountCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
+  const headerPercent = parseCurrency(payload.desconto_porcentagem);
+  const freteCents = Math.round(parseCurrency(payload.valor_frete) * 100);
+  let subtotalCents = totalCents;
+
+  if (headerPercent > 0 && headerPercent < 100) {
+    subtotalCents = Math.round(subtotalCents * (1 - headerPercent / 100));
+  }
+
+  return subtotalCents - headerDiscountCents + freteCents;
+}
+
+function applySmallRoundingDiscount(payload: Record<string, any>): Record<string, any> {
+  const declaredCents = Math.round(parseCurrency(payload.valor_total) * 100);
+  if (declaredCents <= 0) return payload;
+
+  const computedCents = computeNormalizedDocumentTotalCents(payload);
+  if (computedCents == null || computedCents === declaredCents) return payload;
+
+  const diffCents = computedCents - declaredCents;
+  if (Math.abs(diffCents) > 100) return payload;
+
+  const currentDiscountCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
+  const nextDiscountCents = currentDiscountCents + diffCents;
+  if (nextDiscountCents < 0) return payload;
+
+  console.warn(`[GC] Ajuste financeiro de centavos na separação: calculado=${formatCurrency(computedCents / 100)}, declarado=${formatCurrency(declaredCents / 100)}, ajuste=${formatCurrency(diffCents / 100)}.`);
+
+  return {
+    ...payload,
+    tipo_desconto: 'R$',
+    desconto_tipo: 'R$',
+    desconto_valor: formatCurrency(nextDiscountCents / 100),
+    desconto_porcentagem: '0.00',
+  };
 }
 
 function isInstallmentMismatchError(error: unknown): boolean {
@@ -587,10 +711,20 @@ function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
 function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<string, any> {
   const normalized = {
     ...payload,
-    produtos: normalizeLineUnitPrice(payload.produtos, 'produto') || payload.produtos,
-    servicos: normalizeLineUnitPrice(payload.servicos, 'servico') || payload.servicos,
+    produtos: normalizeLineMoney(normalizeLineUnitPrice(payload.produtos, 'produto'), 'produto') || payload.produtos,
+    servicos: normalizeLineMoney(normalizeLineUnitPrice(payload.servicos, 'servico'), 'servico') || payload.servicos,
+    pagamentos: normalizePaymentsMoney(payload.pagamentos),
   };
-  return recalcPagamentos(normalized);
+  for (const field of ['valor_total', 'valor_frete', 'desconto_valor']) {
+    if (normalized[field] != null && String(normalized[field]).trim() !== '') {
+      normalized[field] = normalizeMoneyValue(normalized[field]);
+    }
+  }
+  if (normalized.desconto_porcentagem != null && String(normalized.desconto_porcentagem).trim() !== '') {
+    normalized.desconto_porcentagem = normalizeMoneyValue(normalized.desconto_porcentagem);
+  }
+
+  return recalcPagamentos(applySmallRoundingDiscount(normalized));
 }
 
 // O GestãoClick SÓ registra as linhas e recalcula o valor_total em PUT quando
@@ -657,7 +791,7 @@ async function putStatusOnlyWithFallback(
   try {
     return await apiRequest<GCUpdateResponse>(path, {
       method: 'PUT',
-      body: JSON.stringify(flattenLinesForGC(minimalPayload)),
+      body: JSON.stringify(flattenLinesForGC(withInstallmentPrecisionFallback(minimalPayload))),
     });
   } catch (error) {
     if (!shouldFallbackToFullStatusPayload(error)) throw error;

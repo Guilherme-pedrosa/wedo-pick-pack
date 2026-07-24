@@ -323,19 +323,12 @@ Deno.serve(async (req: Request) => {
       console.warn('[generate-os] Could not re-fetch full orçamento, using frontend payload:', fetchErr);
     }
 
-    // Detect budget type by value, not by the mere presence of service rows.
-    // Some product budgets include a fully-discounted technical-hour service line
-    // only as commercial context (e.g. ORC #4998: servicos.length=1 but
-    // valor_servicos=0 and service valor_total=0). Those must generate VENDA,
-    // not OS, otherwise GC rejects /api/ordens_servicos with 400.
-    const serviceLinesTotal = Array.isArray(orcamento.servicos)
-      ? orcamento.servicos.reduce((sum: number, item: any) => {
-          const svc = item?.servico || item;
-          return sum + parseMoney(svc?.valor_total);
-        }, 0)
-      : 0;
-    const isServico = parseMoney(orcamento.valor_servicos) > 0 || serviceLinesTotal > 0;
+    // Regra de negócio: orçamento com QUALQUER linha de serviço vira OS.
+    // Orçamento só de produto vira Venda.
+    const hasServiceLine = Array.isArray(orcamento.servicos) && orcamento.servicos.length > 0;
+    const isServico = hasServiceLine || parseMoney(orcamento.valor_servicos) > 0;
     const docKind: 'os' | 'venda' = isServico ? 'os' : 'venda';
+
 
     console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente} - tipo: ${docKind.toUpperCase()}`);
 

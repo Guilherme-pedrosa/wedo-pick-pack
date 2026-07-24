@@ -674,21 +674,10 @@ Deno.serve(async (req: Request) => {
       // ----- VENDA (orçamento de produto) -----
       console.log('[generate-os] Step 4: Creating GC Venda...');
 
-      // Copy atributos from orçamento (vendas accept custom atributos as-is)
+      // Do not copy orçamento attributes into venda: each GC document type has its
+      // own attribute registry. Sending orçamento attribute IDs in a venda can also
+      // produce 400 Bad Request. Only send venda-specific attributes discovered below.
       const vendaAtributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-      if (orcamento.atributos?.length) {
-        for (const a of orcamento.atributos) {
-          const attr = a?.atributo || a;
-          const attrId = attr?.atributo_id || attr?.id;
-          if (!attrId) continue;
-          vendaAtributos.push({
-            atributo: {
-              atributo_id: String(attrId),
-              conteudo: String(attr?.conteudo ?? ''),
-            },
-          });
-        }
-      }
 
       // Insert the Auvo task number into the venda "TAREFA DE ENTREGA" custom field
       // and the orçamento code into the "NÚMERO DO ORÇAMENTO" custom field.

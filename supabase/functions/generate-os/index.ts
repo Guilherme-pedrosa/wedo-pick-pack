@@ -11,8 +11,47 @@ const AUVO_API_URL = 'https://api.auvo.com.br/v2';
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 function compactApiMessage(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (value == null) return '';
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extractApiErrorMessage(payload: unknown): string {
+  const seen = new Set<unknown>();
+  const candidates: string[] = [];
+
+  const collect = (value: unknown) => {
+    if (value == null || seen.has(value)) return;
+    if (typeof value === 'object') seen.add(value);
+
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      const compact = compactApiMessage(value);
+      if (compact && compact !== '[object Object]') candidates.push(compact);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(collect);
+      return;
+    }
+
+    if (typeof value === 'object') {
+      const obj = value as Record<string, unknown>;
+      const preferredKeys = [
+        'message', 'mensagem', 'erro', 'error', 'errors', 'detail', 'details',
+        'description', 'descricao', 'data', 'result', 'raw', 'body',
+      ];
+      for (const key of preferredKeys) collect(obj[key]);
+      for (const [key, nested] of Object.entries(obj)) {
+        if (!preferredKeys.includes(key)) collect(nested);
+      }
+    }
+  };
+
+  collect(payload);
+  const unique = Array.from(new Set(candidates)).filter((msg) => !/^\{\}$|^\[\]$/.test(msg));
+  const meaningful = unique.filter((msg) => !/^bad request$/i.test(msg));
+  return (meaningful.length ? meaningful : unique).slice(0, 4).join(' | ');
 }
 
 function friendlyErrorMessage(message: string): string {
@@ -62,8 +101,10 @@ async function gcRequest(path: string, method: string, body?: unknown) {
   let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
   if (!res.ok && res.status !== 200) {
-    const apiMsg = compactApiMessage(json?.message || json?.data?.mensagem || json?.data?.erro || json?.error || json?.raw || text);
-    throw new Error(`GestãoClick ${method} ${path} retornou erro ${res.status}${apiMsg ? `: ${apiMsg.slice(0, 240)}` : ''}`);
+    const apiMsg = extractApiErrorMessage(json) || compactApiMessage(text);
+    const responseDetail = apiMsg || `sem detalhe no corpo da resposta (${res.statusText || 'sem statusText'})`;
+    console.error(`[gcRequest] ${method} ${path} HTTP ${res.status}: ${responseDetail.slice(0, 1200)}`);
+    throw new Error(`GestãoClick ${method} ${path} retornou erro ${res.status}: ${responseDetail.slice(0, 800)}`);
   }
   return json;
 }

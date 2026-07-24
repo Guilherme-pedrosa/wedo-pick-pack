@@ -65,7 +65,20 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
   let data: any;
   try { data = JSON.parse(text); } catch { data = { raw: text }; }
   if (!res.ok) {
-    throw new Error(`Auvo create task failed [${res.status}]: ${text.slice(0, 500)}`);
+    console.error(`[auvoCreateTask] HTTP ${res.status} body:`, text.slice(0, 1000));
+    let friendly: string;
+    if (res.status >= 500) {
+      friendly = `O Auvo está instável no momento (erro ${res.status}). A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.`;
+    } else if (res.status === 401 || res.status === 403) {
+      friendly = `Sem autorização no Auvo (${res.status}). Verifique as credenciais/token do Auvo.`;
+    } else if (res.status === 400 || res.status === 422) {
+      const apiMsg = data?.messageError || data?.message || data?.error || (typeof data?.raw === 'string' ? '' : '');
+      friendly = `Auvo rejeitou os dados da tarefa (${res.status})${apiMsg ? `: ${String(apiMsg).slice(0, 200)}` : '.'} Revise cliente, técnico e tipo de atividade.`;
+    } else {
+      const apiMsg = data?.messageError || data?.message || data?.error || '';
+      friendly = `Falha ao criar tarefa no Auvo (${res.status})${apiMsg ? `: ${String(apiMsg).slice(0, 200)}` : '.'}`;
+    }
+    throw new Error(friendly);
   }
   // Return raw parsed response — caller handles taskID extraction
   return data;

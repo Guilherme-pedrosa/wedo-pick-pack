@@ -943,7 +943,7 @@ Deno.serve(async (req: Request) => {
       if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
       if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
 
-      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(normalizeGCMoneyPayload(orcUpdatePayload)));
+      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(orcUpdatePayload))));
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);
     } catch (orcErr) {
       const orcMsg = orcErr instanceof Error ? orcErr.message : String(orcErr);

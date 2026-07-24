@@ -214,6 +214,55 @@ function formatMoney(value: number): string {
   return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
 }
 
+// GC devolve valores com 4 casas decimais (ex.: 601.1600). O sistema
+// financeiro/fiscal opera em BRL com 2 casas — enviar 4 casas causa
+// diferenças de arredondamento entre linhas × cabeçalho × parcelas e o
+// GC responde 400 Bad Request. Normalizamos toda linha monetária para 2 casas
+// antes de qualquer POST/PUT.
+const MONEY_FIELDS = ['valor_venda', 'valor_custo', 'valor_total', 'desconto_valor', 'valor_frete', 'valor'];
+function round2Money(value: unknown): string {
+  return formatMoney(parseMoney(value));
+}
+function normalizeLineMoney(line: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = { ...line };
+  for (const f of MONEY_FIELDS) {
+    if (out[f] != null && String(out[f]).trim() !== '') out[f] = round2Money(out[f]);
+  }
+  return out;
+}
+function normalizeGCLines(items: any[] | undefined, key: 'produto' | 'servico'): any[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((entry) => {
+    const line = getLinePayload(entry, key);
+    if (!line) return entry;
+    const normalized = normalizeLineMoney(line);
+    if (entry && typeof entry === 'object' && entry[key] && typeof entry[key] === 'object') {
+      return { ...entry, [key]: normalized };
+    }
+    return normalized;
+  });
+}
+function normalizeGCPayments(pagamentos: any[] | undefined): any[] {
+  if (!Array.isArray(pagamentos)) return [];
+  return pagamentos.map((p) => {
+    if (p?.pagamento && typeof p.pagamento === 'object') {
+      return { ...p, pagamento: { ...p.pagamento, valor: round2Money(p.pagamento.valor) } };
+    }
+    if (p?.valor != null) return { ...p, valor: round2Money(p.valor) };
+    return p;
+  });
+}
+function normalizeGCMoneyPayload<T extends Record<string, any>>(payload: T): T {
+  const out: Record<string, any> = { ...payload };
+  if (out.produtos) out.produtos = normalizeGCLines(out.produtos, 'produto');
+  if (out.servicos) out.servicos = normalizeGCLines(out.servicos, 'servico');
+  if (out.pagamentos) out.pagamentos = normalizeGCPayments(out.pagamentos);
+  for (const f of ['valor_total', 'valor_frete', 'desconto_valor']) {
+    if (out[f] != null && String(out[f]).trim() !== '') out[f] = round2Money(out[f]);
+  }
+  return out as T;
+}
+
 function getPaymentValue(payment: any): number {
   if (payment?.pagamento?.valor != null) return parseMoney(payment.pagamento.valor);
   return parseMoney(payment?.valor);
@@ -772,7 +821,7 @@ Deno.serve(async (req: Request) => {
 
       console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
 
-      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(osPayload)));
+      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(osPayload))));
       osId = gcResult?.data?.id;
       osCodigo = gcResult?.data?.codigo;
       console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
@@ -841,7 +890,7 @@ Deno.serve(async (req: Request) => {
 
       console.log(`[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? 'n/a'}, desconto=${vendaPayload.desconto_valor ?? '0'} (${vendaPayload.desconto_tipo ?? 'n/a'}), situacao=${VENDA_SITUACAO_ID}`);
 
-      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(vendaPayload)));
+      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(vendaPayload))));
       osId = gcResult?.data?.id;
       osCodigo = gcResult?.data?.codigo;
       console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);
@@ -894,7 +943,7 @@ Deno.serve(async (req: Request) => {
       if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
       if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
 
-      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(orcUpdatePayload));
+      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(normalizeGCMoneyPayload(orcUpdatePayload)));
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);
     } catch (orcErr) {
       const orcMsg = orcErr instanceof Error ? orcErr.message : String(orcErr);

@@ -580,21 +580,14 @@ Deno.serve(async (req: Request) => {
 
       console.log('[generate-os] Step 4: Creating GC OS...');
 
-      // Copy atributos exactly from orçamento
+      // ⚠️ Não copiar os atributos do orçamento verbatim: os IDs de atributo do
+      // orçamento (ex.: 66890, 73341, 73350, 67350, 87361, 87362, 88695) NÃO existem
+      // no registro de atributos de OS (que usa IDs próprios: 81831, 73343, 73344,
+      // 68658, 73897, 66889, 66902, 68156, 76731, 87055). Enviar IDs desconhecidos
+      // faz o GC responder 400 Bad Request. Iniciar vazio e preencher via upsertAttr
+      // com os IDs corretos de OS (descobertos em getOSAtributoIds).
       const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-      if (orcamento.atributos?.length) {
-        for (const a of orcamento.atributos) {
-          const attr = a?.atributo || a;
-          const attrId = attr?.atributo_id || attr?.id;
-          if (!attrId) continue;
-          atributos.push({
-            atributo: {
-              atributo_id: String(attrId),
-              conteudo: String(attr?.conteudo ?? ''),
-            },
-          });
-        }
-      }
+
 
       // Override only the two required link attributes
       const upsertAttr = (atributo_id: string | null, conteudo: string) => {

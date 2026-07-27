@@ -230,6 +230,38 @@ function normalizeLineMoney(line: Record<string, any>): Record<string, any> {
   }
   return out;
 }
+
+
+/**
+ * Remove linhas duplicadas (mesmo produto/serviço, quantidade e valores).
+ * Evita que o GC crie a OS/Venda com os itens repetidos.
+ */
+function dedupeGCLines(items: any[] | undefined, key: 'produto' | 'servico'): any[] {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const entry of items) {
+    const line = (entry && typeof entry === 'object' && entry[key]) ? entry[key] : entry;
+    if (!line || typeof line !== 'object') { out.push(entry); continue; }
+    const fp = [
+      line.produto_id ?? line.servico_id ?? '',
+      line.variacao_id ?? '',
+      line.nome_produto ?? line.nome_servico ?? '',
+      String(line.quantidade ?? ''),
+      String(line.valor_venda ?? line.valor ?? ''),
+      String(line.valor_total ?? ''),
+      String(line.desconto_valor ?? ''),
+    ].join('|');
+    if (seen.has(fp)) continue;
+    seen.add(fp);
+    out.push(entry);
+  }
+  if (out.length !== items.length) {
+    console.warn(`[generate-os] ⚠️ ${items.length - out.length} linha(s) de ${key} duplicada(s) removida(s) do payload`);
+  }
+  return out;
+}
+
 function normalizeGCLines(items: any[] | undefined, key: 'produto' | 'servico'): any[] {
   if (!Array.isArray(items)) return [];
   return items.map((entry) => {
@@ -483,6 +515,17 @@ Deno.serve(async (req: Request) => {
     } catch (fetchErr) {
       console.warn('[generate-os] Could not re-fetch full orçamento, using frontend payload:', fetchErr);
     }
+
+    // ============================================
+    // ANTI-DUPLICAÇÃO DE ITENS
+    // O payload do frontend (rastreador) é montado com paginação paralela e pode
+    // trazer a MESMA linha repetida. O GC cria uma linha para cada entrada
+    // recebida no POST → a OS/Venda nasce com os produtos duplicados.
+    // Removemos duplicatas exatas (mesmo produto/variação/qtd/valor) antes de enviar.
+    // ============================================
+    orcamento.produtos = dedupeGCLines(orcamento.produtos, 'produto');
+    orcamento.servicos = dedupeGCLines(orcamento.servicos, 'servico');
+
 
     // Regra de negócio: orçamento com QUALQUER linha de serviço vira OS.
     // Orçamento só de produto vira Venda.

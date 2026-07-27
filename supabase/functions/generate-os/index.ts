@@ -229,6 +229,8 @@ function normalizeLineMoney(line: Record<string, any>): Record<string, any> {
     if (out[f] != null && String(out[f]).trim() !== '') out[f] = round2Money(out[f]);
   }
   return out;
+}
+
 
 /**
  * Remove linhas duplicadas (mesmo produto/serviço, quantidade e valores).

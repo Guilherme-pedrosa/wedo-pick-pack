@@ -484,6 +484,17 @@ Deno.serve(async (req: Request) => {
       console.warn('[generate-os] Could not re-fetch full orçamento, using frontend payload:', fetchErr);
     }
 
+    // ============================================
+    // ANTI-DUPLICAÇÃO DE ITENS
+    // O payload do frontend (rastreador) é montado com paginação paralela e pode
+    // trazer a MESMA linha repetida. O GC cria uma linha para cada entrada
+    // recebida no POST → a OS/Venda nasce com os produtos duplicados.
+    // Removemos duplicatas exatas (mesmo produto/variação/qtd/valor) antes de enviar.
+    // ============================================
+    orcamento.produtos = dedupeGCLines(orcamento.produtos, 'produto');
+    orcamento.servicos = dedupeGCLines(orcamento.servicos, 'servico');
+
+
     // Regra de negócio: orçamento com QUALQUER linha de serviço vira OS.
     // Orçamento só de produto vira Venda.
     const hasServiceLine = Array.isArray(orcamento.servicos) && orcamento.servicos.length > 0;

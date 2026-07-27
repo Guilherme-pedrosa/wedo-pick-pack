@@ -229,7 +229,37 @@ function normalizeLineMoney(line: Record<string, any>): Record<string, any> {
     if (out[f] != null && String(out[f]).trim() !== '') out[f] = round2Money(out[f]);
   }
   return out;
+
+/**
+ * Remove linhas duplicadas (mesmo produto/serviço, quantidade e valores).
+ * Evita que o GC crie a OS/Venda com os itens repetidos.
+ */
+function dedupeGCLines(items: any[] | undefined, key: 'produto' | 'servico'): any[] {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const entry of items) {
+    const line = (entry && typeof entry === 'object' && entry[key]) ? entry[key] : entry;
+    if (!line || typeof line !== 'object') { out.push(entry); continue; }
+    const fp = [
+      line.produto_id ?? line.servico_id ?? '',
+      line.variacao_id ?? '',
+      line.nome_produto ?? line.nome_servico ?? '',
+      String(line.quantidade ?? ''),
+      String(line.valor_venda ?? line.valor ?? ''),
+      String(line.valor_total ?? ''),
+      String(line.desconto_valor ?? ''),
+    ].join('|');
+    if (seen.has(fp)) continue;
+    seen.add(fp);
+    out.push(entry);
+  }
+  if (out.length !== items.length) {
+    console.warn(`[generate-os] ⚠️ ${items.length - out.length} linha(s) de ${key} duplicada(s) removida(s) do payload`);
+  }
+  return out;
 }
+
 function normalizeGCLines(items: any[] | undefined, key: 'produto' | 'servico'): any[] {
   if (!Array.isArray(items)) return [];
   return items.map((entry) => {

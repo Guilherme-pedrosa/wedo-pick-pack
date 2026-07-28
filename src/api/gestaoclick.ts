@@ -938,7 +938,8 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
   if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
 
-  if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
+  // Sempre atribui ao usuário API GC (guilherme.pedrosa@outlook.com), não ao humano logado
+  payload.usuario_id = '1320473';
 
   const minimalPayload: Record<string, any> = {
     tipo: payload.tipo,

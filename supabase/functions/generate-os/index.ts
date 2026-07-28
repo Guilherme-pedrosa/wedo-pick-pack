@@ -986,7 +986,8 @@ Deno.serve(async (req: Request) => {
       if (orcForUpdate.vendedor_id) orcUpdatePayload.vendedor_id = orcForUpdate.vendedor_id;
       if (orcForUpdate.observacoes) orcUpdatePayload.observacoes = orcForUpdate.observacoes;
       if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
-      if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
+      // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
+      orcUpdatePayload.usuario_id = '1320473';
 
       await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(orcUpdatePayload))));
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);

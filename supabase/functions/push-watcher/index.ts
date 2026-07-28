@@ -1,5 +1,5 @@
 // supabase/functions/push-watcher/index.ts
-// Polling watcher (cron 1/min) que diffa a fila do checkout (OS + Vendas)
+// Polling watcher que diffa a fila do checkout (OS + Vendas)
 // e dispara push notifications:
 //  - new_order:     pedido apareceu em status configurado para mostrar
 //  - order_taken:   pedido sumiu da fila (concluído por outro operador)
@@ -20,6 +20,7 @@ const PROJECT_URL = Deno.env.get('SUPABASE_URL');
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const ANON = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ?? '';
 const GC_API_URL = 'https://api.gestaoclick.com';
+const STOCK_REGRESSION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 async function gc(path: string): Promise<any> {
   const GC_ACCESS_TOKEN = Deno.env.get('GC_ACCESS_TOKEN');
@@ -168,8 +169,9 @@ Deno.serve(async (req) => {
       .eq('id', 'queue')
       .maybeSingle();
 
+    const previousPayload = prevRow?.payload || {};
     const prevIds: Set<string> = new Set(
-      (prevRow?.payload?.ids as string[]) || []
+      (previousPayload.ids as string[]) || []
     );
     const currentIds = new Set(queueFiltered.map((q) => `${q.type}:${q.id}`));
 
@@ -220,56 +222,71 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 6) Stock regressions (separations onde live status difere de target stockout)
-    const { data: cfg } = await admin
-      .from('inventory_policy_config')
-      .select('os_stockout_situacao_ids,vendas_stockout_situacao_ids')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (cfg) {
-      const stockoutSet = new Set<string>([
-        ...(cfg.os_stockout_situacao_ids || []).map(String),
-        ...(cfg.vendas_stockout_situacao_ids || []).map(String),
-      ]);
-      // Foca nas separações concluídas nos últimos 7 dias
-      const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-      const { data: seps } = await admin
-        .from('separations')
-        .select('id,order_id,order_code,order_type,target_status_id,client_name')
-        .eq('invalidated', false)
-        .gte('concluded_at', since);
+    // 6) Stock regressions. This is deliberately slower than the queue watcher:
+    // the old implementation fetched every recent separation from GC on every
+    // cron tick, which could consume the entire company quota by itself.
+    const lastRegressionCheckAt = Date.parse(
+      String(previousPayload.last_regression_check_at || '')
+    );
+    const shouldCheckStockRegressions =
+      !Number.isFinite(lastRegressionCheckAt) ||
+      Date.now() - lastRegressionCheckAt >= STOCK_REGRESSION_CHECK_INTERVAL_MS;
+    let regressionChecks = 0;
+    let regressionsFound = 0;
 
-      for (const sep of seps || []) {
-        const targetDebits = stockoutSet.has(String(sep.target_status_id));
-        if (!targetDebits) continue;
-        // Pega situação atual no GC
-        try {
-          const path =
-            sep.order_type === 'os'
-              ? `/api/ordens_servicos/${sep.order_id}`
-              : `/api/vendas/${sep.order_id}`;
-          const json = await gc(path);
-          const live = json?.data;
-          if (!live) continue;
-          const liveSit = String(live.situacao_id || '');
-          const liveDebits = stockoutSet.has(liveSit);
-          if (liveDebits) continue;
+    if (shouldCheckStockRegressions) {
+      const { data: cfg } = await admin
+        .from('inventory_policy_config')
+        .select('os_stockout_situacao_ids,vendas_stockout_situacao_ids')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cfg) {
+        const stockoutSet = new Set<string>([
+          ...(cfg.os_stockout_situacao_ids || []).map(String),
+          ...(cfg.vendas_stockout_situacao_ids || []).map(String),
+        ]);
+        // Automatic checks only need the last 24 hours. Older records can still
+        // be refreshed manually from the separations screen.
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: seps } = await admin
+          .from('separations')
+          .select('id,order_id,order_code,order_type,target_status_id,client_name')
+          .eq('invalidated', false)
+          .gte('concluded_at', since);
 
-          const dedupKey = `regression:${sep.id}:${liveSit}`;
-          const skip = await alreadyNotified(admin, 'stock_regression', dedupKey);
-          if (skip) continue;
+        for (const sep of seps || []) {
+          const targetDebits = stockoutSet.has(String(sep.target_status_id));
+          if (!targetDebits) continue;
+          try {
+            regressionChecks++;
+            const path =
+              sep.order_type === 'os'
+                ? `/api/ordens_servicos/${sep.order_id}`
+                : `/api/vendas/${sep.order_id}`;
+            const json = await gc(path);
+            const live = json?.data;
+            if (!live) continue;
+            const liveSit = String(live.situacao_id || '');
+            const liveDebits = stockoutSet.has(liveSit);
+            if (liveDebits) continue;
 
-          await sendPush(
-            admin,
-            'stock_regression',
-            `⚠️ Estoque NÃO baixou — #${sep.order_code}`,
-            `${sep.client_name} — status atual no ERP não baixa estoque.`,
-            '/separations',
-            `regression-${sep.id}`
-          );
-        } catch (e) {
-          console.error('regression check', e);
+            const dedupKey = `regression:${sep.id}:${liveSit}`;
+            const skip = await alreadyNotified(admin, 'stock_regression', dedupKey);
+            if (skip) continue;
+            regressionsFound++;
+
+            await sendPush(
+              admin,
+              'stock_regression',
+              `⚠️ Estoque NÃO baixou — #${sep.order_code}`,
+              `${sep.client_name} — status atual no ERP não baixa estoque.`,
+              '/separations',
+              `regression-${sep.id}`
+            );
+          } catch (e) {
+            console.error('regression check', e);
+          }
         }
       }
     }
@@ -281,6 +298,9 @@ Deno.serve(async (req) => {
         ids: [...currentIds],
         list: queueFiltered,
         ts: new Date().toISOString(),
+        last_regression_check_at: shouldCheckStockRegressions
+          ? new Date().toISOString()
+          : previousPayload.last_regression_check_at || null,
       },
       updated_at: new Date().toISOString(),
     });
@@ -292,6 +312,10 @@ Deno.serve(async (req) => {
         new_orders: newOnes.length,
         taken: taken.length,
         first_run: isFirstRun,
+        gc_queue_requests: osStatusSet.size + vendaStatusSet.size,
+        gc_regression_requests: regressionChecks,
+        regressions_found: regressionsFound,
+        stock_regression_check_ran: shouldCheckStockRegressions,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

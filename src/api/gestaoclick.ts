@@ -871,7 +871,7 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
   if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
   if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
   if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
-  if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
+  minimalPayload.usuario_id = '1320473';
 
   const putResponse = await putStatusOnlyWithFallback(`/api/ordens_servicos/${id}`, minimalPayload, payload);
 

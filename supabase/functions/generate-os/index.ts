@@ -854,7 +854,8 @@ Deno.serve(async (req: Request) => {
       if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
       if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
-      if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
+      // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
+      osPayload.usuario_id = '1320473';
       // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
       if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
         osPayload.desconto_valor = orcamento.desconto_valor;
@@ -923,7 +924,8 @@ Deno.serve(async (req: Request) => {
       if (orcamento.observacoes_interna) vendaPayload.observacoes_interna = orcamento.observacoes_interna;
       if (orcamento.valor_total) vendaPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) vendaPayload.pagamentos = orcamento.pagamentos;
-      if (gc_usuario_id) vendaPayload.usuario_id = gc_usuario_id;
+      // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
+      vendaPayload.usuario_id = '1320473';
       // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
       if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
         vendaPayload.desconto_valor = orcamento.desconto_valor;
@@ -984,7 +986,8 @@ Deno.serve(async (req: Request) => {
       if (orcForUpdate.vendedor_id) orcUpdatePayload.vendedor_id = orcForUpdate.vendedor_id;
       if (orcForUpdate.observacoes) orcUpdatePayload.observacoes = orcForUpdate.observacoes;
       if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
-      if (gc_usuario_id) orcUpdatePayload.usuario_id = gc_usuario_id;
+      // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
+      orcUpdatePayload.usuario_id = '1320473';
 
       await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(orcUpdatePayload))));
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);

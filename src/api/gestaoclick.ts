@@ -852,7 +852,8 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
   if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
   if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
 
-  if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
+  // Sempre atribui ao usuário API GC (guilherme.pedrosa@outlook.com), não ao humano logado
+  payload.usuario_id = '1320473';
 
   const minimalPayload: Record<string, any> = {
     // GC reseta o cliente para "Consumidor" quando o PUT não informa cliente_id.
@@ -870,7 +871,7 @@ export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newSt
   if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
   if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
   if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
-  if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
+  minimalPayload.usuario_id = '1320473';
 
   const putResponse = await putStatusOnlyWithFallback(`/api/ordens_servicos/${id}`, minimalPayload, payload);
 
@@ -937,7 +938,8 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
   if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
 
-  if (gcUsuarioId) payload.usuario_id = gcUsuarioId;
+  // Sempre atribui ao usuário API GC (guilherme.pedrosa@outlook.com), não ao humano logado
+  payload.usuario_id = '1320473';
 
   const minimalPayload: Record<string, any> = {
     tipo: payload.tipo,
@@ -956,7 +958,7 @@ export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatus
   if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
   if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
   if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
-  if (gcUsuarioId) minimalPayload.usuario_id = gcUsuarioId;
+  minimalPayload.usuario_id = '1320473';
 
   const putResponse = await putStatusOnlyWithFallback(`/api/vendas/${id}`, minimalPayload, payload);
 

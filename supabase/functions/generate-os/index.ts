@@ -854,7 +854,8 @@ Deno.serve(async (req: Request) => {
       if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
       if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
-      if (gc_usuario_id) osPayload.usuario_id = gc_usuario_id;
+      // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
+      osPayload.usuario_id = '1320473';
       // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
       if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
         osPayload.desconto_valor = orcamento.desconto_valor;

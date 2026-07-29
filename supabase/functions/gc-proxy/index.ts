@@ -5,6 +5,7 @@ const corsHeaders = {
 };
 
 const GC_API_URL = 'https://api.gestaoclick.com';
+const GC_API_USER_ID = '1320473';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -32,8 +33,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const targetUrl = `${GC_API_URL}${path}`;
     const httpMethod = gcMethod || 'GET';
+    const targetUrl = new URL(`${GC_API_URL}${path}`);
+    if (httpMethod === 'GET' && !targetUrl.searchParams.has('usuario_id')) {
+      targetUrl.searchParams.set('usuario_id', GC_API_USER_ID);
+    }
 
     const gcHeaders: Record<string, string> = {
       'access-token': GC_ACCESS_TOKEN,
@@ -51,7 +55,7 @@ Deno.serve(async (req: Request) => {
       fetchOptions.body = JSON.stringify(payload);
     }
 
-    const response = await fetch(targetUrl, fetchOptions);
+    const response = await fetch(targetUrl.toString(), fetchOptions);
     const responseBody = await response.text();
 
     console.log(`GC API ${httpMethod} ${path} -> ${response.status}`);

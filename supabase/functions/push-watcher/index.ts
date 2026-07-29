@@ -20,6 +20,7 @@ const PROJECT_URL = Deno.env.get('SUPABASE_URL');
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const ANON = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ?? '';
 const GC_API_URL = 'https://api.gestaoclick.com';
+const GC_API_USER_ID = '1320473';
 const STOCK_REGRESSION_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 async function gc(path: string): Promise<any> {
@@ -30,7 +31,12 @@ async function gc(path: string): Promise<any> {
     throw new Error('Credenciais do GestãoClick não configuradas');
   }
 
-  const res = await fetch(`${GC_API_URL}${path}`, {
+  const targetUrl = new URL(`${GC_API_URL}${path}`);
+  if (!targetUrl.searchParams.has('usuario_id')) {
+    targetUrl.searchParams.set('usuario_id', GC_API_USER_ID);
+  }
+
+  const res = await fetch(targetUrl.toString(), {
     method: 'GET',
     headers: {
       'access-token': GC_ACCESS_TOKEN,

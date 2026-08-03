@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Plus, Search, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -269,8 +269,8 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                       const produtos = i.linhas.filter((l) => l.tipo === "produto");
                       const servicos = i.linhas.filter((l) => l.tipo === "servico");
                       return (
-                        <>
-                          <TableRow key={i.id}>
+                        <Fragment key={i.id}>
+                          <TableRow>
                             <TableCell>
                               <Button
                                 variant="ghost"
@@ -329,7 +329,7 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                             </TableCell>
                           </TableRow>
                           {aberto && (
-                            <TableRow key={`${i.id}-det`} className="hover:bg-transparent">
+                            <TableRow className="hover:bg-transparent">
                               <TableCell colSpan={8} className="bg-muted/30 p-0">
                                 {i.linhas.length === 0 ? (
                                   <p className="px-4 py-3 text-xs text-muted-foreground">
@@ -411,7 +411,7 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                               </TableCell>
                             </TableRow>
                           )}
-                        </>
+                        </Fragment>
                       );
                     })}
                   </TableBody>

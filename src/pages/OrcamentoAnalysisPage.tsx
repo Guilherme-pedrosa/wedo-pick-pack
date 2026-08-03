@@ -83,14 +83,18 @@ function KpiCard({
 
 export default function OrcamentoAnalysisPage() {
   const [codigo, setCodigo] = useState("");
+  const [tab, setTab] = useState("individual");
   const [config, setConfig] = useState<AnalysisConfig>(() => loadAnalysisConfig());
   const [showConfig, setShowConfig] = useState(false);
   const [rawOrc, setRawOrc] = useState<any | null>(null);
   const [analysis, setAnalysis] = useState<OrcamentoAnalysis | null>(null);
   const [desl, setDesl] = useState<DeslocamentoInput>({ ...DEFAULT_DESLOCAMENTO });
+  const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(loadAnalysisConfig()));
   const rawOrcRef = useRef<any | null>(null);
   const deslRef = useRef<DeslocamentoInput>(desl);
+  const extrasRef = useRef<ExtrasInput>(extras);
   deslRef.current = desl;
+  extrasRef.current = extras;
   rawOrcRef.current = rawOrc;
 
   // Parâmetros globais: carrega do banco (fonte da verdade para todos os usuários)
@@ -100,8 +104,9 @@ export default function OrcamentoAnalysisPage() {
       .then((cfg) => {
         if (!active) return;
         setConfig(cfg);
+        setExtras((prev) => ({ ...prev, horasAdmin: prev.horasAdmin || cfg.moAdminHorasPadrao }));
         if (rawOrcRef.current) {
-          setAnalysis(analyzeOrcamento(rawOrcRef.current, cfg, deslRef.current));
+          setAnalysis(analyzeOrcamento(rawOrcRef.current, cfg, deslRef.current, extrasRef.current));
         }
       })
       .catch(() => {});
@@ -116,7 +121,7 @@ export default function OrcamentoAnalysisPage() {
       setRawOrc(orc);
       const next: DeslocamentoInput = { ...desl, modo: "auto" };
       setDesl(next);
-      setAnalysis(analyzeOrcamento(orc, config, next));
+      setAnalysis(analyzeOrcamento(orc, config, next, extras));
     },
     onError: () => {
       setRawOrc(null);
@@ -127,20 +132,27 @@ export default function OrcamentoAnalysisPage() {
   const updateConfig = (patch: Partial<AnalysisConfig>) => {
     const next = { ...config, ...patch };
     setConfig(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl, extras));
     saveAnalysisConfig(next).catch(() => {
       toast.error("Não foi possível salvar os parâmetros para todos os usuários.");
     });
   };
 
-
   const updateDesl = (patch: Partial<DeslocamentoInput>) => {
     const next = { ...desl, ...patch };
     setDesl(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next, extras));
+  };
+
+  const updateExtras = (patch: Partial<ExtrasInput>) => {
+    const next = { ...extras, ...patch };
+    setExtras(next);
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, desl, next));
   };
 
   const parecer = analysis ? buildParecer(analysis) : null;
+
+
 
 
   return (

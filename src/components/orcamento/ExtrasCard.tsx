@@ -87,7 +87,7 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
                 "considerarPremiacao",
                 `Premiação (${config.premiacaoPecaPct}% peças / ${config.premiacaoServicoPct}% serviços)`,
               ],
-              ["considerarParcelamento", `Custo do parcelamento (CDB ${config.cdbAnualPct}% a.a. / nº de parcelas)`],
+              ["considerarParcelamento", `Custo do parcelamento (CDB ${config.cdbAnualPct}% a.a. — 1x = sem custo)`],
             ] as Array<[keyof ExtrasInput, string]>
           ).map(([key, label]) => (
             <label key={key} className="flex items-center gap-2 text-sm">

@@ -304,7 +304,16 @@ export default function OrcamentoAnalysisPage() {
                   {analysis.nomeVendedor && (
                     <Badge variant="outline">Vendedor: {analysis.nomeVendedor}</Badge>
                   )}
+                  <Button size="sm" variant="outline" onClick={() => exportOrcamentoXLSX(analysis)}>
+                    <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+                    Excel
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => exportOrcamentoPDF(analysis)}>
+                    <FileText className="mr-1.5 h-4 w-4" />
+                    PDF
+                  </Button>
                 </div>
+
               </div>
             </CardHeader>
           </Card>

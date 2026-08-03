@@ -199,10 +199,13 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
   const margemBruta = receita - custo;
   const bruto = quantidade * valorUnitVenda;
 
+  const nome = String(raw.nome_produto || raw.nome_servico || 'Item');
+  const detalhes = raw.detalhes ? String(raw.detalhes) : undefined;
+
   return {
     tipo,
-    nome: String(raw.nome_produto || raw.nome_servico || 'Item'),
-    detalhes: raw.detalhes ? String(raw.detalhes) : undefined,
+    nome,
+    detalhes,
     codigo: raw.codigo_produto ? String(raw.codigo_produto) : undefined,
     tabela: raw.nome_tipo_valor ? String(raw.nome_tipo_valor) : undefined,
     quantidade,
@@ -215,10 +218,17 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
     markupPct: custo > 0 ? ((receita - custo) / custo) * 100 : 0,
     descontoAplicado: Math.max(0, bruto - receita),
     semCusto: valorUnitCusto <= 0,
+    isDeslocamento: DESLOCAMENTO_RE.test(`${nome} ${detalhes || ''}`),
   };
 }
 
-export function analyzeOrcamento(orc: any, config: AnalysisConfig): OrcamentoAnalysis {
+const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
+
+export function analyzeOrcamento(
+  orc: any,
+  config: AnalysisConfig,
+  desl: DeslocamentoInput = DEFAULT_DESLOCAMENTO
+): OrcamentoAnalysis {
   const produtos: AnalysisLine[] = (orc.produtos || [])
     .map((p: any) => p?.produto ?? p)
     .filter(Boolean)
@@ -241,7 +251,33 @@ export function analyzeOrcamento(orc: any, config: AnalysisConfig): OrcamentoAna
 
   const custoProdutos = produtos.reduce((s, l) => s + l.custo, 0);
   const custoServicos = servicos.reduce((s, l) => s + l.custo, 0);
-  const custoTotal = custoProdutos + custoServicos;
+
+  // --- Deslocamento --------------------------------------------------------
+  const linhasDesl = linhas.filter((l) => l.isDeslocamento);
+  const kmDetectado = linhasDesl.reduce((s, l) => s + l.quantidade, 0);
+  const custoJaNasLinhas = linhasDesl.reduce((s, l) => s + l.custo, 0);
+  const receitaDesl = linhasDesl.reduce((s, l) => s + l.receita, 0);
+  const custoPorKm = desl.modo === 'manual' ? (desl.custoPorKm ?? config.custoPorKm) : config.custoPorKm;
+  const kmConsiderado = desl.modo === 'ignorar' ? 0 : desl.modo === 'manual' ? desl.km : kmDetectado;
+  const custoEstimado = desl.modo === 'ignorar' ? 0 : kmConsiderado * custoPorKm;
+  // Evita contagem dupla: o custo já cadastrado nas linhas de deslocamento
+  // continua dentro de custoServicos/custoProdutos; aqui somamos só a diferença.
+  const custoAdicional = Math.max(0, custoEstimado - custoJaNasLinhas);
+
+  const deslocamento: DeslocamentoResumo = {
+    modo: desl.modo,
+    kmDetectado,
+    km: kmConsiderado,
+    custoPorKm,
+    custoEstimado,
+    custoJaNasLinhas,
+    custoAdicional,
+    receita: receitaDesl,
+    linhas: linhasDesl.map((l) => l.nome),
+  };
+
+  const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
+  const custoTotal = custoProdutos + custoServicos + custoAdicional;
 
   const imposto = receitaLiquida * (config.impostoPct / 100);
   const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
@@ -250,6 +286,7 @@ export function analyzeOrcamento(orc: any, config: AnalysisConfig): OrcamentoAna
 
   const descontoLinhas = linhas.reduce((s, l) => s + l.descontoAplicado, 0);
   const brutoSemDesconto = receitaBruta + descontoLinhas;
+
 
   return {
     id: String(orc.id),

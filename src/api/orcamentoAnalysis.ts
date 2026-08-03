@@ -512,12 +512,13 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
-/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem) */
+/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
 export function computeExtras(
   config: AnalysisConfig,
   extras: ExtrasInput,
   receitaPecas: number,
-  receitaServicos: number
+  receitaServicos: number,
+  opts?: { nomeCliente?: string; receitaRestorno?: number }
 ): ExtrasResumo {
   const alimentacao = extras.considerarAlimentacao
     ? Math.max(0, extras.dias) * Math.max(0, extras.tecnicos) * config.alimentacaoDia
@@ -532,6 +533,16 @@ export function computeExtras(
   const pedagio = Math.max(0, extras.pedagio || 0);
   const hospedagem = Math.max(0, extras.hospedagem || 0);
   const premiacao = premiacaoPecas + premiacaoServicos;
+
+  // Restorno: 8% cobrado pelo cliente Sapore sobre o faturamento
+  const aplicaRestorno = isClienteRestorno(opts?.nomeCliente);
+  const baseRestorno = Math.max(
+    0,
+    opts?.receitaRestorno ?? Math.max(0, receitaPecas) + Math.max(0, receitaServicos)
+  );
+  const restornoPct = aplicaRestorno ? RESTORNO_SAPORE_PCT : 0;
+  const restorno = baseRestorno * (restornoPct / 100);
+
   return {
     alimentacao,
     moAdmin,
@@ -540,7 +551,9 @@ export function computeExtras(
     premiacaoServicos,
     pedagio,
     hospedagem,
-    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem,
+    restorno,
+    restornoPct,
+    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem + restorno,
   };
 }
 

@@ -785,8 +785,11 @@ export interface GrupoItem {
   custoDireto: number;
   receitaProdutos: number;
   receitaServicos: number;
+  custoProdutos: number;
+  custoServicos: number;
   kmDetectado: number;
   margemDiretaPct: number;
+  linhas: AnalysisLine[];
 }
 
 export interface GrupoAnalysis {

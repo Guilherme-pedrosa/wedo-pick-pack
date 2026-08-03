@@ -135,6 +135,8 @@ export interface AnalysisLine {
   markupPct: number;
   descontoAplicado: number;
   semCusto: boolean;
+  /** linha identificada como deslocamento/km */
+  isDeslocamento?: boolean;
 }
 
 export interface OrcamentoAnalysis {
@@ -153,7 +155,10 @@ export interface OrcamentoAnalysis {
   receitaLiquida: number;
   custoProdutos: number;
   custoServicos: number;
+  custoDeslocamento: number;
+  deslocamento: DeslocamentoResumo;
   custoTotal: number;
+
   imposto: number;
   custoFixo: number;
   garantia: number;

@@ -880,7 +880,13 @@ export function analyzeGrupo(
     linhas: bases.flatMap((a) => a.deslocamento.linhas),
   };
 
-  const extras = computeExtras(config, extrasInput, receitaProdutos, receitaServicos);
+  const receitaRestorno = itens
+    .filter((i) => isClienteRestorno(i.nomeCliente))
+    .reduce((s, i) => s + i.receita, 0);
+  const extras = computeExtras(config, extrasInput, receitaProdutos, receitaServicos, {
+    nomeCliente: receitaRestorno > 0 ? 'sapore' : '',
+    receitaRestorno,
+  });
   const custoTotal = custoDireto + custoAdicional + extras.total;
 
   const imposto = receitaLiquida * (config.impostoPct / 100);

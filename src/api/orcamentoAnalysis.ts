@@ -184,6 +184,11 @@ function rowToConfig(row: any): AnalysisConfig {
     margemMinima: Number(row.margem_minima ?? DEFAULT_ANALYSIS_CONFIG.margemMinima),
     margemMeta: Number(row.margem_meta ?? DEFAULT_ANALYSIS_CONFIG.margemMeta),
     custoPorKm: Number(row.custo_por_km ?? DEFAULT_ANALYSIS_CONFIG.custoPorKm),
+    alimentacaoDia: Number(row.alimentacao_dia ?? DEFAULT_ANALYSIS_CONFIG.alimentacaoDia),
+    moAdminHora: Number(row.mo_admin_hora ?? DEFAULT_ANALYSIS_CONFIG.moAdminHora),
+    moAdminHorasPadrao: Number(row.mo_admin_horas_padrao ?? DEFAULT_ANALYSIS_CONFIG.moAdminHorasPadrao),
+    premiacaoPecaPct: Number(row.premiacao_peca_pct ?? DEFAULT_ANALYSIS_CONFIG.premiacaoPecaPct),
+    premiacaoServicoPct: Number(row.premiacao_servico_pct ?? DEFAULT_ANALYSIS_CONFIG.premiacaoServicoPct),
   };
 }
 

@@ -122,6 +122,7 @@ function AuthenticatedApp() {
         <Route path="/controle/baixas" element={<BaixaLogsPage />} />
         <Route path="/controle/vinculacoes" element={<HandoffHistoryPage />} />
         <Route path="/rastreador" element={<RastreadorPage />} />
+        <Route path="/analise-orcamento" element={<OrcamentoAnalysisPage />} />
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
         <Route path="/produtos/explorar" element={<ProductExplorerPage />} />
         <Route path="/produtos/explorar/config" element={<ProductExplorerConfigPage />} />

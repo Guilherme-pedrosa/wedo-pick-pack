@@ -304,6 +304,8 @@ export function analyzeOrcamento(
     receitaLiquida,
     custoProdutos,
     custoServicos,
+    custoDeslocamento,
+    deslocamento,
     custoTotal,
     imposto,
     custoFixo,

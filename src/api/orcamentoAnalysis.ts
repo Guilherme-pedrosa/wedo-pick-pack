@@ -218,6 +218,11 @@ export async function saveAnalysisConfig(cfg: AnalysisConfig): Promise<AnalysisC
         margem_minima: cfg.margemMinima,
         margem_meta: cfg.margemMeta,
         custo_por_km: cfg.custoPorKm,
+        alimentacao_dia: cfg.alimentacaoDia,
+        mo_admin_hora: cfg.moAdminHora,
+        mo_admin_horas_padrao: cfg.moAdminHorasPadrao,
+        premiacao_peca_pct: cfg.premiacaoPecaPct,
+        premiacao_servico_pct: cfg.premiacaoServicoPct,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }

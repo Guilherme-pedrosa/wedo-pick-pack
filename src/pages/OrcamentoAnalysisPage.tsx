@@ -75,12 +75,15 @@ export default function OrcamentoAnalysisPage() {
   const [showConfig, setShowConfig] = useState(false);
   const [rawOrc, setRawOrc] = useState<any | null>(null);
   const [analysis, setAnalysis] = useState<OrcamentoAnalysis | null>(null);
+  const [desl, setDesl] = useState<DeslocamentoInput>({ ...DEFAULT_DESLOCAMENTO });
 
   const mutation = useMutation({
     mutationFn: async (code: string) => fetchOrcamentoByCodigo(code),
     onSuccess: (orc) => {
       setRawOrc(orc);
-      setAnalysis(analyzeOrcamento(orc, config));
+      const next: DeslocamentoInput = { ...desl, modo: "auto" };
+      setDesl(next);
+      setAnalysis(analyzeOrcamento(orc, config, next));
     },
     onError: () => {
       setRawOrc(null);
@@ -92,10 +95,17 @@ export default function OrcamentoAnalysisPage() {
     const next = { ...config, ...patch };
     setConfig(next);
     saveAnalysisConfig(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl));
+  };
+
+  const updateDesl = (patch: Partial<DeslocamentoInput>) => {
+    const next = { ...desl, ...patch };
+    setDesl(next);
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next));
   };
 
   const parecer = analysis ? buildParecer(analysis) : null;
+
 
   return (
     <div className="space-y-6">

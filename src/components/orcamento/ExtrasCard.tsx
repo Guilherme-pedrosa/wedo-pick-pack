@@ -70,6 +70,12 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
             value={extras.hospedagem}
             onChange={(n) => onChange({ hospedagem: n })}
           />
+          <NumField
+            id="ex-parc"
+            label="Parcelas"
+            value={extras.parcelas}
+            onChange={(n) => onChange({ parcelas: n })}
+          />
         </div>
 
         <div className="flex flex-wrap gap-4">
@@ -81,6 +87,7 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
                 "considerarPremiacao",
                 `Premiação (${config.premiacaoPecaPct}% peças / ${config.premiacaoServicoPct}% serviços)`,
               ],
+              ["considerarParcelamento", `Custo do parcelamento (CDB ${config.cdbAnualPct}% a.a. / nº de parcelas)`],
             ] as Array<[keyof ExtrasInput, string]>
           ).map(([key, label]) => (
             <label key={key} className="flex items-center gap-2 text-sm">
@@ -100,6 +107,14 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
             ["Premiação", resumo.premiacao],
             ["Pedágio", resumo.pedagio],
             ["Hospedagem", resumo.hospedagem],
+            ...(resumo.parcelamento > 0
+              ? ([
+                  [
+                    `Parcelamento (${resumo.parcelamentoPct.toFixed(2).replace(".", ",")}% em ${resumo.parcelas}x)`,
+                    resumo.parcelamento,
+                  ],
+                ] as [string, number][])
+              : []),
             ...(resumo.restorno > 0
               ? ([[`Restorno (${resumo.restornoPct}%)`, resumo.restorno]] as [string, number][])
               : []),
@@ -121,6 +136,7 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
         <p className="text-xs text-muted-foreground">
           Premiação estimada: {formatBRL(resumo.premiacaoPecas)} em peças + {formatBRL(resumo.premiacaoServicos)} em
           serviços. Ajuste os percentuais em Parâmetros quando o cliente tiver contrato com taxa diferente.
+          {` Custo do parcelamento: CDB de ${config.cdbAnualPct}% a.a. dividido por ${resumo.parcelas} parcela(s) sobre o faturamento.`}
           {resumo.restorno > 0 &&
             ` Cliente Sapore: restorno de ${resumo.restornoPct}% sobre o faturamento aplicado automaticamente.`}
         </p>

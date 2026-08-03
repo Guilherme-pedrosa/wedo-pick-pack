@@ -587,3 +587,157 @@ export function buildParecer(a: OrcamentoAnalysis): Parecer {
 
   return { veredito, titulo, resumo, recomendacoes, alcada };
 }
+
+// --- Análise em conjunto (vários orçamentos do mesmo cliente) ----------------
+
+export interface GrupoItem {
+  id: string;
+  codigo: string;
+  nomeCliente: string;
+  data: string;
+  nomeSituacao: string;
+  receita: number;
+  custoDireto: number;
+  receitaProdutos: number;
+  receitaServicos: number;
+  kmDetectado: number;
+  margemDiretaPct: number;
+}
+
+export interface GrupoAnalysis {
+  clientes: string[];
+  mesmoCliente: boolean;
+  itens: GrupoItem[];
+  receitaLiquida: number;
+  custoDireto: number;
+  deslocamento: DeslocamentoResumo;
+  custoDeslocamentoAdicional: number;
+  extras: ExtrasResumo;
+  custoTotal: number;
+  imposto: number;
+  custoFixo: number;
+  garantia: number;
+  lucro: number;
+  margemLiquidaPct: number;
+  /** desconto máximo (R$) mantendo a margem mínima */
+  descontoMaxMinima: number;
+  /** desconto máximo (R$) mantendo a margem meta */
+  descontoMaxMeta: number;
+  descontoMaxMinimaPct: number;
+  descontoMaxMetaPct: number;
+  config: AnalysisConfig;
+}
+
+/**
+ * Consolida vários orçamentos (normalmente do mesmo cliente) tratando
+ * deslocamento, alimentação, hospedagem, pedágio e MO administrativa como
+ * custos compartilhados — contados UMA vez para o conjunto.
+ */
+export function analyzeGrupo(
+  orcamentos: any[],
+  config: AnalysisConfig,
+  desl: DeslocamentoInput,
+  extrasInput: ExtrasInput
+): GrupoAnalysis {
+  const semExtras: ExtrasInput = {
+    ...extrasInput,
+    considerarAlimentacao: false,
+    considerarAdmin: false,
+    considerarPremiacao: false,
+    pedagio: 0,
+    hospedagem: 0,
+  };
+
+  const bases = orcamentos.map((o) =>
+    analyzeOrcamento(o, config, { modo: 'ignorar', km: 0 }, semExtras)
+  );
+
+  const itens: GrupoItem[] = bases.map((a) => {
+    const custoDireto = a.custoProdutos + a.custoServicos;
+    return {
+      id: a.id,
+      codigo: a.codigo,
+      nomeCliente: a.nomeCliente,
+      data: a.data,
+      nomeSituacao: a.nomeSituacao,
+      receita: a.receitaLiquida,
+      custoDireto,
+      receitaProdutos: a.receitaProdutos,
+      receitaServicos: a.receitaServicos,
+      kmDetectado: a.deslocamento.kmDetectado,
+      margemDiretaPct: a.receitaLiquida > 0 ? ((a.receitaLiquida - custoDireto) / a.receitaLiquida) * 100 : 0,
+    };
+  });
+
+  const receitaLiquida = itens.reduce((s, i) => s + i.receita, 0);
+  const custoDireto = itens.reduce((s, i) => s + i.custoDireto, 0);
+  const receitaProdutos = itens.reduce((s, i) => s + i.receitaProdutos, 0);
+  const receitaServicos = itens.reduce((s, i) => s + i.receitaServicos, 0);
+
+  // Deslocamento compartilhado
+  const kmDetectado = itens.reduce((s, i) => s + i.kmDetectado, 0);
+  const custoJaNasLinhas = bases.reduce((s, a) => s + a.deslocamento.custoJaNasLinhas, 0);
+  const receitaDesl = bases.reduce((s, a) => s + a.deslocamento.receita, 0);
+  const custoPorKm = desl.modo === 'manual' ? (desl.custoPorKm ?? config.custoPorKm) : config.custoPorKm;
+  const km = desl.modo === 'ignorar' ? 0 : desl.modo === 'manual' ? desl.km : kmDetectado;
+  const custoEstimado = km * custoPorKm;
+  const custoAdicional = Math.max(0, custoEstimado - custoJaNasLinhas);
+
+  const deslocamento: DeslocamentoResumo = {
+    modo: desl.modo,
+    kmDetectado,
+    km,
+    custoPorKm,
+    custoEstimado,
+    custoJaNasLinhas,
+    custoAdicional,
+    receita: receitaDesl,
+    linhas: bases.flatMap((a) => a.deslocamento.linhas),
+  };
+
+  const extras = computeExtras(config, extrasInput, receitaProdutos, receitaServicos);
+  const custoTotal = custoDireto + custoAdicional + extras.total;
+
+  const imposto = receitaLiquida * (config.impostoPct / 100);
+  const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
+  const garantia = receitaLiquida * (config.garantiaPct / 100);
+  const lucro = receitaLiquida - custoTotal - imposto - custoFixo - garantia;
+
+  // Desconto máximo mantendo margem alvo.
+  // (R - D) - custoTotal - (R - D) * p = m * (R - D)  =>  R - D = custoTotal / (1 - p - m)
+  const p = (config.impostoPct + config.custoFixoPct + config.garantiaPct) / 100;
+  const custoNaoProporcional = custoTotal;
+  const maxDesc = (margemPct: number) => {
+    const den = 1 - p - margemPct / 100;
+    if (den <= 0) return 0;
+    const receitaMin = custoNaoProporcional / den;
+    return Math.max(0, receitaLiquida - receitaMin);
+  };
+  const descontoMaxMinima = maxDesc(config.margemMinima);
+  const descontoMaxMeta = maxDesc(config.margemMeta);
+
+  const clientes = Array.from(new Set(itens.map((i) => i.nomeCliente).filter(Boolean)));
+
+  return {
+    clientes,
+    mesmoCliente: clientes.length <= 1,
+    itens,
+    receitaLiquida,
+    custoDireto,
+    deslocamento,
+    custoDeslocamentoAdicional: custoAdicional,
+    extras,
+    custoTotal,
+    imposto,
+    custoFixo,
+    garantia,
+    lucro,
+    margemLiquidaPct: receitaLiquida > 0 ? (lucro / receitaLiquida) * 100 : 0,
+    descontoMaxMinima,
+    descontoMaxMeta,
+    descontoMaxMinimaPct: receitaLiquida > 0 ? (descontoMaxMinima / receitaLiquida) * 100 : 0,
+    descontoMaxMetaPct: receitaLiquida > 0 ? (descontoMaxMeta / receitaLiquida) * 100 : 0,
+    config,
+  };
+}
+

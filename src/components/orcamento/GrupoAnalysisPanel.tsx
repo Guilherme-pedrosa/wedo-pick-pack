@@ -109,14 +109,14 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
             className="flex flex-col gap-3 sm:flex-row sm:items-end"
             onSubmit={(e) => {
               e.preventDefault();
-              buscar();
+              buscarClientes();
             }}
           >
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="grupo-cliente">Cliente</Label>
               <Input
                 id="grupo-cliente"
-                placeholder="Digite o nome do cliente"
+                placeholder="Digite parte do nome do cliente (ex.: sapore)"
                 value={cliente}
                 onChange={(e) => setCliente(e.target.value)}
               />
@@ -127,16 +127,53 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                 id="grupo-dias"
                 inputMode="numeric"
                 value={String(dias)}
-                onChange={(e) => setDias(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10) || 0;
+                  setDias(v);
+                }}
+                onBlur={() => clienteSel && carregarOrcamentos(clienteSel)}
               />
             </div>
             <Button type="submit" disabled={cliente.trim().length < 3 || buscando} className="sm:w-40">
               {buscando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-              Buscar
+              Buscar cliente
             </Button>
           </form>
 
+          {clientes && clientes.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                {clienteSel ? "Cliente selecionado" : "Selecione o cliente"}
+              </Label>
+              <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
+                {clientes.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => carregarOrcamentos(c)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-muted/60",
+                      clienteSel?.id === c.id && "bg-primary/10"
+                    )}
+                  >
+                    <span className="truncate font-medium">{c.nome}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {[c.documento, c.cidade].filter(Boolean).join(" • ")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {clienteSel && resultados && resultados.length === 0 && (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Nenhum orçamento de {clienteSel.nome} nos últimos {dias} dias. Aumente a janela de dias.
+            </p>
+          )}
+
           {resultados && resultados.length > 0 && (
+
             <div className="space-y-3">
               <div className="max-h-80 overflow-y-auto rounded-md border">
                 <Table>

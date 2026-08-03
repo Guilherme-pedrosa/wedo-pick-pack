@@ -483,7 +483,42 @@ export default function OrcamentoAnalysisPage() {
                 ["Desconto do cabeçalho", -analysis.descontoCabecalho],
                 ["Custo das peças", -analysis.custoProdutos],
                 ["Custo dos serviços", -analysis.custoServicos],
-                ["Custo de deslocamento (adicional)", -analysis.deslocamento.custoAdicional],
+              ]
+                .filter(([, v]) => (v as number) !== 0)
+                .map(([label, v]) => (
+                  <div key={label as string} className="flex justify-between border-b border-border/50 py-1">
+                    <span className="text-muted-foreground">{label as string}</span>
+                    <span className={cn("tabular-nums", (v as number) < 0 && "text-muted-foreground")}>
+                      {formatBRL(v as number)}
+                    </span>
+                  </div>
+                ))}
+
+              {/* Deslocamento sempre visível, mesmo quando já está embutido no custo dos serviços */}
+              <div className="flex justify-between border-b border-border/50 py-1">
+                <span className="text-muted-foreground">
+                  Custo de deslocamento{" "}
+                  {analysis.deslocamento.modo === "ignorar"
+                    ? "(desconsiderado)"
+                    : `(${analysis.deslocamento.km.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km × ${formatBRL(analysis.deslocamento.custoPorKm)})`}
+                </span>
+                <span className="tabular-nums text-muted-foreground">
+                  {formatBRL(-analysis.deslocamento.custoEstimado)}
+                </span>
+              </div>
+              {analysis.deslocamento.custoJaNasLinhas > 0 && (
+                <div className="flex justify-between border-b border-border/50 py-1">
+                  <span className="text-muted-foreground">
+                    (já contabilizado no custo dos serviços — estorno para não duplicar)
+                  </span>
+                  <span className="tabular-nums text-emerald-500">
+                    {formatBRL(analysis.deslocamento.custoJaNasLinhas)}
+                  </span>
+                </div>
+              )}
+
+              {[
+
                 ["Pedágio", -analysis.extras.pedagio],
                 ["Hospedagem", -analysis.extras.hospedagem],
                 ["Alimentação", -analysis.extras.alimentacao],

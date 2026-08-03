@@ -147,7 +147,7 @@ export default function OrcamentoAnalysisPage() {
             Análise de Custos de Orçamentos
           </h1>
           <p className="text-sm text-muted-foreground">
-            Digite o número do orçamento para avaliar venda, custo, impostos e rentabilidade.
+            Avalie venda, custo, impostos e rentabilidade de um orçamento ou de vários do mesmo cliente.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setShowConfig((v) => !v)}>
@@ -156,6 +156,58 @@ export default function OrcamentoAnalysisPage() {
         </Button>
       </header>
 
+      {showConfig && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Parâmetros globais</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+              {(
+                [
+                  ["impostoPct", "Impostos (%)"],
+                  ["custoFixoPct", "Custo fixo (%)"],
+                  ["garantiaPct", "Garantia (%)"],
+                  ["margemMinima", "Margem mínima (%)"],
+                  ["margemMeta", "Margem meta (%)"],
+                  ["custoPorKm", "Custo por km (R$)"],
+                  ["alimentacaoDia", "Alimentação por dia/técnico (R$)"],
+                  ["moAdminHora", "MO administrativa (R$/h)"],
+                  ["moAdminHorasPadrao", "Horas administrativas padrão"],
+                  ["premiacaoPecaPct", "Premiação peças (%)"],
+                  ["premiacaoServicoPct", "Premiação serviços (%)"],
+                ] as Array<[keyof AnalysisConfig, string]>
+              ).map(([key, label]) => (
+                <div key={key} className="space-y-1.5">
+                  <Label htmlFor={key} className="text-xs">
+                    {label}
+                  </Label>
+                  <Input
+                    id={key}
+                    inputMode="decimal"
+                    value={String(config[key]).replace(".", ",")}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value.replace(",", ".")) || 0;
+                      updateConfig({ [key]: n } as Partial<AnalysisConfig>);
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Os parâmetros ficam salvos no sistema e valem para todos os usuários até alguém alterá-los.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="individual">Orçamento individual</TabsTrigger>
+          <TabsTrigger value="conjunto">Conjunto (mesmo cliente)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="individual" className="space-y-6">
       <Card>
         <CardContent className="p-4">
           <form
@@ -170,7 +222,6 @@ export default function OrcamentoAnalysisPage() {
               <Input
                 id="codigo"
                 inputMode="numeric"
-                autoFocus
                 placeholder="Ex.: 6278"
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
@@ -186,42 +237,6 @@ export default function OrcamentoAnalysisPage() {
             </Button>
           </form>
 
-          {showConfig && (
-            <>
-              <Separator className="my-4" />
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                {(
-                  [
-                    ["impostoPct", "Impostos (%)"],
-                    ["custoFixoPct", "Custo fixo (%)"],
-                    ["garantiaPct", "Garantia (%)"],
-                    ["margemMinima", "Margem mínima (%)"],
-                    ["margemMeta", "Margem meta (%)"],
-                    ["custoPorKm", "Custo por km (R$)"],
-                  ] as Array<[keyof AnalysisConfig, string]>
-                ).map(([key, label]) => (
-                  <div key={key} className="space-y-1.5">
-                    <Label htmlFor={key} className="text-xs">
-                      {label}
-                    </Label>
-                    <Input
-                      id={key}
-                      inputMode="decimal"
-                      value={String(config[key]).replace(".", ",")}
-                      onChange={(e) => {
-                        const n = parseFloat(e.target.value.replace(",", ".")) || 0;
-                        updateConfig({ [key]: n } as Partial<AnalysisConfig>);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Os parâmetros ficam salvos neste navegador e são aplicados imediatamente à análise.
-              </p>
-            </>
-          )}
-
           {mutation.isError && (
             <p className="mt-3 flex items-center gap-2 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
@@ -230,6 +245,7 @@ export default function OrcamentoAnalysisPage() {
           )}
         </CardContent>
       </Card>
+
 
       {mutation.isPending && (
         <div className="grid gap-3 md:grid-cols-4">

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Loader2, Plus, Search, Trash2, Users } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, Loader2, Plus, Search, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,7 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
   const [resultados, setResultados] = useState<OrcamentoResumo[] | null>(null);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [orcamentos, setOrcamentos] = useState<any[]>([]);
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [desl, setDesl] = useState<DeslocamentoInput>(DEFAULT_DESLOCAMENTO);
   const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(config));
 
@@ -252,6 +253,7 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10" />
                       <TableHead>Orçamento</TableHead>
                       <TableHead>Cliente</TableHead>
                       <TableHead className="text-right">Receita</TableHead>
@@ -262,41 +264,159 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {analysis.itens.map((i) => (
-                      <TableRow key={i.id}>
-                        <TableCell>
-                          <p className="font-medium">#{i.codigo}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {[i.data, i.nomeSituacao].filter(Boolean).join(" · ")}
-                          </p>
-                        </TableCell>
-                        <TableCell className="max-w-[220px] truncate">{i.nomeCliente}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatBRL(i.receita)}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatBRL(i.custoDireto)}</TableCell>
-                        <TableCell
-                          className={cn(
-                            "text-right tabular-nums",
-                            i.margemDiretaPct < 0 ? "text-destructive" : "text-emerald-500"
+                    {analysis.itens.map((i) => {
+                      const aberto = expandidos.has(i.id);
+                      const produtos = i.linhas.filter((l) => l.tipo === "produto");
+                      const servicos = i.linhas.filter((l) => l.tipo === "servico");
+                      return (
+                        <Fragment key={i.id}>
+                          <TableRow>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label={aberto ? "Ocultar itens" : "Ver itens"}
+                                onClick={() =>
+                                  setExpandidos((prev) => {
+                                    const next = new Set(prev);
+                                    next.has(i.id) ? next.delete(i.id) : next.add(i.id);
+                                    return next;
+                                  })
+                                }
+                              >
+                                {aberto ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              </Button>
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-medium">#{i.codigo}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {[i.data, i.nomeSituacao].filter(Boolean).join(" · ")}
+                              </p>
+                            </TableCell>
+                            <TableCell className="max-w-[220px] truncate">{i.nomeCliente}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatBRL(i.receita)}
+                              <p className="text-xs text-muted-foreground">
+                                Peças {formatBRL(i.receitaProdutos)} · Serv. {formatBRL(i.receitaServicos)}
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatBRL(i.custoDireto)}
+                              <p className="text-xs text-muted-foreground">
+                                Peças {formatBRL(i.custoProdutos)} · Serv. {formatBRL(i.custoServicos)}
+                              </p>
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                "text-right tabular-nums",
+                                i.margemDiretaPct < 0 ? "text-destructive" : "text-emerald-500"
+                              )}
+                            >
+                              {formatPct(i.margemDiretaPct)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">{i.kmDetectado || "—"}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  setOrcamentos((prev) => prev.filter((o) => String(o?.id ?? "") !== i.id))
+                                }
+                              >
+                                <Trash2 className="h-4 w-4 text-muted-foreground" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          {aberto && (
+                            <TableRow className="hover:bg-transparent">
+                              <TableCell colSpan={8} className="bg-muted/30 p-0">
+                                {i.linhas.length === 0 ? (
+                                  <p className="px-4 py-3 text-xs text-muted-foreground">
+                                    Este orçamento não tem itens detalhados no GestãoClick.
+                                  </p>
+                                ) : (
+                                  <div className="overflow-x-auto p-3">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Item</TableHead>
+                                          <TableHead className="text-right">Qtd</TableHead>
+                                          <TableHead className="text-right">Custo un.</TableHead>
+                                          <TableHead className="text-right">Venda un.</TableHead>
+                                          <TableHead className="text-right">Custo total</TableHead>
+                                          <TableHead className="text-right">Receita</TableHead>
+                                          <TableHead className="text-right">Margem</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {[...produtos, ...servicos].map((l, idx) => (
+                                          <TableRow key={`${i.id}-l-${idx}`}>
+                                            <TableCell>
+                                              <div className="flex items-center gap-2">
+                                                <Badge
+                                                  variant={l.tipo === "produto" ? "secondary" : "outline"}
+                                                  className="shrink-0"
+                                                >
+                                                  {l.tipo === "produto" ? "Peça" : "Serviço"}
+                                                </Badge>
+                                                <div className="min-w-0">
+                                                  <p className="truncate font-medium">{l.nome}</p>
+                                                  <p className="truncate text-xs text-muted-foreground">
+                                                    {[l.detalhes, l.tabela].filter(Boolean).join(" · ")}
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                              {l.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                              {l.semCusto ? (
+                                                <span className="text-amber-500">sem custo</span>
+                                              ) : (
+                                                formatBRL(l.valorUnitCusto)
+                                              )}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                              {formatBRL(l.valorUnitVenda)}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                              {formatBRL(l.custo)}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                              {formatBRL(l.receita)}
+                                            </TableCell>
+                                            <TableCell
+                                              className={cn(
+                                                "text-right font-medium tabular-nums",
+                                                l.margemBruta < 0
+                                                  ? "text-destructive"
+                                                  : l.margemBrutaPct < 10
+                                                    ? "text-amber-500"
+                                                    : "text-emerald-500"
+                                              )}
+                                            >
+                                              {formatBRL(l.margemBruta)}
+                                              <span className="ml-1 text-xs opacity-70">
+                                                ({formatPct(l.margemBrutaPct)})
+                                              </span>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                )}
+                              </TableCell>
+                            </TableRow>
                           )}
-                        >
-                          {formatPct(i.margemDiretaPct)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{i.kmDetectado || "—"}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() =>
-                              setOrcamentos((prev) => prev.filter((o) => String(o?.id ?? "") !== i.id))
-                            }
-                          >
-                            <Trash2 className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                        </Fragment>
+                      );
+                    })}
                   </TableBody>
                 </Table>
+
               </div>
             </CardContent>
           </Card>

@@ -785,8 +785,11 @@ export interface GrupoItem {
   custoDireto: number;
   receitaProdutos: number;
   receitaServicos: number;
+  custoProdutos: number;
+  custoServicos: number;
   kmDetectado: number;
   margemDiretaPct: number;
+  linhas: AnalysisLine[];
 }
 
 export interface GrupoAnalysis {
@@ -849,8 +852,11 @@ export function analyzeGrupo(
       custoDireto,
       receitaProdutos: a.receitaProdutos,
       receitaServicos: a.receitaServicos,
+      custoProdutos: a.custoProdutos,
+      custoServicos: a.custoServicos,
       kmDetectado: a.deslocamento.kmDetectado,
       margemDiretaPct: a.receitaLiquida > 0 ? ((a.receitaLiquida - custoDireto) / a.receitaLiquida) * 100 : 0,
+      linhas: a.linhas,
     };
   });
 

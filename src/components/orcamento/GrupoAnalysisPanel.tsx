@@ -243,11 +243,24 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="h-4 w-4 text-primary" />
-                Orçamentos do conjunto ({analysis.itens.length})
-              </CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="h-4 w-4 text-primary" />
+                  Orçamentos do conjunto ({analysis.itens.length})
+                </CardTitle>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => exportGrupoXLSX(analysis)}>
+                    <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+                    Excel
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => exportGrupoPDF(analysis)}>
+                    <FileText className="mr-1.5 h-4 w-4" />
+                    PDF
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
+
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>

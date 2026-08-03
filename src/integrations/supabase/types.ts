@@ -762,6 +762,7 @@ export type Database = {
       orcamento_analysis_config: {
         Row: {
           alimentacao_dia: number
+          cdb_anual_pct: number
           custo_fixo_pct: number
           custo_por_km: number
           garantia_pct: number
@@ -778,6 +779,7 @@ export type Database = {
         }
         Insert: {
           alimentacao_dia?: number
+          cdb_anual_pct?: number
           custo_fixo_pct?: number
           custo_por_km?: number
           garantia_pct?: number
@@ -794,6 +796,7 @@ export type Database = {
         }
         Update: {
           alimentacao_dia?: number
+          cdb_anual_pct?: number
           custo_fixo_pct?: number
           custo_por_km?: number
           garantia_pct?: number

@@ -193,6 +193,7 @@ export default function OrcamentoAnalysisPage() {
                   ["moAdminHorasPadrao", "Horas administrativas padrão"],
                   ["premiacaoPecaPct", "Premiação peças (%)"],
                   ["premiacaoServicoPct", "Premiação serviços (%)"],
+                  ["cdbAnualPct", "CDB anual (%)"],
                 ] as Array<[keyof AnalysisConfig, string]>
               ).map(([key, label]) => (
                 <div key={key} className="space-y-1.5">
@@ -524,6 +525,10 @@ export default function OrcamentoAnalysisPage() {
                 ["Alimentação", -analysis.extras.alimentacao],
                 ["MO administrativa", -analysis.extras.moAdmin],
                 ["Premiação do técnico", -analysis.extras.premiacao],
+                [
+                  `Custo do parcelamento (${formatPct(analysis.extras.parcelamentoPct, 2)} em ${analysis.extras.parcelas}x)`,
+                  -analysis.extras.parcelamento,
+                ],
                 [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
                 [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0

@@ -573,6 +573,10 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                 ["Alimentação", -analysis.extras.alimentacao],
                 ["MO administrativa", -analysis.extras.moAdmin],
                 ["Premiação do técnico", -analysis.extras.premiacao],
+                [
+                  `Custo do parcelamento (${formatPct(analysis.extras.parcelamentoPct, 2)} em ${analysis.extras.parcelas}x)`,
+                  -analysis.extras.parcelamento,
+                ],
                 [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
                 [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0

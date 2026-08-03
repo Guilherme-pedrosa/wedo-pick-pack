@@ -63,6 +63,8 @@ export interface AnalysisConfig {
   premiacaoPecaPct: number;
   /** Premiação do técnico sobre serviços (%) */
   premiacaoServicoPct: number;
+  /** Rendimento anual do CDB (%) — base do custo do dinheiro no parcelamento */
+  cdbAnualPct: number;
 }
 
 export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
@@ -77,6 +79,7 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   moAdminHorasPadrao: 1,
   premiacaoPecaPct: 1,
   premiacaoServicoPct: 15,
+  cdbAnualPct: 14,
 };
 
 /** Custos operacionais informados na análise (por orçamento ou por conjunto) */
@@ -94,6 +97,9 @@ export interface ExtrasInput {
   pedagio: number;
   /** hospedagem total (R$) */
   hospedagem: number;
+  /** quantidade de parcelas do pagamento */
+  parcelas: number;
+  considerarParcelamento: boolean;
 }
 
 export function defaultExtras(cfg: AnalysisConfig): ExtrasInput {
@@ -106,6 +112,8 @@ export function defaultExtras(cfg: AnalysisConfig): ExtrasInput {
     considerarPremiacao: true,
     pedagio: 0,
     hospedagem: 0,
+    parcelas: 1,
+    considerarParcelamento: true,
   };
 }
 
@@ -120,6 +128,10 @@ export interface ExtrasResumo {
   /** Restorno Sapore (8% sobre a receita líquida) */
   restorno: number;
   restornoPct: number;
+  /** Custo do dinheiro no parcelamento (CDB anual / nº de parcelas) */
+  parcelamento: number;
+  parcelamentoPct: number;
+  parcelas: number;
   total: number;
 }
 
@@ -205,6 +217,7 @@ function rowToConfig(row: any): AnalysisConfig {
     moAdminHorasPadrao: Number(row.mo_admin_horas_padrao ?? DEFAULT_ANALYSIS_CONFIG.moAdminHorasPadrao),
     premiacaoPecaPct: Number(row.premiacao_peca_pct ?? DEFAULT_ANALYSIS_CONFIG.premiacaoPecaPct),
     premiacaoServicoPct: Number(row.premiacao_servico_pct ?? DEFAULT_ANALYSIS_CONFIG.premiacaoServicoPct),
+    cdbAnualPct: Number(row.cdb_anual_pct ?? DEFAULT_ANALYSIS_CONFIG.cdbAnualPct),
   };
 }
 
@@ -239,6 +252,7 @@ export async function saveAnalysisConfig(cfg: AnalysisConfig): Promise<AnalysisC
         mo_admin_horas_padrao: cfg.moAdminHorasPadrao,
         premiacao_peca_pct: cfg.premiacaoPecaPct,
         premiacao_servico_pct: cfg.premiacaoServicoPct,
+        cdb_anual_pct: cfg.cdbAnualPct,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }
@@ -518,7 +532,7 @@ export function computeExtras(
   extras: ExtrasInput,
   receitaPecas: number,
   receitaServicos: number,
-  opts?: { nomeCliente?: string; receitaRestorno?: number }
+  opts?: { nomeCliente?: string; receitaRestorno?: number; receitaFinanciamento?: number }
 ): ExtrasResumo {
   const alimentacao = extras.considerarAlimentacao
     ? Math.max(0, extras.dias) * Math.max(0, extras.tecnicos) * config.alimentacaoDia
@@ -543,6 +557,15 @@ export function computeExtras(
   const restornoPct = aplicaRestorno ? RESTORNO_SAPORE_PCT : 0;
   const restorno = baseRestorno * (restornoPct / 100);
 
+  // Parcelamento: custo do dinheiro = CDB anual / quantidade de parcelas
+  const parcelas = Math.max(1, Math.round(extras.parcelas || 1));
+  const baseFinanciamento = Math.max(
+    0,
+    opts?.receitaFinanciamento ?? opts?.receitaRestorno ?? Math.max(0, receitaPecas) + Math.max(0, receitaServicos)
+  );
+  const parcelamentoPct = extras.considerarParcelamento ? (config.cdbAnualPct || 0) / parcelas : 0;
+  const parcelamento = baseFinanciamento * (parcelamentoPct / 100);
+
   return {
     alimentacao,
     moAdmin,
@@ -553,7 +576,10 @@ export function computeExtras(
     hospedagem,
     restorno,
     restornoPct,
-    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem + restorno,
+    parcelamento,
+    parcelamentoPct,
+    parcelas,
+    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem + restorno + parcelamento,
   };
 }
 
@@ -614,6 +640,7 @@ export function analyzeOrcamento(
   const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos, {
     nomeCliente: String(orc.nome_cliente || ''),
     receitaRestorno: receitaLiquida,
+    receitaFinanciamento: receitaLiquida,
   });
 
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
@@ -832,6 +859,7 @@ export function analyzeGrupo(
     considerarAlimentacao: false,
     considerarAdmin: false,
     considerarPremiacao: false,
+    considerarParcelamento: false,
     pedagio: 0,
     hospedagem: 0,
   };
@@ -892,6 +920,7 @@ export function analyzeGrupo(
   const extras = computeExtras(config, extrasInput, receitaProdutos, receitaServicos, {
     nomeCliente: receitaRestorno > 0 ? 'sapore' : '',
     receitaRestorno,
+    receitaFinanciamento: receitaLiquida,
   });
   const custoTotal = custoDireto + custoAdicional + extras.total;
 

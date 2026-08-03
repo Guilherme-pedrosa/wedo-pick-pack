@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   Calculator,
+  Route,
   Loader2,
   Search,
   Settings2,
@@ -29,6 +30,8 @@ import { cn } from "@/lib/utils";
 import {
   AnalysisConfig,
   OrcamentoAnalysis,
+  DeslocamentoInput,
+  DEFAULT_DESLOCAMENTO,
   analyzeOrcamento,
   buildParecer,
   fetchOrcamentoByCodigo,
@@ -75,12 +78,15 @@ export default function OrcamentoAnalysisPage() {
   const [showConfig, setShowConfig] = useState(false);
   const [rawOrc, setRawOrc] = useState<any | null>(null);
   const [analysis, setAnalysis] = useState<OrcamentoAnalysis | null>(null);
+  const [desl, setDesl] = useState<DeslocamentoInput>({ ...DEFAULT_DESLOCAMENTO });
 
   const mutation = useMutation({
     mutationFn: async (code: string) => fetchOrcamentoByCodigo(code),
     onSuccess: (orc) => {
       setRawOrc(orc);
-      setAnalysis(analyzeOrcamento(orc, config));
+      const next: DeslocamentoInput = { ...desl, modo: "auto" };
+      setDesl(next);
+      setAnalysis(analyzeOrcamento(orc, config, next));
     },
     onError: () => {
       setRawOrc(null);
@@ -92,10 +98,17 @@ export default function OrcamentoAnalysisPage() {
     const next = { ...config, ...patch };
     setConfig(next);
     saveAnalysisConfig(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl));
+  };
+
+  const updateDesl = (patch: Partial<DeslocamentoInput>) => {
+    const next = { ...desl, ...patch };
+    setDesl(next);
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next));
   };
 
   const parecer = analysis ? buildParecer(analysis) : null;
+
 
   return (
     <div className="space-y-6">
@@ -156,6 +169,7 @@ export default function OrcamentoAnalysisPage() {
                     ["garantiaPct", "Garantia (%)"],
                     ["margemMinima", "Margem mínima (%)"],
                     ["margemMeta", "Margem meta (%)"],
+                    ["custoPorKm", "Custo por km (R$)"],
                   ] as Array<[keyof AnalysisConfig, string]>
                 ).map(([key, label]) => (
                   <div key={key} className="space-y-1.5">
@@ -233,7 +247,107 @@ export default function OrcamentoAnalysisPage() {
             </CardHeader>
           </Card>
 
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Route className="h-4 w-4 text-primary" />
+                Custo de deslocamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    ["auto", "Considerar (do orçamento)"],
+                    ["manual", "Editar km"],
+                    ["ignorar", "Não considerar"],
+                  ] as Array<[typeof desl.modo, string]>
+                ).map(([modo, label]) => (
+                  <Button
+                    key={modo}
+                    type="button"
+                    size="sm"
+                    variant={desl.modo === modo ? "default" : "outline"}
+                    onClick={() =>
+                      updateDesl({
+                        modo,
+                        km: modo === "manual" && !desl.km ? analysis.deslocamento.kmDetectado : desl.km,
+                      })
+                    }
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+
+              {desl.modo === "manual" && (
+                <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="km" className="text-xs">
+                      Km rodados
+                    </Label>
+                    <Input
+                      id="km"
+                      inputMode="decimal"
+                      value={String(desl.km).replace(".", ",")}
+                      onChange={(e) => updateDesl({ km: parseFloat(e.target.value.replace(",", ".")) || 0 })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="custoKm" className="text-xs">
+                      Custo por km (R$)
+                    </Label>
+                    <Input
+                      id="custoKm"
+                      inputMode="decimal"
+                      value={String(desl.custoPorKm ?? config.custoPorKm).replace(".", ",")}
+                      onChange={(e) =>
+                        updateDesl({ custoPorKm: parseFloat(e.target.value.replace(",", ".")) || 0 })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-2 text-sm sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Km considerados</p>
+                  <p className="font-semibold tabular-nums">
+                    {analysis.deslocamento.km.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km
+                    {analysis.deslocamento.kmDetectado > 0 && desl.modo === "manual" && (
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">
+                        (orçamento: {analysis.deslocamento.kmDetectado.toLocaleString("pt-BR", { maximumFractionDigits: 1 })})
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Custo do deslocamento</p>
+                  <p className="font-semibold tabular-nums">{formatBRL(analysis.deslocamento.custoEstimado)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Faturado ao cliente</p>
+                  <p
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      analysis.deslocamento.receita < analysis.deslocamento.custoEstimado && "text-amber-500"
+                    )}
+                  >
+                    {formatBRL(analysis.deslocamento.receita)}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {desl.modo === "ignorar"
+                  ? "Deslocamento desconsiderado — use quando a viagem for aproveitada de outro atendimento."
+                  : `O custo entra no resultado mesmo quando o deslocamento é dado de desconto ao cliente. Custo padrão: ${formatBRL(config.custoPorKm)}/km (ajustável em Parâmetros).`}
+              </p>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
             <KpiCard label="Receita (venda)" value={formatBRL(analysis.receitaLiquida)} hint={`Peças ${formatBRL(analysis.receitaProdutos)} · Serviços ${formatBRL(analysis.receitaServicos)}`} />
             <KpiCard label="Custo total" value={formatBRL(analysis.custoTotal)} hint={`Margem bruta ${formatPct(analysis.margemBrutaPct)}`} />
             <KpiCard
@@ -300,6 +414,7 @@ export default function OrcamentoAnalysisPage() {
                 ["Desconto do cabeçalho", -analysis.descontoCabecalho],
                 ["Custo das peças", -analysis.custoProdutos],
                 ["Custo dos serviços", -analysis.custoServicos],
+                ["Custo de deslocamento (adicional)", -analysis.deslocamento.custoAdicional],
                 [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0
                   ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<[string, number]>)

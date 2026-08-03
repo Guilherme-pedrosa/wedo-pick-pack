@@ -542,6 +542,13 @@ export default function OrcamentoAnalysisPage() {
           </Card>
         </>
       )}
+        </TabsContent>
+
+        <TabsContent value="conjunto" className="space-y-6">
+          <GrupoAnalysisPanel config={config} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+

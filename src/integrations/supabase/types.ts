@@ -761,6 +761,7 @@ export type Database = {
       }
       orcamento_analysis_config: {
         Row: {
+          alimentacao_dia: number
           custo_fixo_pct: number
           custo_por_km: number
           garantia_pct: number
@@ -768,10 +769,15 @@ export type Database = {
           imposto_pct: number
           margem_meta: number
           margem_minima: number
+          mo_admin_hora: number
+          mo_admin_horas_padrao: number
+          premiacao_peca_pct: number
+          premiacao_servico_pct: number
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          alimentacao_dia?: number
           custo_fixo_pct?: number
           custo_por_km?: number
           garantia_pct?: number
@@ -779,10 +785,15 @@ export type Database = {
           imposto_pct?: number
           margem_meta?: number
           margem_minima?: number
+          mo_admin_hora?: number
+          mo_admin_horas_padrao?: number
+          premiacao_peca_pct?: number
+          premiacao_servico_pct?: number
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          alimentacao_dia?: number
           custo_fixo_pct?: number
           custo_por_km?: number
           garantia_pct?: number
@@ -790,6 +801,10 @@ export type Database = {
           imposto_pct?: number
           margem_meta?: number
           margem_minima?: number
+          mo_admin_hora?: number
+          mo_admin_horas_padrao?: number
+          premiacao_peca_pct?: number
+          premiacao_servico_pct?: number
           updated_at?: string
           updated_by?: string | null
         }

@@ -611,7 +611,10 @@ export function analyzeOrcamento(
   };
 
   const extrasIn = extrasInput ?? defaultExtras(config);
-  const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos);
+  const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos, {
+    nomeCliente: String(orc.nome_cliente || ''),
+    receitaRestorno: receitaLiquida,
+  });
 
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
   const custoTotal = custoProdutos + custoServicos + custoAdicional + extras.total;

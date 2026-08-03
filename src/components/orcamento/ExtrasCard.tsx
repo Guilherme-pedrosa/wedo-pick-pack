@@ -88,6 +88,10 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
                 `Premiação (${config.premiacaoPecaPct}% peças / ${config.premiacaoServicoPct}% serviços)`,
               ],
               ["considerarParcelamento", `Custo do parcelamento (CDB ${config.cdbAnualPct}% a.a. — 1x = sem custo)`],
+              [
+                "nota10",
+                `Nota 10 (−10% no imposto: ${config.impostoPct.toFixed(2).replace(".", ",")}% → ${(config.impostoPct * 0.9).toFixed(2).replace(".", ",")}%)`,
+              ],
             ] as Array<[keyof ExtrasInput, string]>
           ).map(([key, label]) => (
             <label key={key} className="flex items-center gap-2 text-sm">

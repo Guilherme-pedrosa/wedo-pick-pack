@@ -658,7 +658,7 @@ export function analyzeOrcamento(
   const custoTotal = custoProdutos + custoServicos + custoAdicional + extras.total;
 
   const nota10 = Boolean(extrasIn.nota10);
-  const impostoPctEfetivo = nota10 ? config.impostoPct * 0.9 : config.impostoPct;
+  const impostoPctEfetivo = nota10 ? Math.max(0, config.impostoPct - 10) : config.impostoPct;
   const imposto = receitaLiquida * (impostoPctEfetivo / 100);
   const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
   const garantia = receitaLiquida * (config.garantiaPct / 100);
@@ -943,7 +943,7 @@ export function analyzeGrupo(
   const custoTotal = custoDireto + custoAdicional + extras.total;
 
   const nota10 = Boolean(extrasInput.nota10);
-  const impostoPctEfetivo = nota10 ? config.impostoPct * 0.9 : config.impostoPct;
+  const impostoPctEfetivo = nota10 ? Math.max(0, config.impostoPct - 10) : config.impostoPct;
   const imposto = receitaLiquida * (impostoPctEfetivo / 100);
   const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
   const garantia = receitaLiquida * (config.garantiaPct / 100);

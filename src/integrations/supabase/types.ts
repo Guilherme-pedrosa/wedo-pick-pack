@@ -759,6 +759,42 @@ export type Database = {
           },
         ]
       }
+      orcamento_analysis_config: {
+        Row: {
+          custo_fixo_pct: number
+          custo_por_km: number
+          garantia_pct: number
+          id: string
+          imposto_pct: number
+          margem_meta: number
+          margem_minima: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          custo_fixo_pct?: number
+          custo_por_km?: number
+          garantia_pct?: number
+          id?: string
+          imposto_pct?: number
+          margem_meta?: number
+          margem_minima?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          custo_fixo_pct?: number
+          custo_por_km?: number
+          garantia_pct?: number
+          id?: string
+          imposto_pct?: number
+          margem_meta?: number
+          margem_minima?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       os_generation_logs: {
         Row: {
           auvo_task_id: string | null

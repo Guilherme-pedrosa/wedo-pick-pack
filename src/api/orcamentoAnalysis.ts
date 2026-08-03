@@ -98,7 +98,9 @@ export interface DeslocamentoResumo {
 
 
 const CONFIG_KEY = 'wedo:orcamento-analysis-config';
+const CONFIG_ROW_ID = 'global';
 
+/** Cache local (só para primeira pintura); a fonte da verdade é o banco. */
 export function loadAnalysisConfig(): AnalysisConfig {
   try {
     const raw = localStorage.getItem(CONFIG_KEY);
@@ -109,13 +111,61 @@ export function loadAnalysisConfig(): AnalysisConfig {
   }
 }
 
-export function saveAnalysisConfig(cfg: AnalysisConfig) {
+function cacheAnalysisConfig(cfg: AnalysisConfig) {
   try {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
   } catch {
     /* ignore */
   }
 }
+
+function rowToConfig(row: any): AnalysisConfig {
+  return {
+    impostoPct: Number(row.imposto_pct ?? DEFAULT_ANALYSIS_CONFIG.impostoPct),
+    custoFixoPct: Number(row.custo_fixo_pct ?? DEFAULT_ANALYSIS_CONFIG.custoFixoPct),
+    garantiaPct: Number(row.garantia_pct ?? DEFAULT_ANALYSIS_CONFIG.garantiaPct),
+    margemMinima: Number(row.margem_minima ?? DEFAULT_ANALYSIS_CONFIG.margemMinima),
+    margemMeta: Number(row.margem_meta ?? DEFAULT_ANALYSIS_CONFIG.margemMeta),
+    custoPorKm: Number(row.custo_por_km ?? DEFAULT_ANALYSIS_CONFIG.custoPorKm),
+  };
+}
+
+/** Parâmetros globais, compartilhados por todos os usuários. */
+export async function fetchAnalysisConfig(): Promise<AnalysisConfig> {
+  const { data, error } = await supabase
+    .from('orcamento_analysis_config')
+    .select('*')
+    .eq('id', CONFIG_ROW_ID)
+    .maybeSingle();
+  if (error || !data) return loadAnalysisConfig();
+  const cfg = rowToConfig(data);
+  cacheAnalysisConfig(cfg);
+  return cfg;
+}
+
+export async function saveAnalysisConfig(cfg: AnalysisConfig): Promise<AnalysisConfig> {
+  cacheAnalysisConfig(cfg);
+  const { data, error } = await supabase
+    .from('orcamento_analysis_config')
+    .upsert(
+      {
+        id: CONFIG_ROW_ID,
+        imposto_pct: cfg.impostoPct,
+        custo_fixo_pct: cfg.custoFixoPct,
+        garantia_pct: cfg.garantiaPct,
+        margem_minima: cfg.margemMinima,
+        margem_meta: cfg.margemMeta,
+        custo_por_km: cfg.custoPorKm,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    )
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToConfig(data) : cfg;
+}
+
 
 // --- Tipos ------------------------------------------------------------------
 

@@ -136,7 +136,9 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
         <p className="text-xs text-muted-foreground">
           Premiação estimada: {formatBRL(resumo.premiacaoPecas)} em peças + {formatBRL(resumo.premiacaoServicos)} em
           serviços. Ajuste os percentuais em Parâmetros quando o cliente tiver contrato com taxa diferente.
-          {` Custo do parcelamento: CDB de ${config.cdbAnualPct}% a.a. dividido por ${resumo.parcelas} parcela(s) sobre o faturamento.`}
+          {resumo.parcelas > 1
+            ? ` Custo do parcelamento: taxa mensal de ${(config.cdbAnualPct / 12).toFixed(2).replace(".", ",")}% (CDB ${config.cdbAnualPct}% a.a. ÷ 12) sobre o prazo médio de ${((resumo.parcelas - 1) / 2).toFixed(1).replace(".", ",")} mês(es) em ${resumo.parcelas}x.`
+            : " Pagamento à vista (1x): sem custo de parcelamento."}
           {resumo.restorno > 0 &&
             ` Cliente Sapore: restorno de ${resumo.restornoPct}% sobre o faturamento aplicado automaticamente.`}
         </p>

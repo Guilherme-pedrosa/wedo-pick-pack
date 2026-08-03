@@ -29,6 +29,8 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
   const [dias, setDias] = useState(30);
   const [buscando, setBuscando] = useState(false);
   const [carregando, setCarregando] = useState(false);
+  const [clientes, setClientes] = useState<ClienteResumo[] | null>(null);
+  const [clienteSel, setClienteSel] = useState<ClienteResumo | null>(null);
   const [resultados, setResultados] = useState<OrcamentoResumo[] | null>(null);
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [orcamentos, setOrcamentos] = useState<any[]>([]);
@@ -40,19 +42,36 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
     [orcamentos, config, desl, extras]
   );
 
-  const buscar = async () => {
+  const buscarClientes = async () => {
+    setBuscando(true);
+    setResultados(null);
+    setClienteSel(null);
+    try {
+      const list = await searchClientes(cliente);
+      setClientes(list);
+      if (!list.length) toast.info("Nenhum cliente encontrado com esse termo.");
+    } catch (e) {
+      toast.error((e as Error)?.message || "Erro ao buscar clientes.");
+    } finally {
+      setBuscando(false);
+    }
+  };
+
+  const carregarOrcamentos = async (c: ClienteResumo, janela = dias) => {
+    setClienteSel(c);
     setBuscando(true);
     try {
-      const list = await searchOrcamentosByCliente(cliente, dias);
+      const list = await searchOrcamentosByCliente({ id: c.id, nome: c.nome }, janela);
       setResultados(list);
       setSelecionados(new Set());
-      if (!list.length) toast.info(`Nenhum orçamento desse cliente nos últimos ${dias} dias.`);
+      if (!list.length) toast.info(`Nenhum orçamento de ${c.nome} nos últimos ${janela} dias.`);
     } catch (e) {
       toast.error((e as Error)?.message || "Erro ao buscar orçamentos.");
     } finally {
       setBuscando(false);
     }
   };
+
 
   const toggle = (id: string) =>
     setSelecionados((prev) => {

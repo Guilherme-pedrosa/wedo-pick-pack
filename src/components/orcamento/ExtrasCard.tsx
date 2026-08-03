@@ -90,7 +90,7 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
               ["considerarParcelamento", `Custo do parcelamento (CDB ${config.cdbAnualPct}% a.a. — 1x = sem custo)`],
               [
                 "nota10",
-                `Nota 10 (−10% no imposto: ${config.impostoPct.toFixed(2).replace(".", ",")}% → ${(config.impostoPct * 0.9).toFixed(2).replace(".", ",")}%)`,
+                `Nota 10 (−10 p.p. no imposto: ${config.impostoPct.toFixed(2).replace(".", ",")}% → ${Math.max(0, config.impostoPct - 10).toFixed(2).replace(".", ",")}%)`,
               ],
             ] as Array<[keyof ExtrasInput, string]>
           ).map(([key, label]) => (

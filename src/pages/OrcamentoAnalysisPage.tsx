@@ -374,6 +374,14 @@ export default function OrcamentoAnalysisPage() {
             </CardContent>
           </Card>
 
+          <ExtrasCard
+            config={config}
+            extras={extras}
+            resumo={analysis.extras}
+            onChange={updateExtras}
+          />
+
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
             <KpiCard label="Receita (venda)" value={formatBRL(analysis.receitaLiquida)} hint={`Peças ${formatBRL(analysis.receitaProdutos)} · Serviços ${formatBRL(analysis.receitaServicos)}`} />

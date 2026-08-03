@@ -335,36 +335,110 @@ function parseGCDate(value: any): Date | null {
   return null;
 }
 
+/** Normaliza texto (sem acento, minúsculo) para comparação */
+function norm(s: any): string {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export interface ClienteResumo {
+  id: string;
+  nome: string;
+  documento: string;
+  cidade: string;
+}
+
+/** Busca clientes no GC por nome/razão social (filtro local por tokens, sem acento) */
+export async function searchClientes(termo: string): Promise<ClienteResumo[]> {
+  const q = termo.trim();
+  if (q.length < 3) throw new Error('Digite ao menos 3 letras do nome do cliente.');
+
+  const tokens = norm(q).split(' ').filter(Boolean);
+  const coletados: any[] = [];
+  let pagina = 1;
+  let totalPaginas = 1;
+  do {
+    const res = await apiRequest<{ data: any[]; meta?: any }>(
+      `/api/clientes?pagina=${pagina}&nome=${encodeURIComponent(q)}`
+    );
+    coletados.push(...(res?.data || []));
+    totalPaginas = Number(res?.meta?.total_paginas || 1);
+    pagina += 1;
+  } while (pagina <= totalPaginas && pagina <= 5);
+
+  // Fallback: se a API não achou nada com o nome completo, tenta pelo primeiro token
+  if (!coletados.length && tokens.length > 1) {
+    const res = await apiRequest<{ data: any[] }>(
+      `/api/clientes?pagina=1&nome=${encodeURIComponent(tokens[0])}`
+    );
+    coletados.push(...(res?.data || []));
+  }
+
+  const vistos = new Set<string>();
+  return coletados
+    .map((c: any) => c?.cliente ?? c)
+    .filter((c: any) => {
+      const alvo = norm(`${c?.nome || ''} ${c?.razao_social || ''} ${c?.nome_fantasia || ''}`);
+      return tokens.every((t) => alvo.includes(t));
+    })
+    .map((c: any) => ({
+      id: String(c?.id ?? ''),
+      nome: String(c?.nome || c?.razao_social || c?.nome_fantasia || ''),
+      documento: String(c?.cnpj || c?.cpf || ''),
+      cidade: String(c?.cidade || c?.nome_cidade || ''),
+    }))
+    .filter((c) => {
+      if (!c.id || vistos.has(c.id)) return false;
+      vistos.add(c.id);
+      return true;
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
 /**
  * Busca orçamentos de um cliente nos últimos N dias.
- * A API do GC filtra por nome do cliente; a janela de datas é aplicada localmente.
+ * Aceita o id do cliente (preferido) ou um nome; a janela de datas é aplicada localmente.
  */
 export async function searchOrcamentosByCliente(
-  nomeCliente: string,
+  cliente: { id?: string; nome?: string } | string,
   dias = 30
 ): Promise<OrcamentoResumo[]> {
-  const termo = nomeCliente.trim();
-  if (termo.length < 3) throw new Error('Digite ao menos 3 letras do nome do cliente.');
+  const clienteId = typeof cliente === 'string' ? '' : String(cliente?.id || '');
+  const termo = (typeof cliente === 'string' ? cliente : cliente?.nome || '').trim();
+  if (!clienteId && termo.length < 3) throw new Error('Selecione o cliente na lista.');
 
   const limite = new Date();
   limite.setHours(0, 0, 0, 0);
   limite.setDate(limite.getDate() - Math.max(1, dias));
+
+  const filtro = clienteId
+    ? `cliente_id=${encodeURIComponent(clienteId)}`
+    : `nome=${encodeURIComponent(termo)}`;
 
   const coletados: any[] = [];
   let pagina = 1;
   let totalPaginas = 1;
   do {
     const res = await apiRequest<{ data: any[]; meta?: any }>(
-      `/api/orcamentos?pagina=${pagina}&nome=${encodeURIComponent(termo)}`
+      `/api/orcamentos?pagina=${pagina}&${filtro}`
     );
     coletados.push(...(res?.data || []));
     totalPaginas = Number(res?.meta?.total_paginas || 1);
     pagina += 1;
   } while (pagina <= totalPaginas && pagina <= 10);
 
-  const termoLower = termo.toLowerCase();
+  const tokens = norm(termo).split(' ').filter(Boolean);
   const resumos = coletados
-    .filter((o: any) => String(o?.nome_cliente || '').toLowerCase().includes(termoLower))
+    .map((o: any) => o?.orcamento ?? o)
+    .filter((o: any) => {
+      if (clienteId) return String(o?.cliente_id ?? '') === clienteId;
+      const alvo = norm(o?.nome_cliente);
+      return tokens.every((t) => alvo.includes(t));
+    })
     .map((o: any) => {
       const d = parseGCDate(o?.data ?? o?.data_emissao ?? o?.data_orcamento);
       return {
@@ -383,6 +457,7 @@ export async function searchOrcamentosByCliente(
 
   return resumos.map(({ _d, ...rest }: any) => rest as OrcamentoResumo);
 }
+
 
 
 // --- Cálculo ----------------------------------------------------------------

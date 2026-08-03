@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { Calculator } from "lucide-react";
 import {
   Bot,
   LayoutDashboard,
@@ -90,6 +91,7 @@ const menuGroups: MenuGroup[] = [
       { title: "IA de Estoque", icon: Bot, href: "/estoque-ia" },
       { title: "Rastreador", icon: Search, href: "/rastreador" },
       { title: "Log OS Geradas", icon: ClipboardList, href: "/rastreador/logs" },
+      { title: "Análise de Orçamento", icon: Calculator, href: "/analise-orcamento" },
       { title: "Política Estoque", icon: Settings, href: "/config/estoque" },
     ],
   },

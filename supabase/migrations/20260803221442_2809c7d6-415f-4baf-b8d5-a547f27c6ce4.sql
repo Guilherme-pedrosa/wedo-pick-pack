@@ -1,0 +1,1 @@
+ALTER TABLE public.orcamento_analysis_config ADD COLUMN IF NOT EXISTS cdb_anual_pct numeric NOT NULL DEFAULT 14;

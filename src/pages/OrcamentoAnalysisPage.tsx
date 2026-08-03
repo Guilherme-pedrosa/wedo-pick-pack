@@ -28,22 +28,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import ExtrasCard from "@/components/orcamento/ExtrasCard";
+import GrupoAnalysisPanel from "@/components/orcamento/GrupoAnalysisPanel";
 import {
   AnalysisConfig,
   OrcamentoAnalysis,
   DeslocamentoInput,
   DEFAULT_DESLOCAMENTO,
+  ExtrasInput,
   analyzeOrcamento,
   buildParecer,
+  defaultExtras,
   fetchOrcamentoByCodigo,
   formatBRL,
   formatPct,
   loadAnalysisConfig,
   fetchAnalysisConfig,
-
   saveAnalysisConfig,
 } from "@/api/orcamentoAnalysis";
+
 
 function KpiCard({
   label,
@@ -78,14 +83,18 @@ function KpiCard({
 
 export default function OrcamentoAnalysisPage() {
   const [codigo, setCodigo] = useState("");
+  const [tab, setTab] = useState("individual");
   const [config, setConfig] = useState<AnalysisConfig>(() => loadAnalysisConfig());
   const [showConfig, setShowConfig] = useState(false);
   const [rawOrc, setRawOrc] = useState<any | null>(null);
   const [analysis, setAnalysis] = useState<OrcamentoAnalysis | null>(null);
   const [desl, setDesl] = useState<DeslocamentoInput>({ ...DEFAULT_DESLOCAMENTO });
+  const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(loadAnalysisConfig()));
   const rawOrcRef = useRef<any | null>(null);
   const deslRef = useRef<DeslocamentoInput>(desl);
+  const extrasRef = useRef<ExtrasInput>(extras);
   deslRef.current = desl;
+  extrasRef.current = extras;
   rawOrcRef.current = rawOrc;
 
   // Parâmetros globais: carrega do banco (fonte da verdade para todos os usuários)
@@ -95,8 +104,9 @@ export default function OrcamentoAnalysisPage() {
       .then((cfg) => {
         if (!active) return;
         setConfig(cfg);
+        setExtras((prev) => ({ ...prev, horasAdmin: prev.horasAdmin || cfg.moAdminHorasPadrao }));
         if (rawOrcRef.current) {
-          setAnalysis(analyzeOrcamento(rawOrcRef.current, cfg, deslRef.current));
+          setAnalysis(analyzeOrcamento(rawOrcRef.current, cfg, deslRef.current, extrasRef.current));
         }
       })
       .catch(() => {});
@@ -111,7 +121,7 @@ export default function OrcamentoAnalysisPage() {
       setRawOrc(orc);
       const next: DeslocamentoInput = { ...desl, modo: "auto" };
       setDesl(next);
-      setAnalysis(analyzeOrcamento(orc, config, next));
+      setAnalysis(analyzeOrcamento(orc, config, next, extras));
     },
     onError: () => {
       setRawOrc(null);
@@ -122,20 +132,27 @@ export default function OrcamentoAnalysisPage() {
   const updateConfig = (patch: Partial<AnalysisConfig>) => {
     const next = { ...config, ...patch };
     setConfig(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl, extras));
     saveAnalysisConfig(next).catch(() => {
       toast.error("Não foi possível salvar os parâmetros para todos os usuários.");
     });
   };
 
-
   const updateDesl = (patch: Partial<DeslocamentoInput>) => {
     const next = { ...desl, ...patch };
     setDesl(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next, extras));
+  };
+
+  const updateExtras = (patch: Partial<ExtrasInput>) => {
+    const next = { ...extras, ...patch };
+    setExtras(next);
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, desl, next));
   };
 
   const parecer = analysis ? buildParecer(analysis) : null;
+
+
 
 
   return (
@@ -147,7 +164,7 @@ export default function OrcamentoAnalysisPage() {
             Análise de Custos de Orçamentos
           </h1>
           <p className="text-sm text-muted-foreground">
-            Digite o número do orçamento para avaliar venda, custo, impostos e rentabilidade.
+            Avalie venda, custo, impostos e rentabilidade de um orçamento ou de vários do mesmo cliente.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setShowConfig((v) => !v)}>
@@ -156,6 +173,58 @@ export default function OrcamentoAnalysisPage() {
         </Button>
       </header>
 
+      {showConfig && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Parâmetros globais</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+              {(
+                [
+                  ["impostoPct", "Impostos (%)"],
+                  ["custoFixoPct", "Custo fixo (%)"],
+                  ["garantiaPct", "Garantia (%)"],
+                  ["margemMinima", "Margem mínima (%)"],
+                  ["margemMeta", "Margem meta (%)"],
+                  ["custoPorKm", "Custo por km (R$)"],
+                  ["alimentacaoDia", "Alimentação por dia/técnico (R$)"],
+                  ["moAdminHora", "MO administrativa (R$/h)"],
+                  ["moAdminHorasPadrao", "Horas administrativas padrão"],
+                  ["premiacaoPecaPct", "Premiação peças (%)"],
+                  ["premiacaoServicoPct", "Premiação serviços (%)"],
+                ] as Array<[keyof AnalysisConfig, string]>
+              ).map(([key, label]) => (
+                <div key={key} className="space-y-1.5">
+                  <Label htmlFor={key} className="text-xs">
+                    {label}
+                  </Label>
+                  <Input
+                    id={key}
+                    inputMode="decimal"
+                    value={String(config[key]).replace(".", ",")}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value.replace(",", ".")) || 0;
+                      updateConfig({ [key]: n } as Partial<AnalysisConfig>);
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Os parâmetros ficam salvos no sistema e valem para todos os usuários até alguém alterá-los.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="individual">Orçamento individual</TabsTrigger>
+          <TabsTrigger value="conjunto">Conjunto (mesmo cliente)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="individual" className="space-y-6">
       <Card>
         <CardContent className="p-4">
           <form
@@ -170,7 +239,6 @@ export default function OrcamentoAnalysisPage() {
               <Input
                 id="codigo"
                 inputMode="numeric"
-                autoFocus
                 placeholder="Ex.: 6278"
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
@@ -186,42 +254,6 @@ export default function OrcamentoAnalysisPage() {
             </Button>
           </form>
 
-          {showConfig && (
-            <>
-              <Separator className="my-4" />
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                {(
-                  [
-                    ["impostoPct", "Impostos (%)"],
-                    ["custoFixoPct", "Custo fixo (%)"],
-                    ["garantiaPct", "Garantia (%)"],
-                    ["margemMinima", "Margem mínima (%)"],
-                    ["margemMeta", "Margem meta (%)"],
-                    ["custoPorKm", "Custo por km (R$)"],
-                  ] as Array<[keyof AnalysisConfig, string]>
-                ).map(([key, label]) => (
-                  <div key={key} className="space-y-1.5">
-                    <Label htmlFor={key} className="text-xs">
-                      {label}
-                    </Label>
-                    <Input
-                      id={key}
-                      inputMode="decimal"
-                      value={String(config[key]).replace(".", ",")}
-                      onChange={(e) => {
-                        const n = parseFloat(e.target.value.replace(",", ".")) || 0;
-                        updateConfig({ [key]: n } as Partial<AnalysisConfig>);
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Os parâmetros ficam salvos neste navegador e são aplicados imediatamente à análise.
-              </p>
-            </>
-          )}
-
           {mutation.isError && (
             <p className="mt-3 flex items-center gap-2 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
@@ -230,6 +262,7 @@ export default function OrcamentoAnalysisPage() {
           )}
         </CardContent>
       </Card>
+
 
       {mutation.isPending && (
         <div className="grid gap-3 md:grid-cols-4">
@@ -374,6 +407,14 @@ export default function OrcamentoAnalysisPage() {
             </CardContent>
           </Card>
 
+          <ExtrasCard
+            config={config}
+            extras={extras}
+            resumo={analysis.extras}
+            onChange={updateExtras}
+          />
+
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
             <KpiCard label="Receita (venda)" value={formatBRL(analysis.receitaLiquida)} hint={`Peças ${formatBRL(analysis.receitaProdutos)} · Serviços ${formatBRL(analysis.receitaServicos)}`} />
@@ -443,6 +484,11 @@ export default function OrcamentoAnalysisPage() {
                 ["Custo das peças", -analysis.custoProdutos],
                 ["Custo dos serviços", -analysis.custoServicos],
                 ["Custo de deslocamento (adicional)", -analysis.deslocamento.custoAdicional],
+                ["Pedágio", -analysis.extras.pedagio],
+                ["Hospedagem", -analysis.extras.hospedagem],
+                ["Alimentação", -analysis.extras.alimentacao],
+                ["MO administrativa", -analysis.extras.moAdmin],
+                ["Premiação do técnico", -analysis.extras.premiacao],
                 [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0
                   ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<[string, number]>)
@@ -542,6 +588,13 @@ export default function OrcamentoAnalysisPage() {
           </Card>
         </>
       )}
+        </TabsContent>
+
+        <TabsContent value="conjunto" className="space-y-6">
+          <GrupoAnalysisPanel config={config} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+

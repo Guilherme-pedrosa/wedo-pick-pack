@@ -53,6 +53,16 @@ export interface AnalysisConfig {
   margemMeta: number;
   /** Custo real do deslocamento por km rodado (R$) */
   custoPorKm: number;
+  /** Alimentação por dia por técnico (R$) */
+  alimentacaoDia: number;
+  /** Mão de obra administrativa por hora (R$) */
+  moAdminHora: number;
+  /** Horas administrativas consideradas por padrão */
+  moAdminHorasPadrao: number;
+  /** Premiação do técnico sobre peças (%) */
+  premiacaoPecaPct: number;
+  /** Premiação do técnico sobre serviços (%) */
+  premiacaoServicoPct: number;
 }
 
 export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
@@ -62,7 +72,54 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   margemMinima: 19,
   margemMeta: 30,
   custoPorKm: 1.05,
+  alimentacaoDia: 25,
+  moAdminHora: 30,
+  moAdminHorasPadrao: 1,
+  premiacaoPecaPct: 1,
+  premiacaoServicoPct: 15,
 };
+
+/** Custos operacionais informados na análise (por orçamento ou por conjunto) */
+export interface ExtrasInput {
+  /** dias de atendimento */
+  dias: number;
+  /** técnicos envolvidos */
+  tecnicos: number;
+  considerarAlimentacao: boolean;
+  /** horas de mão de obra administrativa */
+  horasAdmin: number;
+  considerarAdmin: boolean;
+  considerarPremiacao: boolean;
+  /** pedágio total (R$) */
+  pedagio: number;
+  /** hospedagem total (R$) */
+  hospedagem: number;
+}
+
+export function defaultExtras(cfg: AnalysisConfig): ExtrasInput {
+  return {
+    dias: 1,
+    tecnicos: 1,
+    considerarAlimentacao: true,
+    horasAdmin: cfg.moAdminHorasPadrao,
+    considerarAdmin: true,
+    considerarPremiacao: true,
+    pedagio: 0,
+    hospedagem: 0,
+  };
+}
+
+export interface ExtrasResumo {
+  alimentacao: number;
+  moAdmin: number;
+  premiacao: number;
+  premiacaoPecas: number;
+  premiacaoServicos: number;
+  pedagio: number;
+  hospedagem: number;
+  total: number;
+}
+
 
 /** Como o custo de deslocamento entra na análise */
 export type DeslocamentoModo = 'auto' | 'manual' | 'ignorar';
@@ -127,6 +184,11 @@ function rowToConfig(row: any): AnalysisConfig {
     margemMinima: Number(row.margem_minima ?? DEFAULT_ANALYSIS_CONFIG.margemMinima),
     margemMeta: Number(row.margem_meta ?? DEFAULT_ANALYSIS_CONFIG.margemMeta),
     custoPorKm: Number(row.custo_por_km ?? DEFAULT_ANALYSIS_CONFIG.custoPorKm),
+    alimentacaoDia: Number(row.alimentacao_dia ?? DEFAULT_ANALYSIS_CONFIG.alimentacaoDia),
+    moAdminHora: Number(row.mo_admin_hora ?? DEFAULT_ANALYSIS_CONFIG.moAdminHora),
+    moAdminHorasPadrao: Number(row.mo_admin_horas_padrao ?? DEFAULT_ANALYSIS_CONFIG.moAdminHorasPadrao),
+    premiacaoPecaPct: Number(row.premiacao_peca_pct ?? DEFAULT_ANALYSIS_CONFIG.premiacaoPecaPct),
+    premiacaoServicoPct: Number(row.premiacao_servico_pct ?? DEFAULT_ANALYSIS_CONFIG.premiacaoServicoPct),
   };
 }
 
@@ -156,6 +218,11 @@ export async function saveAnalysisConfig(cfg: AnalysisConfig): Promise<AnalysisC
         margem_minima: cfg.margemMinima,
         margem_meta: cfg.margemMeta,
         custo_por_km: cfg.custoPorKm,
+        alimentacao_dia: cfg.alimentacaoDia,
+        mo_admin_hora: cfg.moAdminHora,
+        mo_admin_horas_padrao: cfg.moAdminHorasPadrao,
+        premiacao_peca_pct: cfg.premiacaoPecaPct,
+        premiacao_servico_pct: cfg.premiacaoServicoPct,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }
@@ -208,6 +275,8 @@ export interface OrcamentoAnalysis {
   custoDeslocamento: number;
   deslocamento: DeslocamentoResumo;
   custoTotal: number;
+
+  extras: ExtrasResumo;
 
   imposto: number;
   custoFixo: number;
@@ -274,10 +343,43 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
+/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem) */
+export function computeExtras(
+  config: AnalysisConfig,
+  extras: ExtrasInput,
+  receitaPecas: number,
+  receitaServicos: number
+): ExtrasResumo {
+  const alimentacao = extras.considerarAlimentacao
+    ? Math.max(0, extras.dias) * Math.max(0, extras.tecnicos) * config.alimentacaoDia
+    : 0;
+  const moAdmin = extras.considerarAdmin ? Math.max(0, extras.horasAdmin) * config.moAdminHora : 0;
+  const premiacaoPecas = extras.considerarPremiacao
+    ? Math.max(0, receitaPecas) * (config.premiacaoPecaPct / 100)
+    : 0;
+  const premiacaoServicos = extras.considerarPremiacao
+    ? Math.max(0, receitaServicos) * (config.premiacaoServicoPct / 100)
+    : 0;
+  const pedagio = Math.max(0, extras.pedagio || 0);
+  const hospedagem = Math.max(0, extras.hospedagem || 0);
+  const premiacao = premiacaoPecas + premiacaoServicos;
+  return {
+    alimentacao,
+    moAdmin,
+    premiacao,
+    premiacaoPecas,
+    premiacaoServicos,
+    pedagio,
+    hospedagem,
+    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem,
+  };
+}
+
 export function analyzeOrcamento(
   orc: any,
   config: AnalysisConfig,
-  desl: DeslocamentoInput = DEFAULT_DESLOCAMENTO
+  desl: DeslocamentoInput = DEFAULT_DESLOCAMENTO,
+  extrasInput?: ExtrasInput
 ): OrcamentoAnalysis {
   const produtos: AnalysisLine[] = (orc.produtos || [])
     .map((p: any) => p?.produto ?? p)
@@ -326,8 +428,11 @@ export function analyzeOrcamento(
     linhas: linhasDesl.map((l) => l.nome),
   };
 
+  const extrasIn = extrasInput ?? defaultExtras(config);
+  const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos);
+
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
-  const custoTotal = custoProdutos + custoServicos + custoAdicional;
+  const custoTotal = custoProdutos + custoServicos + custoAdicional + extras.total;
 
   const imposto = receitaLiquida * (config.impostoPct / 100);
   const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
@@ -357,6 +462,7 @@ export function analyzeOrcamento(
     custoDeslocamento,
     deslocamento,
     custoTotal,
+    extras,
     imposto,
     custoFixo,
     garantia,
@@ -481,3 +587,157 @@ export function buildParecer(a: OrcamentoAnalysis): Parecer {
 
   return { veredito, titulo, resumo, recomendacoes, alcada };
 }
+
+// --- Análise em conjunto (vários orçamentos do mesmo cliente) ----------------
+
+export interface GrupoItem {
+  id: string;
+  codigo: string;
+  nomeCliente: string;
+  data: string;
+  nomeSituacao: string;
+  receita: number;
+  custoDireto: number;
+  receitaProdutos: number;
+  receitaServicos: number;
+  kmDetectado: number;
+  margemDiretaPct: number;
+}
+
+export interface GrupoAnalysis {
+  clientes: string[];
+  mesmoCliente: boolean;
+  itens: GrupoItem[];
+  receitaLiquida: number;
+  custoDireto: number;
+  deslocamento: DeslocamentoResumo;
+  custoDeslocamentoAdicional: number;
+  extras: ExtrasResumo;
+  custoTotal: number;
+  imposto: number;
+  custoFixo: number;
+  garantia: number;
+  lucro: number;
+  margemLiquidaPct: number;
+  /** desconto máximo (R$) mantendo a margem mínima */
+  descontoMaxMinima: number;
+  /** desconto máximo (R$) mantendo a margem meta */
+  descontoMaxMeta: number;
+  descontoMaxMinimaPct: number;
+  descontoMaxMetaPct: number;
+  config: AnalysisConfig;
+}
+
+/**
+ * Consolida vários orçamentos (normalmente do mesmo cliente) tratando
+ * deslocamento, alimentação, hospedagem, pedágio e MO administrativa como
+ * custos compartilhados — contados UMA vez para o conjunto.
+ */
+export function analyzeGrupo(
+  orcamentos: any[],
+  config: AnalysisConfig,
+  desl: DeslocamentoInput,
+  extrasInput: ExtrasInput
+): GrupoAnalysis {
+  const semExtras: ExtrasInput = {
+    ...extrasInput,
+    considerarAlimentacao: false,
+    considerarAdmin: false,
+    considerarPremiacao: false,
+    pedagio: 0,
+    hospedagem: 0,
+  };
+
+  const bases = orcamentos.map((o) =>
+    analyzeOrcamento(o, config, { modo: 'ignorar', km: 0 }, semExtras)
+  );
+
+  const itens: GrupoItem[] = bases.map((a) => {
+    const custoDireto = a.custoProdutos + a.custoServicos;
+    return {
+      id: a.id,
+      codigo: a.codigo,
+      nomeCliente: a.nomeCliente,
+      data: a.data,
+      nomeSituacao: a.nomeSituacao,
+      receita: a.receitaLiquida,
+      custoDireto,
+      receitaProdutos: a.receitaProdutos,
+      receitaServicos: a.receitaServicos,
+      kmDetectado: a.deslocamento.kmDetectado,
+      margemDiretaPct: a.receitaLiquida > 0 ? ((a.receitaLiquida - custoDireto) / a.receitaLiquida) * 100 : 0,
+    };
+  });
+
+  const receitaLiquida = itens.reduce((s, i) => s + i.receita, 0);
+  const custoDireto = itens.reduce((s, i) => s + i.custoDireto, 0);
+  const receitaProdutos = itens.reduce((s, i) => s + i.receitaProdutos, 0);
+  const receitaServicos = itens.reduce((s, i) => s + i.receitaServicos, 0);
+
+  // Deslocamento compartilhado
+  const kmDetectado = itens.reduce((s, i) => s + i.kmDetectado, 0);
+  const custoJaNasLinhas = bases.reduce((s, a) => s + a.deslocamento.custoJaNasLinhas, 0);
+  const receitaDesl = bases.reduce((s, a) => s + a.deslocamento.receita, 0);
+  const custoPorKm = desl.modo === 'manual' ? (desl.custoPorKm ?? config.custoPorKm) : config.custoPorKm;
+  const km = desl.modo === 'ignorar' ? 0 : desl.modo === 'manual' ? desl.km : kmDetectado;
+  const custoEstimado = km * custoPorKm;
+  const custoAdicional = Math.max(0, custoEstimado - custoJaNasLinhas);
+
+  const deslocamento: DeslocamentoResumo = {
+    modo: desl.modo,
+    kmDetectado,
+    km,
+    custoPorKm,
+    custoEstimado,
+    custoJaNasLinhas,
+    custoAdicional,
+    receita: receitaDesl,
+    linhas: bases.flatMap((a) => a.deslocamento.linhas),
+  };
+
+  const extras = computeExtras(config, extrasInput, receitaProdutos, receitaServicos);
+  const custoTotal = custoDireto + custoAdicional + extras.total;
+
+  const imposto = receitaLiquida * (config.impostoPct / 100);
+  const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
+  const garantia = receitaLiquida * (config.garantiaPct / 100);
+  const lucro = receitaLiquida - custoTotal - imposto - custoFixo - garantia;
+
+  // Desconto máximo mantendo margem alvo.
+  // (R - D) - custoTotal - (R - D) * p = m * (R - D)  =>  R - D = custoTotal / (1 - p - m)
+  const p = (config.impostoPct + config.custoFixoPct + config.garantiaPct) / 100;
+  const custoNaoProporcional = custoTotal;
+  const maxDesc = (margemPct: number) => {
+    const den = 1 - p - margemPct / 100;
+    if (den <= 0) return 0;
+    const receitaMin = custoNaoProporcional / den;
+    return Math.max(0, receitaLiquida - receitaMin);
+  };
+  const descontoMaxMinima = maxDesc(config.margemMinima);
+  const descontoMaxMeta = maxDesc(config.margemMeta);
+
+  const clientes = Array.from(new Set(itens.map((i) => i.nomeCliente).filter(Boolean)));
+
+  return {
+    clientes,
+    mesmoCliente: clientes.length <= 1,
+    itens,
+    receitaLiquida,
+    custoDireto,
+    deslocamento,
+    custoDeslocamentoAdicional: custoAdicional,
+    extras,
+    custoTotal,
+    imposto,
+    custoFixo,
+    garantia,
+    lucro,
+    margemLiquidaPct: receitaLiquida > 0 ? (lucro / receitaLiquida) * 100 : 0,
+    descontoMaxMinima,
+    descontoMaxMeta,
+    descontoMaxMinimaPct: receitaLiquida > 0 ? (descontoMaxMinima / receitaLiquida) * 100 : 0,
+    descontoMaxMetaPct: receitaLiquida > 0 ? (descontoMaxMeta / receitaLiquida) * 100 : 0,
+    config,
+  };
+}
+

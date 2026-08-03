@@ -428,8 +428,11 @@ export function analyzeOrcamento(
     linhas: linhasDesl.map((l) => l.nome),
   };
 
+  const extrasIn = extrasInput ?? defaultExtras(config);
+  const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos);
+
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
-  const custoTotal = custoProdutos + custoServicos + custoAdicional;
+  const custoTotal = custoProdutos + custoServicos + custoAdicional + extras.total;
 
   const imposto = receitaLiquida * (config.impostoPct / 100);
   const custoFixo = receitaLiquida * (config.custoFixoPct / 100);

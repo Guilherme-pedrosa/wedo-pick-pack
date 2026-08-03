@@ -28,22 +28,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import ExtrasCard from "@/components/orcamento/ExtrasCard";
+import GrupoAnalysisPanel from "@/components/orcamento/GrupoAnalysisPanel";
 import {
   AnalysisConfig,
   OrcamentoAnalysis,
   DeslocamentoInput,
   DEFAULT_DESLOCAMENTO,
+  ExtrasInput,
   analyzeOrcamento,
   buildParecer,
+  defaultExtras,
   fetchOrcamentoByCodigo,
   formatBRL,
   formatPct,
   loadAnalysisConfig,
   fetchAnalysisConfig,
-
   saveAnalysisConfig,
 } from "@/api/orcamentoAnalysis";
+
 
 function KpiCard({
   label,

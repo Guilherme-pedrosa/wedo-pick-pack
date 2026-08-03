@@ -362,25 +362,25 @@ export function buildParecer(a: OrcamentoAnalysis): Parecer {
 
   const recomendacoes: string[] = [];
 
-  const d = a.deslocamento;
-  if (d.modo === 'ignorar') {
+  const dsl = a.deslocamento;
+  if (dsl.modo === 'ignorar') {
     recomendacoes.push(
       'Deslocamento marcado como NÃO considerado (viagem aproveitada de outro atendimento). Se a viagem for exclusiva deste cliente, reative para ver o resultado real.'
     );
-  } else if (d.custoEstimado > 0) {
-    const base = d.modo === 'manual' ? 'informados manualmente' : 'identificados no orçamento';
+  } else if (dsl.custoEstimado > 0) {
+    const base = dsl.modo === 'manual' ? 'informados manualmente' : 'identificados no orçamento';
     recomendacoes.push(
-      `Deslocamento: ${d.km.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km ${base} × ${formatBRL(d.custoPorKm)}/km = ${formatBRL(d.custoEstimado)} de custo` +
-        (d.receita <= 0
+      `Deslocamento: ${dsl.km.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km ${base} × ${formatBRL(dsl.custoPorKm)}/km = ${formatBRL(dsl.custoEstimado)} de custo` +
+        (dsl.receita <= 0
           ? ' — faturado R$ 0,00 ao cliente, ou seja, é custo puro absorvido pela empresa.'
-          : ` contra ${formatBRL(d.receita)} faturados.`)
+          : ` contra ${formatBRL(dsl.receita)} faturados.`)
     );
-    if (d.receita > 0 && d.receita < d.custoEstimado) {
+    if (dsl.receita > 0 && dsl.receita < dsl.custoEstimado) {
       recomendacoes.push(
-        `O deslocamento está sendo cobrado abaixo do custo (diferença de ${formatBRL(d.custoEstimado - d.receita)}).`
+        `O deslocamento está sendo cobrado abaixo do custo (diferença de ${formatBRL(dsl.custoEstimado - dsl.receita)}).`
       );
     }
-  } else if (d.modo === 'auto' && d.kmDetectado === 0) {
+  } else if (dsl.modo === 'auto' && dsl.kmDetectado === 0) {
     recomendacoes.push(
       'Nenhuma linha de deslocamento identificada no orçamento. Se houve viagem, informe os km manualmente para o custo entrar na conta.'
     );

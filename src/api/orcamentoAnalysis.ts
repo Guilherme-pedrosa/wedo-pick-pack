@@ -557,13 +557,18 @@ export function computeExtras(
   const restornoPct = aplicaRestorno ? RESTORNO_SAPORE_PCT : 0;
   const restorno = baseRestorno * (restornoPct / 100);
 
-  // Parcelamento: custo do dinheiro = CDB anual / quantidade de parcelas
+  // Parcelamento: custo do dinheiro = taxa mensal (CDB anual / 12) x prazo médio de recebimento.
+  // Prazo médio de n parcelas mensais = (n - 1) / 2 meses. Em 1x (à vista) o custo é zero.
   const parcelas = Math.max(1, Math.round(extras.parcelas || 1));
   const baseFinanciamento = Math.max(
     0,
     opts?.receitaFinanciamento ?? opts?.receitaRestorno ?? Math.max(0, receitaPecas) + Math.max(0, receitaServicos)
   );
-  const parcelamentoPct = extras.considerarParcelamento ? (config.cdbAnualPct || 0) / parcelas : 0;
+  const prazoMedioMeses = (parcelas - 1) / 2;
+  const parcelamentoPct =
+    extras.considerarParcelamento && parcelas > 1
+      ? ((config.cdbAnualPct || 0) / 12) * prazoMedioMeses
+      : 0;
   const parcelamento = baseFinanciamento * (parcelamentoPct / 100);
 
   return {

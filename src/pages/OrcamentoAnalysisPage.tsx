@@ -414,6 +414,7 @@ export default function OrcamentoAnalysisPage() {
                 ["Desconto do cabeçalho", -analysis.descontoCabecalho],
                 ["Custo das peças", -analysis.custoProdutos],
                 ["Custo dos serviços", -analysis.custoServicos],
+                ["Custo de deslocamento (adicional)", -analysis.deslocamento.custoAdicional],
                 [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0
                   ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<[string, number]>)

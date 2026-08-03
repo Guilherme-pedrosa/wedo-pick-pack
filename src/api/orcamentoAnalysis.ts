@@ -51,6 +51,8 @@ export interface AnalysisConfig {
   margemMinima: number;
   /** Margem líquida meta (%) */
   margemMeta: number;
+  /** Custo real do deslocamento por km rodado (R$) */
+  custoPorKm: number;
 }
 
 export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
@@ -59,7 +61,41 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   garantiaPct: 0,
   margemMinima: 19,
   margemMeta: 30,
+  custoPorKm: 1.05,
 };
+
+/** Como o custo de deslocamento entra na análise */
+export type DeslocamentoModo = 'auto' | 'manual' | 'ignorar';
+
+export interface DeslocamentoInput {
+  modo: DeslocamentoModo;
+  /** km usados quando modo = 'manual' */
+  km: number;
+  /** custo por km usado quando modo = 'manual' (se vazio usa o da config) */
+  custoPorKm?: number;
+}
+
+export const DEFAULT_DESLOCAMENTO: DeslocamentoInput = { modo: 'auto', km: 0 };
+
+export interface DeslocamentoResumo {
+  modo: DeslocamentoModo;
+  /** km identificados no orçamento (linhas de deslocamento) */
+  kmDetectado: number;
+  /** km efetivamente considerados no cálculo */
+  km: number;
+  custoPorKm: number;
+  /** custo total estimado do deslocamento */
+  custoEstimado: number;
+  /** parte do custo que já vem cadastrada nas linhas do orçamento */
+  custoJaNasLinhas: number;
+  /** custo extra somado à análise (evita contagem dupla) */
+  custoAdicional: number;
+  /** receita faturada de deslocamento (pode ser 0 se houve desconto total) */
+  receita: number;
+  /** rótulo das linhas identificadas */
+  linhas: string[];
+}
+
 
 const CONFIG_KEY = 'wedo:orcamento-analysis-config';
 

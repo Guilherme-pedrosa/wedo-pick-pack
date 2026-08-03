@@ -79,6 +79,27 @@ export default function OrcamentoAnalysisPage() {
   const [rawOrc, setRawOrc] = useState<any | null>(null);
   const [analysis, setAnalysis] = useState<OrcamentoAnalysis | null>(null);
   const [desl, setDesl] = useState<DeslocamentoInput>({ ...DEFAULT_DESLOCAMENTO });
+  const rawOrcRef = useRef<any | null>(null);
+  const deslRef = useRef<DeslocamentoInput>(desl);
+  deslRef.current = desl;
+  rawOrcRef.current = rawOrc;
+
+  // Parâmetros globais: carrega do banco (fonte da verdade para todos os usuários)
+  useEffect(() => {
+    let active = true;
+    fetchAnalysisConfig()
+      .then((cfg) => {
+        if (!active) return;
+        setConfig(cfg);
+        if (rawOrcRef.current) {
+          setAnalysis(analyzeOrcamento(rawOrcRef.current, cfg, deslRef.current));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const mutation = useMutation({
     mutationFn: async (code: string) => fetchOrcamentoByCodigo(code),
@@ -97,9 +118,12 @@ export default function OrcamentoAnalysisPage() {
   const updateConfig = (patch: Partial<AnalysisConfig>) => {
     const next = { ...config, ...patch };
     setConfig(next);
-    saveAnalysisConfig(next);
     if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl));
+    saveAnalysisConfig(next).catch(() => {
+      toast.error("Não foi possível salvar os parâmetros para todos os usuários.");
+    });
   };
+
 
   const updateDesl = (patch: Partial<DeslocamentoInput>) => {
     const next = { ...desl, ...patch };

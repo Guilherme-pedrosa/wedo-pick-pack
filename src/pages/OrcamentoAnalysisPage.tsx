@@ -12,6 +12,9 @@ import {
   TrendingDown,
   AlertTriangle,
   CheckCircle2,
+  FileSpreadsheet,
+  FileText,
+
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +51,8 @@ import {
   fetchAnalysisConfig,
   saveAnalysisConfig,
 } from "@/api/orcamentoAnalysis";
+import { exportOrcamentoPDF, exportOrcamentoXLSX } from "@/lib/orcamentoExport";
+
 
 
 function KpiCard({
@@ -304,7 +309,16 @@ export default function OrcamentoAnalysisPage() {
                   {analysis.nomeVendedor && (
                     <Badge variant="outline">Vendedor: {analysis.nomeVendedor}</Badge>
                   )}
+                  <Button size="sm" variant="outline" onClick={() => exportOrcamentoXLSX(analysis)}>
+                    <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+                    Excel
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => exportOrcamentoPDF(analysis)}>
+                    <FileText className="mr-1.5 h-4 w-4" />
+                    PDF
+                  </Button>
                 </div>
+
               </div>
             </CardHeader>
           </Card>

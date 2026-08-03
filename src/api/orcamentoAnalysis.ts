@@ -117,8 +117,24 @@ export interface ExtrasResumo {
   premiacaoServicos: number;
   pedagio: number;
   hospedagem: number;
+  /** Restorno Sapore (8% sobre a receita líquida) */
+  restorno: number;
+  restornoPct: number;
   total: number;
 }
+
+/** Percentual de restorno cobrado pelo cliente Sapore */
+export const RESTORNO_SAPORE_PCT = 8;
+
+/** Identifica se o cliente é Sapore (aplica restorno) */
+export function isClienteRestorno(nomeCliente: any): boolean {
+  return String(nomeCliente || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .includes('sapore');
+}
+
 
 
 /** Como o custo de deslocamento entra na análise */

@@ -3,6 +3,7 @@ import { Loader2, Plus, Search, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,16 +15,22 @@ import {
   DEFAULT_DESLOCAMENTO,
   DeslocamentoInput,
   ExtrasInput,
+  OrcamentoResumo,
   analyzeGrupo,
   defaultExtras,
-  fetchOrcamentoByCodigo,
+  fetchOrcamentoById,
   formatBRL,
   formatPct,
+  searchOrcamentosByCliente,
 } from "@/api/orcamentoAnalysis";
 
 export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig }) {
-  const [codigo, setCodigo] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [cliente, setCliente] = useState("");
+  const [dias, setDias] = useState(30);
+  const [buscando, setBuscando] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [resultados, setResultados] = useState<OrcamentoResumo[] | null>(null);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [orcamentos, setOrcamentos] = useState<any[]>([]);
   const [desl, setDesl] = useState<DeslocamentoInput>(DEFAULT_DESLOCAMENTO);
   const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(config));
@@ -33,52 +40,125 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
     [orcamentos, config, desl, extras]
   );
 
-  const add = async () => {
-    const cod = codigo.trim();
-    if (!cod) return;
-    setLoading(true);
+  const buscar = async () => {
+    setBuscando(true);
     try {
-      const orc = await fetchOrcamentoByCodigo(cod);
-      const id = String(orc?.id ?? cod);
-      if (orcamentos.some((o) => String(o?.id ?? "") === id)) {
-        toast.info("Esse orçamento já está no conjunto.");
-      } else {
-        setOrcamentos((prev) => [...prev, orc]);
-        setCodigo("");
-      }
+      const list = await searchOrcamentosByCliente(cliente, dias);
+      setResultados(list);
+      setSelecionados(new Set());
+      if (!list.length) toast.info(`Nenhum orçamento desse cliente nos últimos ${dias} dias.`);
     } catch (e) {
-      toast.error((e as Error)?.message || "Erro ao consultar o orçamento.");
+      toast.error((e as Error)?.message || "Erro ao buscar orçamentos.");
     } finally {
-      setLoading(false);
+      setBuscando(false);
+    }
+  };
+
+  const toggle = (id: string) =>
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const carregarSelecionados = async () => {
+    const ids = Array.from(selecionados);
+    if (!ids.length) return;
+    setCarregando(true);
+    try {
+      const carregados = await Promise.all(ids.map((id) => fetchOrcamentoById(id)));
+      setOrcamentos((prev) => {
+        const map = new Map(prev.map((o) => [String(o?.id ?? ""), o]));
+        carregados.forEach((o) => map.set(String(o?.id ?? ""), o));
+        return Array.from(map.values());
+      });
+      setSelecionados(new Set());
+    } catch (e) {
+      toast.error((e as Error)?.message || "Erro ao carregar orçamentos.");
+    } finally {
+      setCarregando(false);
     }
   };
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="space-y-4 p-4">
           <form
             className="flex flex-col gap-3 sm:flex-row sm:items-end"
             onSubmit={(e) => {
               e.preventDefault();
-              add();
+              buscar();
             }}
           >
             <div className="flex-1 space-y-1.5">
-              <Label htmlFor="grupo-codigo">Adicionar orçamento ao conjunto</Label>
+              <Label htmlFor="grupo-cliente">Cliente</Label>
               <Input
-                id="grupo-codigo"
-                inputMode="numeric"
-                placeholder="Nº do orçamento"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
+                id="grupo-cliente"
+                placeholder="Digite o nome do cliente"
+                value={cliente}
+                onChange={(e) => setCliente(e.target.value)}
               />
             </div>
-            <Button type="submit" disabled={!codigo.trim() || loading} className="sm:w-40">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              Adicionar
+            <div className="w-32 space-y-1.5">
+              <Label htmlFor="grupo-dias">Últimos (dias)</Label>
+              <Input
+                id="grupo-dias"
+                inputMode="numeric"
+                value={String(dias)}
+                onChange={(e) => setDias(parseInt(e.target.value, 10) || 0)}
+              />
+            </div>
+            <Button type="submit" disabled={cliente.trim().length < 3 || buscando} className="sm:w-40">
+              {buscando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+              Buscar
             </Button>
           </form>
+
+          {resultados && resultados.length > 0 && (
+            <div className="space-y-3">
+              <div className="max-h-80 overflow-y-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10" />
+                      <TableHead>Orçamento</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Situação</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resultados.map((r) => {
+                      const jaNoConjunto = orcamentos.some((o) => String(o?.id ?? "") === r.id);
+                      return (
+                        <TableRow
+                          key={r.id}
+                          className={cn("cursor-pointer", jaNoConjunto && "opacity-50")}
+                          onClick={() => !jaNoConjunto && toggle(r.id)}
+                        >
+                          <TableCell>
+                            <Checkbox checked={jaNoConjunto || selecionados.has(r.id)} disabled={jaNoConjunto} />
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium">#{r.codigo}</p>
+                            <p className="text-xs text-muted-foreground">{r.data}</p>
+                          </TableCell>
+                          <TableCell className="max-w-[220px] truncate">{r.nomeCliente}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{r.nomeSituacao}</TableCell>
+                          <TableCell className="text-right tabular-nums">{formatBRL(r.valorTotal)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              <Button onClick={carregarSelecionados} disabled={!selecionados.size || carregando}>
+                {carregando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                Adicionar {selecionados.size || ""} ao conjunto
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -86,11 +166,12 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
             <Search className="h-6 w-6" />
-            Adicione dois ou mais orçamentos do mesmo cliente para avaliar o desconto total possível quando o
-            atendimento é feito na mesma viagem.
+            Busque pelo cliente, selecione os orçamentos dos últimos {dias} dias e avalie o desconto total possível
+            quando o atendimento é feito na mesma viagem.
           </CardContent>
         </Card>
       )}
+
 
       {analysis && (
         <>

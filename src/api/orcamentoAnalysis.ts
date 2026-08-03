@@ -307,6 +307,84 @@ export async function fetchOrcamentoByCodigo(codigo: string): Promise<any> {
   return orc;
 }
 
+export async function fetchOrcamentoById(id: string): Promise<any> {
+  const full = await apiRequest<{ data: any }>(`/api/orcamentos/${id}`);
+  const orc = full?.data;
+  if (!orc || !orc.id) throw new Error(`Não foi possível carregar o orçamento ${id}.`);
+  return orc;
+}
+
+export interface OrcamentoResumo {
+  id: string;
+  codigo: string;
+  nomeCliente: string;
+  data: string;
+  dataISO: string;
+  nomeSituacao: string;
+  valorTotal: number;
+}
+
+/** Converte data do GC (dd/mm/aaaa ou aaaa-mm-dd) em Date */
+function parseGCDate(value: any): Date | null {
+  const s = String(value || '').trim();
+  if (!s) return null;
+  const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) return new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]));
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  return null;
+}
+
+/**
+ * Busca orçamentos de um cliente nos últimos N dias.
+ * A API do GC filtra por nome do cliente; a janela de datas é aplicada localmente.
+ */
+export async function searchOrcamentosByCliente(
+  nomeCliente: string,
+  dias = 30
+): Promise<OrcamentoResumo[]> {
+  const termo = nomeCliente.trim();
+  if (termo.length < 3) throw new Error('Digite ao menos 3 letras do nome do cliente.');
+
+  const limite = new Date();
+  limite.setHours(0, 0, 0, 0);
+  limite.setDate(limite.getDate() - Math.max(1, dias));
+
+  const coletados: any[] = [];
+  let pagina = 1;
+  let totalPaginas = 1;
+  do {
+    const res = await apiRequest<{ data: any[]; meta?: any }>(
+      `/api/orcamentos?pagina=${pagina}&nome=${encodeURIComponent(termo)}`
+    );
+    coletados.push(...(res?.data || []));
+    totalPaginas = Number(res?.meta?.total_paginas || 1);
+    pagina += 1;
+  } while (pagina <= totalPaginas && pagina <= 10);
+
+  const termoLower = termo.toLowerCase();
+  const resumos = coletados
+    .filter((o: any) => String(o?.nome_cliente || '').toLowerCase().includes(termoLower))
+    .map((o: any) => {
+      const d = parseGCDate(o?.data ?? o?.data_emissao ?? o?.data_orcamento);
+      return {
+        id: String(o?.id ?? ''),
+        codigo: String(o?.codigo ?? ''),
+        nomeCliente: String(o?.nome_cliente ?? ''),
+        data: String(o?.data ?? o?.data_emissao ?? ''),
+        dataISO: d ? d.toISOString() : '',
+        nomeSituacao: String(o?.nome_situacao ?? ''),
+        valorTotal: parseMoney(o?.valor_total),
+        _d: d,
+      };
+    })
+    .filter((o: any) => o.id && (!o._d || o._d >= limite))
+    .sort((a: any, b: any) => (b._d?.getTime() || 0) - (a._d?.getTime() || 0));
+
+  return resumos.map(({ _d, ...rest }: any) => rest as OrcamentoResumo);
+}
+
+
 // --- Cálculo ----------------------------------------------------------------
 
 function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {

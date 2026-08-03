@@ -53,6 +53,16 @@ export interface AnalysisConfig {
   margemMeta: number;
   /** Custo real do deslocamento por km rodado (R$) */
   custoPorKm: number;
+  /** Alimentação por dia por técnico (R$) */
+  alimentacaoDia: number;
+  /** Mão de obra administrativa por hora (R$) */
+  moAdminHora: number;
+  /** Horas administrativas consideradas por padrão */
+  moAdminHorasPadrao: number;
+  /** Premiação do técnico sobre peças (%) */
+  premiacaoPecaPct: number;
+  /** Premiação do técnico sobre serviços (%) */
+  premiacaoServicoPct: number;
 }
 
 export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
@@ -62,7 +72,54 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   margemMinima: 19,
   margemMeta: 30,
   custoPorKm: 1.05,
+  alimentacaoDia: 25,
+  moAdminHora: 30,
+  moAdminHorasPadrao: 1,
+  premiacaoPecaPct: 1,
+  premiacaoServicoPct: 15,
 };
+
+/** Custos operacionais informados na análise (por orçamento ou por conjunto) */
+export interface ExtrasInput {
+  /** dias de atendimento */
+  dias: number;
+  /** técnicos envolvidos */
+  tecnicos: number;
+  considerarAlimentacao: boolean;
+  /** horas de mão de obra administrativa */
+  horasAdmin: number;
+  considerarAdmin: boolean;
+  considerarPremiacao: boolean;
+  /** pedágio total (R$) */
+  pedagio: number;
+  /** hospedagem total (R$) */
+  hospedagem: number;
+}
+
+export function defaultExtras(cfg: AnalysisConfig): ExtrasInput {
+  return {
+    dias: 1,
+    tecnicos: 1,
+    considerarAlimentacao: true,
+    horasAdmin: cfg.moAdminHorasPadrao,
+    considerarAdmin: true,
+    considerarPremiacao: true,
+    pedagio: 0,
+    hospedagem: 0,
+  };
+}
+
+export interface ExtrasResumo {
+  alimentacao: number;
+  moAdmin: number;
+  premiacao: number;
+  premiacaoPecas: number;
+  premiacaoServicos: number;
+  pedagio: number;
+  hospedagem: number;
+  total: number;
+}
+
 
 /** Como o custo de deslocamento entra na análise */
 export type DeslocamentoModo = 'auto' | 'manual' | 'ignorar';

@@ -524,6 +524,7 @@ export default function OrcamentoAnalysisPage() {
                 ["Alimentação", -analysis.extras.alimentacao],
                 ["MO administrativa", -analysis.extras.moAdmin],
                 ["Premiação do técnico", -analysis.extras.premiacao],
+                [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
                 [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0
                   ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<[string, number]>)

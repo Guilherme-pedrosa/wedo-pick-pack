@@ -117,8 +117,24 @@ export interface ExtrasResumo {
   premiacaoServicos: number;
   pedagio: number;
   hospedagem: number;
+  /** Restorno Sapore (8% sobre a receita líquida) */
+  restorno: number;
+  restornoPct: number;
   total: number;
 }
+
+/** Percentual de restorno cobrado pelo cliente Sapore */
+export const RESTORNO_SAPORE_PCT = 8;
+
+/** Identifica se o cliente é Sapore (aplica restorno) */
+export function isClienteRestorno(nomeCliente: any): boolean {
+  return String(nomeCliente || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .includes('sapore');
+}
+
 
 
 /** Como o custo de deslocamento entra na análise */
@@ -496,12 +512,13 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
-/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem) */
+/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
 export function computeExtras(
   config: AnalysisConfig,
   extras: ExtrasInput,
   receitaPecas: number,
-  receitaServicos: number
+  receitaServicos: number,
+  opts?: { nomeCliente?: string; receitaRestorno?: number }
 ): ExtrasResumo {
   const alimentacao = extras.considerarAlimentacao
     ? Math.max(0, extras.dias) * Math.max(0, extras.tecnicos) * config.alimentacaoDia
@@ -516,6 +533,16 @@ export function computeExtras(
   const pedagio = Math.max(0, extras.pedagio || 0);
   const hospedagem = Math.max(0, extras.hospedagem || 0);
   const premiacao = premiacaoPecas + premiacaoServicos;
+
+  // Restorno: 8% cobrado pelo cliente Sapore sobre o faturamento
+  const aplicaRestorno = isClienteRestorno(opts?.nomeCliente);
+  const baseRestorno = Math.max(
+    0,
+    opts?.receitaRestorno ?? Math.max(0, receitaPecas) + Math.max(0, receitaServicos)
+  );
+  const restornoPct = aplicaRestorno ? RESTORNO_SAPORE_PCT : 0;
+  const restorno = baseRestorno * (restornoPct / 100);
+
   return {
     alimentacao,
     moAdmin,
@@ -524,7 +551,9 @@ export function computeExtras(
     premiacaoServicos,
     pedagio,
     hospedagem,
-    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem,
+    restorno,
+    restornoPct,
+    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem + restorno,
   };
 }
 
@@ -582,7 +611,10 @@ export function analyzeOrcamento(
   };
 
   const extrasIn = extrasInput ?? defaultExtras(config);
-  const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos);
+  const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos, {
+    nomeCliente: String(orc.nome_cliente || ''),
+    receitaRestorno: receitaLiquida,
+  });
 
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
   const custoTotal = custoProdutos + custoServicos + custoAdicional + extras.total;
@@ -848,7 +880,13 @@ export function analyzeGrupo(
     linhas: bases.flatMap((a) => a.deslocamento.linhas),
   };
 
-  const extras = computeExtras(config, extrasInput, receitaProdutos, receitaServicos);
+  const receitaRestorno = itens
+    .filter((i) => isClienteRestorno(i.nomeCliente))
+    .reduce((s, i) => s + i.receita, 0);
+  const extras = computeExtras(config, extrasInput, receitaProdutos, receitaServicos, {
+    nomeCliente: receitaRestorno > 0 ? 'sapore' : '',
+    receitaRestorno,
+  });
   const custoTotal = custoDireto + custoAdicional + extras.total;
 
   const imposto = receitaLiquida * (config.impostoPct / 100);

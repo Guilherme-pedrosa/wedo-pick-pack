@@ -100,11 +100,18 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
             ["Premiação", resumo.premiacao],
             ["Pedágio", resumo.pedagio],
             ["Hospedagem", resumo.hospedagem],
+            ...(resumo.restorno > 0
+              ? ([[`Restorno (${resumo.restornoPct}%)`, resumo.restorno]] as [string, number][])
+              : []),
             ["Total extras", resumo.total],
-          ].map(([label, v], i) => (
+          ].map(([label, v], arr, all) => (
             <div key={label as string}>
               <p className="text-xs text-muted-foreground">{label as string}</p>
-              <p className={i === 5 ? "font-bold tabular-nums" : "font-semibold tabular-nums"}>
+              <p
+                className={
+                  label === "Total extras" ? "font-bold tabular-nums" : "font-semibold tabular-nums"
+                }
+              >
                 {formatBRL(v as number)}
               </p>
             </div>
@@ -114,7 +121,10 @@ export default function ExtrasCard({ config, extras, resumo, onChange, title }: 
         <p className="text-xs text-muted-foreground">
           Premiação estimada: {formatBRL(resumo.premiacaoPecas)} em peças + {formatBRL(resumo.premiacaoServicos)} em
           serviços. Ajuste os percentuais em Parâmetros quando o cliente tiver contrato com taxa diferente.
+          {resumo.restorno > 0 &&
+            ` Cliente Sapore: restorno de ${resumo.restornoPct}% sobre o faturamento aplicado automaticamente.`}
         </p>
+
       </CardContent>
     </Card>
   );

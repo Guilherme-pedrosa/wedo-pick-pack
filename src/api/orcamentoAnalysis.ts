@@ -343,10 +343,43 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
+/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem) */
+export function computeExtras(
+  config: AnalysisConfig,
+  extras: ExtrasInput,
+  receitaPecas: number,
+  receitaServicos: number
+): ExtrasResumo {
+  const alimentacao = extras.considerarAlimentacao
+    ? Math.max(0, extras.dias) * Math.max(0, extras.tecnicos) * config.alimentacaoDia
+    : 0;
+  const moAdmin = extras.considerarAdmin ? Math.max(0, extras.horasAdmin) * config.moAdminHora : 0;
+  const premiacaoPecas = extras.considerarPremiacao
+    ? Math.max(0, receitaPecas) * (config.premiacaoPecaPct / 100)
+    : 0;
+  const premiacaoServicos = extras.considerarPremiacao
+    ? Math.max(0, receitaServicos) * (config.premiacaoServicoPct / 100)
+    : 0;
+  const pedagio = Math.max(0, extras.pedagio || 0);
+  const hospedagem = Math.max(0, extras.hospedagem || 0);
+  const premiacao = premiacaoPecas + premiacaoServicos;
+  return {
+    alimentacao,
+    moAdmin,
+    premiacao,
+    premiacaoPecas,
+    premiacaoServicos,
+    pedagio,
+    hospedagem,
+    total: alimentacao + moAdmin + premiacao + pedagio + hospedagem,
+  };
+}
+
 export function analyzeOrcamento(
   orc: any,
   config: AnalysisConfig,
-  desl: DeslocamentoInput = DEFAULT_DESLOCAMENTO
+  desl: DeslocamentoInput = DEFAULT_DESLOCAMENTO,
+  extrasInput?: ExtrasInput
 ): OrcamentoAnalysis {
   const produtos: AnalysisLine[] = (orc.produtos || [])
     .map((p: any) => p?.produto ?? p)

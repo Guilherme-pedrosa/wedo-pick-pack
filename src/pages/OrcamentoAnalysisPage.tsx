@@ -40,6 +40,8 @@ import {
   formatBRL,
   formatPct,
   loadAnalysisConfig,
+  fetchAnalysisConfig,
+
   saveAnalysisConfig,
 } from "@/api/orcamentoAnalysis";
 

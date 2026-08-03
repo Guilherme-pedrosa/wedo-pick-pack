@@ -462,6 +462,7 @@ export function analyzeOrcamento(
     custoDeslocamento,
     deslocamento,
     custoTotal,
+    extras,
     imposto,
     custoFixo,
     garantia,

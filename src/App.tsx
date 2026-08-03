@@ -25,6 +25,7 @@ import ComprasPage from "./pages/ComprasPage";
 import PurchaseTrackerPage from "./pages/PurchaseTrackerPage";
 import RelatorioPedidosPage from "./pages/RelatorioPedidosPage";
 import RastreadorPage from "./pages/RastreadorPage";
+import OrcamentoAnalysisPage from "./pages/OrcamentoAnalysisPage";
 import ProductExplorerPage from "./pages/ProductExplorerPage";
 import EstoqueIAPage from "./pages/EstoqueIAPage";
 import ProductExplorerConfigPage from "./pages/ProductExplorerConfigPage";

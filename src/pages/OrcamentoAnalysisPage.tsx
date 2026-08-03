@@ -169,6 +169,7 @@ export default function OrcamentoAnalysisPage() {
                     ["garantiaPct", "Garantia (%)"],
                     ["margemMinima", "Margem mínima (%)"],
                     ["margemMeta", "Margem meta (%)"],
+                    ["custoPorKm", "Custo por km (R$)"],
                   ] as Array<[keyof AnalysisConfig, string]>
                 ).map(([key, label]) => (
                   <div key={key} className="space-y-1.5">

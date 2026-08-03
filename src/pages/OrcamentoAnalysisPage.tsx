@@ -435,7 +435,7 @@ export default function OrcamentoAnalysisPage() {
             <KpiCard label="Receita (venda)" value={formatBRL(analysis.receitaLiquida)} hint={`Peças ${formatBRL(analysis.receitaProdutos)} · Serviços ${formatBRL(analysis.receitaServicos)}`} />
             <KpiCard label="Custo total" value={formatBRL(analysis.custoTotal)} hint={`Margem bruta ${formatPct(analysis.margemBrutaPct)}`} />
             <KpiCard
-              label={`Impostos (${formatPct(analysis.config.impostoPct, 0)})`}
+              label={`Impostos (${formatPct(analysis.impostoPctEfetivo, analysis.nota10 ? 2 : 0)})`}
               value={formatBRL(analysis.imposto)}
               hint={
                 analysis.custoFixo + analysis.garantia > 0
@@ -544,7 +544,7 @@ export default function OrcamentoAnalysisPage() {
                   -analysis.extras.parcelamento,
                 ],
                 [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
-                [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
+                [`Impostos (${formatPct(analysis.impostoPctEfetivo, analysis.nota10 ? 2 : 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0
                   ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<[string, number]>)
                   : []),

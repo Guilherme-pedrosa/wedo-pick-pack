@@ -135,7 +135,7 @@ function composicaoIndividual(a: OrcamentoAnalysis): Array<[string, number]> {
       -a.extras.parcelamento,
     ],
     [`Restorno Sapore (${formatPct(a.extras.restornoPct, 0)})`, -a.extras.restorno],
-    [`Impostos (${formatPct(a.config.impostoPct, 0)})`, -a.imposto],
+    [`Impostos (${formatPct(a.impostoPctEfetivo, a.nota10 ? 2 : 0)})`, -a.imposto],
     [`Custo fixo (${formatPct(a.config.custoFixoPct, 0)})`, -a.custoFixo],
     [`Garantia (${formatPct(a.config.garantiaPct, 0)})`, -a.garantia],
   ];
@@ -170,7 +170,7 @@ function composicaoGrupo(g: GrupoAnalysis): Array<[string, number]> {
       -g.extras.parcelamento,
     ],
     [`Restorno Sapore (${formatPct(g.extras.restornoPct, 0)})`, -g.extras.restorno],
-    [`Impostos (${formatPct(g.config.impostoPct, 0)})`, -g.imposto],
+    [`Impostos (${formatPct(g.impostoPctEfetivo, g.nota10 ? 2 : 0)})`, -g.imposto],
     [`Custo fixo (${formatPct(g.config.custoFixoPct, 0)})`, -g.custoFixo],
     [`Garantia (${formatPct(g.config.garantiaPct, 0)})`, -g.garantia],
   ];

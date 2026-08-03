@@ -51,6 +51,8 @@ import {
   fetchAnalysisConfig,
   saveAnalysisConfig,
 } from "@/api/orcamentoAnalysis";
+import { exportOrcamentoPDF, exportOrcamentoXLSX } from "@/lib/orcamentoExport";
+
 
 
 function KpiCard({

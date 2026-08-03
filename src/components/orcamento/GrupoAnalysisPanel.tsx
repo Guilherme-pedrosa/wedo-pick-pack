@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import ExtrasCard from "./ExtrasCard";
 import {
   AnalysisConfig,
+  ClienteResumo,
   DEFAULT_DESLOCAMENTO,
   DeslocamentoInput,
   ExtrasInput,
@@ -21,6 +22,7 @@ import {
   fetchOrcamentoById,
   formatBRL,
   formatPct,
+  searchClientes,
   searchOrcamentosByCliente,
 } from "@/api/orcamentoAnalysis";
 

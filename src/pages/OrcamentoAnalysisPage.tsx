@@ -29,6 +29,8 @@ import { cn } from "@/lib/utils";
 import {
   AnalysisConfig,
   OrcamentoAnalysis,
+  DeslocamentoInput,
+  DEFAULT_DESLOCAMENTO,
   analyzeOrcamento,
   buildParecer,
   fetchOrcamentoByCodigo,

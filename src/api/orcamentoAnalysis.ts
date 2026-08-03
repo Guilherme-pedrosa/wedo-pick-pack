@@ -276,6 +276,8 @@ export interface OrcamentoAnalysis {
   deslocamento: DeslocamentoResumo;
   custoTotal: number;
 
+  extras: ExtrasResumo;
+
   imposto: number;
   custoFixo: number;
   garantia: number;

@@ -524,6 +524,88 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
             ))}
           </div>
 
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Composição do resultado do conjunto</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1.5 text-sm">
+              {[
+                ["Peças (venda)", analysis.itens.reduce((s, i) => s + i.receitaProdutos, 0)],
+                ["Serviços (venda)", analysis.itens.reduce((s, i) => s + i.receitaServicos, 0)],
+                ["Custo das peças", -analysis.itens.reduce((s, i) => s + i.custoProdutos, 0)],
+                ["Custo dos serviços", -analysis.itens.reduce((s, i) => s + i.custoServicos, 0)],
+              ]
+                .filter(([, v]) => (v as number) !== 0)
+                .map(([label, v]) => (
+                  <div key={label as string} className="flex justify-between border-b border-border/50 py-1">
+                    <span className="text-muted-foreground">{label as string}</span>
+                    <span className={cn("tabular-nums", (v as number) < 0 && "text-muted-foreground")}>
+                      {formatBRL(v as number)}
+                    </span>
+                  </div>
+                ))}
+
+              <div className="flex justify-between border-b border-border/50 py-1">
+                <span className="text-muted-foreground">
+                  Custo de deslocamento{" "}
+                  {analysis.deslocamento.modo === "ignorar"
+                    ? "(desconsiderado)"
+                    : `(${analysis.deslocamento.km.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km × ${formatBRL(analysis.deslocamento.custoPorKm)})`}
+                </span>
+                <span className="tabular-nums text-muted-foreground">
+                  {formatBRL(-analysis.deslocamento.custoEstimado)}
+                </span>
+              </div>
+              {analysis.deslocamento.custoJaNasLinhas > 0 && (
+                <div className="flex justify-between border-b border-border/50 py-1">
+                  <span className="text-muted-foreground">
+                    (já contabilizado no custo dos serviços — estorno para não duplicar)
+                  </span>
+                  <span className="tabular-nums text-emerald-500">
+                    {formatBRL(analysis.deslocamento.custoJaNasLinhas)}
+                  </span>
+                </div>
+              )}
+
+              {[
+                ["Pedágio", -analysis.extras.pedagio],
+                ["Hospedagem", -analysis.extras.hospedagem],
+                ["Alimentação", -analysis.extras.alimentacao],
+                ["MO administrativa", -analysis.extras.moAdmin],
+                ["Premiação do técnico", -analysis.extras.premiacao],
+                [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
+                [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
+                ...(analysis.custoFixo > 0
+                  ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<
+                      [string, number]
+                    >)
+                  : []),
+                ...(analysis.garantia > 0
+                  ? ([[`Garantia (${formatPct(analysis.config.garantiaPct, 0)})`, -analysis.garantia]] as Array<
+                      [string, number]
+                    >)
+                  : []),
+              ]
+                .filter(([, v]) => (v as number) !== 0)
+                .map(([label, v]) => (
+                  <div key={label as string} className="flex justify-between border-b border-border/50 py-1">
+                    <span className="text-muted-foreground">{label as string}</span>
+                    <span className={cn("tabular-nums", (v as number) < 0 && "text-muted-foreground")}>
+                      {formatBRL(v as number)}
+                    </span>
+                  </div>
+                ))}
+              <div className="flex justify-between pt-2 text-base font-bold">
+                <span>Resultado</span>
+                <span className={cn("tabular-nums", analysis.lucro < 0 ? "text-destructive" : "text-emerald-500")}>
+                  {formatBRL(analysis.lucro)} ({formatPct(analysis.margemLiquidaPct)})
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+
+
           <Card className="border-l-4 border-l-primary">
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Desconto total possível no conjunto</CardTitle>

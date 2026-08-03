@@ -100,6 +100,8 @@ export interface ExtrasInput {
   /** quantidade de parcelas do pagamento */
   parcelas: number;
   considerarParcelamento: boolean;
+  /** Nota 10: reduz o imposto em 10% */
+  nota10: boolean;
 }
 
 export function defaultExtras(cfg: AnalysisConfig): ExtrasInput {
@@ -114,6 +116,7 @@ export function defaultExtras(cfg: AnalysisConfig): ExtrasInput {
     hospedagem: 0,
     parcelas: 1,
     considerarParcelamento: true,
+    nota10: false,
   };
 }
 
@@ -309,6 +312,9 @@ export interface OrcamentoAnalysis {
   extras: ExtrasResumo;
 
   imposto: number;
+  /** alíquota efetiva de imposto aplicada (considera Nota 10) */
+  impostoPctEfetivo: number;
+  nota10: boolean;
   custoFixo: number;
   garantia: number;
   lucro: number;
@@ -651,7 +657,9 @@ export function analyzeOrcamento(
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
   const custoTotal = custoProdutos + custoServicos + custoAdicional + extras.total;
 
-  const imposto = receitaLiquida * (config.impostoPct / 100);
+  const nota10 = Boolean(extrasIn.nota10);
+  const impostoPctEfetivo = nota10 ? config.impostoPct * 0.9 : config.impostoPct;
+  const imposto = receitaLiquida * (impostoPctEfetivo / 100);
   const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
   const garantia = receitaLiquida * (config.garantiaPct / 100);
   const lucro = receitaLiquida - custoTotal - imposto - custoFixo - garantia;
@@ -681,6 +689,8 @@ export function analyzeOrcamento(
     custoTotal,
     extras,
     imposto,
+    impostoPctEfetivo,
+    nota10,
     custoFixo,
     garantia,
     lucro,
@@ -728,7 +738,7 @@ export function buildParecer(a: OrcamentoAnalysis): Parecer {
 
   const resumo =
     `Receita de ${formatBRL(a.receitaLiquida)}, custo de ${formatBRL(a.custoTotal)}, ` +
-    `impostos de ${formatBRL(a.imposto)} (${formatPct(cfg.impostoPct, 0)})` +
+    `impostos de ${formatBRL(a.imposto)} (${formatPct(a.impostoPctEfetivo, a.nota10 ? 2 : 0)}${a.nota10 ? ' — Nota 10' : ''})` +
     (a.custoFixo > 0 ? `, custo fixo de ${formatBRL(a.custoFixo)}` : '') +
     (a.garantia > 0 ? `, provisão de garantia de ${formatBRL(a.garantia)}` : '') +
     `. Resultado de ${formatBRL(a.lucro)} (${formatPct(m)} sobre a venda).`;
@@ -835,6 +845,9 @@ export interface GrupoAnalysis {
   extras: ExtrasResumo;
   custoTotal: number;
   imposto: number;
+  /** alíquota efetiva de imposto aplicada (considera Nota 10) */
+  impostoPctEfetivo: number;
+  nota10: boolean;
   custoFixo: number;
   garantia: number;
   lucro: number;
@@ -929,14 +942,16 @@ export function analyzeGrupo(
   });
   const custoTotal = custoDireto + custoAdicional + extras.total;
 
-  const imposto = receitaLiquida * (config.impostoPct / 100);
+  const nota10 = Boolean(extrasInput.nota10);
+  const impostoPctEfetivo = nota10 ? config.impostoPct * 0.9 : config.impostoPct;
+  const imposto = receitaLiquida * (impostoPctEfetivo / 100);
   const custoFixo = receitaLiquida * (config.custoFixoPct / 100);
   const garantia = receitaLiquida * (config.garantiaPct / 100);
   const lucro = receitaLiquida - custoTotal - imposto - custoFixo - garantia;
 
   // Desconto máximo mantendo margem alvo.
   // (R - D) - custoTotal - (R - D) * p = m * (R - D)  =>  R - D = custoTotal / (1 - p - m)
-  const p = (config.impostoPct + config.custoFixoPct + config.garantiaPct) / 100;
+  const p = (impostoPctEfetivo + config.custoFixoPct + config.garantiaPct) / 100;
   const custoNaoProporcional = custoTotal;
   const maxDesc = (margemPct: number) => {
     const den = 1 - p - margemPct / 100;
@@ -960,6 +975,8 @@ export function analyzeGrupo(
     extras,
     custoTotal,
     imposto,
+    impostoPctEfetivo,
+    nota10,
     custoFixo,
     garantia,
     lucro,

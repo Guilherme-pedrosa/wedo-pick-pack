@@ -603,7 +603,7 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                   -analysis.extras.parcelamento,
                 ],
                 [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
-                [`Impostos (${formatPct(analysis.config.impostoPct, 0)})`, -analysis.imposto],
+                [`Impostos (${formatPct(analysis.impostoPctEfetivo, analysis.nota10 ? 2 : 0)})`, -analysis.imposto],
                 ...(analysis.custoFixo > 0
                   ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<
                       [string, number]

@@ -991,6 +991,8 @@ export function analyzeGrupo(
       custoDireto,
       receitaProdutos: a.receitaProdutos,
       receitaServicos: a.receitaServicos,
+      receitaPremiavelProdutos: a.receitaPremiavelProdutos,
+      receitaPremiavelServicos: a.receitaPremiavelServicos,
       custoProdutos: a.custoProdutos,
       custoServicos: a.custoServicos,
       kmDetectado: a.deslocamento.kmDetectado,

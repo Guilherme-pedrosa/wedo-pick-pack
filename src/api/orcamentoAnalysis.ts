@@ -918,6 +918,8 @@ export interface GrupoItem {
   custoDireto: number;
   receitaProdutos: number;
   receitaServicos: number;
+  receitaPremiavelProdutos: number;
+  receitaPremiavelServicos: number;
   custoProdutos: number;
   custoServicos: number;
   kmDetectado: number;

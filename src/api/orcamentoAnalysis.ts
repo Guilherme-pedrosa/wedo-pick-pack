@@ -692,11 +692,22 @@ export function analyzeOrcamento(
     linhas: linhasDesl.map((l) => l.nome),
   };
 
+  // Premiação: deslocamento, hospedagem e alimentação não entram na base
+  const receitaBrutaProdutos = produtos.reduce((s, l) => s + l.receita, 0);
+  const receitaBrutaServicos = servicos.reduce((s, l) => s + l.receita, 0);
+  const premBrutaProdutos = produtos.filter(isLinhaPremiavel).reduce((s, l) => s + l.receita, 0);
+  const premBrutaServicos = servicos.filter(isLinhaPremiavel).reduce((s, l) => s + l.receita, 0);
+  const ratio = (base: number, total: number) => (total > 0 ? base / total : 1);
+  const receitaPremiavelProdutos = receitaProdutos * ratio(premBrutaProdutos, receitaBrutaProdutos);
+  const receitaPremiavelServicos = receitaServicos * ratio(premBrutaServicos, receitaBrutaServicos);
+
   const extrasIn = extrasInput ?? defaultExtras(config);
   const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos, {
     nomeCliente: String(orc.nome_cliente || ''),
     receitaRestorno: receitaLiquida,
     receitaFinanciamento: receitaLiquida,
+    basePremiacaoPecas: receitaPremiavelProdutos,
+    basePremiacaoServicos: receitaPremiavelServicos,
   });
 
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);

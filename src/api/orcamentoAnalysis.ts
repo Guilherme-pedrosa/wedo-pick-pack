@@ -747,6 +747,8 @@ export function analyzeOrcamento(
     linhas,
     receitaProdutos,
     receitaServicos,
+    receitaPremiavelProdutos,
+    receitaPremiavelServicos,
     receitaFrete,
     descontoCabecalho,
     receitaBruta,

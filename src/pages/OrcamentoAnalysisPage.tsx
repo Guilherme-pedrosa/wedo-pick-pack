@@ -489,7 +489,6 @@ export default function OrcamentoAnalysisPage() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <p className="text-muted-foreground">{parecer.resumo}</p>
-              <p className="rounded-md bg-muted px-3 py-2 text-xs font-medium">{parecer.alcada}</p>
               <ul className="space-y-1.5">
                 {parecer.recomendacoes.map((r, i) => (
                   <li key={i} className="flex gap-2">
@@ -498,6 +497,42 @@ export default function OrcamentoAnalysisPage() {
                   </li>
                 ))}
               </ul>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-primary">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Desconto total possível</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Mantendo a margem mínima ({formatPct(analysis.config.margemMinima, 0)})
+                  </p>
+                  <p className="text-lg font-bold tabular-nums text-emerald-500">
+                    {formatBRL(analysis.descontoMaxMinima)}{" "}
+                    <span className="text-sm font-medium opacity-80">
+                      ({formatPct(analysis.descontoMaxMinimaPct)})
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Mantendo a margem meta ({formatPct(analysis.config.margemMeta, 0)})
+                  </p>
+                  <p className="text-lg font-bold tabular-nums">
+                    {formatBRL(analysis.descontoMaxMeta)}{" "}
+                    <span className="text-sm font-medium opacity-80">
+                      ({formatPct(analysis.descontoMaxMetaPct)})
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <Badge variant="outline" className="font-normal">
+                Valores considerando deslocamento, alimentação, hospedagem, pedágio, MO administrativa e premiação
+                deste orçamento.
+              </Badge>
             </CardContent>
           </Card>
 

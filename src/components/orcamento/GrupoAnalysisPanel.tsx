@@ -53,6 +53,8 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [desl, setDesl] = useState<DeslocamentoInput>(DEFAULT_DESLOCAMENTO);
   const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(config));
+  const [mostrarMemoria, setMostrarMemoria] = useState(true);
+
 
   const analysis = useMemo(
     () => (orcamentos.length ? analyzeGrupo(orcamentos, config, desl, extras) : null),

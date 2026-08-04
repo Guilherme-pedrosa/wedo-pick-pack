@@ -72,10 +72,10 @@ export function deslocamentoMemoRows(a: MemoAnalysisLike): MemoRow[] {
 
   if (d.custoJaNasLinhas > 0) {
     rows.push({
-      label: "(já contabilizado no custo dos serviços — estorno para não duplicar)",
+      label: "(−) parte já incluída em “Custo dos serviços” — estorno para não duplicar",
       valor: d.custoJaNasLinhas,
       tone: "positivo",
-      memo: `As linhas de deslocamento do orçamento já têm ${formatBRL(d.custoJaNasLinhas)} de custo. Só entra a diferença: ${formatBRL(d.custoEstimado)} − ${formatBRL(d.custoJaNasLinhas)} = ${formatBRL(d.custoAdicional)}`,
+      memo: `As linhas de deslocamento/KM do orçamento são linhas de serviço, então ${formatBRL(d.custoJaNasLinhas)} de custo já foram contados em “Custo dos serviços”. Por isso são estornados aqui e só entra a diferença: ${formatBRL(d.custoEstimado)} − ${formatBRL(d.custoJaNasLinhas)} = ${formatBRL(d.custoAdicional)} de custo adicional de deslocamento.`,
     });
   }
   return rows;

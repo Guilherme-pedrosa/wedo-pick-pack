@@ -926,6 +926,7 @@ export interface GrupoItem {
   id: string;
   codigo: string;
   nomeCliente: string;
+  equipamento?: string;
   data: string;
   nomeSituacao: string;
   receita: number;

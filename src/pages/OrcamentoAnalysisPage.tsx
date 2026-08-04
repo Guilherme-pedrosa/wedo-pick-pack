@@ -33,6 +33,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { deslocamentoMemoRows, extrasMemoRows, resultadoMemo } from "@/lib/orcamentoMemoria";
+
 import ExtrasCard from "@/components/orcamento/ExtrasCard";
 import GrupoAnalysisPanel from "@/components/orcamento/GrupoAnalysisPanel";
 import {

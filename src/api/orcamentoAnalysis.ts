@@ -498,13 +498,32 @@ export async function searchOrcamentosByCliente(
         dataISO: d ? d.toISOString() : '',
         nomeSituacao: String(o?.nome_situacao ?? ''),
         valorTotal: parseMoney(o?.valor_total),
+        equipamento: extractEquipamento(o),
         _d: d,
       };
     })
     .filter((o: any) => o.id && (!o._d || o._d >= limite))
     .sort((a: any, b: any) => (b._d?.getTime() || 0) - (a._d?.getTime() || 0));
 
-  return resumos.map(({ _d, ...rest }: any) => rest as OrcamentoResumo);
+  const lista = resumos.map(({ _d, ...rest }: any) => rest as OrcamentoResumo);
+
+  // A listagem do GC normalmente não traz atributos/equipamentos: busca o detalhe
+  // dos primeiros resultados para preencher o equipamento.
+  const semEquip = lista.filter((o) => !o.equipamento).slice(0, 30);
+  if (semEquip.length) {
+    await Promise.all(
+      semEquip.map(async (o) => {
+        try {
+          const full = await fetchOrcamentoFull(o.id);
+          o.equipamento = extractEquipamento(full);
+        } catch {
+          /* ignora */
+        }
+      })
+    );
+  }
+
+  return lista;
 }
 
 

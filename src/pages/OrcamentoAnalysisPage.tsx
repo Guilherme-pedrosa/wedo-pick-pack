@@ -583,7 +583,7 @@ export default function OrcamentoAnalysisPage() {
                     analysis.custoServicos,
                     "custoServicos",
                     true,
-                    "Soma de (custo unitário × quantidade) das linhas de serviço.",
+                    "Soma de (custo unitário × quantidade) das linhas de serviço — inclui as linhas de deslocamento/KM cobradas no orçamento, cujo custo já está aqui dentro.",
                   ],
                 ] as Array<[string, number, keyof AnalysisOverrides, boolean, string]>
               ).map(([label, v, key, negativo, memo]) => (

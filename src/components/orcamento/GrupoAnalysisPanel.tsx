@@ -595,7 +595,7 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                 {
                   label: "Custo dos serviços",
                   valor: -analysis.itens.reduce((s, i) => s + i.custoServicos, 0),
-                  memo: "Soma de (custo unitário × quantidade) das linhas de serviço de cada orçamento.",
+                  memo: "Soma de (custo unitário × quantidade) das linhas de serviço de cada orçamento — inclui as linhas de deslocamento/KM cobradas, cujo custo já está aqui dentro.",
                 },
               ]
                 .map((r) => (

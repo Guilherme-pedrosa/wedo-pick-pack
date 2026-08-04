@@ -199,6 +199,7 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                       <TableHead className="w-10" />
                       <TableHead>Orçamento</TableHead>
                       <TableHead>Cliente</TableHead>
+                      <TableHead>Equipamento</TableHead>
                       <TableHead>Situação</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                     </TableRow>

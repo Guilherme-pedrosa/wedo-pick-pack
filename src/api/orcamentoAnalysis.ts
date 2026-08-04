@@ -594,11 +594,20 @@ export function computeExtras(
   };
 }
 
+export interface AnalysisOverrides {
+  receitaProdutos?: number;
+  receitaServicos?: number;
+  descontoCabecalho?: number;
+  custoProdutos?: number;
+  custoServicos?: number;
+}
+
 export function analyzeOrcamento(
   orc: any,
   config: AnalysisConfig,
   desl: DeslocamentoInput = DEFAULT_DESLOCAMENTO,
-  extrasInput?: ExtrasInput
+  extrasInput?: ExtrasInput,
+  overrides: AnalysisOverrides = {}
 ): OrcamentoAnalysis {
   const produtos: AnalysisLine[] = (orc.produtos || [])
     .map((p: any) => p?.produto ?? p)
@@ -612,16 +621,24 @@ export function analyzeOrcamento(
 
   const linhas = [...produtos, ...servicos];
 
-  const receitaProdutos = produtos.reduce((s, l) => s + l.receita, 0);
-  const receitaServicos = servicos.reduce((s, l) => s + l.receita, 0);
+  const num = (v: number | undefined, fallback: number) => (typeof v === 'number' && isFinite(v) ? v : fallback);
+
+  const receitaProdutos = num(overrides.receitaProdutos, produtos.reduce((s, l) => s + l.receita, 0));
+  const receitaServicos = num(overrides.receitaServicos, servicos.reduce((s, l) => s + l.receita, 0));
   const receitaFrete = parseMoney(orc.valor_frete);
-  const descontoCabecalho = parseMoney(orc.desconto_valor);
+  const descontoCabecalho = num(overrides.descontoCabecalho, parseMoney(orc.desconto_valor));
   const receitaBruta = receitaProdutos + receitaServicos + receitaFrete;
   const valorTotalGC = parseMoney(orc.valor_total);
-  const receitaLiquida = valorTotalGC > 0 ? valorTotalGC : receitaBruta - descontoCabecalho;
+  const receitaAlterada =
+    overrides.receitaProdutos !== undefined ||
+    overrides.receitaServicos !== undefined ||
+    overrides.descontoCabecalho !== undefined;
+  const receitaLiquida =
+    !receitaAlterada && valorTotalGC > 0 ? valorTotalGC : receitaBruta - descontoCabecalho;
 
-  const custoProdutos = produtos.reduce((s, l) => s + l.custo, 0);
-  const custoServicos = servicos.reduce((s, l) => s + l.custo, 0);
+  const custoProdutos = num(overrides.custoProdutos, produtos.reduce((s, l) => s + l.custo, 0));
+  const custoServicos = num(overrides.custoServicos, servicos.reduce((s, l) => s + l.custo, 0));
+
 
   // --- Deslocamento --------------------------------------------------------
   const linhasDesl = linhas.filter((l) => l.isDeslocamento);

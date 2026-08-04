@@ -221,6 +221,9 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                             <p className="text-xs text-muted-foreground">{r.data}</p>
                           </TableCell>
                           <TableCell className="max-w-[220px] truncate">{r.nomeCliente}</TableCell>
+                          <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
+                            {r.equipamento ? `🔧 ${r.equipamento}` : "—"}
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground">{r.nomeSituacao}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatBRL(r.valorTotal)}</TableCell>
                         </TableRow>

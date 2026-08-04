@@ -550,7 +550,8 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
           </div>
 
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+
               <CardTitle className="text-base">Composição do resultado do conjunto</CardTitle>
               <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setMostrarMemoria((v) => !v)}>
                 {mostrarMemoria ? "Ocultar memória de cálculo" : "Ver memória de cálculo"}

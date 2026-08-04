@@ -543,6 +543,15 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
 /** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
+const NAO_PREMIAVEL_RE =
+  /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel|hospedag|hotel|pousada|diária|diaria|aliment|refeiç|refeic|almoç|almoc|janta/i;
+
+/** true quando a linha NÃO gera premiação (deslocamento, hospedagem, alimentação) */
+export function isLinhaPremiavel(l: AnalysisLine): boolean {
+  return !l.isDeslocamento && !NAO_PREMIAVEL_RE.test(`${l.nome} ${l.detalhes || ''}`);
+}
+
+/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
 export function computeExtras(
   config: AnalysisConfig,
   extras: ExtrasInput,

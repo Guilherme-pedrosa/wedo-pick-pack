@@ -370,6 +370,7 @@ export interface OrcamentoResumo {
   dataISO: string;
   nomeSituacao: string;
   valorTotal: number;
+  equipamento?: string;
 }
 
 /** Converte data do GC (dd/mm/aaaa ou aaaa-mm-dd) em Date */

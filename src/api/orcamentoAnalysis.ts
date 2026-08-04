@@ -514,7 +514,7 @@ export async function searchOrcamentosByCliente(
     await Promise.all(
       semEquip.map(async (o) => {
         try {
-          const full = await fetchOrcamentoFull(o.id);
+          const full = await fetchOrcamentoById(o.id);
           o.equipamento = extractEquipamento(full);
         } catch {
           /* ignora */

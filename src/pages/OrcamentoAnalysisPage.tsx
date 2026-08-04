@@ -37,6 +37,7 @@ import ExtrasCard from "@/components/orcamento/ExtrasCard";
 import GrupoAnalysisPanel from "@/components/orcamento/GrupoAnalysisPanel";
 import {
   AnalysisConfig,
+  AnalysisOverrides,
   OrcamentoAnalysis,
   DeslocamentoInput,
   DEFAULT_DESLOCAMENTO,

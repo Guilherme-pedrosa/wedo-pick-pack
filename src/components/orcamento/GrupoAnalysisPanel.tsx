@@ -554,12 +554,22 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
           </div>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
 
               <CardTitle className="text-base">Composição do resultado do conjunto</CardTitle>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setMostrarMemoria((v) => !v)}>
-                {mostrarMemoria ? "Ocultar memória de cálculo" : "Ver memória de cálculo"}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setMostrarMemoria((v) => !v)}>
+                  {mostrarMemoria ? "Ocultar memória de cálculo" : "Ver memória de cálculo"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => exportGrupoXLSX(analysis)}>
+                  <FileSpreadsheet className="mr-1.5 h-4 w-4" />
+                  Excel
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => exportGrupoPDF(analysis)}>
+                  <FileText className="mr-1.5 h-4 w-4" />
+                  PDF
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-1.5 text-sm">
               {[

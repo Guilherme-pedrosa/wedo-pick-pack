@@ -1000,6 +1000,7 @@ export function analyzeGrupo(
       id: a.id,
       codigo: a.codigo,
       nomeCliente: a.nomeCliente,
+      equipamento: a.equipamento,
       data: a.data,
       nomeSituacao: a.nomeSituacao,
       receita: a.receitaLiquida,

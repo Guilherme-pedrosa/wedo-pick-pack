@@ -501,23 +501,52 @@ export default function OrcamentoAnalysisPage() {
               <CardTitle className="text-base">Composição do resultado</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1.5 text-sm">
-              {[
-                ["Peças (venda)", analysis.receitaProdutos],
-                ["Serviços (venda)", analysis.receitaServicos],
-                ["Frete", analysis.receitaFrete],
-                ["Desconto do cabeçalho", -analysis.descontoCabecalho],
-                ["Custo das peças", -analysis.custoProdutos],
-                ["Custo dos serviços", -analysis.custoServicos],
-              ]
-                .filter(([, v]) => (v as number) !== 0)
-                .map(([label, v]) => (
-                  <div key={label as string} className="flex justify-between border-b border-border/50 py-1">
-                    <span className="text-muted-foreground">{label as string}</span>
-                    <span className={cn("tabular-nums", (v as number) < 0 && "text-muted-foreground")}>
-                      {formatBRL(v as number)}
-                    </span>
+              {(
+                [
+                  ["Peças (venda)", analysis.receitaProdutos, "receitaProdutos", false],
+                  ["Serviços (venda)", analysis.receitaServicos, "receitaServicos", false],
+                  ["Desconto do cabeçalho", analysis.descontoCabecalho, "descontoCabecalho", true],
+                  ["Custo das peças", analysis.custoProdutos, "custoProdutos", true],
+                  ["Custo dos serviços", analysis.custoServicos, "custoServicos", true],
+                ] as Array<[string, number, keyof AnalysisOverrides, boolean]>
+              ).map(([label, v, key, negativo]) => (
+                <div key={label} className="flex items-center justify-between gap-3 border-b border-border/50 py-1">
+                  <span className="text-muted-foreground">{label}</span>
+                  <div className="flex items-center gap-1">
+                    {negativo && <span className="text-muted-foreground">-R$</span>}
+                    {!negativo && <span className="text-muted-foreground">R$</span>}
+                    <Input
+                      inputMode="decimal"
+                      className={cn(
+                        "h-7 w-28 border-transparent bg-transparent px-1 text-right tabular-nums hover:border-input focus:border-input",
+                        overrides[key] !== undefined && "border-primary/60 font-medium"
+                      )}
+                      value={(overrides[key] ?? v).toLocaleString("pt-BR", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+                        updateOverrides({ [key]: parseFloat(raw) || 0 } as AnalysisOverrides);
+                      }}
+                    />
                   </div>
-                ))}
+                </div>
+              ))}
+              {analysis.receitaFrete !== 0 && (
+                <div className="flex justify-between border-b border-border/50 py-1">
+                  <span className="text-muted-foreground">Frete</span>
+                  <span className="tabular-nums">{formatBRL(analysis.receitaFrete)}</span>
+                </div>
+              )}
+              {Object.keys(overrides).length > 0 && (
+                <div className="flex justify-end pt-1">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updateOverrides({} as AnalysisOverrides) || setOverrides({})}>
+                    Restaurar valores do orçamento
+                  </Button>
+                </div>
+              )}
+
 
               {/* Deslocamento sempre visível, mesmo quando já está embutido no custo dos serviços */}
               <div className="flex justify-between border-b border-border/50 py-1">

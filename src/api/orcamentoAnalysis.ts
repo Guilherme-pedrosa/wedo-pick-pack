@@ -293,6 +293,8 @@ export interface OrcamentoAnalysis {
   id: string;
   codigo: string;
   nomeCliente: string;
+  /** equipamento vinculado ao orçamento (atributo extra ou lista de equipamentos) */
+  equipamento?: string;
   nomeVendedor?: string;
   data: string;
   nomeSituacao: string;

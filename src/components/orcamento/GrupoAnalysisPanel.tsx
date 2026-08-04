@@ -552,84 +552,80 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Composição do resultado do conjunto</CardTitle>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setMostrarMemoria((v) => !v)}>
+                {mostrarMemoria ? "Ocultar memória de cálculo" : "Ver memória de cálculo"}
+              </Button>
             </CardHeader>
             <CardContent className="space-y-1.5 text-sm">
               {[
-                ["Peças (venda)", analysis.itens.reduce((s, i) => s + i.receitaProdutos, 0)],
-                ["Serviços (venda)", analysis.itens.reduce((s, i) => s + i.receitaServicos, 0)],
-                ["Custo das peças", -analysis.itens.reduce((s, i) => s + i.custoProdutos, 0)],
-                ["Custo dos serviços", -analysis.itens.reduce((s, i) => s + i.custoServicos, 0)],
+                {
+                  label: "Peças (venda)",
+                  valor: analysis.itens.reduce((s, i) => s + i.receitaProdutos, 0),
+                  memo: `Soma da venda de peças de ${analysis.itens.length} orçamento(s): ${analysis.itens
+                    .map((i) => `#${i.codigo} ${formatBRL(i.receitaProdutos)}`)
+                    .join(" + ")}`,
+                },
+                {
+                  label: "Serviços (venda)",
+                  valor: analysis.itens.reduce((s, i) => s + i.receitaServicos, 0),
+                  memo: `Soma da venda de serviços: ${analysis.itens
+                    .map((i) => `#${i.codigo} ${formatBRL(i.receitaServicos)}`)
+                    .join(" + ")}`,
+                },
+                {
+                  label: "Custo das peças",
+                  valor: -analysis.itens.reduce((s, i) => s + i.custoProdutos, 0),
+                  memo: "Soma de (custo unitário × quantidade) das linhas de peças de cada orçamento.",
+                },
+                {
+                  label: "Custo dos serviços",
+                  valor: -analysis.itens.reduce((s, i) => s + i.custoServicos, 0),
+                  memo: "Soma de (custo unitário × quantidade) das linhas de serviço de cada orçamento.",
+                },
               ]
-                .filter(([, v]) => (v as number) !== 0)
-                .map(([label, v]) => (
-                  <div key={label as string} className="flex justify-between border-b border-border/50 py-1">
-                    <span className="text-muted-foreground">{label as string}</span>
-                    <span className={cn("tabular-nums", (v as number) < 0 && "text-muted-foreground")}>
-                      {formatBRL(v as number)}
-                    </span>
+                .filter((r) => r.valor !== 0)
+                .map((r) => (
+                  <div key={r.label} className="border-b border-border/50 py-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{r.label}</span>
+                      <span className={cn("tabular-nums", r.valor < 0 && "text-muted-foreground")}>
+                        {formatBRL(r.valor)}
+                      </span>
+                    </div>
+                    {mostrarMemoria && <p className="pt-0.5 text-xs text-muted-foreground/70">{r.memo}</p>}
                   </div>
                 ))}
 
-              <div className="flex justify-between border-b border-border/50 py-1">
-                <span className="text-muted-foreground">
-                  Custo de deslocamento{" "}
-                  {analysis.deslocamento.modo === "ignorar"
-                    ? "(desconsiderado)"
-                    : `(${analysis.deslocamento.km.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km × ${formatBRL(analysis.deslocamento.custoPorKm)})`}
-                </span>
-                <span className="tabular-nums text-muted-foreground">
-                  {formatBRL(-analysis.deslocamento.custoEstimado)}
-                </span>
-              </div>
-              {analysis.deslocamento.custoJaNasLinhas > 0 && (
-                <div className="flex justify-between border-b border-border/50 py-1">
-                  <span className="text-muted-foreground">
-                    (já contabilizado no custo dos serviços — estorno para não duplicar)
-                  </span>
-                  <span className="tabular-nums text-emerald-500">
-                    {formatBRL(analysis.deslocamento.custoJaNasLinhas)}
+              {[...deslocamentoMemoRows(analysis), ...extrasMemoRows(analysis, extras)]
+                .filter((r) => r.valor !== 0)
+                .map((r) => (
+                  <div key={r.label} className="border-b border-border/50 py-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{r.label}</span>
+                      <span
+                        className={cn(
+                          "tabular-nums",
+                          r.tone === "positivo" ? "text-emerald-500" : "text-muted-foreground"
+                        )}
+                      >
+                        {formatBRL(r.valor)}
+                      </span>
+                    </div>
+                    {mostrarMemoria && <p className="pt-0.5 text-xs text-muted-foreground/70">{r.memo}</p>}
+                  </div>
+                ))}
+              <div className="pt-2">
+                <div className="flex justify-between text-base font-bold">
+                  <span>Resultado</span>
+                  <span className={cn("tabular-nums", analysis.lucro < 0 ? "text-destructive" : "text-emerald-500")}>
+                    {formatBRL(analysis.lucro)} ({formatPct(analysis.margemLiquidaPct)})
                   </span>
                 </div>
-              )}
-
-              {[
-                ["Pedágio", -analysis.extras.pedagio],
-                ["Hospedagem", -analysis.extras.hospedagem],
-                ["Alimentação", -analysis.extras.alimentacao],
-                ["MO administrativa", -analysis.extras.moAdmin],
-                ["Premiação do técnico", -analysis.extras.premiacao],
-                [
-                  `Custo do parcelamento (${formatPct(analysis.extras.parcelamentoPct, 2)} em ${analysis.extras.parcelas}x)`,
-                  -analysis.extras.parcelamento,
-                ],
-                [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
-                [`Impostos (${formatPct(analysis.impostoPctEfetivo, analysis.nota10 ? 2 : 0)})`, -analysis.imposto],
-                ...(analysis.custoFixo > 0
-                  ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<
-                      [string, number]
-                    >)
-                  : []),
-                ...(analysis.garantia > 0
-                  ? ([[`Garantia (${formatPct(analysis.config.garantiaPct, 0)})`, -analysis.garantia]] as Array<
-                      [string, number]
-                    >)
-                  : []),
-              ]
-                .filter(([, v]) => (v as number) !== 0)
-                .map(([label, v]) => (
-                  <div key={label as string} className="flex justify-between border-b border-border/50 py-1">
-                    <span className="text-muted-foreground">{label as string}</span>
-                    <span className={cn("tabular-nums", (v as number) < 0 && "text-muted-foreground")}>
-                      {formatBRL(v as number)}
-                    </span>
-                  </div>
-                ))}
-              <div className="flex justify-between pt-2 text-base font-bold">
-                <span>Resultado</span>
-                <span className={cn("tabular-nums", analysis.lucro < 0 ? "text-destructive" : "text-emerald-500")}>
-                  {formatBRL(analysis.lucro)} ({formatPct(analysis.margemLiquidaPct)})
-                </span>
+                {mostrarMemoria && (
+                  <p className="pt-0.5 text-xs text-muted-foreground/70">{resultadoMemo(analysis)}</p>
+                )}
               </div>
+
             </CardContent>
           </Card>
 

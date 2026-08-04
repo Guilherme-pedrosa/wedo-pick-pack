@@ -544,6 +544,17 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
+/** Nome do equipamento do orçamento: campo extra "Equipamento" ou lista de equipamentos */
+export function extractEquipamento(orc: any): string {
+  const attr = (orc?.atributos || []).find(
+    (a: any) => String(a?.atributo?.descricao || '').toLowerCase() === 'equipamento'
+  );
+  if (attr?.atributo?.conteudo) return String(attr.atributo.conteudo);
+  const eq = (orc?.equipamentos || [])[0]?.equipamento;
+  if (!eq?.equipamento) return '';
+  return [eq.equipamento, eq.marca, eq.modelo].filter(Boolean).join(' · ');
+}
+
 /** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
 const NAO_PREMIAVEL_RE =
   /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel|hospedag|hotel|pousada|diária|diaria|aliment|refeiç|refeic|almoç|almoc|janta/i;

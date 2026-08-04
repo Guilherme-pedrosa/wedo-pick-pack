@@ -743,6 +743,7 @@ export function analyzeOrcamento(
     id: String(orc.id),
     codigo: String(orc.codigo),
     nomeCliente: String(orc.nome_cliente || ''),
+    equipamento: extractEquipamento(orc),
     nomeVendedor: orc.nome_vendedor ? String(orc.nome_vendedor) : undefined,
     data: String(orc.data || ''),
     nomeSituacao: String(orc.nome_situacao || ''),

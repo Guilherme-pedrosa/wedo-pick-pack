@@ -98,6 +98,8 @@ export default function OrcamentoAnalysisPage() {
   const [analysis, setAnalysis] = useState<OrcamentoAnalysis | null>(null);
   const [desl, setDesl] = useState<DeslocamentoInput>({ ...DEFAULT_DESLOCAMENTO });
   const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(loadAnalysisConfig()));
+  const [mostrarMemoria, setMostrarMemoria] = useState(true);
+
   const [overrides, setOverrides] = useState<AnalysisOverrides>({});
   const rawOrcRef = useRef<any | null>(null);
   const deslRef = useRef<DeslocamentoInput>(desl);

@@ -135,20 +135,16 @@ export function extrasMemoRows(a: MemoAnalysisLike, extrasIn?: ExtrasInput): Mem
     },
   ];
 
-  if (a.custoFixo > 0) {
-    rows.push({
-      label: `Custo fixo (${formatPct(c.custoFixoPct, 0)})`,
-      valor: -a.custoFixo,
-      memo: `${formatPct(c.custoFixoPct, 0)} × receita líquida (${formatBRL(a.receitaLiquida)}) = ${formatBRL(a.custoFixo)}`,
-    });
-  }
-  if (a.garantia > 0) {
-    rows.push({
-      label: `Garantia (${formatPct(c.garantiaPct, 0)})`,
-      valor: -a.garantia,
-      memo: `${formatPct(c.garantiaPct, 0)} × receita líquida (${formatBRL(a.receitaLiquida)}) = ${formatBRL(a.garantia)}`,
-    });
-  }
+  rows.push({
+    label: `Custo fixo (${formatPct(c.custoFixoPct, 0)})`,
+    valor: -a.custoFixo,
+    memo: `${formatPct(c.custoFixoPct, 0)} × receita líquida (${formatBRL(a.receitaLiquida)}) = ${formatBRL(a.custoFixo)}`,
+  });
+  rows.push({
+    label: `Garantia (${formatPct(c.garantiaPct, 0)})`,
+    valor: -a.garantia,
+    memo: `${formatPct(c.garantiaPct, 0)} × receita líquida (${formatBRL(a.receitaLiquida)}) = ${formatBRL(a.garantia)}`,
+  });
   return rows;
 }
 

@@ -641,7 +641,7 @@ export default function OrcamentoAnalysisPage() {
               )}
 
               {[...deslocamentoMemoRows(analysis), ...extrasMemoRows(analysis, extras)]
-                .filter((r) => r.valor !== 0)
+                .filter((r) => r.valor !== 0 || r.tone !== "positivo")
                 .map((r) => (
                   <div key={r.label} className="border-b border-border/50 py-1">
                     <div className="flex justify-between">

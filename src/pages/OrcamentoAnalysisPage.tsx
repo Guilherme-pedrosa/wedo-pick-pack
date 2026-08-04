@@ -158,6 +158,11 @@ export default function OrcamentoAnalysisPage() {
     if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, desl, next, overrides));
   };
 
+  const resetOverrides = () => {
+    setOverrides({});
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, desl, extras, {}));
+  };
+
   const updateOverrides = (patch: AnalysisOverrides) => {
     const next = { ...overrides, ...patch };
     setOverrides(next);

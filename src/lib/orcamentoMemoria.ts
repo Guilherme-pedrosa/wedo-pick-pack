@@ -113,7 +113,7 @@ export function extrasMemoRows(a: MemoAnalysisLike, extrasIn?: ExtrasInput): Mem
     {
       label: "Premiação do técnico",
       valor: -e.premiacao,
-      memo: `Peças: ${formatPct(c.premiacaoPecaPct, 0)} = ${formatBRL(e.premiacaoPecas)} + Serviços: ${formatPct(c.premiacaoServicoPct, 0)} = ${formatBRL(e.premiacaoServicos)} (sobre a venda de cada grupo)`,
+      memo: `Peças: ${formatPct(c.premiacaoPecaPct, 0)} = ${formatBRL(e.premiacaoPecas)} + Serviços: ${formatPct(c.premiacaoServicoPct, 0)} = ${formatBRL(e.premiacaoServicos)} (sobre a venda de cada grupo, excluindo deslocamento, hospedagem e alimentação)`,
     },
     {
       label: `Custo do parcelamento (${formatPct(e.parcelamentoPct, 2)} em ${e.parcelas}x)`,

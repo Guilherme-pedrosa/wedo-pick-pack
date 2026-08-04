@@ -537,40 +537,82 @@ export default function OrcamentoAnalysisPage() {
           </Card>
 
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-base">Composição do resultado</CardTitle>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setMostrarMemoria((v) => !v)}>
+                {mostrarMemoria ? "Ocultar memória de cálculo" : "Ver memória de cálculo"}
+              </Button>
             </CardHeader>
             <CardContent className="space-y-1.5 text-sm">
               {(
                 [
-                  ["Peças (venda)", analysis.receitaProdutos, "receitaProdutos", false],
-                  ["Serviços (venda)", analysis.receitaServicos, "receitaServicos", false],
-                  ["Desconto do cabeçalho", analysis.descontoCabecalho, "descontoCabecalho", true],
-                  ["Custo das peças", analysis.custoProdutos, "custoProdutos", true],
-                  ["Custo dos serviços", analysis.custoServicos, "custoServicos", true],
-                ] as Array<[string, number, keyof AnalysisOverrides, boolean]>
-              ).map(([label, v, key, negativo]) => (
-                <div key={label} className="flex items-center justify-between gap-3 border-b border-border/50 py-1">
-                  <span className="text-muted-foreground">{label}</span>
-                  <div className="flex items-center gap-1">
-                    {negativo && <span className="text-muted-foreground">-R$</span>}
-                    {!negativo && <span className="text-muted-foreground">R$</span>}
-                    <Input
-                      inputMode="decimal"
-                      className={cn(
-                        "h-7 w-28 border-transparent bg-transparent px-1 text-right tabular-nums hover:border-input focus:border-input",
-                        overrides[key] !== undefined && "border-primary/60 font-medium"
-                      )}
-                      value={(overrides[key] ?? v).toLocaleString("pt-BR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
-                        updateOverrides({ [key]: parseFloat(raw) || 0 } as AnalysisOverrides);
-                      }}
-                    />
+                  [
+                    "Peças (venda)",
+                    analysis.receitaProdutos,
+                    "receitaProdutos",
+                    false,
+                    `Soma da venda das ${analysis.linhas.filter((l) => l.tipo === "produto").length} linha(s) de peças do orçamento (qtd × valor de venda, já com desconto de linha).`,
+                  ],
+                  [
+                    "Serviços (venda)",
+                    analysis.receitaServicos,
+                    "receitaServicos",
+                    false,
+                    `Soma da venda das ${analysis.linhas.filter((l) => l.tipo === "servico").length} linha(s) de serviços do orçamento.`,
+                  ],
+                  [
+                    "Desconto do cabeçalho",
+                    analysis.descontoCabecalho,
+                    "descontoCabecalho",
+                    true,
+                    "Campo de desconto informado no cabeçalho do orçamento no GestãoClick.",
+                  ],
+                  [
+                    "Custo das peças",
+                    analysis.custoProdutos,
+                    "custoProdutos",
+                    true,
+                    "Soma de (custo unitário cadastrado × quantidade) das linhas de peças.",
+                  ],
+                  [
+                    "Custo dos serviços",
+                    analysis.custoServicos,
+                    "custoServicos",
+                    true,
+                    "Soma de (custo unitário × quantidade) das linhas de serviço.",
+                  ],
+                ] as Array<[string, number, keyof AnalysisOverrides, boolean, string]>
+              ).map(([label, v, key, negativo, memo]) => (
+                <div key={label} className="border-b border-border/50 py-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">{label}</span>
+                    <div className="flex items-center gap-1">
+                      {negativo && <span className="text-muted-foreground">-R$</span>}
+                      {!negativo && <span className="text-muted-foreground">R$</span>}
+                      <Input
+                        inputMode="decimal"
+                        className={cn(
+                          "h-7 w-28 border-transparent bg-transparent px-1 text-right tabular-nums hover:border-input focus:border-input",
+                          overrides[key] !== undefined && "border-primary/60 font-medium"
+                        )}
+                        value={(overrides[key] ?? v).toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+                          updateOverrides({ [key]: parseFloat(raw) || 0 } as AnalysisOverrides);
+                        }}
+                      />
+                    </div>
                   </div>
+                  {mostrarMemoria && (
+                    <p className="pt-0.5 text-xs text-muted-foreground/70">
+                      {overrides[key] !== undefined ? "Valor editado manualmente. Original: " : ""}
+                      {overrides[key] !== undefined ? `${formatBRL(v)} · ` : ""}
+                      {memo}
+                    </p>
+                  )}
                 </div>
               ))}
               {analysis.receitaFrete !== 0 && (
@@ -587,65 +629,43 @@ export default function OrcamentoAnalysisPage() {
                 </div>
               )}
 
-
-              {/* Deslocamento sempre visível, mesmo quando já está embutido no custo dos serviços */}
-              <div className="flex justify-between border-b border-border/50 py-1">
-                <span className="text-muted-foreground">
-                  Custo de deslocamento{" "}
-                  {analysis.deslocamento.modo === "ignorar"
-                    ? "(desconsiderado)"
-                    : `(${analysis.deslocamento.km.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km × ${formatBRL(analysis.deslocamento.custoPorKm)})`}
-                </span>
-                <span className="tabular-nums text-muted-foreground">
-                  {formatBRL(-analysis.deslocamento.custoEstimado)}
-                </span>
-              </div>
-              {analysis.deslocamento.custoJaNasLinhas > 0 && (
-                <div className="flex justify-between border-b border-border/50 py-1">
-                  <span className="text-muted-foreground">
-                    (já contabilizado no custo dos serviços — estorno para não duplicar)
-                  </span>
-                  <span className="tabular-nums text-emerald-500">
-                    {formatBRL(analysis.deslocamento.custoJaNasLinhas)}
-                  </span>
-                </div>
+              {mostrarMemoria && (
+                <p className="pt-1 text-xs text-muted-foreground/70">
+                  Receita líquida = peças + serviços + frete − desconto do cabeçalho ={" "}
+                  {formatBRL(analysis.receitaLiquida)} (base de impostos, restorno e parcelamento)
+                </p>
               )}
 
-              {[
-
-                ["Pedágio", -analysis.extras.pedagio],
-                ["Hospedagem", -analysis.extras.hospedagem],
-                ["Alimentação", -analysis.extras.alimentacao],
-                ["MO administrativa", -analysis.extras.moAdmin],
-                ["Premiação do técnico", -analysis.extras.premiacao],
-                [
-                  `Custo do parcelamento (${formatPct(analysis.extras.parcelamentoPct, 2)} em ${analysis.extras.parcelas}x)`,
-                  -analysis.extras.parcelamento,
-                ],
-                [`Restorno Sapore (${formatPct(analysis.extras.restornoPct, 0)})`, -analysis.extras.restorno],
-                [`Impostos (${formatPct(analysis.impostoPctEfetivo, analysis.nota10 ? 2 : 0)})`, -analysis.imposto],
-                ...(analysis.custoFixo > 0
-                  ? ([[`Custo fixo (${formatPct(analysis.config.custoFixoPct, 0)})`, -analysis.custoFixo]] as Array<[string, number]>)
-                  : []),
-                ...(analysis.garantia > 0
-                  ? ([[`Garantia (${formatPct(analysis.config.garantiaPct, 0)})`, -analysis.garantia]] as Array<[string, number]>)
-                  : []),
-              ]
-                .filter(([, v]) => (v as number) !== 0)
-                .map(([label, v]) => (
-                  <div key={label as string} className="flex justify-between border-b border-border/50 py-1">
-                    <span className="text-muted-foreground">{label as string}</span>
-                    <span className={cn("tabular-nums", (v as number) < 0 && "text-muted-foreground")}>
-                      {formatBRL(v as number)}
-                    </span>
+              {[...deslocamentoMemoRows(analysis), ...extrasMemoRows(analysis, extras)]
+                .filter((r) => r.valor !== 0)
+                .map((r) => (
+                  <div key={r.label} className="border-b border-border/50 py-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{r.label}</span>
+                      <span
+                        className={cn(
+                          "tabular-nums",
+                          r.tone === "positivo" ? "text-emerald-500" : "text-muted-foreground"
+                        )}
+                      >
+                        {formatBRL(r.valor)}
+                      </span>
+                    </div>
+                    {mostrarMemoria && <p className="pt-0.5 text-xs text-muted-foreground/70">{r.memo}</p>}
                   </div>
                 ))}
-              <div className="flex justify-between pt-2 text-base font-bold">
-                <span>Resultado</span>
-                <span className={cn("tabular-nums", analysis.lucro < 0 ? "text-destructive" : "text-emerald-500")}>
-                  {formatBRL(analysis.lucro)} ({formatPct(analysis.margemLiquidaPct)})
-                </span>
+              <div className="pt-2">
+                <div className="flex justify-between text-base font-bold">
+                  <span>Resultado</span>
+                  <span className={cn("tabular-nums", analysis.lucro < 0 ? "text-destructive" : "text-emerald-500")}>
+                    {formatBRL(analysis.lucro)} ({formatPct(analysis.margemLiquidaPct)})
+                  </span>
+                </div>
+                {mostrarMemoria && (
+                  <p className="pt-0.5 text-xs text-muted-foreground/70">{resultadoMemo(analysis)}</p>
+                )}
               </div>
+
             </CardContent>
           </Card>
 

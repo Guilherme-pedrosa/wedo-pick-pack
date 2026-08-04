@@ -299,6 +299,10 @@ export interface OrcamentoAnalysis {
   linhas: AnalysisLine[];
   receitaProdutos: number;
   receitaServicos: number;
+  /** receita de peças que gera premiação (exclui deslocamento, hospedagem e alimentação) */
+  receitaPremiavelProdutos: number;
+  /** receita de serviços que gera premiação (exclui deslocamento, hospedagem e alimentação) */
+  receitaPremiavelServicos: number;
   receitaFrete: number;
   descontoCabecalho: number;
   receitaBruta: number;
@@ -539,22 +543,40 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
 /** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
+const NAO_PREMIAVEL_RE =
+  /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel|hospedag|hotel|pousada|diária|diaria|aliment|refeiç|refeic|almoç|almoc|janta/i;
+
+/** true quando a linha NÃO gera premiação (deslocamento, hospedagem, alimentação) */
+export function isLinhaPremiavel(l: AnalysisLine): boolean {
+  return !l.isDeslocamento && !NAO_PREMIAVEL_RE.test(`${l.nome} ${l.detalhes || ''}`);
+}
+
+/** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
 export function computeExtras(
   config: AnalysisConfig,
   extras: ExtrasInput,
   receitaPecas: number,
   receitaServicos: number,
-  opts?: { nomeCliente?: string; receitaRestorno?: number; receitaFinanciamento?: number }
+  opts?: {
+    nomeCliente?: string;
+    receitaRestorno?: number;
+    receitaFinanciamento?: number;
+    /** base de premiação (exclui deslocamento, hospedagem e alimentação) */
+    basePremiacaoPecas?: number;
+    basePremiacaoServicos?: number;
+  }
 ): ExtrasResumo {
   const alimentacao = extras.considerarAlimentacao
     ? Math.max(0, extras.dias) * Math.max(0, extras.tecnicos) * config.alimentacaoDia
     : 0;
   const moAdmin = extras.considerarAdmin ? Math.max(0, extras.horasAdmin) * config.moAdminHora : 0;
+  const basePremPecas = opts?.basePremiacaoPecas ?? receitaPecas;
+  const basePremServicos = opts?.basePremiacaoServicos ?? receitaServicos;
   const premiacaoPecas = extras.considerarPremiacao
-    ? Math.max(0, receitaPecas) * (config.premiacaoPecaPct / 100)
+    ? Math.max(0, basePremPecas) * (config.premiacaoPecaPct / 100)
     : 0;
   const premiacaoServicos = extras.considerarPremiacao
-    ? Math.max(0, receitaServicos) * (config.premiacaoServicoPct / 100)
+    ? Math.max(0, basePremServicos) * (config.premiacaoServicoPct / 100)
     : 0;
   const pedagio = Math.max(0, extras.pedagio || 0);
   const hospedagem = Math.max(0, extras.hospedagem || 0);
@@ -670,11 +692,22 @@ export function analyzeOrcamento(
     linhas: linhasDesl.map((l) => l.nome),
   };
 
+  // Premiação: deslocamento, hospedagem e alimentação não entram na base
+  const receitaBrutaProdutos = produtos.reduce((s, l) => s + l.receita, 0);
+  const receitaBrutaServicos = servicos.reduce((s, l) => s + l.receita, 0);
+  const premBrutaProdutos = produtos.filter(isLinhaPremiavel).reduce((s, l) => s + l.receita, 0);
+  const premBrutaServicos = servicos.filter(isLinhaPremiavel).reduce((s, l) => s + l.receita, 0);
+  const ratio = (base: number, total: number) => (total > 0 ? base / total : 1);
+  const receitaPremiavelProdutos = receitaProdutos * ratio(premBrutaProdutos, receitaBrutaProdutos);
+  const receitaPremiavelServicos = receitaServicos * ratio(premBrutaServicos, receitaBrutaServicos);
+
   const extrasIn = extrasInput ?? defaultExtras(config);
   const extras = computeExtras(config, extrasIn, receitaProdutos, receitaServicos, {
     nomeCliente: String(orc.nome_cliente || ''),
     receitaRestorno: receitaLiquida,
     receitaFinanciamento: receitaLiquida,
+    basePremiacaoPecas: receitaPremiavelProdutos,
+    basePremiacaoServicos: receitaPremiavelServicos,
   });
 
   const custoDeslocamento = desl.modo === 'ignorar' ? custoJaNasLinhas : Math.max(custoEstimado, custoJaNasLinhas);
@@ -714,6 +747,8 @@ export function analyzeOrcamento(
     linhas,
     receitaProdutos,
     receitaServicos,
+    receitaPremiavelProdutos,
+    receitaPremiavelServicos,
     receitaFrete,
     descontoCabecalho,
     receitaBruta,
@@ -883,6 +918,8 @@ export interface GrupoItem {
   custoDireto: number;
   receitaProdutos: number;
   receitaServicos: number;
+  receitaPremiavelProdutos: number;
+  receitaPremiavelServicos: number;
   custoProdutos: number;
   custoServicos: number;
   kmDetectado: number;
@@ -954,6 +991,8 @@ export function analyzeGrupo(
       custoDireto,
       receitaProdutos: a.receitaProdutos,
       receitaServicos: a.receitaServicos,
+      receitaPremiavelProdutos: a.receitaPremiavelProdutos,
+      receitaPremiavelServicos: a.receitaPremiavelServicos,
       custoProdutos: a.custoProdutos,
       custoServicos: a.custoServicos,
       kmDetectado: a.deslocamento.kmDetectado,
@@ -995,6 +1034,8 @@ export function analyzeGrupo(
     nomeCliente: receitaRestorno > 0 ? 'sapore' : '',
     receitaRestorno,
     receitaFinanciamento: receitaLiquida,
+    basePremiacaoPecas: itens.reduce((s, i) => s + i.receitaPremiavelProdutos, 0),
+    basePremiacaoServicos: itens.reduce((s, i) => s + i.receitaPremiavelServicos, 0),
   });
   const custoTotal = custoDireto + custoAdicional + extras.total;
 

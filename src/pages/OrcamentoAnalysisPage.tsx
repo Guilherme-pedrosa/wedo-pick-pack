@@ -124,9 +124,10 @@ export default function OrcamentoAnalysisPage() {
     mutationFn: async (code: string) => fetchOrcamentoByCodigo(code),
     onSuccess: (orc) => {
       setRawOrc(orc);
+      setOverrides({});
       const next: DeslocamentoInput = { ...desl, modo: "auto" };
       setDesl(next);
-      setAnalysis(analyzeOrcamento(orc, config, next, extras));
+      setAnalysis(analyzeOrcamento(orc, config, next, extras, {}));
     },
     onError: () => {
       setRawOrc(null);
@@ -137,7 +138,7 @@ export default function OrcamentoAnalysisPage() {
   const updateConfig = (patch: Partial<AnalysisConfig>) => {
     const next = { ...config, ...patch };
     setConfig(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl, extras));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, next, desl, extras, overrides));
     saveAnalysisConfig(next).catch(() => {
       toast.error("Não foi possível salvar os parâmetros para todos os usuários.");
     });
@@ -146,14 +147,21 @@ export default function OrcamentoAnalysisPage() {
   const updateDesl = (patch: Partial<DeslocamentoInput>) => {
     const next = { ...desl, ...patch };
     setDesl(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next, extras));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, next, extras, overrides));
   };
 
   const updateExtras = (patch: Partial<ExtrasInput>) => {
     const next = { ...extras, ...patch };
     setExtras(next);
-    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, desl, next));
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, desl, next, overrides));
   };
+
+  const updateOverrides = (patch: AnalysisOverrides) => {
+    const next = { ...overrides, ...patch };
+    setOverrides(next);
+    if (rawOrc) setAnalysis(analyzeOrcamento(rawOrc, config, desl, extras, next));
+  };
+
 
   const parecer = analysis ? buildParecer(analysis) : null;
 

@@ -734,6 +734,10 @@ export function analyzeOrcamento(
     margemBrutaPct: receitaLiquida > 0 ? ((receitaLiquida - custoTotal) / receitaLiquida) * 100 : 0,
     descontoTotalPct:
       brutoSemDesconto > 0 ? ((descontoLinhas + descontoCabecalho) / brutoSemDesconto) * 100 : 0,
+    descontoMaxMinima,
+    descontoMaxMinimaPct: receitaLiquida > 0 ? (descontoMaxMinima / receitaLiquida) * 100 : 0,
+    descontoMaxMeta,
+    descontoMaxMetaPct: receitaLiquida > 0 ? (descontoMaxMeta / receitaLiquida) * 100 : 0,
     linhasSemCusto: linhas.filter((l) => l.semCusto).length,
     valorTotalGC,
     config,

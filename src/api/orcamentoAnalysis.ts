@@ -299,6 +299,10 @@ export interface OrcamentoAnalysis {
   linhas: AnalysisLine[];
   receitaProdutos: number;
   receitaServicos: number;
+  /** receita de peças que gera premiação (exclui deslocamento, hospedagem e alimentação) */
+  receitaPremiavelProdutos: number;
+  /** receita de serviços que gera premiação (exclui deslocamento, hospedagem e alimentação) */
+  receitaPremiavelServicos: number;
   receitaFrete: number;
   descontoCabecalho: number;
   receitaBruta: number;

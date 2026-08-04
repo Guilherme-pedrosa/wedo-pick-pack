@@ -321,6 +321,12 @@ export interface OrcamentoAnalysis {
   margemLiquidaPct: number;
   margemBrutaPct: number;
   descontoTotalPct: number;
+  /** desconto máximo possível mantendo a margem mínima */
+  descontoMaxMinima: number;
+  descontoMaxMinimaPct: number;
+  /** desconto máximo possível mantendo a margem meta */
+  descontoMaxMeta: number;
+  descontoMaxMetaPct: number;
   linhasSemCusto: number;
   valorTotalGC: number;
   config: AnalysisConfig;

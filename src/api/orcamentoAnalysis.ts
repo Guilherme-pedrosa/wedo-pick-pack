@@ -293,6 +293,8 @@ export interface OrcamentoAnalysis {
   id: string;
   codigo: string;
   nomeCliente: string;
+  /** equipamento vinculado ao orçamento (atributo extra ou lista de equipamentos) */
+  equipamento?: string;
   nomeVendedor?: string;
   data: string;
   nomeSituacao: string;
@@ -542,6 +544,17 @@ function buildLine(raw: any, tipo: 'produto' | 'servico'): AnalysisLine {
 
 const DESLOCAMENTO_RE = /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel/i;
 
+/** Nome do equipamento do orçamento: campo extra "Equipamento" ou lista de equipamentos */
+export function extractEquipamento(orc: any): string {
+  const attr = (orc?.atributos || []).find(
+    (a: any) => String(a?.atributo?.descricao || '').toLowerCase() === 'equipamento'
+  );
+  if (attr?.atributo?.conteudo) return String(attr.atributo.conteudo);
+  const eq = (orc?.equipamentos || [])[0]?.equipamento;
+  if (!eq?.equipamento) return '';
+  return [eq.equipamento, eq.marca, eq.modelo].filter(Boolean).join(' · ');
+}
+
 /** Calcula os custos operacionais extras (alimentação, MO admin, premiação, pedágio, hospedagem, restorno) */
 const NAO_PREMIAVEL_RE =
   /desloc|quilometr|kilometr|\bkm\b|\bkms\b|viagem|pedágio|pedagio|combustível|combustivel|hospedag|hotel|pousada|diária|diaria|aliment|refeiç|refeic|almoç|almoc|janta/i;
@@ -741,6 +754,7 @@ export function analyzeOrcamento(
     id: String(orc.id),
     codigo: String(orc.codigo),
     nomeCliente: String(orc.nome_cliente || ''),
+    equipamento: extractEquipamento(orc),
     nomeVendedor: orc.nome_vendedor ? String(orc.nome_vendedor) : undefined,
     data: String(orc.data || ''),
     nomeSituacao: String(orc.nome_situacao || ''),
@@ -912,6 +926,7 @@ export interface GrupoItem {
   id: string;
   codigo: string;
   nomeCliente: string;
+  equipamento?: string;
   data: string;
   nomeSituacao: string;
   receita: number;
@@ -985,6 +1000,7 @@ export function analyzeGrupo(
       id: a.id,
       codigo: a.codigo,
       nomeCliente: a.nomeCliente,
+      equipamento: a.equipamento,
       data: a.data,
       nomeSituacao: a.nomeSituacao,
       receita: a.receitaLiquida,

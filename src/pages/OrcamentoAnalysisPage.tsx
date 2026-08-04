@@ -317,6 +317,11 @@ export default function OrcamentoAnalysisPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle className="text-lg">
                   Orçamento #{analysis.codigo} — {analysis.nomeCliente}
+                  {analysis.equipamento && (
+                    <span className="ml-2 block text-sm font-normal text-muted-foreground sm:inline">
+                      🔧 {analysis.equipamento}
+                    </span>
+                  )}
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{analysis.nomeSituacao}</Badge>

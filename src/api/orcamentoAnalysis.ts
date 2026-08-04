@@ -1034,6 +1034,8 @@ export function analyzeGrupo(
     nomeCliente: receitaRestorno > 0 ? 'sapore' : '',
     receitaRestorno,
     receitaFinanciamento: receitaLiquida,
+    basePremiacaoPecas: itens.reduce((s, i) => s + i.receitaPremiavelProdutos, 0),
+    basePremiacaoServicos: itens.reduce((s, i) => s + i.receitaPremiavelServicos, 0),
   });
   const custoTotal = custoDireto + custoAdicional + extras.total;
 

@@ -321,6 +321,12 @@ export interface OrcamentoAnalysis {
   margemLiquidaPct: number;
   margemBrutaPct: number;
   descontoTotalPct: number;
+  /** desconto máximo possível mantendo a margem mínima */
+  descontoMaxMinima: number;
+  descontoMaxMinimaPct: number;
+  /** desconto máximo possível mantendo a margem meta */
+  descontoMaxMeta: number;
+  descontoMaxMetaPct: number;
   linhasSemCusto: number;
   valorTotalGC: number;
   config: AnalysisConfig;
@@ -684,6 +690,19 @@ export function analyzeOrcamento(
   const descontoLinhas = linhas.reduce((s, l) => s + l.descontoAplicado, 0);
   const brutoSemDesconto = receitaBruta + descontoLinhas;
 
+  // Desconto máximo mantendo margem alvo:
+  // (R - D) - custoTotal - (R - D) * p = m * (R - D)  =>  R - D = custoTotal / (1 - p - m)
+  const pTaxas = (impostoPctEfetivo + config.custoFixoPct + config.garantiaPct) / 100;
+  const maxDesconto = (margemPct: number) => {
+    const den = 1 - pTaxas - margemPct / 100;
+    if (den <= 0) return 0;
+    return Math.max(0, receitaLiquida - custoTotal / den);
+  };
+  const descontoMaxMinima = maxDesconto(config.margemMinima);
+  const descontoMaxMeta = maxDesconto(config.margemMeta);
+
+
+
 
   return {
     id: String(orc.id),
@@ -715,6 +734,10 @@ export function analyzeOrcamento(
     margemBrutaPct: receitaLiquida > 0 ? ((receitaLiquida - custoTotal) / receitaLiquida) * 100 : 0,
     descontoTotalPct:
       brutoSemDesconto > 0 ? ((descontoLinhas + descontoCabecalho) / brutoSemDesconto) * 100 : 0,
+    descontoMaxMinima,
+    descontoMaxMinimaPct: receitaLiquida > 0 ? (descontoMaxMinima / receitaLiquida) * 100 : 0,
+    descontoMaxMeta,
+    descontoMaxMetaPct: receitaLiquida > 0 ? (descontoMaxMeta / receitaLiquida) * 100 : 0,
     linhasSemCusto: linhas.filter((l) => l.semCusto).length,
     valorTotalGC,
     config,

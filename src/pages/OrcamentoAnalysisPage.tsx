@@ -541,7 +541,7 @@ export default function OrcamentoAnalysisPage() {
               )}
               {Object.keys(overrides).length > 0 && (
                 <div className="flex justify-end pt-1">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updateOverrides({} as AnalysisOverrides) || setOverrides({})}>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={resetOverrides}>
                     Restaurar valores do orçamento
                   </Button>
                 </div>

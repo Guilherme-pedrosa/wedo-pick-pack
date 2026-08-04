@@ -557,17 +557,26 @@ export function computeExtras(
   extras: ExtrasInput,
   receitaPecas: number,
   receitaServicos: number,
-  opts?: { nomeCliente?: string; receitaRestorno?: number; receitaFinanciamento?: number }
+  opts?: {
+    nomeCliente?: string;
+    receitaRestorno?: number;
+    receitaFinanciamento?: number;
+    /** base de premiação (exclui deslocamento, hospedagem e alimentação) */
+    basePremiacaoPecas?: number;
+    basePremiacaoServicos?: number;
+  }
 ): ExtrasResumo {
   const alimentacao = extras.considerarAlimentacao
     ? Math.max(0, extras.dias) * Math.max(0, extras.tecnicos) * config.alimentacaoDia
     : 0;
   const moAdmin = extras.considerarAdmin ? Math.max(0, extras.horasAdmin) * config.moAdminHora : 0;
+  const basePremPecas = opts?.basePremiacaoPecas ?? receitaPecas;
+  const basePremServicos = opts?.basePremiacaoServicos ?? receitaServicos;
   const premiacaoPecas = extras.considerarPremiacao
-    ? Math.max(0, receitaPecas) * (config.premiacaoPecaPct / 100)
+    ? Math.max(0, basePremPecas) * (config.premiacaoPecaPct / 100)
     : 0;
   const premiacaoServicos = extras.considerarPremiacao
-    ? Math.max(0, receitaServicos) * (config.premiacaoServicoPct / 100)
+    ? Math.max(0, basePremServicos) * (config.premiacaoServicoPct / 100)
     : 0;
   const pedagio = Math.max(0, extras.pedagio || 0);
   const hospedagem = Math.max(0, extras.hospedagem || 0);

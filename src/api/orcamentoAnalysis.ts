@@ -819,15 +819,31 @@ export function buildParecer(a: OrcamentoAnalysis): Parecer {
     );
   }
 
-  const d = a.descontoTotalPct;
+  // Desconto máximo que ainda respeita a margem mínima.
+  // lucro = R' - C - R'*(imp+fixo+gar)  =>  margem = 1 - k - C/R'
+  const R = a.receitaLiquida;
+  const k =
+    (a.impostoPctEfetivo + a.config.custoFixoPct + a.config.garantiaPct) / 100;
+  const mmin = cfg.margemMinima / 100;
+  const denom = 1 - k - mmin;
+  const receitaMinima = denom > 0 ? a.custoTotal / denom : Infinity;
+  const descontoMaxValor = R - receitaMinima;
+  const descontoMaxPct = R > 0 ? (descontoMaxValor / R) * 100 : 0;
+
+  const alcadaTexto = (pct: number) =>
+    pct <= 5
+      ? 'alçada do Consultor Comercial (até 5%)'
+      : pct <= 10
+        ? 'exige aprovação do Gerente Comercial (5,01% a 10%)'
+        : 'exige aprovação da Diretoria (acima de 10%)';
+
   const alcada =
-    d <= 0
-      ? 'Sem desconto aplicado — não requer aprovação.'
-      : d <= 5
-        ? `Desconto de ${formatPct(d)} — alçada do Consultor Comercial (até 5%).`
-        : d <= 10
-          ? `Desconto de ${formatPct(d)} — exige aprovação do Gerente Comercial (5,01% a 10%).`
-          : `Desconto de ${formatPct(d)} — exige aprovação da Diretoria (acima de 10%).`;
+    m < cfg.margemMinima
+      ? `Sem espaço para desconto — a margem atual (${formatPct(m)}) já está abaixo do mínimo de ${formatPct(cfg.margemMinima, 0)}.`
+      : descontoMaxValor <= 0
+        ? `Sem espaço para desconto mantendo a margem mínima de ${formatPct(cfg.margemMinima, 0)}.`
+        : `Desconto máximo possível: ${formatPct(descontoMaxPct)} (${formatBRL(descontoMaxValor)}) mantendo a margem mínima de ${formatPct(cfg.margemMinima, 0)} — ${alcadaTexto(descontoMaxPct)}.`;
+
 
   return { veredito, titulo, resumo, recomendacoes, alcada };
 }

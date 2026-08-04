@@ -323,7 +323,12 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                                 {[i.data, i.nomeSituacao].filter(Boolean).join(" · ")}
                               </p>
                             </TableCell>
-                            <TableCell className="max-w-[220px] truncate">{i.nomeCliente}</TableCell>
+                            <TableCell className="max-w-[260px]">
+                              <p className="truncate">{i.nomeCliente}</p>
+                              {i.equipamento && (
+                                <p className="truncate text-xs text-muted-foreground">🔧 {i.equipamento}</p>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {formatBRL(i.receita)}
                               <p className="text-xs text-muted-foreground">

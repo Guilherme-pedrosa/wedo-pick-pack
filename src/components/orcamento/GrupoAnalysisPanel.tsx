@@ -589,7 +589,6 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                 },
               ]
                 .map((r) => (
-                .map((r) => (
                   <div key={r.label} className="border-b border-border/50 py-1">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{r.label}</span>

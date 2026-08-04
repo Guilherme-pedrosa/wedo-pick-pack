@@ -690,6 +690,19 @@ export function analyzeOrcamento(
   const descontoLinhas = linhas.reduce((s, l) => s + l.descontoAplicado, 0);
   const brutoSemDesconto = receitaBruta + descontoLinhas;
 
+  // Desconto máximo mantendo margem alvo:
+  // (R - D) - custoTotal - (R - D) * p = m * (R - D)  =>  R - D = custoTotal / (1 - p - m)
+  const pTaxas = (impostoPctEfetivo + config.custoFixoPct + config.garantiaPct) / 100;
+  const maxDesconto = (margemPct: number) => {
+    const den = 1 - pTaxas - margemPct / 100;
+    if (den <= 0) return 0;
+    return Math.max(0, receitaLiquida - custoTotal / den);
+  };
+  const descontoMaxMinima = maxDesconto(config.margemMinima);
+  const descontoMaxMeta = maxDesconto(config.margemMeta);
+
+
+
 
   return {
     id: String(orc.id),

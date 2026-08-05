@@ -2,12 +2,20 @@ import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listOSMultiStatus } from '@/api/gestaoclick';
 import { getSeparations, linkTechnicianToSeparation, SeparationRecord } from '@/api/separations';
-import { getAuvoAgenda, auvoStatusLabel, matchTechnician, normalizeName, AuvoAgendaTask } from '@/api/auvoAgenda';
+import {
+  getAuvoTasksByIds,
+  auvoStatusLabel,
+  matchTechnician,
+  normalizeName,
+  getExecTaskIdsFromOS,
+  AuvoAgendaTask,
+} from '@/api/auvoAgenda';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { GCOrdemServico } from '@/api/types';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {

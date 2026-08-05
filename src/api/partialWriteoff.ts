@@ -1,9 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { OrderType } from './types';
-import {
-  invokePartialWriteoffClient,
-  isMissingPartialWriteoffFunction,
-} from './partialWriteoffClient';
+import { invokePartialWriteoffClient } from './partialWriteoffClient';
 
 export type PartialWriteoffStatus =
   | 'awaiting_separation'
@@ -90,27 +87,8 @@ export interface PartialCheckoutEntry {
   createdAt: string;
 }
 
-async function parseInvokeError(error: unknown, fallback: string): Promise<string> {
-  const candidate = error as any;
-  try {
-    const contextBody = candidate?.context?.body;
-    if (typeof contextBody === 'string') return JSON.parse(contextBody)?.error || fallback;
-    if (typeof contextBody?.text === 'function') {
-      const body = JSON.parse(await contextBody.text());
-      return body?.error || fallback;
-    }
-  } catch { /* use regular message */ }
-  return candidate?.message || fallback;
-}
-
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('partial-writeoff', { body });
-  if (error && isMissingPartialWriteoffFunction(error)) {
-    return invokePartialWriteoffClient<T>(body);
-  }
-  if (error) throw new Error(await parseInvokeError(error, 'Falha na baixa parcial'));
-  if (data?.error) throw new Error(data.error);
-  return data as T;
+  return invokePartialWriteoffClient<T>(body);
 }
 
 export async function searchPartialBudgets(term: string): Promise<PartialBudgetSearchResult[]> {

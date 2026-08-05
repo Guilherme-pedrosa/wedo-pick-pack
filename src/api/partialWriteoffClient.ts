@@ -3,7 +3,6 @@ import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
 } from './partialWriteoff';
-import type { OrderType } from './types';
 
 type DocumentType = 'os' | 'venda';
 type AuthContext = {
@@ -700,16 +699,3 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
   if (action === 'consolidate') return { operation: await handleConsolidate(body, auth) } as T;
   throw new Error('UNKNOWN_ACTION');
 }
-
-export function isMissingPartialWriteoffFunction(error: unknown): boolean {
-  const candidate = error as any;
-  if (Number(candidate?.context?.status) === 404) return true;
-  const text = [
-    candidate?.message,
-    candidate?.context?.body,
-    candidate?.context?.statusText,
-  ].filter(Boolean).join(' ');
-  return /requested function was not found|function.*not found|404|not_found/i.test(text);
-}
-
-export type { OrderType };

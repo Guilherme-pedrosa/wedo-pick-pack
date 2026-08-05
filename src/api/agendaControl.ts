@@ -1,6 +1,21 @@
 import type { GCOrdemServico } from '@/api/types';
 
 export const GC_EXECUTION_TASK_ATTRIBUTE_ID = '73344';
+export const GC_REPAIR_LOCATION_ATTRIBUTE_ID = '68658';
+
+/** Mesmo recorte de processo da tela Controle OS, carregado pelo Pick & Pack. */
+export const OPEN_AGENDA_OS_SITUATIONS = [
+  { id: '7063579', label: 'AGUARDANDO COMPRA DE PEÇAS' },
+  { id: '7063580', label: 'AGUARDANDO CHEGADA DE PEÇAS' },
+  { id: '7659440', label: 'AGUARDANDO FABRICAÇÃO' },
+  { id: '7063581', label: 'PEDIDO EM CONFERÊNCIA' },
+  { id: '7063705', label: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' },
+  { id: '7213493', label: 'SERVIÇO AGUARDANDO EXECUÇÃO' },
+  { id: '7684665', label: 'RETIRADA PELO TÉCNICO' },
+  { id: '7748831', label: 'AGUARDANDO RETIRADA' },
+  { id: '8219136', label: 'EM ROTA' },
+  { id: '7116099', label: 'EXECUTADO – AG. NEGOCIAÇÃO' },
+] as const;
 
 function attributeParts(raw: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(raw)) return [];
@@ -27,11 +42,26 @@ export function parseTaskIds(value: unknown): string[] {
 
 /** Only attribute 73344 is the execution visit that can be scheduled. */
 export function getExecutionTaskIds(os: Pick<GCOrdemServico, 'atributos'>): string[] {
-  const attribute = attributeParts(os.atributos).find((entry) =>
-    String(entry.atributo_id ?? entry.id ?? '').trim() === GC_EXECUTION_TASK_ATTRIBUTE_ID,
-  );
+  return parseTaskIds(getOsAttributeValue(os, GC_EXECUTION_TASK_ATTRIBUTE_ID));
+}
 
-  return parseTaskIds(attribute?.conteudo ?? attribute?.valor ?? '');
+export function getOsAttributeValue(
+  os: Pick<GCOrdemServico, 'atributos'>,
+  attributeId: string,
+): string {
+  const attribute = attributeParts(os.atributos).find((entry) =>
+    String(entry.atributo_id ?? entry.id ?? '').trim() === attributeId,
+  );
+  return String(attribute?.conteudo ?? attribute?.valor ?? '').trim();
+}
+
+export function normalizeFilterText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function datePart(value: string | null | undefined): string {

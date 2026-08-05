@@ -35,6 +35,3 @@ verify_jwt = false
 
 [functions.inventory-consumption-daily]
 verify_jwt = false
-
-[functions.syncgc-control-os]
-verify_jwt = true

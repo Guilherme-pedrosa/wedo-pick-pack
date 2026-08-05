@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { classifyAgendaRow, getExecutionTaskIds, parseTaskIds } from './agendaControl';
+import {
+  classifyAgendaRow,
+  getExecutionTaskIds,
+  getOsAttributeValue,
+  normalizeFilterText,
+  parseTaskIds,
+} from './agendaControl';
 
 describe('agendaControl', () => {
   it('extracts only execution task ids from GC attribute 73344', () => {
@@ -19,6 +25,16 @@ describe('agendaControl', () => {
 
   it('normalizes and deduplicates task id lists', () => {
     expect(parseTaskIds('12 / 13; 12, inválido')).toEqual(['12', '13']);
+  });
+
+  it('reads the local do reparo attribute used by Controle OS filters', () => {
+    expect(getOsAttributeValue({
+      atributos: [{ atributo: { atributo_id: '68658', conteudo: 'GALPÃO' } }],
+    }, '68658')).toBe('GALPÃO');
+  });
+
+  it('normalizes accents and spacing for filter comparisons', () => {
+    expect(normalizeFilterText('  Em Execução  ')).toBe('em execucao');
   });
 
   it('classifies scheduling availability without matching customer names', () => {

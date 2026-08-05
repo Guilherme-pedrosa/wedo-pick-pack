@@ -68,6 +68,7 @@ export interface PartialBudgetSearchResult {
   id: string;
   codigo: string;
   budget_kind: 'produto' | 'servico';
+  eligible_for_partial_writeoff: boolean;
   cliente_id: string;
   nome_cliente: string;
   data: string;
@@ -92,8 +93,15 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   return invokePartialWriteoffClient<T>(body);
 }
 
-export async function searchPartialBudgets(term: string): Promise<PartialBudgetSearchResult[]> {
-  const data = await invoke<{ budgets: PartialBudgetSearchResult[] }>({ action: 'search_budgets', term });
+export async function searchPartialBudgets(
+  term: string,
+  budgetKind: PartialBudgetSearchResult['budget_kind'],
+): Promise<PartialBudgetSearchResult[]> {
+  const data = await invoke<{ budgets: PartialBudgetSearchResult[] }>({
+    action: 'search_budgets',
+    term,
+    budget_kind: budgetKind,
+  });
   return data.budgets || [];
 }
 

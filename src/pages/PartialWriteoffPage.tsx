@@ -58,6 +58,7 @@ function friendlyError(error: unknown) {
   if (message.includes('CONFIGURE_OS_CONCLUSION_STATUS')) return 'Configure a situação padrão de conclusão de OS antes de consolidar.';
   if (message.includes('CONFIGURE_AUVO_USER_ID')) return 'Configure o ID de usuário Auvo antes de consolidar.';
   if (message.includes('SEARCH_TOO_SHORT')) return 'Digite pelo menos 2 caracteres para buscar.';
+  if (message.includes('SEARCH_BUDGET_KIND_REQUIRED')) return 'Escolha se o orçamento é de Produto ou Serviço.';
   if (message.includes('BUDGET_ALREADY_HAS_DOCUMENT')) return 'Este orçamento já gerou OS ou venda e não pode entrar na baixa parcial.';
   return message;
 }
@@ -73,6 +74,8 @@ export default function PartialWriteoffPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [term, setTerm] = useState('');
+  const [budgetKind, setBudgetKind] = useState<PartialBudgetSearchResult['budget_kind'] | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<PartialBudgetSearchResult[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -139,13 +142,20 @@ export default function PartialWriteoffPage() {
   }
 
   async function handleSearch() {
+    if (!budgetKind) {
+      toast.error('Escolha se o orçamento é de Produto ou Serviço.');
+      return;
+    }
     if (term.trim().length < 2) {
       toast.error('Digite pelo menos 2 caracteres.');
       return;
     }
     setSearching(true);
+    setHasSearched(false);
+    setResults([]);
     try {
-      setResults(await searchPartialBudgets(term));
+      setResults(await searchPartialBudgets(term, budgetKind));
+      setHasSearched(true);
     } catch (error) {
       toast.error(friendlyError(error));
     } finally {
@@ -240,18 +250,52 @@ export default function PartialWriteoffPage() {
             <CardTitle className="text-base">Localizar orçamento</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">1. Este orçamento é de:</p>
+              <div className="grid max-w-md grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo do orçamento">
+                <Button
+                  type="button"
+                  variant={budgetKind === 'produto' ? 'default' : 'outline'}
+                  aria-pressed={budgetKind === 'produto'}
+                  onClick={() => {
+                    setBudgetKind('produto');
+                    setResults([]);
+                    setHasSearched(false);
+                  }}
+                >
+                  Produto
+                </Button>
+                <Button
+                  type="button"
+                  variant={budgetKind === 'servico' ? 'default' : 'outline'}
+                  aria-pressed={budgetKind === 'servico'}
+                  onClick={() => {
+                    setBudgetKind('servico');
+                    setResults([]);
+                    setHasSearched(false);
+                  }}
+                >
+                  Serviço
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm font-medium">2. Informe o orçamento:</p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={term}
-                  onChange={event => setTerm(event.target.value)}
+                  onChange={event => {
+                    setTerm(event.target.value);
+                    setResults([]);
+                    setHasSearched(false);
+                  }}
                   onKeyDown={event => event.key === 'Enter' && void handleSearch()}
-                  placeholder="Número, cliente ou CNPJ"
+                  placeholder={budgetKind ? `Número, cliente ou CNPJ do orçamento de ${budgetKind}` : 'Primeiro escolha Produto ou Serviço'}
                   className="pl-9"
                 />
               </div>
-              <Button onClick={handleSearch} disabled={searching}>
+              <Button onClick={handleSearch} disabled={searching || !budgetKind}>
                 {searching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                 Buscar
               </Button>
@@ -260,7 +304,10 @@ export default function PartialWriteoffPage() {
             {results.length > 0 && (
               <div className="grid gap-2 md:grid-cols-2">
                 {results.map(budget => (
-                  <div key={`${budget.budget_kind}:${budget.id}`} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                  <div
+                    key={`${budget.budget_kind}:${budget.id}`}
+                    className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${budget.eligible_for_partial_writeoff ? 'bg-background' : 'border-amber-300 bg-amber-50'}`}
+                  >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-semibold">Orçamento #{budget.codigo}</p>
@@ -270,17 +317,31 @@ export default function PartialWriteoffPage() {
                       </div>
                       <p className="truncate text-sm">{budget.nome_cliente}</p>
                       <p className="text-xs text-muted-foreground">{budget.nome_situacao} · R$ {budget.valor_total}</p>
+                      {!budget.eligible_for_partial_writeoff && (
+                        <p className="mt-1 text-xs font-medium text-amber-800">
+                          Já possui {budget.nome_situacao.toLocaleLowerCase('pt-BR').includes('os') ? 'OS' : 'venda'} gerada. Baixa parcial bloqueada.
+                        </p>
+                      )}
                     </div>
-                    <Button size="sm" variant={budget.partial_operation ? 'outline' : 'default'} onClick={() => handleOpen(budget)} disabled={openingId === budget.id}>
+                    <Button
+                      size="sm"
+                      variant={budget.partial_operation ? 'outline' : 'default'}
+                      onClick={() => handleOpen(budget)}
+                      disabled={openingId === budget.id || !budget.eligible_for_partial_writeoff}
+                    >
                       {openingId === budget.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {budget.partial_operation ? 'Abrir controle' : 'Iniciar baixa'}
+                      {!budget.eligible_for_partial_writeoff
+                        ? 'Documento já gerado'
+                        : budget.partial_operation ? 'Abrir controle' : 'Iniciar baixa'}
                     </Button>
                   </div>
                 ))}
               </div>
             )}
-            {!searching && term && results.length === 0 && (
-              <p className="text-sm text-muted-foreground">Nenhum resultado carregado. Faça a busca para consultar o GestãoClick.</p>
+            {!searching && hasSearched && results.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Nenhum orçamento de {budgetKind === 'produto' ? 'produto' : 'serviço'} encontrado para “{term.trim()}”.
+              </p>
             )}
           </CardContent>
         </Card>

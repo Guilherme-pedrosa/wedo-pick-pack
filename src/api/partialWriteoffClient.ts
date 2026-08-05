@@ -132,22 +132,24 @@ async function fetchBudget(id: string): Promise<any> {
   return response.data;
 }
 
-async function searchBudgets(term: string): Promise<Array<any & { budget_kind: BudgetKind }>> {
+async function searchBudgets(term: string, kind: BudgetKind): Promise<Array<any & { budget_kind: BudgetKind }>> {
   const value = term.trim();
   if (value.length < 2) throw new Error('SEARCH_TOO_SHORT');
+  if (kind !== 'produto' && kind !== 'servico') throw new Error('SEARCH_BUDGET_KIND_REQUIRED');
   const encoded = encodeURIComponent(value);
-  const sources: Array<{ kind: BudgetKind; collection: string }> = [
-    { kind: 'produto', collection: '/api/orcamentos_produtos' },
-    { kind: 'servico', collection: '/api/orcamentos_servicos' },
+  const collection = kind === 'produto' ? '/api/orcamentos_produtos' : '/api/orcamentos_servicos';
+  const requests = [
+    `${collection}?pagina=1&limite=100&codigo=${encoded}`,
+    `${collection}?pagina=1&limite=100&nome=${encoded}`,
+    `${collection}?pagina=1&limite=100&pesquisa=${encoded}`,
   ];
-  const requests = sources.flatMap(source => [
-    { ...source, path: `${source.collection}?pagina=1&limite=100&codigo=${encoded}` },
-    { ...source, path: `${source.collection}?pagina=1&limite=100&nome=${encoded}` },
-    { ...source, path: `${source.collection}?pagina=1&limite=100&pesquisa=${encoded}` },
-  ]);
-  const settled = await Promise.allSettled(requests.map(({ path }) => gcRequest(path)));
-  const rows = settled.flatMap((result, index) => result.status === 'fulfilled'
-    ? (result.value?.data || []).map((row: any) => ({ ...row, budget_kind: requests[index].kind }))
+  const settled = await Promise.allSettled(requests.map(path => gcRequest(path)));
+  const rows = settled.flatMap(result => result.status === 'fulfilled'
+    ? (result.value?.data || []).map((row: any) => ({
+        ...row,
+        budget_kind: kind,
+        eligible_for_partial_writeoff: isBudgetEligibleForPartialWriteoff(row),
+      }))
     : []);
   const normalized = value.toLocaleLowerCase('pt-BR').replace(/\D/g, '');
   const byId = new Map<string, any>();
@@ -159,12 +161,10 @@ async function searchBudgets(term: string): Promise<Array<any & { budget_kind: B
     }
   }
   return [...byId.values()]
-    .filter(isBudgetEligibleForPartialWriteoff)
     .sort((a, b) => {
       const exactA = String(a.codigo || '') === value ? 0 : 1;
       const exactB = String(b.codigo || '') === value ? 0 : 1;
       if (exactA !== exactB) return exactA - exactB;
-      if (a.budget_kind !== b.budget_kind) return a.budget_kind === 'produto' ? -1 : 1;
       return String(b.codigo || '').localeCompare(String(a.codigo || ''), 'pt-BR', { numeric: true });
     })
     .slice(0, 50);
@@ -704,7 +704,11 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
   const action = String(body.action || '');
 
   if (action === 'search_budgets') {
-    const budgets = await searchBudgets(String(body.term || ''));
+    const kind = body.budget_kind === 'produto' || body.budget_kind === 'servico'
+      ? body.budget_kind
+      : undefined;
+    if (!kind) throw new Error('SEARCH_BUDGET_KIND_REQUIRED');
+    const budgets = await searchBudgets(String(body.term || ''), kind);
     const ids = budgets.map((budget) => String(budget.id));
     const { data: operations } = ids.length
       ? await cloud

@@ -198,8 +198,8 @@ export default function AgendamentoSeparacaoPage() {
       // 2. Vincular PEÇAS da separação ao técnico no GC (Ativos do Técnico)
       // Buscamos os itens da separação para registrar o movimento de "Posse do Técnico"
       const { data: sepItemsRaw } = await supabase
-        .from('box_items')
-        .select('produto_id')
+        .from('box_items' as any)
+        .select('id')
         .eq('separation_id', sep.id);
       
       const itemsCount = (sepItemsRaw || []).length;
@@ -213,7 +213,7 @@ export default function AgendamentoSeparacaoPage() {
         technician_gc_id: tech.gc_id,
         client_name: sep.client_name,
         operator_name: operatorName,
-        items_count: (sepItems || []).length
+        items_count: itemsCount
       };
 
       await logSystemAction({

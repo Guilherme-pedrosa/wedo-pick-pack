@@ -367,9 +367,12 @@ export default function AgendaOSPanel() {
                           </span>
                           <span>{auvoStatusLabel(task.status)}</span>
                         </>
+                      ) : execTaskId ? (
+                        <span>Tarefa de execução #{execTaskId} não encontrada no Auvo</span>
                       ) : (
-                        <span>Sem tarefa de execução no Auvo em {agendaDate.split('-').reverse().join('/')}</span>
+                        <span>OS sem "TAREFA EXECUÇÃO" preenchida no GestãoClick (atributo 73344)</span>
                       )}
+
                     </div>
                   </div>
 

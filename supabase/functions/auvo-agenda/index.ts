@@ -46,6 +46,25 @@ async function fetchTasks(token: string, startDate: string, endDate: string) {
   return all;
 }
 
+/** Fetch specific tasks by ID (used when the OS carries the exec task id in GC). */
+async function fetchTasksByIds(token: string, ids: string[]) {
+  const out: any[] = [];
+  const CONCURRENCY = 6;
+  const unique = [...new Set(ids.filter((id) => /^\d+$/.test(String(id))))].slice(0, 400);
+  for (let i = 0; i < unique.length; i += CONCURRENCY) {
+    const slice = unique.slice(i, i + CONCURRENCY);
+    await Promise.all(slice.map(async (id) => {
+      try {
+        const data = await auvoGet(token, `/tasks/${encodeURIComponent(id)}`);
+        const t = data?.result ?? data;
+        if (t && (t.taskID || t.id)) out.push(t);
+      } catch (_) { /* tarefa inexistente/removida no Auvo */ }
+    }));
+  }
+  return out;
+}
+
+
 async function fetchUsers(token: string): Promise<Map<number, string>> {
   const map = new Map<number, string>();
   for (let page = 1; page <= 10; page++) {

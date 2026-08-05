@@ -381,6 +381,190 @@ export default function SeparationsPage() {
         </TabsList>
 
         <TabsContent value="separations" className="space-y-4">
+          <div className="flex items-center justify-between print:hidden">
+            <div>
+              <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <PackageCheck className="h-6 w-6 text-primary" />
+                Histórico de Separações
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {separations.length} resultado(s) — {validCount} válida(s), {invalidCount} invalidada(s)
+              </p>
+              {stockRegressionCount > 0 && (
+                <div className="mt-2 flex items-center gap-2 px-3 py-1.5 rounded-md bg-destructive/10 border border-destructive/30 text-destructive text-xs font-medium w-fit">
+                  <PackageX className="h-3.5 w-3.5" />
+                  {stockRegressionCount} separação(ões) com regressão de estoque.
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+              <Button variant="default" size="sm" onClick={syncWithGC} disabled={syncing || fetchingLive || isLoading}>
+                {(syncing || fetchingLive) ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Radio className="h-4 w-4 mr-1.5" />}
+                Status GC
+              </Button>
+              <Button variant="outline" size="sm" onClick={handlePrint} disabled={isLoading || separations.length === 0}>
+                <Printer className="h-4 w-4 mr-1.5" />
+                Imprimir
+              </Button>
+            </div>
+          </div>
+
+          <Card className="p-3 print:hidden">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Buscar</p>
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Código ou cliente" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Data inicial</p>
+                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Data final</p>
+                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Tipo</p>
+                <select value={orderType} onChange={(e) => setOrderType(e.target.value as 'all' | 'os' | 'venda')} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="all">Todos</option>
+                  <option value="os">OS</option>
+                  <option value="venda">Venda</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Situação</p>
+                <div className="flex gap-2">
+                  <select value={status} onChange={(e) => setStatus(e.target.value as 'all' | 'valid' | 'invalid')} className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm">
+                    <option value="all">Todas</option>
+                    <option value="valid">Válidas</option>
+                    <option value="invalid">Invalidadas</option>
+                  </select>
+                  <Button variant="outline" onClick={clearFilters}>Limpar</Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {syncing && (
+            <div className="space-y-1 print:hidden">
+              <Progress value={syncProgress.total > 0 ? (syncProgress.checked / syncProgress.total) * 100 : 0} className="h-2" />
+              <p className="text-xs text-muted-foreground text-center">Verificando {syncProgress.checked}/{syncProgress.total} pedidos no GestãoClick…</p>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="text-center text-muted-foreground py-12 print:hidden">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+              Carregando separações…
+            </div>
+          )}
+
+          <div className="space-y-3 print:hidden">
+            {separations.map(sep => (
+              <SeparationCard
+                key={sep.id}
+                sep={sep}
+                formatTime={formatTime}
+                formatDateTime={formatDateTime}
+                formatDuration={formatDuration}
+                onUpdated={() => refetch()}
+                liveStatus={liveStatuses[sep.id] || undefined}
+                stockRegression={computeStockRegression(sep, liveStatuses[sep.id])}
+              />
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="agenda" className="space-y-4">
+          <Card className="p-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Data de agendamento
+                </label>
+                <Input type="date" value={agendaDate} onChange={(e) => setAgendaDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <User className="h-3 w-3" /> Técnico (execução)
+                </label>
+                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={selectedAgendaTech} onChange={(e) => setSelectedAgendaTech(e.target.value)}>
+                  <option value="all">Todos os técnicos</option>
+                  <option value="none">Sem técnico (não agendadas)</option>
+                  {agendaTechOptions.map((tech) => (
+                    <option key={tech} value={tech}>{tech}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <Filter className="h-3 w-3" /> Situação
+                </label>
+                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={selectedAgendaStatus} onChange={(e) => setSelectedAgendaStatus(e.target.value)}>
+                  <option value="all">Todas as situações</option>
+                  {agendaStatusOptions.map((s) => (
+                    <option key={s} value={String(s)}>{auvoStatusLabel(s)}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <Search className="h-3 w-3" /> Buscar
+                </label>
+                <Input placeholder="Código OS ou Cliente..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" className="w-full gap-2" onClick={() => refetchAgenda()} disabled={isAgendaLoading}>
+                  <RefreshCw className={`h-4 w-4 ${isAgendaLoading ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+              </div>
+            </div>
+          </Card>
+          
+          <div className="grid grid-cols-1 gap-4">
+            {isAgendaLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                <p>Carregando agenda do Auvo...</p>
+              </div>
+            ) : filteredAgendaTasks.length === 0 ? (
+              <div className="text-center py-20 border rounded-lg bg-muted/20">
+                <Filter className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-muted-foreground">Nenhuma tarefa encontrada.</p>
+              </div>
+            ) : (
+              filteredAgendaTasks.map((task) => {
+                const hasTech = !!task.technician_name;
+                const sep = findSeparationForTask(task);
+                const linked = !!sep?.technician_name;
+                return (
+                  <Card key={task.task_id} className={`p-4 border-l-4 ${!hasTech ? 'bg-yellow-50/60 border-l-yellow-400' : 'border-l-primary'}`}>
+                    <div className="flex flex-col md:flex-row justify-between gap-4">
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold">{task.customer_name || 'Cliente não informado'}</span>
+                          <Badge variant="secondary">{auvoStatusLabel(task.status)}</Badge>
+                          {!hasTech && <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">Não agendada</Badge>}
+                          {linked && <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200"><CheckCircle2 className="h-3 w-3 mr-1" /> Vinculado</Badge>}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">Tarefa #{task.task_id} | {formatTimeStr(task.task_date)}</div>
+                        <div className="text-xs mt-2 text-muted-foreground">
+                          {sep ? `Separação: #${sep.order_code} · ${sep.client_name} ${sep.technician_name ? ` · Técnico: ${sep.technician_name}` : ''}` : 'Sem separação concluída.'}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <div className="flex items-center justify-between print:hidden">
         <div>

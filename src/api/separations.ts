@@ -9,6 +9,7 @@ export interface SeparationRecord {
   client_name: string;
   status_name: string;
   status_id: string;
+  client_id: string | null;
   target_status_id: string;
   target_status_name: string;
   total_value: string;

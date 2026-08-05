@@ -310,6 +310,7 @@ export default function AgendaOSPanel() {
         || String(os.codigo).includes(search.trim())
         || row.taskIds.some((id) => id.includes(search.trim()));
       const matchesAgenda = agendaFilter === 'all' || agendaFilter === bucket;
+      const matchesDate = !dateFilterActive || datePart(task?.task_date) === agendaDate;
       const matchesTechnician = technicianFilter === 'all'
         || (technicianFilter === 'none' && !task?.technician_name)
         || task?.technician_name === technicianFilter;

@@ -152,6 +152,11 @@ function gcOrderUrl(osId: string): string {
   return `https://gestaoclick.com/ordens_servicos/editar/${osId}?retorno=%2Fordens_servicos`;
 }
 
+function auvoTaskUrl(taskId: string): string {
+  return `https://app.auvo.com.br/tasks/${taskId}`;
+}
+
+
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
   const [agendaDate, setAgendaDate] = useState(todayISO);

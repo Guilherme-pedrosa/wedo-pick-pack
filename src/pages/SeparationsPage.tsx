@@ -284,64 +284,8 @@ export default function SeparationsPage() {
     }
   };
 
-  /** Matches an Auvo task to a local separation */
-  const findSeparationForTask = (task: AuvoAgendaTask): SeparationRecord | null => {
-    const codes = [task.os_code, task.orcamento_code].filter(Boolean) as string[];
-    for (const code of codes) {
-      const byCode = separations.find((s) => s.order_code === code && !s.invalidated);
-      if (byCode) return byCode;
-    }
-    if (task.customer_id_gc) {
-      const byCustomerId = separations.find((s) => s.client_id === task.customer_id_gc && !s.invalidated);
-      if (byCustomerId) return byCustomerId;
-    }
-    const client = normalizeName(task.customer_name || '');
-    if (!client) return null;
-    return (
-      separations.find((s) => {
-        if (s.invalidated) return false;
-        const sc = normalizeName(s.client_name);
-        return sc === client || sc.includes(client) || client.includes(sc);
-      }) || null
-    );
-  };
 
-  const agendaTechOptions = useMemo(() => {
-    const set = new Set<string>();
-    agendaTasks.forEach((t) => {
-      if (t.technician_name) set.add(t.technician_name);
-    });
-    return Array.from(set).sort();
-  }, [agendaTasks]);
 
-  const agendaStatusOptions = useMemo(() => {
-    const set = new Set<number>();
-    agendaTasks.forEach((t) => {
-      if (t.status != null) set.add(t.status);
-    });
-    return Array.from(set).sort((a, b) => a - b);
-  }, [agendaTasks]);
-
-  const filteredAgendaTasks = useMemo(() => {
-    const term = normalizeName(search);
-    return agendaTasks.filter((t) => {
-      const matchesSearch =
-        !term ||
-        normalizeName(t.customer_name || '').includes(term) ||
-        normalizeName(t.orientation || '').includes(term) ||
-        (t.os_code || '').includes(search.trim()) ||
-        (t.orcamento_code || '').includes(search.trim());
-
-      const matchesTech =
-        selectedAgendaTech === 'all' ||
-        (selectedAgendaTech === 'none' && !t.technician_name) ||
-        t.technician_name === selectedAgendaTech;
-
-      const matchesStatus = selectedAgendaStatus === 'all' || String(t.status ?? '') === selectedAgendaStatus;
-
-      return matchesSearch && matchesTech && matchesStatus;
-    });
-  }, [agendaTasks, search, selectedAgendaTech, selectedAgendaStatus]);
 
   const reportGeneratedAt = new Date().toLocaleString('pt-BR');
 

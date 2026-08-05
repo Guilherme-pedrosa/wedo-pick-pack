@@ -21,6 +21,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 import { getAuvoAgenda, auvoStatusLabel, matchTechnician, normalizeName, AuvoAgendaTask } from '@/api/auvoAgenda';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AgendaOSPanel from '@/components/separations/AgendaOSPanel';
 import { useSearchParams } from 'react-router-dom';
 
 export default function SeparationsPage() {
@@ -39,35 +40,8 @@ export default function SeparationsPage() {
   const setActiveTab = (tab: string) => {
     setSearchParams(tab === 'agenda' ? { tab: 'agenda' } : {}, { replace: true });
   };
-  const [agendaDate, setAgendaDate] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  });
-  const [selectedAgendaTech, setSelectedAgendaTech] = useState('all');
-  const [selectedAgendaStatus, setSelectedAgendaStatus] = useState('all');
-  const [technicians, setTechnicians] = useState<{ id: string; gc_id: string; name: string }[]>([]);
-  const [linkingTask, setLinkingTask] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase
-      .from('technicians')
-      .select('id, gc_id, name')
-      .eq('active', true)
-      .order('name')
-      .then(({ data }) => setTechnicians((data || []) as { id: string; gc_id: string; name: string }[]));
-  }, []);
 
-  const {
-    data: agendaTasks = [],
-    isLoading: isAgendaLoading,
-    isError: isAgendaError,
-    error: agendaError,
-    refetch: refetchAgenda,
-  } = useQuery({
-    queryKey: ['auvo-agenda', agendaDate],
-    queryFn: () => getAuvoAgenda(agendaDate),
-    enabled: activeTab === 'agenda',
-  });
 
   // Live GC status tracking
   const [liveStatuses, setLiveStatuses] = useState<Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null>>({});
@@ -310,64 +284,8 @@ export default function SeparationsPage() {
     }
   };
 
-  /** Matches an Auvo task to a local separation */
-  const findSeparationForTask = (task: AuvoAgendaTask): SeparationRecord | null => {
-    const codes = [task.os_code, task.orcamento_code].filter(Boolean) as string[];
-    for (const code of codes) {
-      const byCode = separations.find((s) => s.order_code === code && !s.invalidated);
-      if (byCode) return byCode;
-    }
-    if (task.customer_id_gc) {
-      const byCustomerId = separations.find((s) => s.client_id === task.customer_id_gc && !s.invalidated);
-      if (byCustomerId) return byCustomerId;
-    }
-    const client = normalizeName(task.customer_name || '');
-    if (!client) return null;
-    return (
-      separations.find((s) => {
-        if (s.invalidated) return false;
-        const sc = normalizeName(s.client_name);
-        return sc === client || sc.includes(client) || client.includes(sc);
-      }) || null
-    );
-  };
 
-  const agendaTechOptions = useMemo(() => {
-    const set = new Set<string>();
-    agendaTasks.forEach((t) => {
-      if (t.technician_name) set.add(t.technician_name);
-    });
-    return Array.from(set).sort();
-  }, [agendaTasks]);
 
-  const agendaStatusOptions = useMemo(() => {
-    const set = new Set<number>();
-    agendaTasks.forEach((t) => {
-      if (t.status != null) set.add(t.status);
-    });
-    return Array.from(set).sort((a, b) => a - b);
-  }, [agendaTasks]);
-
-  const filteredAgendaTasks = useMemo(() => {
-    const term = normalizeName(search);
-    return agendaTasks.filter((t) => {
-      const matchesSearch =
-        !term ||
-        normalizeName(t.customer_name || '').includes(term) ||
-        normalizeName(t.orientation || '').includes(term) ||
-        (t.os_code || '').includes(search.trim()) ||
-        (t.orcamento_code || '').includes(search.trim());
-
-      const matchesTech =
-        selectedAgendaTech === 'all' ||
-        (selectedAgendaTech === 'none' && !t.technician_name) ||
-        t.technician_name === selectedAgendaTech;
-
-      const matchesStatus = selectedAgendaStatus === 'all' || String(t.status ?? '') === selectedAgendaStatus;
-
-      return matchesSearch && matchesTech && matchesStatus;
-    });
-  }, [agendaTasks, search, selectedAgendaTech, selectedAgendaStatus]);
 
   const reportGeneratedAt = new Date().toLocaleString('pt-BR');
 
@@ -485,90 +403,9 @@ export default function SeparationsPage() {
         </TabsContent>
 
         <TabsContent value="agenda" className="space-y-4">
-          <Card className="p-4 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Calendar className="h-3 w-3" /> Data de agendamento
-                </label>
-                <Input type="date" value={agendaDate} onChange={(e) => setAgendaDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <User className="h-3 w-3" /> Técnico (execução)
-                </label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={selectedAgendaTech} onChange={(e) => setSelectedAgendaTech(e.target.value)}>
-                  <option value="all">Todos os técnicos</option>
-                  <option value="none">Sem técnico (não agendadas)</option>
-                  {agendaTechOptions.map((tech) => (
-                    <option key={tech} value={tech}>{tech}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Filter className="h-3 w-3" /> Situação
-                </label>
-                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={selectedAgendaStatus} onChange={(e) => setSelectedAgendaStatus(e.target.value)}>
-                  <option value="all">Todas as situações</option>
-                  {agendaStatusOptions.map((s) => (
-                    <option key={s} value={String(s)}>{auvoStatusLabel(s)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Search className="h-3 w-3" /> Buscar
-                </label>
-                <Input placeholder="Código OS ou Cliente..." value={search} onChange={(e) => setSearch(e.target.value)} />
-              </div>
-              <div className="flex items-end">
-                <Button variant="outline" className="w-full gap-2" onClick={() => refetchAgenda()} disabled={isAgendaLoading}>
-                  <RefreshCw className={`h-4 w-4 ${isAgendaLoading ? 'animate-spin' : ''}`} />
-                  Atualizar
-                </Button>
-              </div>
-            </div>
-          </Card>
-          
-          <div className="grid grid-cols-1 gap-4">
-            {isAgendaLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                <p>Carregando agenda do Auvo...</p>
-              </div>
-            ) : filteredAgendaTasks.length === 0 ? (
-              <div className="text-center py-20 border rounded-lg bg-muted/20">
-                <Filter className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
-                <p className="text-muted-foreground">Nenhuma tarefa encontrada.</p>
-              </div>
-            ) : (
-              filteredAgendaTasks.map((task) => {
-                const hasTech = !!task.technician_name;
-                const sep = findSeparationForTask(task);
-                const linked = !!sep?.technician_name;
-                return (
-                  <Card key={task.task_id} className={`p-4 border-l-4 ${!hasTech ? 'bg-yellow-50/60 border-l-yellow-400' : 'border-l-primary'}`}>
-                    <div className="flex flex-col md:flex-row justify-between gap-4">
-                      <div className="space-y-1 flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold">{task.customer_name || 'Cliente não informado'}</span>
-                          <Badge variant="secondary">{auvoStatusLabel(task.status)}</Badge>
-                          {!hasTech && <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">Não agendada</Badge>}
-                          {linked && <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200"><CheckCircle2 className="h-3 w-3 mr-1" /> Vinculado</Badge>}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">Tarefa #{task.task_id} | {formatTimeStr(task.task_date)}</div>
-                        <div className="text-xs mt-2 text-muted-foreground">
-                          {sep ? `Separação: #${sep.order_code} · ${sep.client_name} ${sep.technician_name ? ` · Técnico: ${sep.technician_name}` : ''}` : 'Sem separação concluída.'}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })
-            )}
-          </div>
+          <AgendaOSPanel />
         </TabsContent>
+
       </Tabs>
     </div>
   );

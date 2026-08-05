@@ -859,6 +859,11 @@ export default function AgendaOSPanel() {
                         </Button>
                       )}
                       <Button asChild variant="ghost" size="icon" title="Abrir OS no GestãoClick"><a href={gcOrderUrl(row.os.id)} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>
+                      {(row.task?.task_id || row.taskIds[0]) && (
+                        <Button asChild variant="ghost" size="icon" title="Abrir tarefa no Auvo">
+                          <a href={auvoTaskUrl(row.task?.task_id || row.taskIds[0])} target="_blank" rel="noreferrer"><Calendar className="h-4 w-4" /></a>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

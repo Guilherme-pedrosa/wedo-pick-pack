@@ -32,6 +32,7 @@ import ProductExplorerConfigPage from "./pages/ProductExplorerConfigPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
+import AgendamentoSeparacaoPage from "./pages/AgendamentoSeparacaoPage";
 import ReturnLogsPage from "./pages/ReturnLogsPage";
 import LoginPage from "./pages/LoginPage";
 import SystemLogsPage from "./pages/SystemLogsPage";
@@ -109,6 +110,7 @@ function AuthenticatedApp() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/separations" element={<SeparationsPage />} />
+        <Route path="/agendamento" element={<AgendamentoSeparacaoPage />} />
         <Route path="/devolucoes" element={<ReturnLogsPage />} />
         <Route path="/compras" element={<ComprasPage />} />
         <Route path="/compras/acompanhamento" element={<PurchaseTrackerPage />} />

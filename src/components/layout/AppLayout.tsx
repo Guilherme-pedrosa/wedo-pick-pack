@@ -34,6 +34,7 @@ export function AppLayout({ isAdmin, userName }: AppLayoutProps) {
         '/dashboard': 'dashboard',
         '/checkout': 'checkout',
         '/separations': 'separations',
+        '/agendamento': 'separations',
         '/compras': 'compras',
         '/rastreador': 'rastreador',
         '/controle/caixas': 'controle_caixas',

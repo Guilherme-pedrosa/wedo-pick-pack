@@ -32,7 +32,7 @@ import {
   AuvoAgendaTask,
 } from '@/api/auvoAgenda';
 import { getSeparations, linkTechnicianToSeparation, SeparationRecord } from '@/api/separations';
-import { getOS, updateOSStatus } from '@/api/gestaoclick';
+import { getOS, updateOSStatus, getVenda, updateVendaStatus } from '@/api/gestaoclick';
 import { logSystemAction } from '@/lib/systemLog';
 import { toast } from 'sonner';
 

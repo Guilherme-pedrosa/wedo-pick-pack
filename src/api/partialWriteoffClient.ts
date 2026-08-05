@@ -1,0 +1,715 @@
+import { supabase } from '@/integrations/supabase/client';
+import type {
+  PartialBudgetSearchResult,
+  PartialWriteoffOperation,
+} from './partialWriteoff';
+import type { OrderType } from './types';
+
+type DocumentType = 'os' | 'venda';
+type AuthContext = {
+  id: string;
+  email: string;
+  name: string;
+  profile: Record<string, any>;
+};
+
+const cloud = supabase as any;
+
+function compact(value: unknown): string {
+  if (value == null) return '';
+  const raw = value instanceof Error
+    ? value.message
+    : typeof value === 'string'
+      ? value
+      : JSON.stringify(value);
+  return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function apiError(payload: any): string {
+  const values = [
+    payload?.message,
+    payload?.mensagem,
+    payload?.erro,
+    payload?.error,
+    payload?.data?.mensagem,
+    payload?.data?.erro,
+    payload?.data?.message,
+    payload?.raw,
+  ].map(compact).filter(Boolean);
+  return [...new Set(values)].slice(0, 4).join(' | ');
+}
+
+async function gcRequest(path: string, method = 'GET', body?: unknown): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('gc-proxy', {
+    body: { path, method, payload: body },
+  });
+  if (error) throw new Error(error.message || `GestaoClick ${method} ${path}`);
+  if (!data?._proxy?.ok) {
+    const status = data?._proxy?.gc_http_status || 500;
+    throw new Error(`GestaoClick ${method} ${path} (${status}): ${apiError(data) || 'falha na integracao'}`);
+  }
+  return data;
+}
+
+async function authenticate(): Promise<AuthContext> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) throw new Error('AUTH_REQUIRED');
+
+  const { data: profile } = await cloud
+    .from('profiles')
+    .select('name, auvo_user_id, gc_usuario_id, default_os_conclusion_status, default_venda_conclusion_status')
+    .eq('id', data.user.id)
+    .maybeSingle();
+
+  return {
+    id: data.user.id,
+    email: data.user.email || '',
+    name: profile?.name || data.user.email || 'Operador',
+    profile: profile || {},
+  };
+}
+
+function numberValue(value: unknown): number {
+  const raw = String(value ?? '').trim();
+  if (!raw) return 0;
+  const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function qtyString(value: number): string {
+  return String(Math.round((value + Number.EPSILON) * 1_000_000) / 1_000_000);
+}
+
+function normalizeId(value: unknown): string {
+  const id = String(value ?? '').trim();
+  return ['0', 'null', 'undefined'].includes(id.toLowerCase()) ? '' : id;
+}
+
+function unwrapProductLine(line: any): any {
+  return line?.produto || line?.Produto || line || {};
+}
+
+function lineKey(product: any, index: number): string {
+  return `${normalizeId(product.produto_id)}::${normalizeId(product.variacao_id)}::${index}`;
+}
+
+function documentTypeForBudget(budget: any): DocumentType {
+  const hasServices = Array.isArray(budget?.servicos) && budget.servicos.length > 0;
+  return hasServices || numberValue(budget?.valor_servicos) > 0 ? 'os' : 'venda';
+}
+
+function operationItemsFromBudget(budget: any) {
+  return (budget?.produtos || []).map((line: any, index: number) => {
+    const product = unwrapProductLine(line);
+    return {
+      line_key: lineKey(product, index),
+      product_id: normalizeId(product.produto_id),
+      variation_id: normalizeId(product.variacao_id),
+      product_name: String(product.nome_produto || 'Produto').trim(),
+      product_code: String(product.codigo_produto || '').trim(),
+      unit: String(product.sigla_unidade || 'UN').trim(),
+      original_quantity: numberValue(product.quantidade),
+      line_snapshot: line,
+    };
+  }).filter((item: any) => item.product_id && item.original_quantity > 0);
+}
+
+async function fetchBudget(id: string): Promise<any> {
+  const response = await gcRequest(`/api/orcamentos/${encodeURIComponent(id)}`);
+  if (!response?.data?.id) throw new Error('BUDGET_NOT_FOUND');
+  return response.data;
+}
+
+async function searchBudgets(term: string): Promise<any[]> {
+  const value = term.trim();
+  if (value.length < 2) throw new Error('SEARCH_TOO_SHORT');
+  const encoded = encodeURIComponent(value);
+  const paths = [
+    `/api/orcamentos?pagina=1&limite=100&codigo=${encoded}`,
+    `/api/orcamentos?pagina=1&limite=100&nome=${encoded}`,
+    `/api/orcamentos?pagina=1&limite=100&pesquisa=${encoded}`,
+  ];
+  const settled = await Promise.allSettled(paths.map((path) => gcRequest(path)));
+  const rows = settled.flatMap((result) => result.status === 'fulfilled' ? result.value?.data || [] : []);
+  const normalized = value.toLocaleLowerCase('pt-BR').replace(/\D/g, '');
+  const byId = new Map<string, any>();
+  for (const row of rows) {
+    const haystack = `${row.codigo || ''} ${row.nome_cliente || ''} ${row.cpf_cnpj || ''} ${row.cnpj || ''}`.toLocaleLowerCase('pt-BR');
+    const digits = haystack.replace(/\D/g, '');
+    if (haystack.includes(value.toLocaleLowerCase('pt-BR')) || (normalized.length >= 3 && digits.includes(normalized))) {
+      byId.set(String(row.id), row);
+    }
+  }
+  return [...byId.values()].slice(0, 50);
+}
+
+function unwrapProductDetail(response: any): any {
+  return response?.data?.Produto || response?.data?.produto || response?.data || {};
+}
+
+function currentStock(detail: any, variationId: string): number {
+  if (variationId && Array.isArray(detail?.variacoes)) {
+    const match = detail.variacoes.find((entry: any) => {
+      const variation = entry?.variacao || entry;
+      return normalizeId(variation?.id || variation?.variacao_id) === variationId;
+    });
+    if (match) return numberValue((match?.variacao || match)?.estoque);
+  }
+  return numberValue(detail?.estoque);
+}
+
+async function getOperationGraph(operationId: string): Promise<PartialWriteoffOperation> {
+  const [operationResult, itemsResult, batchesResult] = await Promise.all([
+    cloud.from('partial_writeoff_operations').select('*').eq('id', operationId).single(),
+    cloud.from('partial_writeoff_item_balances').select('*').eq('operation_id', operationId).order('created_at'),
+    cloud.from('partial_writeoff_batches').select('*').eq('operation_id', operationId).order('sequence'),
+  ]);
+  if (operationResult.error) throw operationResult.error;
+  if (itemsResult.error) throw itemsResult.error;
+  if (batchesResult.error) throw batchesResult.error;
+  return {
+    ...operationResult.data,
+    items: itemsResult.data || [],
+    batches: batchesResult.data || [],
+  } as PartialWriteoffOperation;
+}
+
+async function listOperationGraphs(): Promise<PartialWriteoffOperation[]> {
+  const { data: operations, error } = await cloud
+    .from('partial_writeoff_operations')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  if (!operations?.length) return [];
+
+  const ids = operations.map((operation: any) => operation.id);
+  const [itemsResult, batchesResult] = await Promise.all([
+    cloud.from('partial_writeoff_item_balances').select('*').in('operation_id', ids).order('created_at'),
+    cloud.from('partial_writeoff_batches').select('*').in('operation_id', ids).order('sequence'),
+  ]);
+  if (itemsResult.error) throw itemsResult.error;
+  if (batchesResult.error) throw batchesResult.error;
+  return operations.map((operation: any) => ({
+    ...operation,
+    items: (itemsResult.data || []).filter((item: any) => item.operation_id === operation.id),
+    batches: (batchesResult.data || []).filter((batch: any) => batch.operation_id === operation.id),
+  })) as PartialWriteoffOperation[];
+}
+
+async function getSettings(): Promise<Record<string, string>> {
+  const { data, error } = await cloud
+    .from('partial_writeoff_settings')
+    .select('*')
+    .eq('singleton', true)
+    .single();
+  if (error) throw error;
+  return data as Record<string, string>;
+}
+
+function selectedLine(snapshot: any, quantity: number): any {
+  const cloned = structuredClone(snapshot || {});
+  const product = unwrapProductLine(cloned);
+  const originalQuantity = numberValue(product.quantidade);
+  const ratio = originalQuantity > 0 ? quantity / originalQuantity : 1;
+  product.quantidade = qtyString(quantity);
+
+  if (originalQuantity > 0 && product.valor_total != null && String(product.valor_total).trim() !== '') {
+    product.valor_total = (numberValue(product.valor_total) * ratio).toFixed(2);
+  }
+  const discountKind = String(product.desconto_tipo || product.tipo_desconto || '').toLocaleLowerCase('pt-BR');
+  const isPercentageDiscount = discountKind.includes('porcent') || discountKind.includes('percent') || discountKind.includes('%');
+  if (!isPercentageDiscount && originalQuantity > 0 && product.desconto_valor != null && String(product.desconto_valor).trim() !== '') {
+    product.desconto_valor = (numberValue(product.desconto_valor) * ratio).toFixed(2);
+  }
+  return cloned;
+}
+
+function auxiliaryPayload(
+  operation: PartialWriteoffOperation,
+  selected: Array<{ item: any; quantity: number }>,
+  waitingStatusId: string,
+  marker: string,
+  gcUserId?: string,
+) {
+  const budget = operation.budget_snapshot || {};
+  const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
+  const note = `[${marker}] BAIXA PARCIAL do orcamento #${operation.budget_code}. Documento auxiliar: sem financeiro, comissao, servicos ou Auvo.`;
+  const common: Record<string, any> = {
+    cliente_id: operation.client_id,
+    data: new Date().toISOString().slice(0, 10),
+    situacao_id: waitingStatusId,
+    produtos: products,
+    valor_frete: '0.00',
+    condicao_pagamento: 'a_vista',
+    centro_custo_id: (budget as any).centro_custo_id || '501357',
+    usuario_id: gcUserId || '1320473',
+    observacoes: note,
+    observacoes_interna: marker,
+  };
+  return operation.document_type === 'os'
+    ? { ...common, servicos: [], equipamentos: [] }
+    : { ...common, tipo: 'produto' };
+}
+
+function unwrapListDocument(entry: any): any {
+  return entry?.OrdemServico || entry?.ordem_servico || entry?.Venda || entry?.venda || entry;
+}
+
+async function findAuxiliaryByMarker(type: DocumentType, marker: string): Promise<any | null> {
+  const collection = type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
+  const encoded = encodeURIComponent(marker);
+  const paths = [
+    `${collection}?pagina=1&limite=100&pesquisa=${encoded}`,
+    `${collection}?pagina=1&limite=100`,
+  ];
+  const results = await Promise.allSettled(paths.map((path) => gcRequest(path)));
+  let hadSuccessfulLookup = false;
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue;
+    hadSuccessfulLookup = true;
+    for (const entry of result.value?.data || []) {
+      const document = unwrapListDocument(entry);
+      const searchable = `${document?.observacoes_interna || ''} ${document?.observacoes || ''}`;
+      if (searchable.includes(marker)) return document;
+    }
+  }
+  if (!hadSuccessfulLookup) throw new Error('AUXILIARY_RECOVERY_LOOKUP_FAILED');
+  return null;
+}
+
+async function markBatchReconciliation(
+  batchId: string,
+  message: string,
+  auth: AuthContext,
+  document?: any,
+): Promise<void> {
+  const { error } = await cloud.rpc('partial_writeoff_mark_batch_reconciliation', {
+    p_batch_id: batchId,
+    p_error_message: message,
+    p_document: document || null,
+    p_actor_id: auth.id,
+    p_actor_name: auth.name,
+  });
+  if (error) throw error;
+}
+
+function statusUpdatePayload(document: any, statusId: string, type: DocumentType): Record<string, any> {
+  const keys = [
+    'cliente_id', 'data', 'data_entrada', 'data_saida', 'valor_total', 'valor_frete',
+    'condicao_pagamento', 'produtos', 'servicos', 'equipamentos', 'atributos',
+    'pagamentos', 'vendedor_id', 'tecnico_id', 'centro_custo_id', 'usuario_id',
+    'observacoes', 'observacoes_interna', 'desconto_valor', 'desconto_tipo', 'tipo_desconto',
+  ];
+  const payload: Record<string, any> = { situacao_id: statusId };
+  for (const key of keys) {
+    if (document?.[key] !== undefined && document?.[key] !== null) payload[key] = document[key];
+  }
+  if (type === 'venda') payload.tipo = document?.tipo || 'produto';
+  if (!payload.data) payload.data = new Date().toISOString().slice(0, 10);
+  if (!Array.isArray(payload.produtos)) payload.produtos = [];
+  return payload;
+}
+
+async function updateDocumentStatus(type: DocumentType, id: string, statusId: string): Promise<any> {
+  if (!statusId) throw new Error(`PARTIAL_${type.toUpperCase()}_STATUS_NOT_CONFIGURED`);
+  const path = type === 'os'
+    ? `/api/ordens_servicos/${encodeURIComponent(id)}`
+    : `/api/vendas/${encodeURIComponent(id)}`;
+  const latest = (await gcRequest(path))?.data;
+  if (!latest) throw new Error('AUXILIARY_DOCUMENT_NOT_FOUND');
+  if (normalizeId(latest.situacao_id) === statusId) return latest;
+  await gcRequest(path, 'PUT', statusUpdatePayload(latest, statusId, type));
+  const confirmed = (await gcRequest(path))?.data;
+  if (normalizeId(confirmed?.situacao_id) !== statusId) throw new Error('STATUS_NOT_APPLIED');
+  return confirmed;
+}
+
+function quantityMap(lines: any[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const line of lines || []) {
+    const product = unwrapProductLine(line);
+    const key = `${normalizeId(product.produto_id)}::${normalizeId(product.variacao_id)}`;
+    map.set(key, (map.get(key) || 0) + numberValue(product.quantidade));
+  }
+  return map;
+}
+
+function sameQuantities(expected: Map<string, number>, actual: Map<string, number>): boolean {
+  if (expected.size !== actual.size) return false;
+  for (const [key, quantity] of expected) {
+    if (Math.abs((actual.get(key) || 0) - quantity) > 0.000001) return false;
+  }
+  return true;
+}
+
+async function handleOpenOperation(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  const budget = await fetchBudget(String(body.budget_id || ''));
+  const items = operationItemsFromBudget(budget);
+  if (!items.length) throw new Error('BUDGET_HAS_NO_STOCK_ITEMS');
+  const type = documentTypeForBudget(budget);
+  const { data, error } = await cloud.rpc('partial_writeoff_open_operation', {
+    p_budget: budget,
+    p_document_type: type,
+    p_items: items,
+    p_created_by: auth.id,
+    p_created_by_name: auth.name,
+  });
+  if (error) throw error;
+  return getOperationGraph(String(data));
+}
+
+async function handlePrepareBatch(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  const operationId = String(body.operation_id || '');
+  const requested: Array<{ item_id: string; quantity: number }> = Array.isArray(body.items) ? body.items : [];
+  if (!operationId || !requested.length) throw new Error('EMPTY_BATCH');
+  const operation = await getOperationGraph(operationId);
+  const selected = requested.map((request) => {
+    const item = operation.items.find((candidate) => candidate.id === request.item_id);
+    const quantity = numberValue(request.quantity);
+    if (!item) throw new Error('ITEM_NOT_FOUND');
+    if (quantity <= 0 || quantity > numberValue(item.available_to_reserve_quantity)) {
+      throw new Error(`QUANTITY_EXCEEDS_PENDING:${item.product_name}`);
+    }
+    return { item, quantity };
+  });
+
+  for (const { item, quantity } of selected) {
+    const detail = unwrapProductDetail(await gcRequest(`/api/produtos/${encodeURIComponent(item.product_id)}`));
+    const stock = currentStock(detail, item.variation_id);
+    if (quantity > stock) throw new Error(`INSUFFICIENT_STOCK:${item.product_name}:${stock}`);
+  }
+
+  const idempotencyKey = String(body.idempotency_key || crypto.randomUUID());
+  const { data: reservation, error: reserveError } = await cloud.rpc('partial_writeoff_reserve_batch', {
+    p_operation_id: operationId,
+    p_idempotency_key: idempotencyKey,
+    p_items: selected.map(({ item, quantity }) => ({ item_id: item.id, quantity })),
+    p_actor_id: auth.id,
+    p_actor_name: auth.name,
+  });
+  if (reserveError) throw reserveError;
+  const batchId = String(reservation?.batch_id || '');
+  const existingReservation = reservation?.existing === true;
+
+  const { data: batch, error: batchError } = await cloud
+    .from('partial_writeoff_batches')
+    .select('*')
+    .eq('id', batchId)
+    .single();
+  if (batchError) throw batchError;
+  if (batch.status === 'awaiting_checkout') return getOperationGraph(operationId);
+  if (existingReservation && batch.status === 'creating') {
+    let recovered: any | null = null;
+    try {
+      recovered = await findAuxiliaryByMarker(operation.document_type, batch.marker);
+    } catch {
+      throw new Error('BATCH_CREATION_IN_PROGRESS');
+    }
+    if (!recovered?.id) throw new Error('BATCH_CREATION_IN_PROGRESS');
+    const { error: attachRecoveredError } = await cloud.rpc('partial_writeoff_attach_auxiliary', {
+      p_batch_id: batchId,
+      p_document_id: String(recovered.id),
+      p_document_code: String(recovered.codigo || ''),
+      p_gc_response: recovered,
+    });
+    if (attachRecoveredError) throw attachRecoveredError;
+    return getOperationGraph(operationId);
+  }
+  if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
+
+  const settings = await getSettings();
+  const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
+  if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
+  const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id);
+  const path = operation.document_type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
+
+  let document: any = null;
+  try {
+    const response = await gcRequest(path, 'POST', payload);
+    document = response?.data || null;
+    if (!document?.id) throw new Error('GESTAOCLICK_RETURNED_NO_DOCUMENT_ID');
+  } catch (createError) {
+    try {
+      document = await findAuxiliaryByMarker(operation.document_type, batch.marker);
+    } catch { /* ambiguous request */ }
+    if (!document?.id) {
+      const message = compact(createError) || 'Falha ambigua ao criar documento auxiliar';
+      const explicitRejection = message.startsWith(`GestaoClick POST ${path}`);
+      if (explicitRejection) {
+        await cloud.rpc('partial_writeoff_release_batch', {
+          p_batch_id: batchId,
+          p_error_message: message,
+        });
+      } else {
+        await markBatchReconciliation(batchId, `Criacao ambigua no GestaoClick: ${message}`, auth);
+      }
+      throw createError;
+    }
+  }
+
+  const { error: attachError } = await cloud.rpc('partial_writeoff_attach_auxiliary', {
+    p_batch_id: batchId,
+    p_document_id: String(document.id),
+    p_document_code: String(document.codigo || ''),
+    p_gc_response: document,
+  });
+  if (attachError) {
+    const message = `Documento auxiliar #${document.codigo || document.id} criado, mas nao vinculado: ${compact(attachError)}`;
+    try {
+      const cancelStatus = settings[`${operation.document_type}_cancel_status_id`];
+      if (!cancelStatus) throw new Error('PARTIAL_CANCEL_STATUS_NOT_CONFIGURED');
+      await updateDocumentStatus(operation.document_type, String(document.id), cancelStatus);
+      await cloud.rpc('partial_writeoff_release_batch', {
+        p_batch_id: batchId,
+        p_error_message: message,
+      });
+    } catch (cancelError) {
+      await markBatchReconciliation(
+        batchId,
+        `${message}. Cancelamento automatico falhou: ${compact(cancelError)}`,
+        auth,
+        document,
+      );
+    }
+    throw attachError;
+  }
+  return getOperationGraph(operationId);
+}
+
+async function handleConfirmBatch(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  const batchId = String(body.batch_id || '');
+  const { data: batch, error: batchError } = await cloud
+    .from('partial_writeoff_batches')
+    .select('*')
+    .eq('id', batchId)
+    .single();
+  if (batchError || !batch) throw new Error('BATCH_NOT_FOUND');
+  if (batch.status === 'confirmed') return getOperationGraph(batch.operation_id);
+  if (batch.status !== 'awaiting_checkout') throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
+
+  const { data: batchItems, error: itemsError } = await cloud
+    .from('partial_writeoff_batch_items')
+    .select('quantity, partial_writeoff_items(*)')
+    .eq('batch_id', batchId);
+  if (itemsError) throw itemsError;
+  const expectedLines = (batchItems || []).map((entry: any) => selectedLine(
+    entry.partial_writeoff_items.line_snapshot,
+    numberValue(entry.quantity),
+  ));
+  const type = batch.auxiliary_document_type as DocumentType;
+  const path = type === 'os'
+    ? `/api/ordens_servicos/${encodeURIComponent(batch.auxiliary_document_id)}`
+    : `/api/vendas/${encodeURIComponent(batch.auxiliary_document_id)}`;
+  const currentDocument = (await gcRequest(path))?.data;
+  if (!sameQuantities(quantityMap(expectedLines), quantityMap(currentDocument?.produtos || []))) {
+    throw new Error('AUXILIARY_ITEMS_CHANGED');
+  }
+
+  const { data: claim, error: claimError } = await cloud.rpc('partial_writeoff_claim_confirmation', {
+    p_batch_id: batchId,
+  });
+  if (claimError) throw claimError;
+  if (claim === 'confirmed') return getOperationGraph(batch.operation_id);
+
+  const settings = await getSettings();
+  const stockStatus = settings[`${type}_stock_status_id`];
+  try {
+    await updateDocumentStatus(type, String(batch.auxiliary_document_id), stockStatus);
+    const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
+      p_batch_id: batchId,
+      p_success: true,
+      p_error_message: null,
+      p_actor_id: auth.id,
+      p_actor_name: auth.name,
+    });
+    if (finishError) throw finishError;
+  } catch (error) {
+    const message = compact(error);
+    let applied = false;
+    try {
+      const latest = (await gcRequest(path))?.data;
+      applied = normalizeId(latest?.situacao_id) === stockStatus;
+    } catch { /* keep false */ }
+    const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
+      p_batch_id: batchId,
+      p_success: applied,
+      p_error_message: applied ? null : message,
+      p_actor_id: auth.id,
+      p_actor_name: auth.name,
+    });
+    if (finishError || !applied) throw new Error(applied ? compact(finishError) || message : message);
+  }
+  return getOperationGraph(batch.operation_id);
+}
+
+async function compensateAuxiliaries(batches: any[], settings: Record<string, string>): Promise<boolean> {
+  let ok = true;
+  for (const batch of batches) {
+    try {
+      await updateDocumentStatus(
+        batch.auxiliary_document_type,
+        batch.auxiliary_document_id,
+        settings[`${batch.auxiliary_document_type}_stock_status_id`],
+      );
+    } catch {
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+async function resetConsolidation(operationId: string, auth: AuthContext): Promise<void> {
+  const { error } = await cloud.rpc('partial_writeoff_reset_consolidation', {
+    p_operation_id: operationId,
+    p_actor_id: auth.id,
+    p_actor_name: auth.name,
+  });
+  if (error) throw error;
+}
+
+async function finishConsolidation(
+  operationId: string,
+  success: boolean,
+  auth: AuthContext,
+  generated?: any,
+  errorMessage?: string,
+): Promise<void> {
+  const { error } = await cloud.rpc('partial_writeoff_finish_consolidation', {
+    p_operation_id: operationId,
+    p_success: success,
+    p_document_id: generated?.os_id ? String(generated.os_id) : null,
+    p_document_code: generated?.os_codigo ? String(generated.os_codigo) : null,
+    p_auvo_task_id: generated?.auvo_task_id ? String(generated.auvo_task_id) : null,
+    p_error_message: errorMessage || null,
+    p_actor_id: auth.id,
+    p_actor_name: auth.name,
+  });
+  if (error) throw error;
+}
+
+async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  const operationId = String(body.operation_id || '');
+  const operation = await getOperationGraph(operationId);
+  if (operation.status === 'completed') return operation;
+  if (operation.document_type === 'os' && !auth.profile.default_os_conclusion_status) {
+    throw new Error('CONFIGURE_OS_CONCLUSION_STATUS');
+  }
+  if (!auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
+
+  const { error: claimError } = await cloud.rpc('partial_writeoff_claim_consolidation', {
+    p_operation_id: operationId,
+  });
+  if (claimError) throw claimError;
+  const settings = await getSettings();
+  const confirmedBatches = operation.batches.filter((batch) => batch.status === 'confirmed');
+
+  const cancelled: any[] = [];
+  try {
+    for (const batch of confirmedBatches) {
+      cancelled.push(batch);
+      await updateDocumentStatus(
+        batch.auxiliary_document_type,
+        String(batch.auxiliary_document_id),
+        settings[`${batch.auxiliary_document_type}_cancel_status_id`],
+      );
+    }
+  } catch (error) {
+    const compensated = await compensateAuxiliaries(cancelled, settings);
+    const message = `Falha ao compensar auxiliares antes da consolidacao: ${compact(error)}`;
+    if (compensated) await resetConsolidation(operationId, auth);
+    else await finishConsolidation(operationId, false, auth, undefined, message);
+    throw new Error(message);
+  }
+
+  let generated: any;
+  try {
+    const result = await supabase.functions.invoke('generate-os', {
+      body: {
+        orcamento: operation.budget_snapshot,
+        auvo_user_id: auth.profile.auvo_user_id,
+        gc_usuario_id: auth.profile.gc_usuario_id || undefined,
+        auvo_customer_id: body.auvo_customer_id || undefined,
+        manual_equipamento: body.manual_equipamento || undefined,
+      },
+    });
+    generated = result.data;
+    if (result.error || generated?.error) {
+      throw new Error(generated?.error || result.error?.message || 'Falha ao gerar documento definitivo');
+    }
+    if (operation.document_type === 'os') {
+      await updateDocumentStatus('os', String(generated.os_id), String(auth.profile.default_os_conclusion_status));
+    }
+  } catch (error) {
+    const compensated = generated?.os_id ? false : await compensateAuxiliaries(cancelled, settings);
+    const message = generated?.os_id
+      ? `Documento definitivo #${generated.os_codigo || generated.os_id} foi criado, mas nao foi possivel finaliza-lo: ${compact(error)}`
+      : `Falha ao criar documento definitivo: ${compact(error)}`;
+    if (compensated) await resetConsolidation(operationId, auth);
+    else await finishConsolidation(operationId, false, auth, generated, message);
+    throw new Error(message);
+  }
+
+  await cloud.from('os_generation_logs').insert({
+    orcamento_codigo: operation.budget_code,
+    orcamento_id: operation.budget_id,
+    nome_cliente: operation.client_name,
+    os_id: String(generated.os_id || ''),
+    os_codigo: String(generated.os_codigo || ''),
+    auvo_task_id: String(generated.auvo_task_id || ''),
+    operator_id: auth.id,
+    operator_name: auth.name,
+    valor_total: numberValue((operation.budget_snapshot as any)?.valor_total),
+    warnings: generated.warnings || null,
+    success: true,
+  });
+
+  await finishConsolidation(operationId, true, auth, generated);
+  return getOperationGraph(operationId);
+}
+
+export async function invokePartialWriteoffClient<T>(body: Record<string, unknown>): Promise<T> {
+  const auth = await authenticate();
+  const action = String(body.action || '');
+
+  if (action === 'search_budgets') {
+    const budgets = await searchBudgets(String(body.term || ''));
+    const ids = budgets.map((budget) => String(budget.id));
+    const { data: operations } = ids.length
+      ? await cloud
+          .from('partial_writeoff_operations')
+          .select('id, budget_id, status')
+          .in('budget_id', ids)
+          .not('status', 'in', '(completed,cancelled)')
+      : { data: [] as any[] };
+    const active = new Map((operations || []).map((operation: any) => [operation.budget_id, operation]));
+    const result: PartialBudgetSearchResult[] = budgets.map((budget) => ({
+      ...budget,
+      partial_operation: active.get(String(budget.id)) || null,
+    }));
+    return { budgets: result } as T;
+  }
+  if (action === 'open_operation') return { operation: await handleOpenOperation(body, auth) } as T;
+  if (action === 'get_operation') {
+    return { operation: await getOperationGraph(String(body.operation_id || '')) } as T;
+  }
+  if (action === 'list_operations') return { operations: await listOperationGraphs() } as T;
+  if (action === 'prepare_batch') return { operation: await handlePrepareBatch(body, auth) } as T;
+  if (action === 'confirm_batch') return { operation: await handleConfirmBatch(body, auth) } as T;
+  if (action === 'consolidate') return { operation: await handleConsolidate(body, auth) } as T;
+  throw new Error('UNKNOWN_ACTION');
+}
+
+export function isMissingPartialWriteoffFunction(error: unknown): boolean {
+  const candidate = error as any;
+  if (Number(candidate?.context?.status) === 404) return true;
+  const text = [
+    candidate?.message,
+    candidate?.context?.body,
+    candidate?.context?.statusText,
+  ].filter(Boolean).join(' ');
+  return /requested function was not found|function.*not found|404|not_found/i.test(text);
+}
+
+export type { OrderType };

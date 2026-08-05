@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildActivePartialDemand, PartialWriteoffOperation } from './partialWriteoff';
+import { isMissingPartialWriteoffFunction } from './partialWriteoffClient';
 
 function operation(withdrawn: number, status: PartialWriteoffOperation['status'] = 'awaiting_balance'): PartialWriteoffOperation {
   return {
@@ -67,5 +68,12 @@ describe('demanda da baixa parcial', () => {
     const result = buildActivePartialDemand([operation(10, 'completed')]);
     expect(result.activeBudgetIds.size).toBe(0);
     expect(result.pendingByBudgetAndProduct.size).toBe(0);
+  });
+});
+
+describe('fallback do Lovable Cloud', () => {
+  it('ativa o fluxo local autenticado quando a nova funcao ainda nao existe', () => {
+    expect(isMissingPartialWriteoffFunction({ context: { status: 404 } })).toBe(true);
+    expect(isMissingPartialWriteoffFunction(new Error('Requested function was not found'))).toBe(true);
   });
 });

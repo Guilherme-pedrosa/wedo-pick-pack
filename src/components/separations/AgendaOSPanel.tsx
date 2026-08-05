@@ -346,6 +346,7 @@ export default function AgendaOSPanel() {
         || (repairLocationFilter === 'sem_info' && !repairLocation);
       return matchesSearch
         && matchesAgenda
+        && matchesDate
         && matchesTechnician
         && matchesSituation
         && matchesSeparation
@@ -360,7 +361,9 @@ export default function AgendaOSPanel() {
       return String(b.os.codigo).localeCompare(String(a.os.codigo), 'pt-BR', { numeric: true });
     });
   }, [
+    agendaDate,
     agendaFilter,
+    dateFilterActive,
     excludedSituations,
     executionFilter,
     repairLocationFilter,

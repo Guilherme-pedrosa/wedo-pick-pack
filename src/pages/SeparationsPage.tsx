@@ -33,7 +33,11 @@ export default function SeparationsPage() {
   const [status, setStatus] = useState<'all' | 'valid' | 'invalid'>('all');
 
   // Agenda / Auvo States
-  const [activeTab, setActiveTab] = useState('separations');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'agenda' ? 'agenda' : 'separations';
+  const setActiveTab = (tab: string) => {
+    setSearchParams(tab === 'agenda' ? { tab: 'agenda' } : {}, { replace: true });
+  };
   const [agendaDate, setAgendaDate] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

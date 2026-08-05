@@ -155,6 +155,7 @@ function gcOrderUrl(osId: string): string {
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
   const [agendaDate, setAgendaDate] = useState(todayISO);
+  const [dateFilterActive, setDateFilterActive] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState<AgendaFilter>('all');
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [excludedSituations, setExcludedSituations] = useState<Set<string>>(new Set());

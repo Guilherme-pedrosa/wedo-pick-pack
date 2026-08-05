@@ -290,7 +290,7 @@ export default function SeparationsPage() {
   const reportGeneratedAt = new Date().toLocaleString('pt-BR');
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
+    <div className={cn(activeTab === 'agenda' ? 'max-w-[1600px]' : 'max-w-4xl', 'mx-auto p-4 md:p-6 space-y-4')}>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="separations" className="gap-2">
@@ -299,7 +299,7 @@ export default function SeparationsPage() {
           </TabsTrigger>
           <TabsTrigger value="agenda" className="gap-2">
             <Calendar className="h-4 w-4" />
-            Agendamento (Auvo)
+            Agendamento e Separação
           </TabsTrigger>
         </TabsList>
 

@@ -37,7 +37,8 @@ function buildSystemDescription(action: string, d: Record<string, unknown> | nul
   if (!d) return undefined;
   if (action === 'vincular_tecnico') {
     const prev = d.previous_technician_name ? ` (anterior: ${d.previous_technician_name})` : '';
-    return `Técnico: ${d.technician_name ?? '—'}${d.technician_gc_id ? ` — ID ${d.technician_gc_id}` : ''}${prev}. Novo status: ${d.new_status ?? '—'}.`;
+    const itemCount = d.pieces_quantity ? ` ${d.pieces_quantity} peça(s) vinculada(s).` : '';
+    return `Técnico: ${d.technician_name ?? '—'}${d.technician_gc_id ? ` — ID ${d.technician_gc_id}` : ''}${prev}.${itemCount} Novo status: ${d.new_status ?? '—'}.`;
   }
   if (action === 'desvincular_tecnico') {
     return `Técnico removido${d.previous_technician_name ? `: ${d.previous_technician_name}` : ''}. Status revertido para ${d.new_status ?? '—'}.`;
@@ -99,12 +100,15 @@ export async function getSeparationHistory(sep: SeparationRecord): Promise<Separ
       });
     }
     if (s.technician_name) {
+      const itemCount = Array.isArray(s.items) && s.items.length > 0
+        ? s.items.reduce((total, item) => total + Number(item.confirmed_quantity || item.expected_quantity || 0), 0)
+        : s.items_confirmed;
       events.push({
         at: s.concluded_at,
         source: 'separation',
         kind: 'tech-link',
         title: `Técnico vinculado${tag}`,
-        description: `Técnico: ${s.technician_name}${s.technician_gc_id ? ` (ID ${s.technician_gc_id})` : ''}`,
+        description: `Técnico: ${s.technician_name}${s.technician_gc_id ? ` (ID ${s.technician_gc_id})` : ''} • ${itemCount} peça(s) vinculada(s)`,
       });
     }
     if (s.invalidated && s.invalidated_at) {

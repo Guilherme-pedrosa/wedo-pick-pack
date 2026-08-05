@@ -21,12 +21,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 import { getAuvoAgenda, auvoStatusLabel, matchTechnician, normalizeName, AuvoAgendaTask } from '@/api/auvoAgenda';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PickingItem, GCProdutoItem } from '@/api/types';
-import SeparationReceipt, { extractServiceLocation } from '@/components/checkout/SeparationReceipt';
-import SeparationHistoryDialog from '@/components/separations/SeparationHistoryDialog';
-import { trackGcStatusChanges } from '@/api/gcStatusTracker';
-import { supabase } from '@/integrations/supabase/client';
-import { logSystemAction } from '@/lib/systemLog';
 
 export default function SeparationsPage() {
   const queryClient = useQueryClient();

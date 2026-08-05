@@ -21,6 +21,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 import { getAuvoAgenda, auvoStatusLabel, matchTechnician, normalizeName, AuvoAgendaTask } from '@/api/auvoAgenda';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useSearchParams } from 'react-router-dom';
 
 export default function SeparationsPage() {
   const queryClient = useQueryClient();

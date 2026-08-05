@@ -268,6 +268,15 @@ export default function SeparationsPage() {
     window.print();
   };
 
+  const formatTimeStr = (iso: string | null) => {
+    if (!iso) return '--:--';
+    try {
+      return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '--:--';
+    }
+  };
+
   const formatTime = (iso: string) => {
     try {
       return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -296,11 +305,83 @@ export default function SeparationsPage() {
     }
   };
 
+  /** Matches an Auvo task to a local separation */
+  const findSeparationForTask = (task: AuvoAgendaTask): SeparationRecord | null => {
+    const codes = [task.os_code, task.orcamento_code].filter(Boolean) as string[];
+    for (const code of codes) {
+      const byCode = separations.find((s) => s.order_code === code && !s.invalidated);
+      if (byCode) return byCode;
+    }
+    if (task.customer_id_gc) {
+      const byCustomerId = separations.find((s) => s.client_id === task.customer_id_gc && !s.invalidated);
+      if (byCustomerId) return byCustomerId;
+    }
+    const client = normalizeName(task.customer_name || '');
+    if (!client) return null;
+    return (
+      separations.find((s) => {
+        if (s.invalidated) return false;
+        const sc = normalizeName(s.client_name);
+        return sc === client || sc.includes(client) || client.includes(sc);
+      }) || null
+    );
+  };
+
+  const agendaTechOptions = useMemo(() => {
+    const set = new Set<string>();
+    agendaTasks.forEach((t) => {
+      if (t.technician_name) set.add(t.technician_name);
+    });
+    return Array.from(set).sort();
+  }, [agendaTasks]);
+
+  const agendaStatusOptions = useMemo(() => {
+    const set = new Set<number>();
+    agendaTasks.forEach((t) => {
+      if (t.status != null) set.add(t.status);
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [agendaTasks]);
+
+  const filteredAgendaTasks = useMemo(() => {
+    const term = normalizeName(search);
+    return agendaTasks.filter((t) => {
+      const matchesSearch =
+        !term ||
+        normalizeName(t.customer_name || '').includes(term) ||
+        normalizeName(t.orientation || '').includes(term) ||
+        (t.os_code || '').includes(search.trim()) ||
+        (t.orcamento_code || '').includes(search.trim());
+
+      const matchesTech =
+        selectedAgendaTech === 'all' ||
+        (selectedAgendaTech === 'none' && !t.technician_name) ||
+        t.technician_name === selectedAgendaTech;
+
+      const matchesStatus = selectedAgendaStatus === 'all' || String(t.status ?? '') === selectedAgendaStatus;
+
+      return matchesSearch && matchesTech && matchesStatus;
+    });
+  }, [agendaTasks, search, selectedAgendaTech, selectedAgendaStatus]);
+
   const reportGeneratedAt = new Date().toLocaleString('pt-BR');
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-4">
-      {/* Screen-only controls */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsTrigger value="separations" className="gap-2">
+            <PackageCheck className="h-4 w-4" />
+            Histórico de Separações
+          </TabsTrigger>
+          <TabsTrigger value="agenda" className="gap-2">
+            <Calendar className="h-4 w-4" />
+            Agendamento (Auvo)
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="separations" className="space-y-4">
+
       <div className="flex items-center justify-between print:hidden">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">

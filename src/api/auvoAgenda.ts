@@ -48,6 +48,69 @@ export async function getAuvoAgenda(startDate: string, endDate?: string): Promis
   return ((data as any)?.items || []) as AuvoAgendaTask[];
 }
 
+/**
+ * Busca tarefas do Auvo pelos IDs extraídos do campo "TAREFA EXECUÇÃO" (atributo 73344)
+ * da OS no GestãoClick — mesmo vínculo usado no Auvo GC Sync.
+ */
+export async function getAuvoTasksByIds(taskIds: string[]): Promise<AuvoAgendaTask[]> {
+  if (taskIds.length === 0) return [];
+  const { data, error } = await supabase.functions.invoke('auvo-agenda', {
+    body: { task_ids: taskIds },
+  });
+
+  if (error) {
+    console.error('Error fetching Auvo tasks by id:', error);
+    throw new Error('Não foi possível carregar as tarefas do Auvo');
+  }
+  if ((data as any)?.error) {
+    throw new Error((data as any).error);
+  }
+  return ((data as any)?.items || []) as AuvoAgendaTask[];
+}
+
+/** IDs de atributos personalizados da OS no GestãoClick. */
+export const GC_ATRIBUTO_TAREFA_EXEC = '73344';
+export const GC_ATRIBUTO_TAREFA_OS = '73343';
+
+/** Lê um atributo personalizado da OS do GC (formato aninhado ou plano). */
+export function extractGcAtributo(
+  atributos: unknown[] | undefined,
+  atributoId: string,
+  nameHints: string[] = [],
+): string | null {
+  if (!Array.isArray(atributos)) return null;
+  for (const raw of atributos) {
+    const nested: any = (raw as any)?.atributo || raw;
+    if (!nested) continue;
+    const id = String(nested.atributo_id ?? nested.id ?? '');
+    const nome = normalizeName(String(nested.nome ?? nested.atributo ?? ''));
+    const matchesId = id === atributoId;
+    const matchesName = nameHints.length > 0 && nameHints.some((h) => nome.includes(normalizeName(h)));
+    if (matchesId || matchesName) {
+      const value = String(nested.conteudo ?? nested.valor ?? '').trim();
+      if (value) return value;
+    }
+  }
+  return null;
+}
+
+/** Extrai os IDs de tarefa Auvo (o campo pode conter múltiplos separados por / , ;). */
+export function parseAuvoTaskIds(value: string | null): string[] {
+  if (!value) return [];
+  return [...new Set((value.match(/\d{4,}/g) || []).map(String))];
+}
+
+/** Retorna o(s) ID(s) da TAREFA DE EXECUÇÃO gravada na OS do GC. */
+export function getExecTaskIdsFromOS(atributos: unknown[] | undefined): string[] {
+  const exec = parseAuvoTaskIds(
+    extractGcAtributo(atributos, GC_ATRIBUTO_TAREFA_EXEC, ['tarefa execucao', 'execução', 'execucao']),
+  );
+  if (exec.length > 0) return exec;
+  // Fallback: OS criada e executada na mesma tarefa (73343)
+  return parseAuvoTaskIds(extractGcAtributo(atributos, GC_ATRIBUTO_TAREFA_OS, ['tarefa os']));
+}
+
+
 /** Normalizes a name for fuzzy matching (accents, case, extra spaces). */
 export function normalizeName(value: string): string {
   return (value || '')

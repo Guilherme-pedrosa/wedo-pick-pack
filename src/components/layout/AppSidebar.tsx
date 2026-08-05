@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Calculator } from "lucide-react";
+import { Calculator, Calendar } from "lucide-react";
 import {
   Bot,
   LayoutDashboard,

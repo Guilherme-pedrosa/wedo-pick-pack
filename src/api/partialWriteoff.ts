@@ -1,5 +1,9 @@
 import { supabase } from '@/integrations/supabase/client';
 import { OrderType } from './types';
+import {
+  invokePartialWriteoffClient,
+  isMissingPartialWriteoffFunction,
+} from './partialWriteoffClient';
 
 export type PartialWriteoffStatus =
   | 'awaiting_separation'
@@ -101,6 +105,9 @@ async function parseInvokeError(error: unknown, fallback: string): Promise<strin
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('partial-writeoff', { body });
+  if (error && isMissingPartialWriteoffFunction(error)) {
+    return invokePartialWriteoffClient<T>(body);
+  }
   if (error) throw new Error(await parseInvokeError(error, 'Falha na baixa parcial'));
   if (data?.error) throw new Error(data.error);
   return data as T;

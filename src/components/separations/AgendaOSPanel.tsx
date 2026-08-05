@@ -1,389 +1,870 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { listOSMultiStatus } from '@/api/gestaoclick';
-import { getSeparations, linkTechnicianToSeparation, SeparationRecord } from '@/api/separations';
-import { getAuvoAgenda, auvoStatusLabel, matchTechnician, normalizeName, AuvoAgendaTask } from '@/api/auvoAgenda';
-import { useCheckoutStore } from '@/store/checkoutStore';
-import { GCOrdemServico } from '@/api/types';
-import { supabase } from '@/integrations/supabase/client';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Link } from 'react-router-dom';
 import {
   Calendar,
-  User,
-  Filter,
-  Search,
-  RefreshCw,
-  Loader2,
   CheckCircle2,
-  UserPlus,
-  PackageCheck,
-  PackageSearch,
-  Clock,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
+  Clock,
+  ExternalLink,
+  Filter,
+  Link2Off,
+  Loader2,
+  MapPin,
+  PackageCheck,
+  PackageOpen,
+  PackageSearch,
+  RefreshCw,
+  Search,
+  User,
+  UserPlus,
+  Wrench,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Link } from 'react-router-dom';
 
-interface TechnicianRow {
+import {
+  classifyAgendaRow,
+  datePart,
+  getExecutionTaskIds,
+  type AgendaBucket,
+} from '@/api/agendaControl';
+import {
+  auvoStatusLabel,
+  getAuvoAgenda,
+  getAuvoAgendaUsers,
+  getAuvoTasksByIds,
+  matchTechnician,
+  normalizeName,
+  updateAuvoAgendaTask,
+  type AuvoAgendaTask,
+} from '@/api/auvoAgenda';
+import { getOS } from '@/api/gestaoclick';
+import {
+  getSeparations,
+  snapshotOrderProducts,
+  type SeparationItemSnapshot,
+  type SeparationRecord,
+} from '@/api/separations';
+import { assignSeparationToTechnician } from '@/api/separationAssignment';
+import {
+  getSyncGcControlOs,
+  type SyncGcControlOrder,
+  type SyncGcControlTask,
+} from '@/api/syncGcControlOs';
+import type { GCOrdemServico } from '@/api/types';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+
+interface LocalTechnician {
   id: string;
   gc_id: string;
   name: string;
 }
 
-interface AgendaRow {
+interface AgendaOsRow {
   os: GCOrdemServico;
+  taskIds: string[];
   task: AuvoAgendaTask | null;
   separation: SeparationRecord | null;
-  suggested: TechnicianRow | null;
+  bucket: AgendaBucket;
+  items: SeparationItemSnapshot[];
 }
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+type AgendaFilter = 'all' | AgendaBucket | 'orphan';
+type SeparationFilter = 'all' | 'pending' | 'separated' | 'linked';
+
+const BUCKET_META: Record<AgendaBucket, { label: string; className: string }> = {
+  'scheduled-date': {
+    label: 'Agendada no dia',
+    className: 'border-blue-200 bg-blue-50 text-blue-800',
+  },
+  available: {
+    label: 'Disponível para agendar',
+    className: 'border-amber-300 bg-amber-50 text-amber-800',
+  },
+  'other-date': {
+    label: 'Agendada em outra data',
+    className: 'border-slate-200 bg-slate-50 text-slate-700',
+  },
+  'no-task': {
+    label: 'Sem tarefa de execução',
+    className: 'border-red-200 bg-red-50 text-red-700',
+  },
+};
+
+function todayISO(): string {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function formatTimeStr(iso: string | null) {
-  if (!iso) return '--:--';
-  try {
-    return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '--:--';
-  }
+function formatDate(value: string | null | undefined): string {
+  const date = datePart(value);
+  if (!date) return 'Sem data';
+  const [year, month, day] = date.split('-');
+  return `${day}/${month}/${year}`;
 }
 
-function formatMoney(value: string | number | undefined) {
-  const n = typeof value === 'number' ? value : parseFloat(String(value || '0').replace(',', '.'));
-  if (isNaN(n)) return 'R$ 0,00';
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function formatTime(value: string | null | undefined): string {
+  const raw = String(value || '');
+  const match = raw.match(/T(\d{2}):(\d{2})/);
+  return match ? `${match[1]}:${match[2]}` : '--:--';
+}
+
+function taskStatus(task: AuvoAgendaTask | null): string {
+  return task?.status_description || auvoStatusLabel(task?.status ?? null);
+}
+
+function formatMoney(value: string | number | null | undefined): string {
+  const number = Number.parseFloat(String(value ?? '0').replace(',', '.'));
+  return (Number.isFinite(number) ? number : 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
+}
+
+function separatedQuantity(items: SeparationItemSnapshot[]): number {
+  return items.reduce((total, item) => {
+    const quantity = Number(item.confirmed_quantity || item.expected_quantity || 0);
+    return total + (Number.isFinite(quantity) ? quantity : 0);
+  }, 0);
+}
+
+function equipmentName(os: GCOrdemServico): string {
+  return (os.equipamentos || [])
+    .map((entry) => entry.equipamento?.equipamento)
+    .filter(Boolean)
+    .join(', ');
+}
+
+function gcOrderUrl(osId: string): string {
+  return `https://gestaoclick.com/ordens_servicos/editar/${osId}?retorno=%2Fordens_servicos`;
+}
+
+function sourceTaskToAuvo(task: SyncGcControlTask): AuvoAgendaTask {
+  const technicianId = Number(task.technician_id || 0);
+  const startTime = String(task.start_time || '00:00:00').slice(0, 8);
+  const normalizedStartTime = startTime.length === 5 ? `${startTime}:00` : startTime;
+  const endTime = String(task.end_time || '').slice(0, 8);
+  const normalizedEndTime = endTime.length === 5 ? `${endTime}:00` : endTime;
+  return {
+    task_id: task.task_id,
+    task_date: task.task_date
+      ? `${task.task_date}T${normalizedStartTime}`
+      : null,
+    task_end_date: task.task_date && task.end_time
+      ? `${task.task_date}T${normalizedEndTime}`
+      : null,
+    task_type: null,
+    task_type_name: null,
+    status: null,
+    status_description: task.status,
+    checkin_date: null,
+    technician_id: Number.isFinite(technicianId) && technicianId > 0 ? technicianId : null,
+    technician_name: task.technician_name,
+    customer_id: null,
+    customer_name: task.customer_name,
+    address: task.address || '',
+    orientation: task.orientation || '',
+  };
+}
+
+function sourceOrderToGc(order: SyncGcControlOrder): GCOrdemServico {
+  return {
+    id: order.gc_os_id,
+    codigo: order.gc_os_code,
+    cliente_id: '',
+    nome_cliente: order.client_name || 'Cliente não informado no Controle OS',
+    nome_tecnico: order.os_technician_name || undefined,
+    data: order.os_date || '',
+    data_entrada: order.os_date || undefined,
+    data_saida: order.expected_exit_date || undefined,
+    situacao_id: order.situation_id || '',
+    nome_situacao: order.situation_name || 'Situação não informada',
+    valor_total: String(order.total_value || 0),
+    produtos: [],
+    equipamentos: order.equipment_name ? [{
+      equipamento: {
+        equipamento: order.equipment_name,
+        serie: order.equipment_serial || undefined,
+      },
+    }] : [],
+    atributos: [{
+      atributo: {
+        atributo_id: '73344',
+        conteudo: order.execution_task_ids.join(' / '),
+      },
+    }],
+  };
 }
 
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
-  const config = useCheckoutStore((s) => s.config);
-
-  const [agendaDate, setAgendaDate] = useState<string>(todayISO);
-  const [techFilter, setTechFilter] = useState('all');
-  const [situacaoFilter, setSituacaoFilter] = useState('all');
+  const [agendaDate, setAgendaDate] = useState(todayISO);
+  const [agendaFilter, setAgendaFilter] = useState<AgendaFilter>('all');
+  const [technicianFilter, setTechnicianFilter] = useState('all');
+  const [situationFilter, setSituationFilter] = useState('all');
+  const [separationFilter, setSeparationFilter] = useState<SeparationFilter>('all');
   const [search, setSearch] = useState('');
-  const [linkingId, setLinkingId] = useState<string | null>(null);
-  const [technicians, setTechnicians] = useState<TechnicianRow[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [detailItemsByOsId, setDetailItemsByOsId] = useState<Record<string, SeparationItemSnapshot[]>>({});
+  const [loadingItemsId, setLoadingItemsId] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase
-      .from('technicians')
-      .select('id, gc_id, name')
-      .eq('active', true)
-      .order('name')
-      .then(({ data }) => setTechnicians((data || []) as TechnicianRow[]));
-  }, []);
+  const [scheduleRow, setScheduleRow] = useState<AgendaOsRow | null>(null);
+  const [scheduleTaskId, setScheduleTaskId] = useState('');
+  const [scheduleDate, setScheduleDate] = useState(agendaDate);
+  const [scheduleTime, setScheduleTime] = useState('08:00');
+  const [scheduleTechnicianId, setScheduleTechnicianId] = useState('');
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
-  // 1) Fila de OS — mesma origem do Controle OS (GestãoClick / syncgc)
-  const {
-    data: osQueue,
-    isLoading: loadingOS,
-    refetch: refetchOS,
-  } = useQuery({
-    queryKey: ['agenda-os-queue', config.osStatusToShow.join(',')],
-    queryFn: () => listOSMultiStatus(config.osStatusToShow),
+  const [assignmentRow, setAssignmentRow] = useState<AgendaOsRow | null>(null);
+  const [assignmentTechnicianId, setAssignmentTechnicianId] = useState('');
+  const [savingAssignment, setSavingAssignment] = useState(false);
+
+  const osQuery = useQuery({
+    queryKey: ['syncgc-controle-os', agendaDate],
+    queryFn: () => getSyncGcControlOs(agendaDate),
     staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
-  // 2) Agenda do Auvo (tarefas de execução)
-  const {
-    data: tasks = [],
-    isLoading: loadingAgenda,
-    refetch: refetchAgenda,
-  } = useQuery({
-    queryKey: ['auvo-agenda', agendaDate],
-    queryFn: () => getAuvoAgenda(agendaDate),
-  });
-
-  // 3) Histórico de separações (para saber o que já foi separado / vinculado)
-  const {
-    data: separations = [],
-    isLoading: loadingSeps,
-    refetch: refetchSeps,
-  } = useQuery({
-    queryKey: ['separations', 'agenda'],
+  const separationsQuery = useQuery({
+    queryKey: ['separations', 'agenda-control'],
     queryFn: () => getSeparations({ orderType: 'os', status: 'valid' }),
+    staleTime: 30_000,
     refetchInterval: 60_000,
   });
 
-  const orders = osQueue?.data || [];
+  const localTechniciansQuery = useQuery({
+    queryKey: ['technicians', 'active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('technicians')
+        .select('id, gc_id, name')
+        .eq('active', true)
+        .order('name');
+      if (error) throw error;
+      return (data || []) as LocalTechnician[];
+    },
+    staleTime: 5 * 60_000,
+  });
 
-  const rows = useMemo<AgendaRow[]>(() => {
-    const taskByCode = new Map<string, AuvoAgendaTask>();
-    const tasksByClient: AuvoAgendaTask[] = [];
-    tasks.forEach((t) => {
-      if (t.os_code) taskByCode.set(String(t.os_code).trim(), t);
-      tasksByClient.push(t);
-    });
+  const auvoUsersQuery = useQuery({
+    queryKey: ['auvo-agenda-users'],
+    queryFn: getAuvoAgendaUsers,
+    staleTime: 10 * 60_000,
+  });
 
-    return orders.map((os) => {
-      let task = taskByCode.get(String(os.codigo).trim()) || null;
-      if (!task) {
-        const client = normalizeName(os.nome_cliente);
-        task =
-          tasksByClient.find((t) => {
-            const tc = normalizeName(t.customer_name || '');
-            return !!tc && !!client && (tc === client || tc.includes(client) || client.includes(tc));
-          }) || null;
-      }
-      const separation =
-        separations.find((s) => s.order_type === 'os' && (s.order_id === os.id || s.order_code === os.codigo)) || null;
-      const suggested = matchTechnician(task?.technician_name || null, technicians);
-      return { os, task, separation, suggested };
-    });
-  }, [orders, tasks, separations, technicians]);
+  const orders = useMemo(
+    () => (osQuery.data?.orders || []).map(sourceOrderToGc),
+    [osQuery.data?.orders],
+  );
+  const executionTaskIds = useMemo(
+    () => Array.from(new Set(orders.flatMap(getExecutionTaskIds))),
+    [orders],
+  );
 
-  const situacaoOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    orders.forEach((o) => map.set(o.situacao_id, o.nome_situacao));
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  const executionTasksQuery = useQuery({
+    queryKey: ['auvo-execution-tasks', executionTaskIds.join(',')],
+    queryFn: () => getAuvoTasksByIds(executionTaskIds),
+    enabled: executionTaskIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const dayTasksQuery = useQuery({
+    queryKey: ['auvo-agenda', agendaDate],
+    queryFn: () => getAuvoAgenda(agendaDate),
+    staleTime: 30_000,
+  });
+
+  const allTasksById = useMemo(() => {
+    const map = new Map<string, AuvoAgendaTask>();
+    for (const order of osQuery.data?.orders || []) {
+      for (const task of order.execution_tasks || []) map.set(task.task_id, sourceTaskToAuvo(task));
+    }
+    for (const task of dayTasksQuery.data || []) map.set(task.task_id, task);
+    for (const task of executionTasksQuery.data || []) map.set(task.task_id, task);
+    return map;
+  }, [dayTasksQuery.data, executionTasksQuery.data, osQuery.data?.orders]);
+
+  const separationByOrderId = useMemo(() => {
+    const map = new Map<string, SeparationRecord>();
+    for (const separation of separationsQuery.data || []) {
+      if (!map.has(separation.order_id)) map.set(separation.order_id, separation);
+    }
+    return map;
+  }, [separationsQuery.data]);
+
+  const rows = useMemo<AgendaOsRow[]>(() => orders.map((os) => {
+    const taskIds = getExecutionTaskIds(os);
+    const tasks = taskIds.map((id) => allTasksById.get(id)).filter((task): task is AuvoAgendaTask => !!task);
+    const task = tasks.find((candidate) => datePart(candidate.task_date) === agendaDate) || tasks[0] || null;
+    const separation = separationByOrderId.get(os.id) || null;
+    const storedItems = Array.isArray(separation?.items) ? separation.items : [];
+    const items = storedItems.length > 0
+      ? storedItems
+      : (detailItemsByOsId[os.id] || snapshotOrderProducts(os.produtos));
+    return {
+      os,
+      taskIds,
+      task,
+      separation,
+      items,
+      bucket: classifyAgendaRow({
+        taskId: taskIds[0] || null,
+        taskDate: task?.task_date || null,
+        technicianId: task?.technician_id || null,
+        selectedDate: agendaDate,
+      }),
+    };
+  }), [agendaDate, allTasksById, detailItemsByOsId, orders, separationByOrderId]);
+
+  const referencedTaskIds = useMemo(() => new Set(orders.flatMap(getExecutionTaskIds)), [orders]);
+  const orphanTasks = useMemo(() => {
+    const map = new Map<string, AuvoAgendaTask>();
+    for (const task of osQuery.data?.orphan_tasks || []) map.set(task.task_id, sourceTaskToAuvo(task));
+    for (const task of dayTasksQuery.data || []) {
+      if (!referencedTaskIds.has(task.task_id)) map.set(task.task_id, task);
+    }
+    return Array.from(map.values()).filter((task) => !referencedTaskIds.has(task.task_id));
+  }, [dayTasksQuery.data, osQuery.data?.orphan_tasks, referencedTaskIds]);
+
+  const situationOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    orders.forEach((order) => options.set(order.situacao_id, order.nome_situacao));
+    return Array.from(options.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   }, [orders]);
 
-  const techOptions = useMemo(() => {
-    const set = new Set<string>();
-    tasks.forEach((t) => t.technician_name && set.add(t.technician_name));
-    return Array.from(set).sort();
-  }, [tasks]);
+  const technicianOptions = useMemo(() => {
+    const names = new Set<string>();
+    allTasksById.forEach((task) => task.technician_name && names.add(task.technician_name));
+    return Array.from(names).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [allTasksById]);
 
   const filteredRows = useMemo(() => {
     const term = normalizeName(search);
-    return rows
-      .filter(({ os, task }) => {
-        // Data de agendamento é o filtro principal: mostra OS agendadas no dia
-        // e também as OS ainda sem tarefa de execução (não agendadas).
-        const scheduled = !!task;
+    return rows.filter((row) => {
+      const { os, task, separation, bucket } = row;
+      const matchesSearch = !term
+        || normalizeName(os.nome_cliente).includes(term)
+        || normalizeName(os.nome_tecnico || '').includes(term)
+        || normalizeName(task?.technician_name || '').includes(term)
+        || normalizeName(equipmentName(os)).includes(term)
+        || String(os.codigo).includes(search.trim())
+        || row.taskIds.some((id) => id.includes(search.trim()));
+      const matchesAgenda = agendaFilter === 'all' || agendaFilter === bucket;
+      const matchesTechnician = technicianFilter === 'all'
+        || (technicianFilter === 'none' && !task?.technician_name)
+        || task?.technician_name === technicianFilter;
+      const matchesSituation = situationFilter === 'all' || os.situacao_id === situationFilter;
+      const matchesSeparation = separationFilter === 'all'
+        || (separationFilter === 'pending' && !separation)
+        || (separationFilter === 'separated' && !!separation && !separation.technician_name)
+        || (separationFilter === 'linked' && !!separation?.technician_name);
+      return matchesSearch && matchesAgenda && matchesTechnician && matchesSituation && matchesSeparation;
+    }).sort((a, b) => {
+      const bucketOrder: AgendaBucket[] = ['scheduled-date', 'available', 'other-date', 'no-task'];
+      const bucketDiff = bucketOrder.indexOf(a.bucket) - bucketOrder.indexOf(b.bucket);
+      if (bucketDiff !== 0) return bucketDiff;
+      const timeDiff = String(a.task?.task_date || '').localeCompare(String(b.task?.task_date || ''));
+      if (timeDiff !== 0) return timeDiff;
+      return String(b.os.codigo).localeCompare(String(a.os.codigo), 'pt-BR', { numeric: true });
+    });
+  }, [agendaFilter, rows, search, separationFilter, situationFilter, technicianFilter]);
 
-        const matchesTech =
-          techFilter === 'all' ||
-          (techFilter === 'none' && !task?.technician_name) ||
-          task?.technician_name === techFilter;
+  const filteredOrphans = useMemo(() => {
+    if (agendaFilter !== 'all' && agendaFilter !== 'orphan') return [];
+    if (separationFilter !== 'all') return [];
+    const term = normalizeName(search);
+    return orphanTasks.filter((task) => {
+      const matchesSearch = !term
+        || normalizeName(task.customer_name || '').includes(term)
+        || normalizeName(task.technician_name || '').includes(term)
+        || normalizeName(task.orientation || '').includes(term)
+        || task.task_id.includes(search.trim());
+      const matchesTechnician = technicianFilter === 'all'
+        || (technicianFilter === 'none' && !task.technician_name)
+        || task.technician_name === technicianFilter;
+      return matchesSearch && matchesTechnician;
+    });
+  }, [agendaFilter, orphanTasks, search, separationFilter, technicianFilter]);
 
-        const matchesSituacao = situacaoFilter === 'all' || os.situacao_id === situacaoFilter;
+  const counts = useMemo(() => ({
+    total: rows.length,
+    scheduled: rows.filter((row) => row.bucket === 'scheduled-date').length,
+    available: rows.filter((row) => row.bucket === 'available').length,
+    separated: rows.filter((row) => !!row.separation && !row.separation.technician_name).length,
+    linked: rows.reduce((total, row) => (
+      row.separation?.technician_name
+        ? total + (separatedQuantity(row.items) || row.separation.items_confirmed || row.separation.items_total)
+        : total
+    ), 0),
+    orphans: orphanTasks.length,
+  }), [orphanTasks.length, rows]);
 
-        const matchesSearch =
-          !term ||
-          normalizeName(os.nome_cliente).includes(term) ||
-          String(os.codigo).includes(search.trim()) ||
-          normalizeName(task?.technician_name || '').includes(term);
+  const isLoading = osQuery.isLoading
+    || separationsQuery.isLoading
+    || localTechniciansQuery.isLoading
+    || auvoUsersQuery.isLoading
+    || dayTasksQuery.isLoading
+    || (executionTaskIds.length > 0 && executionTasksQuery.isLoading);
 
-        return (scheduled || techFilter === 'all' || techFilter === 'none') && matchesTech && matchesSituacao && matchesSearch;
-      })
-      .sort((a, b) => {
-        // Agendadas primeiro por horário; não agendadas no fim
-        if (!!a.task !== !!b.task) return a.task ? -1 : 1;
-        const at = a.task?.task_date || '';
-        const bt = b.task?.task_date || '';
-        if (at !== bt) return at.localeCompare(bt);
-        return String(a.os.codigo).localeCompare(String(b.os.codigo), 'pt-BR', { numeric: true });
-      });
-  }, [rows, search, techFilter, situacaoFilter]);
-
-  const scheduledCount = filteredRows.filter((r) => r.task).length;
-  const unscheduledCount = filteredRows.length - scheduledCount;
-
-  const isLoading = loadingOS || loadingAgenda || loadingSeps;
-
-  const refreshAll = () => {
-    refetchOS();
-    refetchAgenda();
-    refetchSeps();
+  const refreshAll = async () => {
+    await Promise.all([
+      osQuery.refetch(),
+      separationsQuery.refetch(),
+      executionTasksQuery.refetch(),
+      dayTasksQuery.refetch(),
+      localTechniciansQuery.refetch(),
+      auvoUsersQuery.refetch(),
+    ]);
   };
 
-  const handleLink = async (row: AgendaRow) => {
+  const loadRowItems = async (row: AgendaOsRow): Promise<SeparationItemSnapshot[]> => {
+    if (row.items.length > 0) return row.items;
+    if (detailItemsByOsId[row.os.id]) return detailItemsByOsId[row.os.id];
+    setLoadingItemsId(row.os.id);
+    try {
+      const detail = await getOS(row.os.id);
+      const items = snapshotOrderProducts(detail.produtos);
+      setDetailItemsByOsId((current) => ({ ...current, [row.os.id]: items }));
+      return items;
+    } finally {
+      setLoadingItemsId(null);
+    }
+  };
+
+  const toggleItems = async (row: AgendaOsRow) => {
+    if (!expandedRows.has(row.os.id) && row.items.length === 0) {
+      try {
+        await loadRowItems(row);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Não foi possível carregar as peças da OS');
+        return;
+      }
+    }
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(row.os.id)) next.delete(row.os.id);
+      else next.add(row.os.id);
+      return next;
+    });
+  };
+
+  const openSchedule = (row: AgendaOsRow) => {
+    if (row.taskIds.length === 0) {
+      toast.error('Esta OS não possui o atributo Tarefa Execução (73344) no GestãoClick.');
+      return;
+    }
+    const taskId = row.task?.task_id && row.taskIds.includes(row.task.task_id)
+      ? row.task.task_id
+      : row.taskIds[0];
+    const task = allTasksById.get(taskId) || row.task;
+    setScheduleRow(row);
+    setScheduleTaskId(taskId);
+    setScheduleDate(datePart(task?.task_date) || agendaDate);
+    setScheduleTime(formatTime(task?.task_date) === '--:--' ? '08:00' : formatTime(task?.task_date));
+    setScheduleTechnicianId(task?.technician_id ? String(task.technician_id) : '');
+  };
+
+  const saveSchedule = async () => {
+    if (!scheduleRow || !scheduleTaskId || !scheduleDate || !scheduleTime || !scheduleTechnicianId) {
+      toast.error('Informe tarefa, data, horário e técnico.');
+      return;
+    }
+    setSavingSchedule(true);
+    try {
+      await updateAuvoAgendaTask({
+        taskId: scheduleTaskId,
+        scheduledAt: `${scheduleDate}T${scheduleTime}:00`,
+        technicianId: Number(scheduleTechnicianId),
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['auvo-execution-tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['auvo-agenda'] }),
+      ]);
+      toast.success(`Visita da OS #${scheduleRow.os.codigo} atualizada no Auvo.`);
+      setScheduleRow(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao atualizar a visita');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const openAssignment = async (row: AgendaOsRow) => {
     if (!row.separation) {
-      toast.error('OS ainda não separada — conclua a separação no Controle OS antes de vincular.');
+      toast.error('Separe e confira as peças desta OS antes de vinculá-las ao técnico.');
       return;
     }
-    const tech = row.suggested;
-    if (!tech) {
-      toast.error('Nenhum técnico local corresponde ao técnico de execução do Auvo.');
+    let items = row.items;
+    if (items.length === 0) {
+      try {
+        items = await loadRowItems(row);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Não foi possível carregar as peças da OS');
+        return;
+      }
+    }
+    if (items.length === 0) return toast.error('Não há peças registradas nesta separação.');
+    const suggested = matchTechnician(row.task?.technician_name || null, localTechniciansQuery.data || []);
+    setAssignmentRow({ ...row, items });
+    setAssignmentTechnicianId(suggested?.gc_id || row.separation.technician_gc_id || '');
+  };
+
+  const saveAssignment = async () => {
+    if (!assignmentRow?.separation || !assignmentTechnicianId) {
+      toast.error('Escolha o técnico que receberá as peças.');
       return;
     }
-    setLinkingId(row.os.id);
-    const ok = await linkTechnicianToSeparation(row.separation.id, tech.gc_id, tech.name);
-    setLinkingId(null);
-    if (ok) {
-      toast.success(`Técnico ${tech.name} vinculado à OS #${row.os.codigo}`);
-      queryClient.invalidateQueries({ queryKey: ['separations'] });
-    } else {
-      toast.error('Não foi possível vincular o técnico.');
+    const technician = (localTechniciansQuery.data || []).find((item) => item.gc_id === assignmentTechnicianId);
+    if (!technician) {
+      toast.error('Técnico não encontrado no cadastro do Pick & Pack.');
+      return;
+    }
+    setSavingAssignment(true);
+    try {
+      await assignSeparationToTechnician({
+        separation: assignmentRow.separation,
+        technician,
+        items: assignmentRow.items,
+        auvoTaskId: assignmentRow.task?.task_id || assignmentRow.taskIds[0] || null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['separations'] });
+      toast.success(`${separatedQuantity(assignmentRow.items)} peça(s) da OS #${assignmentRow.os.codigo} vinculada(s) a ${technician.name}.`);
+      setAssignmentRow(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao vincular as peças');
+    } finally {
+      setSavingAssignment(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-lg font-bold flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-primary" />
-            Agendamento — Controle OS + Auvo
-          </h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {filteredRows.length} OS na fila · {scheduledCount} agendada(s) · {unscheduledCount} sem agendamento
+          <h1 className="flex items-center gap-2 text-xl font-bold">
+            <Calendar className="h-6 w-6 text-primary" />
+            Agendamento e Separação
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Controle OS + tarefa de execução do Auvo + histórico real das peças separadas. O vínculo é sempre pelo ID da tarefa 73344, nunca pelo nome do cliente.
           </p>
+          {osQuery.data && (
+            <p className="mt-1 text-xs font-medium text-emerald-700">
+              Fonte ativa: Controle OS do Sync GC · consolidado em {new Date(osQuery.data.generated_at).toLocaleString('pt-BR')}
+            </p>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={refreshAll} disabled={isLoading} className="gap-2">
           <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
-          Atualizar
+          Atualizar tudo
         </Button>
       </div>
 
-      <Card className="p-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3 w-3" /> Data de agendamento
-            </label>
-            <Input type="date" value={agendaDate} onChange={(e) => setAgendaDate(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <User className="h-3 w-3" /> Técnico (execução Auvo)
-            </label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={techFilter}
-              onChange={(e) => setTechFilter(e.target.value)}
-            >
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        <SummaryButton label="OS abertas" value={counts.total} active={agendaFilter === 'all'} onClick={() => setAgendaFilter('all')} />
+        <SummaryButton label="Agenda do dia" value={counts.scheduled} active={agendaFilter === 'scheduled-date'} onClick={() => setAgendaFilter('scheduled-date')} tone="blue" />
+        <SummaryButton label="Disponíveis" value={counts.available} active={agendaFilter === 'available'} onClick={() => setAgendaFilter('available')} tone="amber" />
+        <SummaryButton label="Separadas sem vínculo" value={counts.separated} active={separationFilter === 'separated'} onClick={() => setSeparationFilter(separationFilter === 'separated' ? 'all' : 'separated')} tone="green" />
+        <SummaryButton label="Peças vinculadas" value={counts.linked} active={separationFilter === 'linked'} onClick={() => setSeparationFilter(separationFilter === 'linked' ? 'all' : 'linked')} tone="violet" />
+        <SummaryButton label="Tarefas sem OS" value={counts.orphans} active={agendaFilter === 'orphan'} onClick={() => setAgendaFilter('orphan')} tone="red" />
+      </div>
+
+      <Card className="p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <FilterField label="Data da tarefa de execução" icon={Calendar}>
+            <Input type="date" value={agendaDate} onChange={(event) => setAgendaDate(event.target.value)} />
+          </FilterField>
+          <FilterField label="Técnico da execução" icon={User}>
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={technicianFilter} onChange={(event) => setTechnicianFilter(event.target.value)}>
               <option value="all">Todos</option>
-              <option value="none">Sem técnico (não agendadas)</option>
-              {techOptions.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
+              <option value="none">Sem técnico</option>
+              {technicianOptions.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Filter className="h-3 w-3" /> Situação da OS (GC)
-            </label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={situacaoFilter}
-              onChange={(e) => setSituacaoFilter(e.target.value)}
-            >
+          </FilterField>
+          <FilterField label="Situação da OS" icon={Filter}>
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={situationFilter} onChange={(event) => setSituationFilter(event.target.value)}>
+              <option value="all">Todas do Controle OS</option>
+              {situationOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </FilterField>
+          <FilterField label="Agenda" icon={Clock}>
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={agendaFilter} onChange={(event) => setAgendaFilter(event.target.value as AgendaFilter)}>
               <option value="all">Todas</option>
-              {situacaoOptions.map(([id, nome]) => (
-                <option key={id} value={id}>{nome}</option>
-              ))}
+              <option value="scheduled-date">Agendadas no dia</option>
+              <option value="available">Disponíveis para agendar</option>
+              <option value="other-date">Agendadas em outra data</option>
+              <option value="no-task">Sem tarefa execução</option>
+              <option value="orphan">Tarefas Auvo sem OS</option>
             </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <Search className="h-3 w-3" /> Buscar
-            </label>
-            <Input placeholder="OS, cliente ou técnico" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+          </FilterField>
+          <FilterField label="Separação" icon={PackageCheck}>
+            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={separationFilter} onChange={(event) => setSeparationFilter(event.target.value as SeparationFilter)}>
+              <option value="all">Todas</option>
+              <option value="pending">Aguardando separação</option>
+              <option value="separated">Separada, sem vínculo</option>
+              <option value="linked">Peças vinculadas</option>
+            </select>
+          </FilterField>
+          <FilterField label="Buscar" icon={Search}>
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="OS, cliente, tarefa…" />
+          </FilterField>
         </div>
       </Card>
 
+      {osQuery.isError && (
+        <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <p className="font-semibold">Não foi possível abrir a base do Controle OS.</p>
+          <p className="mt-1">{osQuery.error instanceof Error ? osQuery.error.message : 'Falha na integração com o Sync GC'}</p>
+        </Card>
+      )}
+
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-          <Loader2 className="h-7 w-7 animate-spin mb-2" />
-          <p className="text-sm">Carregando fila de OS e agenda…</p>
-        </div>
-      ) : filteredRows.length === 0 ? (
-        <div className="text-center py-16 border rounded-lg bg-muted/20">
-          <ClipboardList className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
-          <p className="text-muted-foreground text-sm">Nenhuma OS encontrada para os filtros aplicados.</p>
+          <Loader2 className="mb-2 h-7 w-7 animate-spin" />
+          <p className="text-sm">Cruzando Controle OS, Auvo e separações…</p>
         </div>
       ) : (
         <div className="space-y-3">
           {filteredRows.map((row) => {
-            const { os, task, separation, suggested } = row;
-            const scheduled = !!task?.technician_name;
-            const linked = !!separation?.technician_name;
+            const expanded = expandedRows.has(row.os.id);
+            const linked = !!row.separation?.technician_name;
             return (
-              <Card
-                key={os.id}
-                className={cn(
-                  'p-4 border-l-4',
-                  scheduled ? 'border-l-primary' : 'bg-yellow-50/70 border-l-yellow-400'
-                )}
-              >
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-sm">OS #{os.codigo}</span>
-                      <Badge variant="secondary">{os.nome_situacao}</Badge>
-                      {!scheduled && (
-                        <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                          Não agendada
-                        </Badge>
-                      )}
-                      {separation ? (
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                          <PackageCheck className="h-3 w-3 mr-1" /> Separada
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-muted text-muted-foreground">
-                          <PackageSearch className="h-3 w-3 mr-1" /> Aguardando separação
-                        </Badge>
-                      )}
-                      {linked && (
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                          <CheckCircle2 className="h-3 w-3 mr-1" /> {separation?.technician_name}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <p className="text-sm font-medium truncate">{os.nome_cliente}</p>
-
-                    <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-                      <span>{formatMoney(os.valor_total)}</span>
-                      {task ? (
-                        <>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" /> {formatTimeStr(task.task_date)} · Tarefa #{task.task_id}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <User className="h-3 w-3" /> {task.technician_name || 'Sem técnico'}
-                          </span>
-                          <span>{auvoStatusLabel(task.status)}</span>
-                        </>
-                      ) : (
-                        <span>Sem tarefa de execução no Auvo em {agendaDate.split('-').reverse().join('/')}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {!separation && (
-                      <Button asChild variant="outline" size="sm" className="gap-1.5">
-                        <Link to="/checkout">
-                          <PackageSearch className="h-3.5 w-3.5" /> Separar
-                        </Link>
-                      </Button>
-                    )}
-                    {separation && !linked && (
-                      <Button
-                        size="sm"
-                        className="gap-1.5"
-                        disabled={!suggested || linkingId === os.id}
-                        onClick={() => handleLink(row)}
-                        title={suggested ? `Vincular ${suggested.name}` : 'Técnico do Auvo não cadastrado localmente'}
-                      >
-                        {linkingId === os.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <Card key={row.os.id} className={cn('overflow-hidden border-l-4', row.bucket === 'scheduled-date' && 'border-l-blue-500', row.bucket === 'available' && 'border-l-amber-500', row.bucket === 'other-date' && 'border-l-slate-400', row.bucket === 'no-task' && 'border-l-red-400')}>
+                <div className="p-4">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-primary text-primary-foreground">OS #{row.os.codigo}</Badge>
+                        <Badge variant="outline">{row.os.nome_situacao}</Badge>
+                        <Badge variant="outline" className={BUCKET_META[row.bucket].className}>{BUCKET_META[row.bucket].label}</Badge>
+                        {row.separation ? (
+                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                            <PackageCheck className="mr-1 h-3 w-3" /> {separatedQuantity(row.items) || row.separation.items_confirmed || row.separation.items_total} peça(s) separada(s)
+                          </Badge>
                         ) : (
-                          <UserPlus className="h-3.5 w-3.5" />
+                          <Badge variant="outline" className="text-muted-foreground">
+                            <PackageSearch className="mr-1 h-3 w-3" /> Aguardando separação
+                          </Badge>
                         )}
-                        {suggested ? `Vincular ${suggested.name.split(' ')[0]}` : 'Vincular técnico'}
+                        {linked && (
+                          <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
+                            <CheckCircle2 className="mr-1 h-3 w-3" /> Peças com {row.separation?.technician_name}
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-foreground">{row.os.nome_cliente || 'Cliente não informado no GC'}</p>
+                        {equipmentName(row.os) && <p className="mt-0.5 text-xs text-muted-foreground"><Wrench className="mr-1 inline h-3 w-3" />{equipmentName(row.os)}</p>}
+                      </div>
+
+                      <div className="grid gap-x-5 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                        <span><strong className="text-foreground">Téc. OS:</strong> {row.os.nome_tecnico || '—'}</span>
+                        <span><strong className="text-foreground">Téc. execução:</strong> {row.task?.technician_name || 'Sem técnico'}</span>
+                        <span><strong className="text-foreground">Tarefa:</strong> {row.taskIds.length ? row.taskIds.join(' / ') : '73344 ausente'}</span>
+                        <span><strong className="text-foreground">Execução:</strong> {row.task ? `${formatDate(row.task.task_date)} ${formatTime(row.task.task_date)}` : 'Sem agenda'}</span>
+                        <span><strong className="text-foreground">Data OS:</strong> {formatDate(row.os.data_entrada || row.os.data)}</span>
+                        <span><strong className="text-foreground">Status Auvo:</strong> {row.task ? taskStatus(row.task) : '—'}</span>
+                        <span><strong className="text-foreground">Valor:</strong> {formatMoney(row.os.valor_total)}</span>
+                        <span><strong className="text-foreground">Separação:</strong> {row.separation ? formatDate(row.separation.concluded_at) : 'Pendente'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-[420px] xl:justify-end">
+                      <Button variant="outline" size="sm" onClick={() => toggleItems(row)} disabled={loadingItemsId === row.os.id}>
+                        {loadingItemsId === row.os.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <PackageOpen className="mr-1.5 h-3.5 w-3.5" />}
+                        Peças ({row.items.length || row.separation?.items_total || 'carregar'})
+                        {expanded ? <ChevronUp className="ml-1 h-3.5 w-3.5" /> : <ChevronDown className="ml-1 h-3.5 w-3.5" />}
                       </Button>
-                    )}
+                      {!row.separation && (
+                        <Button asChild variant="outline" size="sm"><Link to="/checkout"><PackageSearch className="mr-1.5 h-3.5 w-3.5" />Separar</Link></Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => openSchedule(row)} disabled={row.taskIds.length === 0}>
+                        <Calendar className="mr-1.5 h-3.5 w-3.5" />{row.task ? 'Alterar agenda' : 'Agendar visita'}
+                      </Button>
+                      {row.separation && (
+                        <Button size="sm" onClick={() => openAssignment(row)}>
+                          <UserPlus className="mr-1.5 h-3.5 w-3.5" />{linked ? 'Alterar vínculo' : 'Vincular peças'}
+                        </Button>
+                      )}
+                      <Button asChild variant="ghost" size="icon" title="Abrir OS no GestãoClick"><a href={gcOrderUrl(row.os.id)} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>
+                    </div>
                   </div>
                 </div>
+
+                {expanded && row.items.length > 0 && <ItemsPanel items={row.items} technicianName={row.separation?.technician_name || null} />}
               </Card>
             );
           })}
+
+          {filteredOrphans.map((task) => (
+            <Card key={`orphan-${task.task_id}`} className="border-l-4 border-l-red-400 bg-red-50/30 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700"><Link2Off className="mr-1 h-3 w-3" />Sem OS aberta no Controle OS</Badge>
+                    <Badge variant="secondary">Tarefa #{task.task_id}</Badge>
+                    <Badge variant="outline">{taskStatus(task)}</Badge>
+                  </div>
+                  <p className="font-semibold">{task.customer_name || 'Cliente não informado no Auvo'}</p>
+                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                    <span><Clock className="mr-1 inline h-3 w-3" />{formatDate(task.task_date)} {formatTime(task.task_date)}</span>
+                    <span><User className="mr-1 inline h-3 w-3" />{task.technician_name || 'Sem técnico'}</span>
+                    {task.address && <span><MapPin className="mr-1 inline h-3 w-3" />{task.address}</span>}
+                  </div>
+                  {task.orientation && <p className="line-clamp-2 max-w-4xl text-xs text-muted-foreground">{task.orientation}</p>}
+                </div>
+                <p className="max-w-sm text-xs text-red-700">Esta tarefa é exibida para conferência, mas não pode receber peças: nenhum atributo 73344 de uma OS aberta aponta para ela.</p>
+              </div>
+            </Card>
+          ))}
+
+          {filteredRows.length === 0 && filteredOrphans.length === 0 && (
+            <div className="rounded-lg border bg-muted/20 py-16 text-center">
+              <ClipboardList className="mx-auto mb-2 h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">Nenhum registro encontrado para os filtros aplicados.</p>
+            </div>
+          )}
         </div>
       )}
+
+      <Dialog open={!!scheduleRow} onOpenChange={(open) => !open && !savingSchedule && setScheduleRow(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Agendar visita {scheduleRow ? `— OS #${scheduleRow.os.codigo}` : ''}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {scheduleRow && scheduleRow.taskIds.length > 1 && (
+              <FilterField label="Tarefa de execução" icon={ClipboardList}>
+                <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={scheduleTaskId} onChange={(event) => {
+                  const id = event.target.value;
+                  const task = allTasksById.get(id);
+                  setScheduleTaskId(id);
+                  setScheduleDate(datePart(task?.task_date) || agendaDate);
+                  setScheduleTime(formatTime(task?.task_date) === '--:--' ? '08:00' : formatTime(task?.task_date));
+                  setScheduleTechnicianId(task?.technician_id ? String(task.technician_id) : '');
+                }}>
+                  {scheduleRow.taskIds.map((id) => <option key={id} value={id}>Tarefa #{id}</option>)}
+                </select>
+              </FilterField>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <FilterField label="Data" icon={Calendar}><Input type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} /></FilterField>
+              <FilterField label="Horário" icon={Clock}><Input type="time" value={scheduleTime} onChange={(event) => setScheduleTime(event.target.value)} /></FilterField>
+            </div>
+            <FilterField label="Técnico no Auvo" icon={User}>
+              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={scheduleTechnicianId} onChange={(event) => setScheduleTechnicianId(event.target.value)}>
+                <option value="">Selecione o técnico</option>
+                {(auvoUsersQuery.data || []).map((technician) => <option key={technician.user_id} value={technician.user_id}>{technician.name}</option>)}
+              </select>
+            </FilterField>
+            <p className="rounded-md bg-blue-50 p-3 text-xs text-blue-800">Esta ação altera a data, o horário e o técnico diretamente na tarefa de execução do Auvo. O vínculo das peças é feito separadamente e continua sendo uma escolha sua.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleRow(null)} disabled={savingSchedule}>Cancelar</Button>
+            <Button onClick={saveSchedule} disabled={savingSchedule || !scheduleTechnicianId || !scheduleDate || !scheduleTime}>{savingSchedule && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar no Auvo</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!assignmentRow} onOpenChange={(open) => !open && !savingAssignment && setAssignmentRow(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Vincular peças ao técnico {assignmentRow ? `— OS #${assignmentRow.os.codigo}` : ''}</DialogTitle></DialogHeader>
+          {assignmentRow && (
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-sm font-semibold">{assignmentRow.os.nome_cliente}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Sugestão do Auvo: <strong className="text-foreground">{assignmentRow.task?.technician_name || 'nenhuma'}</strong>. Você pode escolher outro técnico abaixo.</p>
+              </div>
+              <FilterField label="Técnico que receberá as peças" icon={UserPlus}>
+                <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={assignmentTechnicianId} onChange={(event) => setAssignmentTechnicianId(event.target.value)}>
+                  <option value="">Selecione o técnico</option>
+                  {(localTechniciansQuery.data || []).map((technician) => <option key={technician.id} value={technician.gc_id}>{technician.name}</option>)}
+                </select>
+              </FilterField>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Peças que serão vinculadas ({separatedQuantity(assignmentRow.items)} unidade(s) em {assignmentRow.items.length} item(ns))</p>
+                <div className="max-h-56 overflow-y-auto rounded-md border">
+                  {assignmentRow.items.map((item, index) => (
+                    <div key={`${item.product_id}-${item.variation_id}-${index}`} className="flex items-center justify-between gap-3 border-b px-3 py-2 text-sm last:border-b-0">
+                      <div className="min-w-0"><p className="truncate font-medium">{item.name}</p><p className="text-xs text-muted-foreground">{item.code || 'Sem código'}</p></div>
+                      <Badge variant="secondary">{item.confirmed_quantity} {item.unit}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800">Ao confirmar, estas peças ficam registradas no histórico da separação sob responsabilidade do técnico escolhido e a OS muda para “Retirada pelo técnico”.</p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignmentRow(null)} disabled={savingAssignment}>Cancelar</Button>
+            <Button onClick={saveAssignment} disabled={savingAssignment || !assignmentTechnicianId}>{savingAssignment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Vincular {assignmentRow ? separatedQuantity(assignmentRow.items) : 0} peça(s)</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SummaryButton({ label, value, active, onClick, tone = 'default' }: {
+  label: string;
+  value: number;
+  active: boolean;
+  onClick: () => void;
+  tone?: 'default' | 'blue' | 'amber' | 'green' | 'violet' | 'red';
+}) {
+  const tones = {
+    default: 'text-foreground',
+    blue: 'text-blue-700',
+    amber: 'text-amber-700',
+    green: 'text-emerald-700',
+    violet: 'text-violet-700',
+    red: 'text-red-700',
+  };
+  return (
+    <button type="button" onClick={onClick} className={cn('rounded-lg border bg-card p-3 text-left transition hover:border-primary/50 hover:shadow-sm', active && 'border-primary ring-1 ring-primary/20')}>
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 text-2xl font-bold', tones[tone])}>{value}</p>
+    </button>
+  );
+}
+
+function FilterField({ label, icon: Icon, children }: {
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><Icon className="h-3 w-3" />{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function ItemsPanel({ items, technicianName }: { items: SeparationItemSnapshot[]; technicianName: string | null }) {
+  return (
+    <div className="border-t bg-muted/20 px-4 py-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Peças da separação</p>
+        {technicianName && <p className="text-xs font-medium text-violet-700"><User className="mr-1 inline h-3 w-3" />Responsável: {technicianName}</p>}
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {items.map((item, index) => (
+          <div key={`${item.product_id}-${item.variation_id}-${index}`} className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2">
+            <div className="min-w-0"><p className="truncate text-xs font-medium">{item.name}</p><p className="text-[11px] text-muted-foreground">{item.code || 'Sem código'}</p></div>
+            <Badge variant="secondary" className="shrink-0">{item.confirmed_quantity} {item.unit}</Badge>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

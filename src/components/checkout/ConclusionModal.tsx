@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
 import { GCOrdemServico, GCVenda, PickingItem } from '@/api/types';
-import { createSeparation } from '@/api/separations';
+import { createSeparation, snapshotPickingItems } from '@/api/separations';
 import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -110,6 +110,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         total_value: session.valorTotal,
         items_total: session.items.length,
         items_confirmed: session.items.filter(i => i.conferido).length,
+        items: snapshotPickingItems(session.items),
         operator_name: config.operatorName,
         equipment_name: session.equipmentName || undefined,
         started_at: session.startedAt,

@@ -1265,6 +1265,7 @@ export type Database = {
       }
       separations: {
         Row: {
+          client_id: string | null
           client_name: string
           concluded_at: string
           created_at: string
@@ -1274,6 +1275,7 @@ export type Database = {
           invalidated_at: string | null
           invalidated_reason: string | null
           items_confirmed: number
+          items: Json
           items_total: number
           observations: string | null
           operator_name: string
@@ -1291,6 +1293,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          client_id?: string | null
           client_name: string
           concluded_at?: string
           created_at?: string
@@ -1300,6 +1303,7 @@ export type Database = {
           invalidated_at?: string | null
           invalidated_reason?: string | null
           items_confirmed?: number
+          items?: Json
           items_total?: number
           observations?: string | null
           operator_name?: string
@@ -1317,6 +1321,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          client_id?: string | null
           client_name?: string
           concluded_at?: string
           created_at?: string
@@ -1326,6 +1331,7 @@ export type Database = {
           invalidated_at?: string | null
           invalidated_reason?: string | null
           items_confirmed?: number
+          items?: Json
           items_total?: number
           observations?: string | null
           operator_name?: string

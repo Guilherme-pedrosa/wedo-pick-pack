@@ -1,4 +1,16 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { GCProdutoItem, PickingItem } from '@/api/types';
+import type { Json } from '@/integrations/supabase/types';
+
+export interface SeparationItemSnapshot {
+  product_id: string;
+  variation_id: string;
+  code: string;
+  name: string;
+  unit: string;
+  expected_quantity: number;
+  confirmed_quantity: number;
+}
 
 export interface SeparationRecord {
   id: string;
@@ -15,6 +27,7 @@ export interface SeparationRecord {
   total_value: string;
   items_total: number;
   items_confirmed: number;
+  items: SeparationItemSnapshot[];
   operator_name: string;
   equipment_name: string | null;
   technician_gc_id: string | null;
@@ -40,6 +53,7 @@ export interface CreateSeparationInput {
   total_value: string;
   items_total: number;
   items_confirmed: number;
+  items: SeparationItemSnapshot[];
   operator_name: string;
   client_id?: string;
   equipment_name?: string;
@@ -55,6 +69,40 @@ export interface SeparationFilters {
   search?: string;
 }
 
+function quantity(value: string | number | undefined): number {
+  const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value ?? '0'));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function snapshotPickingItems(items: PickingItem[]): SeparationItemSnapshot[] {
+  return items.map((item) => ({
+    product_id: String(item.produto_id || ''),
+    variation_id: String(item.variacao_id || ''),
+    code: String(item.codigo_produto || ''),
+    name: String(item.nome_produto || ''),
+    unit: String(item.sigla_unidade || ''),
+    expected_quantity: quantity(item.qtd_total),
+    confirmed_quantity: quantity(item.qtd_conferida),
+  }));
+}
+
+export function snapshotOrderProducts(
+  products: Array<{ produto: GCProdutoItem }> | null | undefined,
+): SeparationItemSnapshot[] {
+  return (products || []).map(({ produto }) => {
+    const expected = quantity(produto.quantidade);
+    return {
+      product_id: String(produto.produto_id || ''),
+      variation_id: String(produto.variacao_id || ''),
+      code: String(produto.codigo_produto || ''),
+      name: String(produto.nome_produto || ''),
+      unit: String(produto.sigla_unidade || ''),
+      expected_quantity: expected,
+      confirmed_quantity: expected,
+    };
+  });
+}
+
 export async function createSeparation(input: CreateSeparationInput): Promise<SeparationRecord> {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -68,6 +116,7 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
       user_id: user.id,
       client_id: input.client_id || null,
       ...input,
+      items: input.items,
     })
     .select()
     .single();
@@ -152,7 +201,7 @@ export async function getValidSeparatedOrderIds(): Promise<Set<string>> {
     console.error('Error fetching valid separations:', error);
     return new Set();
   }
-  return new Set((data || []).map(d => (d as any).order_id));
+  return new Set((data || []).map((record) => record.order_id));
 }
 
 export async function invalidateSeparation(id: string, reason: string): Promise<boolean> {
@@ -180,14 +229,22 @@ export async function invalidateSeparation(id: string, reason: string): Promise<
 export async function linkTechnicianToSeparation(
   id: string,
   technicianGcId: string | null,
-  technicianName: string | null
+  technicianName: string | null,
+  items?: SeparationItemSnapshot[],
 ): Promise<boolean> {
+  const update: {
+    technician_gc_id: string | null;
+    technician_name: string | null;
+    items?: Json;
+  } = {
+    technician_gc_id: technicianGcId,
+    technician_name: technicianName,
+  };
+  if (items && items.length > 0) update.items = items as unknown as Json;
+
   const { data, error } = await supabase
     .from('separations')
-    .update({
-      technician_gc_id: technicianGcId,
-      technician_name: technicianName,
-    })
+    .update(update)
     .eq('id', id)
     .select('id');
 

@@ -26,6 +26,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getOS, getVenda } from "@/api/gestaoclick";
+import type { SeparationItemSnapshot } from "@/api/separations";
 
 interface GCEmployee {
   id: string;
@@ -66,6 +67,7 @@ interface TechSeparation {
   total_value: string;
   items_total: number;
   items_confirmed: number;
+  items: SeparationItemSnapshot[];
   concluded_at: string;
   invalidated: boolean;
   target_status_id: string;
@@ -121,7 +123,7 @@ const TechniciansPage = () => {
           .eq("status", "active"),
         supabase
           .from("separations")
-          .select("id, order_type, order_id, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, concluded_at, invalidated, technician_gc_id, target_status_id")
+          .select("id, order_type, order_id, order_code, client_name, equipment_name, total_value, items_total, items_confirmed, items, concluded_at, invalidated, technician_gc_id, target_status_id")
           .in("technician_gc_id", gcIds)
           .eq("invalidated", false)
           .order("concluded_at", { ascending: false }),
@@ -627,10 +629,20 @@ const TechniciansPage = () => {
                                   <TableCell className="py-1.5 text-xs font-bold">
                                     #{sep.order_code}
                                   </TableCell>
-                                  <TableCell className="py-1.5 text-xs max-w-[200px] truncate">
-                                    {sep.client_name}
+                                  <TableCell className="py-1.5 text-xs max-w-[280px]">
+                                    <div className="truncate">{sep.client_name}</div>
                                     {sep.equipment_name && (
-                                      <span className="text-muted-foreground ml-1">🔧 {sep.equipment_name}</span>
+                                      <div className="truncate text-muted-foreground">🔧 {sep.equipment_name}</div>
+                                    )}
+                                    {Array.isArray(sep.items) && sep.items.length > 0 && (
+                                      <div className="mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+                                        {sep.items.slice(0, 3).map((item, index) => (
+                                          <div key={`${item.product_id}:${item.variation_id}:${index}`} className="truncate">
+                                            {item.confirmed_quantity || item.expected_quantity}x {item.code ? `${item.code} — ` : ''}{item.name}
+                                          </div>
+                                        ))}
+                                        {sep.items.length > 3 && <div>+ {sep.items.length - 3} peça(s)</div>}
+                                      </div>
                                     )}
                                   </TableCell>
                                   <TableCell className="py-1.5 text-xs text-center">

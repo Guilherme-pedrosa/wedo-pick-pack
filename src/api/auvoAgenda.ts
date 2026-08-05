@@ -3,9 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 export interface AuvoAgendaTask {
   task_id: string;
   task_date: string | null;
+  task_end_date: string | null;
   task_type: number | null;
   task_type_name: string | null;
   status: number | null;
+  status_description: string | null;
   checkin_date: string | null;
   technician_id: number | null;
   technician_name: string | null;
@@ -13,9 +15,12 @@ export interface AuvoAgendaTask {
   customer_name: string | null;
   address: string;
   orientation: string;
-  orcamento_code: string | null;
-  os_code: string | null;
-  customer_id_gc: string | null;
+}
+
+export interface AuvoAgendaUser {
+  user_id: number;
+  name: string;
+  login: string;
 }
 
 export const AUVO_STATUS_LABEL: Record<number, string> = {
@@ -33,6 +38,13 @@ export function auvoStatusLabel(status: number | null): string {
   return AUVO_STATUS_LABEL[status] ?? `Status ${status}`;
 }
 
+function assertFunctionResult(data: unknown, fallback: string): Record<string, unknown> {
+  if (!data || typeof data !== 'object') throw new Error(fallback);
+  const result = data as Record<string, unknown>;
+  if (result.error) throw new Error(String(result.error));
+  return result;
+}
+
 export async function getAuvoAgenda(startDate: string, endDate?: string): Promise<AuvoAgendaTask[]> {
   const { data, error } = await supabase.functions.invoke('auvo-agenda', {
     body: { start_date: startDate, end_date: endDate || startDate },
@@ -42,10 +54,48 @@ export async function getAuvoAgenda(startDate: string, endDate?: string): Promis
     console.error('Error fetching Auvo agenda:', error);
     throw new Error('Não foi possível carregar a agenda do Auvo');
   }
-  if ((data as any)?.error) {
-    throw new Error((data as any).error);
-  }
-  return ((data as any)?.items || []) as AuvoAgendaTask[];
+  const result = assertFunctionResult(data, 'Resposta vazia do Auvo');
+  return (Array.isArray(result.items) ? result.items : []) as AuvoAgendaTask[];
+}
+
+export async function getAuvoTasksByIds(taskIds: string[]): Promise<AuvoAgendaTask[]> {
+  const unique = Array.from(new Set(taskIds.filter((id) => /^\d+$/.test(id))));
+  if (unique.length === 0) return [];
+
+  const { data, error } = await supabase.functions.invoke('auvo-agenda', {
+    body: { action: 'tasks-by-id', task_ids: unique },
+  });
+  if (error) throw new Error(error.message || 'Não foi possível consultar as tarefas de execução');
+  const result = assertFunctionResult(data, 'Resposta vazia do Auvo');
+  return (Array.isArray(result.items) ? result.items : []) as AuvoAgendaTask[];
+}
+
+export async function getAuvoAgendaUsers(): Promise<AuvoAgendaUser[]> {
+  const { data, error } = await supabase.functions.invoke('auvo-agenda', {
+    body: { action: 'list-users' },
+  });
+  if (error) throw new Error(error.message || 'Não foi possível carregar os técnicos do Auvo');
+  const result = assertFunctionResult(data, 'Resposta vazia do Auvo');
+  return (Array.isArray(result.items) ? result.items : []) as AuvoAgendaUser[];
+}
+
+export async function updateAuvoAgendaTask(input: {
+  taskId: string;
+  scheduledAt: string;
+  technicianId: number;
+}): Promise<AuvoAgendaTask> {
+  const { data, error } = await supabase.functions.invoke('auvo-agenda', {
+    body: {
+      action: 'update-task',
+      task_id: input.taskId,
+      scheduled_at: input.scheduledAt,
+      technician_id: input.technicianId,
+    },
+  });
+  if (error) throw new Error(error.message || 'Não foi possível atualizar a tarefa no Auvo');
+  const result = assertFunctionResult(data, 'Resposta vazia do Auvo');
+  if (!result.item || typeof result.item !== 'object') throw new Error('O Auvo não confirmou a tarefa atualizada');
+  return result.item as AuvoAgendaTask;
 }
 
 /** Normalizes a name for fuzzy matching (accents, case, extra spaces). */

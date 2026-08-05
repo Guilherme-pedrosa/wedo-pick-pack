@@ -23,6 +23,8 @@ export interface GCOrdemServico {
   cliente_id: string;
   nome_cliente: string;
   vendedor_id?: string;
+  tecnico_id?: string;
+  nome_tecnico?: string;
   data: string;
   data_entrada?: string;
   data_saida?: string;

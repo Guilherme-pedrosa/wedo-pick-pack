@@ -890,7 +890,14 @@ export default function AgendaOSPanel() {
                   </div>
                   {task.orientation && <p className="line-clamp-2 max-w-4xl text-xs text-muted-foreground">{task.orientation}</p>}
                 </div>
-                <p className="max-w-sm text-xs text-red-700">Esta tarefa é exibida para conferência, mas não pode receber peças: nenhum atributo 73344 de uma OS aberta aponta para ela.</p>
+                <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
+                  <p className="max-w-sm text-xs text-red-700">Esta tarefa é exibida para conferência, mas não pode receber peças: nenhum atributo 73344 de uma OS aberta aponta para ela.</p>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={auvoTaskUrl(task.task_id)} target="_blank" rel="noreferrer">
+                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />Abrir no Auvo
+                    </a>
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}

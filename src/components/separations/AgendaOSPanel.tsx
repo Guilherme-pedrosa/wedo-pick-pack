@@ -84,7 +84,7 @@ export default function AgendaOSPanel() {
     });
   }, [rows, debouncedSearch, agendaDate, techFilter, statusFilter, sortField]);
 
-  useEffect(() => { if (!selectedKey || !filteredRows.some((row) => row.key === selectedKey)) setSelectedKey(filteredRows[0]?.key || null); }, [filteredRows, selectedKey]);
+  useEffect(() => { if (selectedKey && !filteredRows.some((row) => row.key === selectedKey)) { setSelectedKey(null); setDetailOpen(false); } }, [filteredRows, selectedKey]);
   const selected = filteredRows.find((row) => row.key === selectedKey) || null;
   const isLoading = osQuery.isLoading || dailyTasksQuery.isLoading || separationsQuery.isLoading;
   const isFetching = osQuery.isFetching || linkedTasksQuery.isFetching || dailyTasksQuery.isFetching || separationsQuery.isFetching;

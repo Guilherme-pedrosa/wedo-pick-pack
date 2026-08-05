@@ -165,10 +165,10 @@ function normalizeTask(task: any, users: Map<number, string>, customers: Map<num
 }
 
 async function fetchTasksByIds(token: string, taskIds: string[]): Promise<any[]> {
-  const unique = Array.from(new Set(taskIds.filter((id) => /^\d+$/.test(id)))).slice(0, 150);
+  const unique = Array.from(new Set(taskIds.filter((id) => /^\d+$/.test(id)))).slice(0, 300);
   const result: any[] = [];
-  for (let i = 0; i < unique.length; i += 6) {
-    await Promise.all(unique.slice(i, i + 6).map(async (taskId) => {
+  for (let i = 0; i < unique.length; i += 10) {
+    await Promise.all(unique.slice(i, i + 10).map(async (taskId) => {
       try {
         const data = await auvoRequest(token, `/tasks/${taskId}`);
         const task = data?.result ?? data;
@@ -204,8 +204,9 @@ Deno.serve(async (req: Request) => {
     if (action === 'tasks-by-id') {
       const ids = Array.isArray(body?.task_ids) ? body.task_ids.map(String) : [];
       const [tasks, users] = await Promise.all([fetchTasksByIds(token, ids), fetchUsers(token)]);
-      const customers = await fetchCustomers(token, tasks.map((task) => Number(task?.customerId ?? 0)));
-      const items = tasks.map((task) => normalizeTask(task, users.names, customers));
+      // Para OS vinculadas, o nome do cliente já vem do GestãoClick. Evitar uma
+      // chamada por cliente reduz bastante o tempo ao carregar centenas de OS.
+      const items = tasks.map((task) => normalizeTask(task, users.names, new Map()));
       return json({ items, count: items.length, requested: ids.length });
     }
 

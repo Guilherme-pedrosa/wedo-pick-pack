@@ -27,9 +27,13 @@ import { toast } from 'sonner';
 import {
   classifyAgendaRow,
   datePart,
+  GC_REPAIR_LOCATION_ATTRIBUTE_ID,
   getExecutionTaskIds,
+  getOsAttributeValue,
+  normalizeFilterText,
   type AgendaBucket,
 } from '@/api/agendaControl';
+import { getOpenAgendaOrders } from '@/api/agendaOrders';
 import {
   auvoStatusLabel,
   getAuvoAgenda,
@@ -48,11 +52,6 @@ import {
   type SeparationRecord,
 } from '@/api/separations';
 import { assignSeparationToTechnician } from '@/api/separationAssignment';
-import {
-  getSyncGcControlOs,
-  type SyncGcControlOrder,
-  type SyncGcControlTask,
-} from '@/api/syncGcControlOs';
 import type { GCOrdemServico } from '@/api/types';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -60,8 +59,11 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface LocalTechnician {
   id: string;
@@ -80,6 +82,8 @@ interface AgendaOsRow {
 
 type AgendaFilter = 'all' | AgendaBucket | 'orphan';
 type SeparationFilter = 'all' | 'pending' | 'separated' | 'linked';
+type ExecutionFilter = 'all' | 'em_andamento' | 'pausada' | 'finalizada' | 'sem_exec';
+type RepairLocationFilter = 'all' | 'galpao' | 'cliente' | 'sem_info';
 
 const BUCKET_META: Record<AgendaBucket, { label: string; className: string }> = {
   'scheduled-date': {
@@ -148,69 +152,15 @@ function gcOrderUrl(osId: string): string {
   return `https://gestaoclick.com/ordens_servicos/editar/${osId}?retorno=%2Fordens_servicos`;
 }
 
-function sourceTaskToAuvo(task: SyncGcControlTask): AuvoAgendaTask {
-  const technicianId = Number(task.technician_id || 0);
-  const startTime = String(task.start_time || '00:00:00').slice(0, 8);
-  const normalizedStartTime = startTime.length === 5 ? `${startTime}:00` : startTime;
-  const endTime = String(task.end_time || '').slice(0, 8);
-  const normalizedEndTime = endTime.length === 5 ? `${endTime}:00` : endTime;
-  return {
-    task_id: task.task_id,
-    task_date: task.task_date
-      ? `${task.task_date}T${normalizedStartTime}`
-      : null,
-    task_end_date: task.task_date && task.end_time
-      ? `${task.task_date}T${normalizedEndTime}`
-      : null,
-    task_type: null,
-    task_type_name: null,
-    status: null,
-    status_description: task.status,
-    checkin_date: null,
-    technician_id: Number.isFinite(technicianId) && technicianId > 0 ? technicianId : null,
-    technician_name: task.technician_name,
-    customer_id: null,
-    customer_name: task.customer_name,
-    address: task.address || '',
-    orientation: task.orientation || '',
-  };
-}
-
-function sourceOrderToGc(order: SyncGcControlOrder): GCOrdemServico {
-  return {
-    id: order.gc_os_id,
-    codigo: order.gc_os_code,
-    cliente_id: '',
-    nome_cliente: order.client_name || 'Cliente não informado no Controle OS',
-    nome_tecnico: order.os_technician_name || undefined,
-    data: order.os_date || '',
-    data_entrada: order.os_date || undefined,
-    data_saida: order.expected_exit_date || undefined,
-    situacao_id: order.situation_id || '',
-    nome_situacao: order.situation_name || 'Situação não informada',
-    valor_total: String(order.total_value || 0),
-    produtos: [],
-    equipamentos: order.equipment_name ? [{
-      equipamento: {
-        equipamento: order.equipment_name,
-        serie: order.equipment_serial || undefined,
-      },
-    }] : [],
-    atributos: [{
-      atributo: {
-        atributo_id: '73344',
-        conteudo: order.execution_task_ids.join(' / '),
-      },
-    }],
-  };
-}
-
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
   const [agendaDate, setAgendaDate] = useState(todayISO);
   const [agendaFilter, setAgendaFilter] = useState<AgendaFilter>('all');
   const [technicianFilter, setTechnicianFilter] = useState('all');
-  const [situationFilter, setSituationFilter] = useState('all');
+  const [excludedSituations, setExcludedSituations] = useState<Set<string>>(new Set());
+  const [situationSearch, setSituationSearch] = useState('');
+  const [executionFilter, setExecutionFilter] = useState<ExecutionFilter>('all');
+  const [repairLocationFilter, setRepairLocationFilter] = useState<RepairLocationFilter>('all');
   const [separationFilter, setSeparationFilter] = useState<SeparationFilter>('all');
   const [search, setSearch] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -229,8 +179,8 @@ export default function AgendaOSPanel() {
   const [savingAssignment, setSavingAssignment] = useState(false);
 
   const osQuery = useQuery({
-    queryKey: ['syncgc-controle-os', agendaDate],
-    queryFn: () => getSyncGcControlOs(agendaDate),
+    queryKey: ['agenda-open-orders'],
+    queryFn: getOpenAgendaOrders,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
@@ -262,10 +212,7 @@ export default function AgendaOSPanel() {
     staleTime: 10 * 60_000,
   });
 
-  const orders = useMemo(
-    () => (osQuery.data?.orders || []).map(sourceOrderToGc),
-    [osQuery.data?.orders],
-  );
+  const orders = useMemo(() => osQuery.data || [], [osQuery.data]);
   const executionTaskIds = useMemo(
     () => Array.from(new Set(orders.flatMap(getExecutionTaskIds))),
     [orders],
@@ -286,13 +233,10 @@ export default function AgendaOSPanel() {
 
   const allTasksById = useMemo(() => {
     const map = new Map<string, AuvoAgendaTask>();
-    for (const order of osQuery.data?.orders || []) {
-      for (const task of order.execution_tasks || []) map.set(task.task_id, sourceTaskToAuvo(task));
-    }
     for (const task of dayTasksQuery.data || []) map.set(task.task_id, task);
     for (const task of executionTasksQuery.data || []) map.set(task.task_id, task);
     return map;
-  }, [dayTasksQuery.data, executionTasksQuery.data, osQuery.data?.orders]);
+  }, [dayTasksQuery.data, executionTasksQuery.data]);
 
   const separationByOrderId = useMemo(() => {
     const map = new Map<string, SeparationRecord>();
@@ -329,18 +273,23 @@ export default function AgendaOSPanel() {
   const referencedTaskIds = useMemo(() => new Set(orders.flatMap(getExecutionTaskIds)), [orders]);
   const orphanTasks = useMemo(() => {
     const map = new Map<string, AuvoAgendaTask>();
-    for (const task of osQuery.data?.orphan_tasks || []) map.set(task.task_id, sourceTaskToAuvo(task));
     for (const task of dayTasksQuery.data || []) {
       if (!referencedTaskIds.has(task.task_id)) map.set(task.task_id, task);
     }
     return Array.from(map.values()).filter((task) => !referencedTaskIds.has(task.task_id));
-  }, [dayTasksQuery.data, osQuery.data?.orphan_tasks, referencedTaskIds]);
+  }, [dayTasksQuery.data, referencedTaskIds]);
 
   const situationOptions = useMemo(() => {
     const options = new Map<string, string>();
     orders.forEach((order) => options.set(order.situacao_id, order.nome_situacao));
     return Array.from(options.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   }, [orders]);
+
+  const visibleSituationOptions = useMemo(() => {
+    const term = normalizeFilterText(situationSearch);
+    if (!term) return situationOptions;
+    return situationOptions.filter(([, name]) => normalizeFilterText(name).includes(term));
+  }, [situationOptions, situationSearch]);
 
   const technicianOptions = useMemo(() => {
     const names = new Set<string>();
@@ -363,12 +312,43 @@ export default function AgendaOSPanel() {
       const matchesTechnician = technicianFilter === 'all'
         || (technicianFilter === 'none' && !task?.technician_name)
         || task?.technician_name === technicianFilter;
-      const matchesSituation = situationFilter === 'all' || os.situacao_id === situationFilter;
+      const matchesSituation = !excludedSituations.has(String(os.situacao_id));
       const matchesSeparation = separationFilter === 'all'
         || (separationFilter === 'pending' && !separation)
         || (separationFilter === 'separated' && !!separation && !separation.technician_name)
         || (separationFilter === 'linked' && !!separation?.technician_name);
-      return matchesSearch && matchesAgenda && matchesTechnician && matchesSituation && matchesSeparation;
+      const executionStatus = normalizeFilterText(task ? taskStatus(task) : '');
+      const matchesExecution = executionFilter === 'all'
+        || (executionFilter === 'em_andamento' && (
+          executionStatus.includes('andamento')
+          || executionStatus.includes('deslocamento')
+          || executionStatus.includes('check-in')
+        ))
+        || (executionFilter === 'pausada' && executionStatus.includes('paus'))
+        || (executionFilter === 'finalizada' && (
+          executionStatus.includes('finalizada')
+          || executionStatus.includes('check-out')
+        ))
+        || (executionFilter === 'sem_exec' && (
+          !task
+          || !executionStatus
+          || executionStatus.includes('aberta')
+          || executionStatus.includes('agendada')
+        ));
+      const repairLocation = normalizeFilterText(
+        getOsAttributeValue(os, GC_REPAIR_LOCATION_ATTRIBUTE_ID),
+      );
+      const matchesRepairLocation = repairLocationFilter === 'all'
+        || (repairLocationFilter === 'galpao' && repairLocation.includes('galpao'))
+        || (repairLocationFilter === 'cliente' && repairLocation.includes('cliente'))
+        || (repairLocationFilter === 'sem_info' && !repairLocation);
+      return matchesSearch
+        && matchesAgenda
+        && matchesTechnician
+        && matchesSituation
+        && matchesSeparation
+        && matchesExecution
+        && matchesRepairLocation;
     }).sort((a, b) => {
       const bucketOrder: AgendaBucket[] = ['scheduled-date', 'available', 'other-date', 'no-task'];
       const bucketDiff = bucketOrder.indexOf(a.bucket) - bucketOrder.indexOf(b.bucket);
@@ -377,11 +357,21 @@ export default function AgendaOSPanel() {
       if (timeDiff !== 0) return timeDiff;
       return String(b.os.codigo).localeCompare(String(a.os.codigo), 'pt-BR', { numeric: true });
     });
-  }, [agendaFilter, rows, search, separationFilter, situationFilter, technicianFilter]);
+  }, [
+    agendaFilter,
+    excludedSituations,
+    executionFilter,
+    repairLocationFilter,
+    rows,
+    search,
+    separationFilter,
+    technicianFilter,
+  ]);
 
   const filteredOrphans = useMemo(() => {
     if (agendaFilter !== 'all' && agendaFilter !== 'orphan') return [];
     if (separationFilter !== 'all') return [];
+    if (excludedSituations.size > 0 || repairLocationFilter !== 'all') return [];
     const term = normalizeName(search);
     return orphanTasks.filter((task) => {
       const matchesSearch = !term
@@ -392,9 +382,26 @@ export default function AgendaOSPanel() {
       const matchesTechnician = technicianFilter === 'all'
         || (technicianFilter === 'none' && !task.technician_name)
         || task.technician_name === technicianFilter;
-      return matchesSearch && matchesTechnician;
+      const status = normalizeFilterText(taskStatus(task));
+      const matchesExecution = executionFilter === 'all'
+        || (executionFilter === 'em_andamento' && (
+          status.includes('andamento') || status.includes('deslocamento') || status.includes('check-in')
+        ))
+        || (executionFilter === 'pausada' && status.includes('paus'))
+        || (executionFilter === 'finalizada' && (status.includes('finalizada') || status.includes('check-out')))
+        || (executionFilter === 'sem_exec' && (!status || status.includes('aberta') || status.includes('agendada')));
+      return matchesSearch && matchesTechnician && matchesExecution;
     });
-  }, [agendaFilter, orphanTasks, search, separationFilter, technicianFilter]);
+  }, [
+    agendaFilter,
+    excludedSituations.size,
+    executionFilter,
+    orphanTasks,
+    repairLocationFilter,
+    search,
+    separationFilter,
+    technicianFilter,
+  ]);
 
   const counts = useMemo(() => ({
     total: rows.length,
@@ -556,11 +563,11 @@ export default function AgendaOSPanel() {
             Agendamento e Separação
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Controle OS + tarefa de execução do Auvo + histórico real das peças separadas. O vínculo é sempre pelo ID da tarefa 73344, nunca pelo nome do cliente.
+            As mesmas situações e regras operacionais do Controle OS, com agenda do Auvo e histórico real das peças separadas — tudo carregado pelo próprio Pick & Pack.
           </p>
           {osQuery.data && (
             <p className="mt-1 text-xs font-medium text-emerald-700">
-              Fonte ativa: Controle OS do Sync GC · consolidado em {new Date(osQuery.data.generated_at).toLocaleString('pt-BR')}
+              Fonte ativa: GestãoClick + Auvo + separações do Pick & Pack
             </p>
           )}
         </div>
@@ -579,8 +586,8 @@ export default function AgendaOSPanel() {
         <SummaryButton label="Tarefas sem OS" value={counts.orphans} active={agendaFilter === 'orphan'} onClick={() => setAgendaFilter('orphan')} tone="red" />
       </div>
 
-      <Card className="p-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <Card className="space-y-4 p-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <FilterField label="Data da tarefa de execução" icon={Calendar}>
             <Input type="date" value={agendaDate} onChange={(event) => setAgendaDate(event.target.value)} />
           </FilterField>
@@ -589,12 +596,6 @@ export default function AgendaOSPanel() {
               <option value="all">Todos</option>
               <option value="none">Sem técnico</option>
               {technicianOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </FilterField>
-          <FilterField label="Situação da OS" icon={Filter}>
-            <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={situationFilter} onChange={(event) => setSituationFilter(event.target.value)}>
-              <option value="all">Todas do Controle OS</option>
-              {situationOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </select>
           </FilterField>
           <FilterField label="Agenda" icon={Clock}>
@@ -619,19 +620,114 @@ export default function AgendaOSPanel() {
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="OS, cliente, tarefa…" />
           </FilterField>
         </div>
+
+        <div className="border-t pt-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filtros operacionais do Controle OS</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Filter className="h-3.5 w-3.5" />
+                  Situação
+                  {excludedSituations.size > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-[10px]">{excludedSituations.size} ocultas</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80" align="start">
+                <div className="space-y-2">
+                  <Input
+                    value={situationSearch}
+                    onChange={(event) => setSituationSearch(event.target.value)}
+                    placeholder="Buscar situação…"
+                    className="h-8 text-xs"
+                  />
+                  <div className="flex items-center gap-2 pb-1">
+                    <Checkbox
+                      checked={excludedSituations.size === 0}
+                      onCheckedChange={(checked) => {
+                        setExcludedSituations(checked
+                          ? new Set()
+                          : new Set(situationOptions.map(([id]) => id)));
+                      }}
+                    />
+                    <span className="text-xs font-medium">Todas</span>
+                  </div>
+                  <ScrollArea className="h-52">
+                    <div className="space-y-1.5 pr-3">
+                      {visibleSituationOptions.map(([id, name]) => (
+                        <label key={id} className="flex cursor-pointer items-center gap-2">
+                          <Checkbox
+                            checked={!excludedSituations.has(id)}
+                            onCheckedChange={() => {
+                              setExcludedSituations((current) => {
+                                const next = new Set(current);
+                                if (next.has(id)) next.delete(id);
+                                else next.add(id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="text-xs">{name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {([
+              ['all', 'Todas'],
+              ['em_andamento', '🔄 Em andamento'],
+              ['pausada', '⏸ Pausada'],
+              ['finalizada', '✅ Finalizada'],
+              ['sem_exec', 'Sem execução'],
+            ] as const).map(([value, label]) => (
+              <Button
+                key={value}
+                variant={executionFilter === value ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setExecutionFilter(value)}
+              >
+                {label}
+              </Button>
+            ))}
+
+            <span className="mx-1 h-6 w-px bg-border" />
+
+            {([
+              ['all', 'Local: todos'],
+              ['galpao', '🏭 Galpão'],
+              ['cliente', '🏢 Cliente'],
+              ['sem_info', 'Sem local'],
+            ] as const).map(([value, label]) => (
+              <Button
+                key={value}
+                variant={repairLocationFilter === value ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setRepairLocationFilter(value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
       </Card>
 
       {osQuery.isError && (
         <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          <p className="font-semibold">Não foi possível abrir a base do Controle OS.</p>
-          <p className="mt-1">{osQuery.error instanceof Error ? osQuery.error.message : 'Falha na integração com o Sync GC'}</p>
+          <p className="font-semibold">Não foi possível carregar as OS do GestãoClick.</p>
+          <p className="mt-1">{osQuery.error instanceof Error ? osQuery.error.message : 'Falha ao consultar as OS no Pick & Pack'}</p>
         </Card>
       )}
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="mb-2 h-7 w-7 animate-spin" />
-          <p className="text-sm">Cruzando Controle OS, Auvo e separações…</p>
+          <p className="text-sm">Carregando OS, agenda do Auvo e separações…</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -712,7 +808,7 @@ export default function AgendaOSPanel() {
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700"><Link2Off className="mr-1 h-3 w-3" />Sem OS aberta no Controle OS</Badge>
+                    <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700"><Link2Off className="mr-1 h-3 w-3" />Tarefa Auvo sem OS aberta</Badge>
                     <Badge variant="secondary">Tarefa #{task.task_id}</Badge>
                     <Badge variant="outline">{taskStatus(task)}</Badge>
                   </div>

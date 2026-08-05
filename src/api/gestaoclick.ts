@@ -112,7 +112,7 @@ async function confirmStatusApplied(tipo: 'os' | 'venda', id: string, expectedSt
 }
 
 // --- LIST ---
-export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
+export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string, limite = 100): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
   const term = pesquisa?.trim();
 
   if (isUsingMock()) {
@@ -129,7 +129,7 @@ export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string)
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
 
-  const params = new URLSearchParams({ pagina: String(pagina) });
+  const params = new URLSearchParams({ pagina: String(pagina), limite: String(limite) });
   if (situacaoId) params.set('situacao_id', situacaoId);
 
   // Mantém a fila com os códigos mais novos no topo (ex.: OS 9090)
@@ -139,7 +139,7 @@ export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string)
   if (term) {
     if (/^\d+$/.test(term)) {
       params.set('codigo', term);
-      params.set('limite', '100');
+      params.set('limite', String(limite));
     }
     // Text search (client name) is handled client-side — GC 'nome' param
     // searches OS title, not client name, so we skip it here.

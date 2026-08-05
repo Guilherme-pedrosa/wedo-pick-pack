@@ -252,7 +252,7 @@ export default function AgendamentoSeparacaoPage() {
       </div>
 
       <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Calendar className="h-3 w-3" /> Data de agendamento
@@ -297,17 +297,18 @@ export default function AgendamentoSeparacaoPage() {
             <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Search className="h-3 w-3" /> Buscar
             </label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Cliente, OS ou orçamento..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1"
-              />
-              <Button variant="outline" size="icon" onClick={() => refetch()}>
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
+            <Input
+              placeholder="Código OS ou Cliente..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-end">
+            <Button variant="outline" className="w-full gap-2" onClick={() => refetch()} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
           </div>
         </div>
       </Card>

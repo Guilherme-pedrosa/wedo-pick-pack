@@ -308,6 +308,9 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             <Badge className={session.tipo === 'os' ? 'bg-primary text-primary-foreground' : 'bg-purple-700 text-primary-foreground'}>
               {session.tipo === 'os' ? 'OS' : 'VENDA'}
             </Badge>
+            {session.partialWriteoff && (
+              <Badge className="bg-amber-600 text-white">BAIXA PARCIAL · ORÇ. #{session.partialWriteoff.budgetCode}</Badge>
+            )}
             <span className="font-bold text-base md:text-lg">#{session.codigo}</span>
             <span className="text-sm text-muted-foreground truncate max-w-[160px] md:max-w-none">{session.nomeCliente}</span>
             {session.equipmentName && (
@@ -443,7 +446,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
             <span>Início {new Date(session.startedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
           <div className="flex gap-2">
-            {hasAnyConfirmed && !allConfirmed && (
+            {hasAnyConfirmed && !allConfirmed && !session.partialWriteoff && (
               <Button
                 variant="outline"
                 size="sm"

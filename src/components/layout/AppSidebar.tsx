@@ -22,6 +22,7 @@ import {
   Briefcase,
   Undo2,
   Truck,
+  PackageMinus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,7 @@ const menuGroups: MenuGroup[] = [
     label: "Operação",
     items: [
       { title: "Checkout", icon: Package, href: "/checkout" },
+      { title: "Baixa Parcial", icon: PackageMinus, href: "/baixa-parcial" },
       { title: "Separações", icon: PackageCheck, href: "/separations" },
       { title: "Agendamento e Separação", icon: Calendar, href: "/separations?tab=agenda" },
       { title: "Devoluções", icon: Undo2, href: "/devolucoes" },

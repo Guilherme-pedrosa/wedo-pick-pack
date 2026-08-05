@@ -10,6 +10,7 @@ import {
 } from './mockData';
 import { scopeSituationCatalog } from './situationScopes';
 import { supabase } from '@/integrations/supabase/client';
+import { getActivePartialDemand } from './partialWriteoff';
 
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
@@ -168,6 +169,7 @@ export async function buildOSIndex(
 
   const index: OSIndex = {};
   const reservedDemand: OSReservedDemand = {};
+  const { auxiliaryDocumentIds } = await getActivePartialDemand();
   let page = 1;
   let totalPages = 1;
   let vinculos = 0;
@@ -182,6 +184,7 @@ export async function buildOSIndex(
       const os = unwrapOSRecord(item);
       const osCodigo = resolveOSCode(os);
       const osId = normalizeId(os?.id);
+      if (osId && auxiliaryDocumentIds.has(`os:${osId}`)) continue;
       const osRef = osCodigo || osId || '—';
       const nomeSituacao = String(os?.nome_situacao ?? '');
       const nomeCliente = String(os?.nome_cliente ?? '');
@@ -422,6 +425,8 @@ export async function buildListaCompras(
   onProgress?: (step: string, checked: number, total: number) => void,
 ): Promise<ComprasResult> {
 
+  const partialDemand = await getActivePartialDemand();
+
   // PHASE 1: Fetch all approved budgets
   onProgress?.('Buscando orçamentos aprovados…', 0, 1);
   const allOrcamentos: GCOrcamento[] = [];
@@ -456,7 +461,8 @@ export async function buildListaCompras(
     const byFlags = hasConvertedBudgetByFlags(o);
     const osMatch = osIndex[String(o.codigo)];
 
-    if (byFlags || osMatch) {
+    const isPartialBudget = partialDemand.activeBudgetIds.has(o.id);
+    if (!isPartialBudget && (byFlags || osMatch)) {
       if (!convertedById.has(o.id)) {
         const reason = byFlags ? 'flag' as const : 'os_index' as const;
         const linkNumber = osMatch?.os_codigo ?? null;
@@ -590,12 +596,20 @@ export async function buildListaCompras(
   }>();
 
   for (const orc of orcamentosElegiveis) {
+    const partialByProduct = partialDemand.pendingByBudgetAndProduct.get(orc.id);
+    const processedPartialKeys = new Set<string>();
     for (const p of orc.produtos || []) {
       const produtoId = normalizeId(p.produto.produto_id);
       if (!produtoId) continue;
       const variacaoId = normalizeId(p.produto.variacao_id);
       const key = makeProdutoKey(produtoId, variacaoId);
-      const qty = parseDecimal(p.produto.quantidade);
+      let qty = parseDecimal(p.produto.quantidade);
+      if (partialByProduct) {
+        if (processedPartialKeys.has(key)) continue;
+        processedPartialKeys.add(key);
+        qty = partialByProduct.get(key) ?? 0;
+      }
+      if (qty <= 0) continue;
       if (!productMap.has(key)) {
         productMap.set(key, {
           produto_id: produtoId, variacao_id: variacaoId,

@@ -1,0 +1,687 @@
+-- Baixa parcial de orçamentos
+--
+-- O orçamento continua sendo o documento-mãe. Cada retirada gera um
+-- documento auxiliar do mesmo tipo (OS ou venda) e somente a confirmação no
+-- Checkout transforma a quantidade reservada em quantidade baixada.
+
+CREATE TABLE IF NOT EXISTS public.partial_writeoff_settings (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  os_waiting_status_id text NOT NULL DEFAULT '7063581',
+  os_stock_status_id text NOT NULL DEFAULT '7347355',
+  os_cancel_status_id text NOT NULL DEFAULT '7340613',
+  venda_waiting_status_id text NOT NULL DEFAULT '7063581',
+  venda_stock_status_id text NOT NULL DEFAULT '7347355',
+  venda_cancel_status_id text NOT NULL DEFAULT '7340613',
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO public.partial_writeoff_settings (singleton)
+VALUES (true)
+ON CONFLICT (singleton) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS public.partial_writeoff_operations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  budget_id text NOT NULL,
+  budget_code text NOT NULL,
+  client_id text NOT NULL,
+  client_name text NOT NULL,
+  document_type text NOT NULL CHECK (document_type IN ('os', 'venda')),
+  status text NOT NULL DEFAULT 'awaiting_separation' CHECK (status IN (
+    'awaiting_separation',
+    'partial_separation',
+    'awaiting_balance',
+    'ready_to_consolidate',
+    'consolidating',
+    'completed',
+    'cancelled',
+    'reconciliation_required'
+  )),
+  budget_snapshot jsonb NOT NULL,
+  definitive_document_id text,
+  definitive_document_code text,
+  definitive_auvo_task_id text,
+  reconciliation_reason text,
+  version integer NOT NULL DEFAULT 1,
+  created_by uuid,
+  created_by_name text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_partial_writeoff_active_budget
+ON public.partial_writeoff_operations (budget_id)
+WHERE status NOT IN ('completed', 'cancelled');
+
+CREATE INDEX IF NOT EXISTS idx_partial_writeoff_operations_status
+ON public.partial_writeoff_operations (status, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.partial_writeoff_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  operation_id uuid NOT NULL REFERENCES public.partial_writeoff_operations(id) ON DELETE CASCADE,
+  line_key text NOT NULL,
+  product_id text NOT NULL,
+  variation_id text NOT NULL DEFAULT '',
+  product_name text NOT NULL,
+  product_code text NOT NULL DEFAULT '',
+  unit text NOT NULL DEFAULT 'UN',
+  original_quantity numeric(18,6) NOT NULL CHECK (original_quantity > 0),
+  reserved_quantity numeric(18,6) NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),
+  withdrawn_quantity numeric(18,6) NOT NULL DEFAULT 0 CHECK (withdrawn_quantity >= 0),
+  line_snapshot jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT uq_partial_writeoff_item_line UNIQUE (operation_id, line_key),
+  CONSTRAINT chk_partial_writeoff_item_balance CHECK (
+    reserved_quantity + withdrawn_quantity <= original_quantity
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_partial_writeoff_items_product
+ON public.partial_writeoff_items (product_id, variation_id);
+
+CREATE TABLE IF NOT EXISTS public.partial_writeoff_batches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  operation_id uuid NOT NULL REFERENCES public.partial_writeoff_operations(id) ON DELETE CASCADE,
+  sequence integer NOT NULL,
+  idempotency_key text NOT NULL UNIQUE,
+  marker text NOT NULL UNIQUE,
+  status text NOT NULL DEFAULT 'creating' CHECK (status IN (
+    'creating',
+    'awaiting_checkout',
+    'confirming',
+    'confirmed',
+    'cancelling',
+    'cancelled',
+    'consolidated',
+    'failed',
+    'reconciliation_required'
+  )),
+  auxiliary_document_type text NOT NULL CHECK (auxiliary_document_type IN ('os', 'venda')),
+  auxiliary_document_id text,
+  auxiliary_document_code text,
+  gc_create_response jsonb,
+  error_message text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  confirmed_at timestamptz,
+  CONSTRAINT uq_partial_writeoff_batch_sequence UNIQUE (operation_id, sequence)
+);
+
+CREATE INDEX IF NOT EXISTS idx_partial_writeoff_batches_document
+ON public.partial_writeoff_batches (auxiliary_document_type, auxiliary_document_id)
+WHERE auxiliary_document_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_partial_writeoff_batches_queue
+ON public.partial_writeoff_batches (status, created_at)
+WHERE status IN ('creating', 'awaiting_checkout', 'confirming');
+
+CREATE TABLE IF NOT EXISTS public.partial_writeoff_batch_items (
+  batch_id uuid NOT NULL REFERENCES public.partial_writeoff_batches(id) ON DELETE CASCADE,
+  item_id uuid NOT NULL REFERENCES public.partial_writeoff_items(id) ON DELETE RESTRICT,
+  quantity numeric(18,6) NOT NULL CHECK (quantity > 0),
+  PRIMARY KEY (batch_id, item_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.partial_writeoff_events (
+  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  operation_id uuid NOT NULL REFERENCES public.partial_writeoff_operations(id) ON DELETE CASCADE,
+  batch_id uuid REFERENCES public.partial_writeoff_batches(id) ON DELETE SET NULL,
+  event_type text NOT NULL,
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  actor_id uuid,
+  actor_name text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_partial_writeoff_events_operation
+ON public.partial_writeoff_events (operation_id, created_at DESC);
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_touch_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_partial_writeoff_operations_updated_at ON public.partial_writeoff_operations;
+CREATE TRIGGER trg_partial_writeoff_operations_updated_at
+BEFORE UPDATE ON public.partial_writeoff_operations
+FOR EACH ROW EXECUTE FUNCTION public.partial_writeoff_touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_partial_writeoff_items_updated_at ON public.partial_writeoff_items;
+CREATE TRIGGER trg_partial_writeoff_items_updated_at
+BEFORE UPDATE ON public.partial_writeoff_items
+FOR EACH ROW EXECUTE FUNCTION public.partial_writeoff_touch_updated_at();
+
+DROP TRIGGER IF EXISTS trg_partial_writeoff_batches_updated_at ON public.partial_writeoff_batches;
+CREATE TRIGGER trg_partial_writeoff_batches_updated_at
+BEFORE UPDATE ON public.partial_writeoff_batches
+FOR EACH ROW EXECUTE FUNCTION public.partial_writeoff_touch_updated_at();
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_open_operation(
+  p_budget jsonb,
+  p_document_type text,
+  p_items jsonb,
+  p_created_by uuid DEFAULT NULL,
+  p_created_by_name text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_operation_id uuid;
+  v_budget_id text := trim(coalesce(p_budget->>'id', ''));
+  v_item jsonb;
+BEGIN
+  IF v_budget_id = '' OR trim(coalesce(p_budget->>'codigo', '')) = '' THEN
+    RAISE EXCEPTION 'INVALID_BUDGET';
+  END IF;
+  IF p_document_type NOT IN ('os', 'venda') THEN
+    RAISE EXCEPTION 'INVALID_DOCUMENT_TYPE';
+  END IF;
+  IF jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'EMPTY_ITEMS';
+  END IF;
+
+  SELECT id INTO v_operation_id
+  FROM public.partial_writeoff_operations
+  WHERE budget_id = v_budget_id
+    AND status NOT IN ('completed', 'cancelled')
+  FOR UPDATE;
+
+  IF v_operation_id IS NOT NULL THEN
+    RETURN v_operation_id;
+  END IF;
+
+  INSERT INTO public.partial_writeoff_operations (
+    budget_id, budget_code, client_id, client_name, document_type,
+    budget_snapshot, created_by, created_by_name
+  ) VALUES (
+    v_budget_id,
+    trim(p_budget->>'codigo'),
+    trim(coalesce(p_budget->>'cliente_id', '')),
+    trim(coalesce(p_budget->>'nome_cliente', '')),
+    p_document_type,
+    p_budget,
+    p_created_by,
+    nullif(trim(coalesce(p_created_by_name, '')), '')
+  ) RETURNING id INTO v_operation_id;
+
+  FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
+  LOOP
+    INSERT INTO public.partial_writeoff_items (
+      operation_id, line_key, product_id, variation_id, product_name,
+      product_code, unit, original_quantity, line_snapshot
+    ) VALUES (
+      v_operation_id,
+      trim(v_item->>'line_key'),
+      trim(v_item->>'product_id'),
+      trim(coalesce(v_item->>'variation_id', '')),
+      trim(coalesce(v_item->>'product_name', 'Produto')),
+      trim(coalesce(v_item->>'product_code', '')),
+      trim(coalesce(v_item->>'unit', 'UN')),
+      (v_item->>'original_quantity')::numeric,
+      coalesce(v_item->'line_snapshot', '{}'::jsonb)
+    );
+  END LOOP;
+
+  INSERT INTO public.partial_writeoff_events (
+    operation_id, event_type, payload, actor_id, actor_name
+  ) VALUES (
+    v_operation_id, 'operation_opened', jsonb_build_object('document_type', p_document_type),
+    p_created_by, p_created_by_name
+  );
+
+  RETURN v_operation_id;
+EXCEPTION
+  WHEN unique_violation THEN
+    SELECT id INTO v_operation_id
+    FROM public.partial_writeoff_operations
+    WHERE budget_id = v_budget_id
+      AND status NOT IN ('completed', 'cancelled');
+    IF v_operation_id IS NOT NULL THEN RETURN v_operation_id; END IF;
+    RAISE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_reserve_batch(
+  p_operation_id uuid,
+  p_idempotency_key text,
+  p_items jsonb,
+  p_actor_id uuid DEFAULT NULL,
+  p_actor_name text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_batch_id uuid;
+  v_sequence integer;
+  v_document_type text;
+  v_status text;
+  v_item jsonb;
+  v_item_id uuid;
+  v_quantity numeric;
+  v_available numeric;
+  v_marker text;
+BEGIN
+  SELECT id INTO v_batch_id
+  FROM public.partial_writeoff_batches
+  WHERE idempotency_key = p_idempotency_key;
+  IF v_batch_id IS NOT NULL THEN
+    RETURN jsonb_build_object('batch_id', v_batch_id, 'existing', true);
+  END IF;
+
+  SELECT document_type, status
+  INTO v_document_type, v_status
+  FROM public.partial_writeoff_operations
+  WHERE id = p_operation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'OPERATION_NOT_FOUND'; END IF;
+  IF v_status NOT IN ('awaiting_separation', 'partial_separation', 'awaiting_balance') THEN
+    RAISE EXCEPTION 'OPERATION_NOT_RESERVABLE:%', v_status;
+  END IF;
+  IF jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
+    RAISE EXCEPTION 'EMPTY_BATCH';
+  END IF;
+
+  SELECT coalesce(max(sequence), 0) + 1 INTO v_sequence
+  FROM public.partial_writeoff_batches
+  WHERE operation_id = p_operation_id;
+
+  v_marker := 'PP-PARCIAL-' || upper(v_document_type) || '-' || replace(p_operation_id::text, '-', '') || '-' || v_sequence;
+
+  INSERT INTO public.partial_writeoff_batches (
+    operation_id, sequence, idempotency_key, marker, auxiliary_document_type
+  ) VALUES (
+    p_operation_id, v_sequence, p_idempotency_key, v_marker, v_document_type
+  ) RETURNING id INTO v_batch_id;
+
+  FOR v_item IN SELECT value FROM jsonb_array_elements(p_items)
+  LOOP
+    v_item_id := (v_item->>'item_id')::uuid;
+    v_quantity := (v_item->>'quantity')::numeric;
+    IF v_quantity <= 0 THEN RAISE EXCEPTION 'INVALID_QUANTITY'; END IF;
+
+    SELECT original_quantity - reserved_quantity - withdrawn_quantity
+    INTO v_available
+    FROM public.partial_writeoff_items
+    WHERE id = v_item_id AND operation_id = p_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN RAISE EXCEPTION 'ITEM_NOT_FOUND'; END IF;
+    IF v_quantity > v_available THEN
+      RAISE EXCEPTION 'QUANTITY_EXCEEDS_PENDING:%:%', v_quantity, v_available;
+    END IF;
+
+    UPDATE public.partial_writeoff_items
+    SET reserved_quantity = reserved_quantity + v_quantity
+    WHERE id = v_item_id;
+
+    INSERT INTO public.partial_writeoff_batch_items (batch_id, item_id, quantity)
+    VALUES (v_batch_id, v_item_id, v_quantity);
+  END LOOP;
+
+  UPDATE public.partial_writeoff_operations
+  SET status = 'partial_separation', version = version + 1
+  WHERE id = p_operation_id;
+
+  INSERT INTO public.partial_writeoff_events (
+    operation_id, batch_id, event_type, payload, actor_id, actor_name
+  ) VALUES (
+    p_operation_id, v_batch_id, 'batch_reserved', p_items, p_actor_id, p_actor_name
+  );
+
+  RETURN jsonb_build_object('batch_id', v_batch_id, 'existing', false);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_release_batch(
+  p_batch_id uuid,
+  p_error_message text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_operation_id uuid;
+  v_status text;
+BEGIN
+  SELECT operation_id, status INTO v_operation_id, v_status
+  FROM public.partial_writeoff_batches
+  WHERE id = p_batch_id
+  FOR UPDATE;
+  IF NOT FOUND OR v_status NOT IN ('creating', 'failed') THEN RETURN; END IF;
+
+  UPDATE public.partial_writeoff_items i
+  SET reserved_quantity = greatest(0, i.reserved_quantity - bi.quantity)
+  FROM public.partial_writeoff_batch_items bi
+  WHERE bi.batch_id = p_batch_id AND bi.item_id = i.id;
+
+  UPDATE public.partial_writeoff_batches
+  SET status = 'failed', error_message = left(p_error_message, 1000)
+  WHERE id = p_batch_id;
+
+  UPDATE public.partial_writeoff_operations o
+  SET status = CASE
+    WHEN EXISTS (
+      SELECT 1 FROM public.partial_writeoff_items i
+      WHERE i.operation_id = o.id AND i.withdrawn_quantity > 0
+    ) THEN 'awaiting_balance'
+    ELSE 'awaiting_separation'
+  END,
+  version = version + 1
+  WHERE o.id = v_operation_id;
+
+  INSERT INTO public.partial_writeoff_events (operation_id, batch_id, event_type, payload)
+  VALUES (v_operation_id, p_batch_id, 'batch_failed', jsonb_build_object('error', p_error_message));
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_attach_auxiliary(
+  p_batch_id uuid,
+  p_document_id text,
+  p_document_code text,
+  p_gc_response jsonb DEFAULT '{}'::jsonb
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_operation_id uuid;
+BEGIN
+  UPDATE public.partial_writeoff_batches
+  SET status = 'awaiting_checkout',
+      auxiliary_document_id = p_document_id,
+      auxiliary_document_code = p_document_code,
+      gc_create_response = p_gc_response,
+      error_message = NULL
+  WHERE id = p_batch_id AND status = 'creating'
+  RETURNING operation_id INTO v_operation_id;
+
+  IF v_operation_id IS NULL THEN RAISE EXCEPTION 'BATCH_NOT_CREATING'; END IF;
+  INSERT INTO public.partial_writeoff_events (operation_id, batch_id, event_type, payload)
+  VALUES (v_operation_id, p_batch_id, 'auxiliary_created', jsonb_build_object(
+    'document_id', p_document_id, 'document_code', p_document_code
+  ));
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_claim_confirmation(p_batch_id uuid)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_status text;
+BEGIN
+  SELECT status INTO v_status
+  FROM public.partial_writeoff_batches
+  WHERE id = p_batch_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'BATCH_NOT_FOUND'; END IF;
+  IF v_status = 'confirmed' THEN RETURN 'confirmed'; END IF;
+  IF v_status <> 'awaiting_checkout' THEN RAISE EXCEPTION 'BATCH_NOT_CONFIRMABLE:%', v_status; END IF;
+  UPDATE public.partial_writeoff_batches SET status = 'confirming' WHERE id = p_batch_id;
+  RETURN 'confirming';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_finish_confirmation(
+  p_batch_id uuid,
+  p_success boolean,
+  p_error_message text DEFAULT NULL,
+  p_actor_id uuid DEFAULT NULL,
+  p_actor_name text DEFAULT NULL
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_operation_id uuid;
+  v_operation_status text;
+BEGIN
+  SELECT operation_id INTO v_operation_id
+  FROM public.partial_writeoff_batches
+  WHERE id = p_batch_id AND status = 'confirming'
+  FOR UPDATE;
+  IF v_operation_id IS NULL THEN RAISE EXCEPTION 'BATCH_NOT_CONFIRMING'; END IF;
+
+  IF NOT p_success THEN
+    UPDATE public.partial_writeoff_batches
+    SET status = 'reconciliation_required', error_message = left(p_error_message, 1000)
+    WHERE id = p_batch_id;
+    UPDATE public.partial_writeoff_operations
+    SET status = 'reconciliation_required', reconciliation_reason = left(p_error_message, 1000), version = version + 1
+    WHERE id = v_operation_id;
+    INSERT INTO public.partial_writeoff_events (operation_id, batch_id, event_type, payload, actor_id, actor_name)
+    VALUES (v_operation_id, p_batch_id, 'confirmation_reconciliation_required', jsonb_build_object('error', p_error_message), p_actor_id, p_actor_name);
+    RETURN 'reconciliation_required';
+  END IF;
+
+  UPDATE public.partial_writeoff_items i
+  SET reserved_quantity = greatest(0, i.reserved_quantity - bi.quantity),
+      withdrawn_quantity = i.withdrawn_quantity + bi.quantity
+  FROM public.partial_writeoff_batch_items bi
+  WHERE bi.batch_id = p_batch_id AND bi.item_id = i.id;
+
+  UPDATE public.partial_writeoff_batches
+  SET status = 'confirmed', confirmed_at = now(), error_message = NULL
+  WHERE id = p_batch_id;
+
+  IF EXISTS (
+    SELECT 1 FROM public.partial_writeoff_items
+    WHERE operation_id = v_operation_id
+      AND original_quantity > withdrawn_quantity
+  ) THEN
+    v_operation_status := 'awaiting_balance';
+  ELSE
+    v_operation_status := 'ready_to_consolidate';
+  END IF;
+
+  UPDATE public.partial_writeoff_operations
+  SET status = v_operation_status, version = version + 1
+  WHERE id = v_operation_id;
+
+  INSERT INTO public.partial_writeoff_events (operation_id, batch_id, event_type, payload, actor_id, actor_name)
+  VALUES (v_operation_id, p_batch_id, 'batch_confirmed', '{}'::jsonb, p_actor_id, p_actor_name);
+  RETURN v_operation_status;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_claim_consolidation(p_operation_id uuid)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_status text;
+BEGIN
+  SELECT status INTO v_status
+  FROM public.partial_writeoff_operations
+  WHERE id = p_operation_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'OPERATION_NOT_FOUND'; END IF;
+  IF v_status = 'completed' THEN RETURN 'completed'; END IF;
+  IF v_status <> 'ready_to_consolidate' THEN
+    RAISE EXCEPTION 'OPERATION_NOT_CONSOLIDATABLE:%', v_status;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.partial_writeoff_items
+    WHERE operation_id = p_operation_id
+      AND (withdrawn_quantity <> original_quantity OR reserved_quantity <> 0)
+  ) THEN
+    RAISE EXCEPTION 'OPERATION_HAS_PENDING_BALANCE';
+  END IF;
+  UPDATE public.partial_writeoff_operations
+  SET status = 'consolidating', version = version + 1, reconciliation_reason = NULL
+  WHERE id = p_operation_id;
+  INSERT INTO public.partial_writeoff_events (operation_id, event_type)
+  VALUES (p_operation_id, 'consolidation_started');
+  RETURN 'consolidating';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.partial_writeoff_finish_consolidation(
+  p_operation_id uuid,
+  p_success boolean,
+  p_document_id text DEFAULT NULL,
+  p_document_code text DEFAULT NULL,
+  p_auvo_task_id text DEFAULT NULL,
+  p_error_message text DEFAULT NULL,
+  p_actor_id uuid DEFAULT NULL,
+  p_actor_name text DEFAULT NULL
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_status text;
+BEGIN
+  SELECT status INTO v_status
+  FROM public.partial_writeoff_operations
+  WHERE id = p_operation_id
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'OPERATION_NOT_FOUND'; END IF;
+  IF v_status = 'completed' THEN RETURN 'completed'; END IF;
+  IF v_status <> 'consolidating' THEN RAISE EXCEPTION 'OPERATION_NOT_CONSOLIDATING:%', v_status; END IF;
+
+  IF p_success THEN
+    UPDATE public.partial_writeoff_operations
+    SET status = 'completed',
+        definitive_document_id = p_document_id,
+        definitive_document_code = p_document_code,
+        definitive_auvo_task_id = p_auvo_task_id,
+        reconciliation_reason = NULL,
+        completed_at = now(),
+        version = version + 1
+    WHERE id = p_operation_id;
+    UPDATE public.partial_writeoff_batches
+    SET status = 'consolidated'
+    WHERE operation_id = p_operation_id AND status IN ('confirmed', 'cancelled');
+    INSERT INTO public.partial_writeoff_events (
+      operation_id, event_type, payload, actor_id, actor_name
+    ) VALUES (
+      p_operation_id, 'consolidation_completed', jsonb_build_object(
+        'document_id', p_document_id,
+        'document_code', p_document_code,
+        'auvo_task_id', p_auvo_task_id
+      ), p_actor_id, p_actor_name
+    );
+    RETURN 'completed';
+  END IF;
+
+  UPDATE public.partial_writeoff_operations
+  SET status = 'reconciliation_required',
+      reconciliation_reason = left(p_error_message, 1000),
+      version = version + 1
+  WHERE id = p_operation_id;
+  INSERT INTO public.partial_writeoff_events (
+    operation_id, event_type, payload, actor_id, actor_name
+  ) VALUES (
+    p_operation_id, 'consolidation_reconciliation_required',
+    jsonb_build_object('error', p_error_message), p_actor_id, p_actor_name
+  );
+  RETURN 'reconciliation_required';
+END;
+$$;
+
+CREATE OR REPLACE VIEW public.partial_writeoff_item_balances AS
+SELECT
+  i.*,
+  (i.original_quantity - i.withdrawn_quantity) AS pending_purchase_quantity,
+  (i.original_quantity - i.withdrawn_quantity - i.reserved_quantity) AS available_to_reserve_quantity
+FROM public.partial_writeoff_items i;
+
+ALTER TABLE public.partial_writeoff_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partial_writeoff_operations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partial_writeoff_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partial_writeoff_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partial_writeoff_batch_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.partial_writeoff_events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Authenticated read partial settings" ON public.partial_writeoff_settings;
+CREATE POLICY "Authenticated read partial settings" ON public.partial_writeoff_settings
+FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Authenticated read partial operations" ON public.partial_writeoff_operations;
+CREATE POLICY "Authenticated read partial operations" ON public.partial_writeoff_operations
+FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Authenticated read partial items" ON public.partial_writeoff_items;
+CREATE POLICY "Authenticated read partial items" ON public.partial_writeoff_items
+FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Authenticated read partial batches" ON public.partial_writeoff_batches;
+CREATE POLICY "Authenticated read partial batches" ON public.partial_writeoff_batches
+FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Authenticated read partial batch items" ON public.partial_writeoff_batch_items;
+CREATE POLICY "Authenticated read partial batch items" ON public.partial_writeoff_batch_items
+FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "Authenticated read partial events" ON public.partial_writeoff_events;
+CREATE POLICY "Authenticated read partial events" ON public.partial_writeoff_events
+FOR SELECT TO authenticated USING (true);
+
+GRANT SELECT ON public.partial_writeoff_settings TO authenticated;
+GRANT SELECT ON public.partial_writeoff_operations TO authenticated;
+GRANT SELECT ON public.partial_writeoff_items TO authenticated;
+GRANT SELECT ON public.partial_writeoff_batches TO authenticated;
+GRANT SELECT ON public.partial_writeoff_batch_items TO authenticated;
+GRANT SELECT ON public.partial_writeoff_events TO authenticated;
+GRANT SELECT ON public.partial_writeoff_item_balances TO authenticated;
+
+GRANT ALL ON public.partial_writeoff_settings TO service_role;
+GRANT ALL ON public.partial_writeoff_operations TO service_role;
+GRANT ALL ON public.partial_writeoff_items TO service_role;
+GRANT ALL ON public.partial_writeoff_batches TO service_role;
+GRANT ALL ON public.partial_writeoff_batch_items TO service_role;
+GRANT ALL ON public.partial_writeoff_events TO service_role;
+GRANT SELECT ON public.partial_writeoff_item_balances TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.partial_writeoff_events_id_seq TO service_role;
+
+REVOKE ALL ON FUNCTION public.partial_writeoff_open_operation(jsonb, text, jsonb, uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.partial_writeoff_reserve_batch(uuid, text, jsonb, uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.partial_writeoff_release_batch(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.partial_writeoff_attach_auxiliary(uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.partial_writeoff_claim_confirmation(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.partial_writeoff_finish_confirmation(uuid, boolean, text, uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.partial_writeoff_claim_consolidation(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.partial_writeoff_finish_consolidation(uuid, boolean, text, text, text, text, uuid, text) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_open_operation(jsonb, text, jsonb, uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_reserve_batch(uuid, text, jsonb, uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_release_batch(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_attach_auxiliary(uuid, text, text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_claim_confirmation(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_finish_confirmation(uuid, boolean, text, uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_claim_consolidation(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.partial_writeoff_finish_consolidation(uuid, boolean, text, text, text, text, uuid, text) TO service_role;
+
+COMMENT ON TABLE public.partial_writeoff_operations IS
+  'Documento-mãe e estado consolidado do fluxo de baixa parcial.';
+COMMENT ON TABLE public.partial_writeoff_batches IS
+  'Cada lote representa um documento auxiliar enviado ao Checkout.';
+COMMENT ON COLUMN public.partial_writeoff_items.withdrawn_quantity IS
+  'Quantidade já confirmada no Checkout e movimentada no GestãoClick.';

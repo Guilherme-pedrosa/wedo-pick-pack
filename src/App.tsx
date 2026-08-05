@@ -18,6 +18,7 @@ import CheckinLogsPage from "./pages/controle/CheckinLogsPage";
 import BaixaLogsPage from "./pages/controle/BaixaLogsPage";
 import HandoffHistoryPage from "./pages/controle/HandoffHistoryPage";
 import CheckoutPage from "./pages/CheckoutPage";
+import PartialWriteoffPage from "./pages/PartialWriteoffPage";
 import ConfigPage from "./pages/ConfigPage";
 import InventoryPolicyPage from "./pages/InventoryPolicyPage";
 import InventoryAnalysisPage from "./pages/InventoryAnalysisPage";
@@ -109,6 +110,7 @@ function AuthenticatedApp() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="/baixa-parcial" element={<PartialWriteoffPage />} />
         <Route path="/separations" element={<SeparationsPage />} />
         
         <Route path="/devolucoes" element={<ReturnLogsPage />} />

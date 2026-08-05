@@ -77,6 +77,8 @@ async function fetchQueueForStatuses(
       const json = await gc(path);
       const arr = Array.isArray(json?.data) ? json.data : [];
       for (const item of arr) {
+        const internalNote = `${item?.observacoes_interna || ''} ${item?.observacoes || ''}`;
+        if (internalNote.includes('PP-PARCIAL-')) continue;
         out.push({
           type,
           id: String(item.id),

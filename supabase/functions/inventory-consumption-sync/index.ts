@@ -189,6 +189,21 @@ async function processDocument(
 ) {
   const docId = String(doc.id);
 
+  // Documentos auxiliares da baixa parcial movimentam o estoque no GC, mas o
+  // consumo definitivo pertence ao documento-mãe. Ignorá-los aqui evita
+  // duplicar histórico, curva de consumo e sugestão de compra.
+  const { data: partialBatch } = await supabase
+    .from('partial_writeoff_batches')
+    .select('id')
+    .eq('auxiliary_document_type', docType)
+    .eq('auxiliary_document_id', docId)
+    .limit(1)
+    .maybeSingle();
+  if (partialBatch) {
+    stats.skipped++;
+    return;
+  }
+
   const { data: existing } = await supabase
     .from('doc_stock_effect')
     .select('id, debited')

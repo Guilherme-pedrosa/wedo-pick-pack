@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -116,6 +118,35 @@ Deno.serve(async (req: Request) => {
 
   try {
     console.log('[COMPRAS-AUTO] Starting automated scan...');
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+    const { data: partialOperations } = await admin
+      .from('partial_writeoff_operations')
+      .select('id, budget_id')
+      .not('status', 'in', '(completed,cancelled)');
+    const partialOperationIds = (partialOperations || []).map((operation: any) => operation.id);
+    const activePartialBudgetIds = new Set((partialOperations || []).map((operation: any) => String(operation.budget_id)));
+    const partialBudgetByOperation = new Map((partialOperations || []).map((operation: any) => [operation.id, String(operation.budget_id)]));
+    const partialPendingByBudget = new Map<string, Map<string, number>>();
+    const partialAuxiliaryOSIds = new Set<string>();
+    if (partialOperationIds.length > 0) {
+      const [{ data: partialItems }, { data: partialBatches }] = await Promise.all([
+        admin.from('partial_writeoff_item_balances').select('operation_id, product_id, variation_id, pending_purchase_quantity').in('operation_id', partialOperationIds),
+        admin.from('partial_writeoff_batches').select('auxiliary_document_type, auxiliary_document_id').in('operation_id', partialOperationIds),
+      ]);
+      for (const item of partialItems || []) {
+        const budgetId = partialBudgetByOperation.get(item.operation_id);
+        if (!budgetId) continue;
+        const key = makeProdutoKey(item.product_id, item.variation_id);
+        if (!partialPendingByBudget.has(budgetId)) partialPendingByBudget.set(budgetId, new Map());
+        const demand = partialPendingByBudget.get(budgetId)!;
+        demand.set(key, (demand.get(key) || 0) + parseDecimal(item.pending_purchase_quantity));
+      }
+      for (const batch of partialBatches || []) {
+        if (batch.auxiliary_document_type === 'os' && batch.auxiliary_document_id) {
+          partialAuxiliaryOSIds.add(String(batch.auxiliary_document_id));
+        }
+      }
+    }
 
     // Step 1: Resolve budget status IDs by name
     const statusOrcRes = await gcFetch('/api/situacoes_orcamentos', AT, ST);
@@ -156,6 +187,7 @@ Deno.serve(async (req: Request) => {
       const os = item?.OrdemServico ?? item?.ordem_servico ?? item?.ordemServico ?? item;
       const osCodigo = normalizeId(os?.codigo) || normalizeId(os?.numero) || normalizeId(os?.id) || '—';
       const osId = normalizeId(os?.id);
+      if (osId && partialAuxiliaryOSIds.has(osId)) continue;
       const nomeSituacao = String(os?.nome_situacao ?? '');
       const nomeCliente = String(os?.nome_cliente ?? '');
       const normalizedSituacao = normalizeForMatch(nomeSituacao);
@@ -194,7 +226,7 @@ Deno.serve(async (req: Request) => {
     const eligibleBudgets = allBudgets.filter(o => {
       const byFlags = isConvertedBudgetFlag(o.situacao_financeiro) || isConvertedBudgetFlag(o.situacao_estoque);
       const osMatch = osIndex[String(o.codigo)];
-      return !byFlags && !osMatch;
+      return activePartialBudgetIds.has(String(o.id)) || (!byFlags && !osMatch);
     });
     const convertedCount = allBudgets.length - eligibleBudgets.length;
     console.log(`[COMPRAS-AUTO] ${eligibleBudgets.length} eligible, ${convertedCount} converted`);
@@ -235,13 +267,21 @@ Deno.serve(async (req: Request) => {
     }>();
 
     for (const orc of eligibleBudgets) {
+      const partialDemand = partialPendingByBudget.get(String(orc.id));
+      const processedPartialKeys = new Set<string>();
       for (const p of orc.produtos || []) {
         const prod = p?.produto;
         const produtoId = normalizeId(prod?.produto_id);
         if (!produtoId) continue;
         const variacaoId = normalizeId(prod?.variacao_id);
         const key = makeProdutoKey(produtoId, variacaoId);
-        const qty = parseDecimal(prod?.quantidade);
+        let qty = parseDecimal(prod?.quantidade);
+        if (partialDemand) {
+          if (processedPartialKeys.has(key)) continue;
+          processedPartialKeys.add(key);
+          qty = partialDemand.get(key) ?? 0;
+        }
+        if (qty <= 0) continue;
         if (!productMap.has(key)) {
           productMap.set(key, {
             produto_id: produtoId, variacao_id: variacaoId,
@@ -415,8 +455,7 @@ Deno.serve(async (req: Request) => {
     console.log(`[COMPRAS-AUTO] Done in ${durationMs}ms: ${itensList.length} items to buy`);
 
     // Step 10: Save snapshot to DB
-    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-    const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
+    const supabase = admin;
 
     const { error: insertError } = await supabase.from('compras_snapshots').insert({
       total_produtos_sem_estoque: itensList.length,

@@ -155,6 +155,7 @@ function gcOrderUrl(osId: string): string {
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
   const [agendaDate, setAgendaDate] = useState(todayISO);
+  const [dateFilterActive, setDateFilterActive] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState<AgendaFilter>('all');
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [excludedSituations, setExcludedSituations] = useState<Set<string>>(new Set());
@@ -309,6 +310,7 @@ export default function AgendaOSPanel() {
         || String(os.codigo).includes(search.trim())
         || row.taskIds.some((id) => id.includes(search.trim()));
       const matchesAgenda = agendaFilter === 'all' || agendaFilter === bucket;
+      const matchesDate = !dateFilterActive || datePart(task?.task_date) === agendaDate;
       const matchesTechnician = technicianFilter === 'all'
         || (technicianFilter === 'none' && !task?.technician_name)
         || task?.technician_name === technicianFilter;
@@ -344,6 +346,7 @@ export default function AgendaOSPanel() {
         || (repairLocationFilter === 'sem_info' && !repairLocation);
       return matchesSearch
         && matchesAgenda
+        && matchesDate
         && matchesTechnician
         && matchesSituation
         && matchesSeparation
@@ -358,7 +361,9 @@ export default function AgendaOSPanel() {
       return String(b.os.codigo).localeCompare(String(a.os.codigo), 'pt-BR', { numeric: true });
     });
   }, [
+    agendaDate,
     agendaFilter,
+    dateFilterActive,
     excludedSituations,
     executionFilter,
     repairLocationFilter,
@@ -593,7 +598,36 @@ export default function AgendaOSPanel() {
       <Card className="space-y-4 p-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <FilterField label="Data da tarefa de execução" icon={Calendar}>
-            <Input type="date" value={agendaDate} onChange={(event) => setAgendaDate(event.target.value)} />
+            <div className="space-y-1">
+              <Input
+                type="date"
+                value={agendaDate}
+                onChange={(event) => {
+                  setAgendaDate(event.target.value);
+                  if (event.target.value) setDateFilterActive(true);
+                }}
+              />
+              <div className="flex items-center justify-between gap-2">
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={dateFilterActive}
+                    onChange={(event) => setDateFilterActive(event.target.checked)}
+                  />
+                  Filtrar apenas esta data
+                </label>
+                {dateFilterActive && (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline"
+                    onClick={() => setDateFilterActive(false)}
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
           </FilterField>
           <FilterField label="Técnico da execução" icon={User}>
             <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={technicianFilter} onChange={(event) => setTechnicianFilter(event.target.value)}>

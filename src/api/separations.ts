@@ -110,14 +110,16 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
     throw new Error('AUTH_REQUIRED');
   }
 
+  const payload = {
+    ...input,
+    user_id: user.id,
+    client_id: input.client_id || null,
+    items: input.items as unknown as never,
+  };
+
   const { data, error } = await supabase
     .from('separations')
-    .insert({
-      user_id: user.id,
-      client_id: input.client_id || null,
-      ...input,
-      items: input.items,
-    })
+    .insert(payload)
     .select()
     .single();
 

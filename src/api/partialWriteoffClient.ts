@@ -5,6 +5,7 @@ import type {
 } from './partialWriteoff';
 
 type DocumentType = 'os' | 'venda';
+type BudgetKind = PartialBudgetSearchResult['budget_kind'];
 type AuthContext = {
   id: string;
   email: string;
@@ -93,9 +94,20 @@ function lineKey(product: any, index: number): string {
   return `${normalizeId(product.produto_id)}::${normalizeId(product.variacao_id)}::${index}`;
 }
 
-function documentTypeForBudget(budget: any): DocumentType {
+export function documentTypeForBudgetKind(kind: BudgetKind | undefined, budget: any): DocumentType {
+  if (kind === 'produto') return 'venda';
+  if (kind === 'servico') return 'os';
   const hasServices = Array.isArray(budget?.servicos) && budget.servicos.length > 0;
   return hasServices || numberValue(budget?.valor_servicos) > 0 ? 'os' : 'venda';
+}
+
+export function isBudgetEligibleForPartialWriteoff(budget: any): boolean {
+  const status = String(budget?.nome_situacao || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR');
+  const generatedDocument = /\b(os|venda)\b.*\bgerad[ao]\b|\bgerad[ao]\b.*\b(os|venda)\b/.test(status);
+  return !generatedDocument;
 }
 
 function operationItemsFromBudget(budget: any) {
@@ -120,27 +132,42 @@ async function fetchBudget(id: string): Promise<any> {
   return response.data;
 }
 
-async function searchBudgets(term: string): Promise<any[]> {
+async function searchBudgets(term: string): Promise<Array<any & { budget_kind: BudgetKind }>> {
   const value = term.trim();
   if (value.length < 2) throw new Error('SEARCH_TOO_SHORT');
   const encoded = encodeURIComponent(value);
-  const paths = [
-    `/api/orcamentos?pagina=1&limite=100&codigo=${encoded}`,
-    `/api/orcamentos?pagina=1&limite=100&nome=${encoded}`,
-    `/api/orcamentos?pagina=1&limite=100&pesquisa=${encoded}`,
+  const sources: Array<{ kind: BudgetKind; collection: string }> = [
+    { kind: 'produto', collection: '/api/orcamentos_produtos' },
+    { kind: 'servico', collection: '/api/orcamentos_servicos' },
   ];
-  const settled = await Promise.allSettled(paths.map((path) => gcRequest(path)));
-  const rows = settled.flatMap((result) => result.status === 'fulfilled' ? result.value?.data || [] : []);
+  const requests = sources.flatMap(source => [
+    { ...source, path: `${source.collection}?pagina=1&limite=100&codigo=${encoded}` },
+    { ...source, path: `${source.collection}?pagina=1&limite=100&nome=${encoded}` },
+    { ...source, path: `${source.collection}?pagina=1&limite=100&pesquisa=${encoded}` },
+  ]);
+  const settled = await Promise.allSettled(requests.map(({ path }) => gcRequest(path)));
+  const rows = settled.flatMap((result, index) => result.status === 'fulfilled'
+    ? (result.value?.data || []).map((row: any) => ({ ...row, budget_kind: requests[index].kind }))
+    : []);
   const normalized = value.toLocaleLowerCase('pt-BR').replace(/\D/g, '');
   const byId = new Map<string, any>();
   for (const row of rows) {
     const haystack = `${row.codigo || ''} ${row.nome_cliente || ''} ${row.cpf_cnpj || ''} ${row.cnpj || ''}`.toLocaleLowerCase('pt-BR');
     const digits = haystack.replace(/\D/g, '');
     if (haystack.includes(value.toLocaleLowerCase('pt-BR')) || (normalized.length >= 3 && digits.includes(normalized))) {
-      byId.set(String(row.id), row);
+      byId.set(`${row.budget_kind}:${row.id}`, row);
     }
   }
-  return [...byId.values()].slice(0, 50);
+  return [...byId.values()]
+    .filter(isBudgetEligibleForPartialWriteoff)
+    .sort((a, b) => {
+      const exactA = String(a.codigo || '') === value ? 0 : 1;
+      const exactB = String(b.codigo || '') === value ? 0 : 1;
+      if (exactA !== exactB) return exactA - exactB;
+      if (a.budget_kind !== b.budget_kind) return a.budget_kind === 'produto' ? -1 : 1;
+      return String(b.codigo || '').localeCompare(String(a.codigo || ''), 'pt-BR', { numeric: true });
+    })
+    .slice(0, 50);
 }
 
 function unwrapProductDetail(response: any): any {
@@ -345,9 +372,13 @@ function sameQuantities(expected: Map<string, number>, actual: Map<string, numbe
 
 async function handleOpenOperation(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
   const budget = await fetchBudget(String(body.budget_id || ''));
+  if (!isBudgetEligibleForPartialWriteoff(budget)) throw new Error('BUDGET_ALREADY_HAS_DOCUMENT');
   const items = operationItemsFromBudget(budget);
   if (!items.length) throw new Error('BUDGET_HAS_NO_STOCK_ITEMS');
-  const type = documentTypeForBudget(budget);
+  const kind: BudgetKind | undefined = body.budget_kind === 'produto' || body.budget_kind === 'servico'
+    ? body.budget_kind
+    : undefined;
+  const type = documentTypeForBudgetKind(kind, budget);
   const { data, error } = await cloud.rpc('partial_writeoff_open_operation', {
     p_budget: budget,
     p_document_type: type,

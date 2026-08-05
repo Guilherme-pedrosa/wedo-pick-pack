@@ -58,6 +58,7 @@ function friendlyError(error: unknown) {
   if (message.includes('CONFIGURE_OS_CONCLUSION_STATUS')) return 'Configure a situação padrão de conclusão de OS antes de consolidar.';
   if (message.includes('CONFIGURE_AUVO_USER_ID')) return 'Configure o ID de usuário Auvo antes de consolidar.';
   if (message.includes('SEARCH_TOO_SHORT')) return 'Digite pelo menos 2 caracteres para buscar.';
+  if (message.includes('BUDGET_ALREADY_HAS_DOCUMENT')) return 'Este orçamento já gerou OS ou venda e não pode entrar na baixa parcial.';
   return message;
 }
 
@@ -159,7 +160,7 @@ export default function PartialWriteoffPage() {
     }
     setOpeningId(budget.id);
     try {
-      const operation = await openPartialOperation(budget.id);
+      const operation = await openPartialOperation(budget.id, budget.budget_kind);
       await refresh();
       setSelectedId(operation.id);
       toast.success(`Orçamento #${operation.budget_code} entrou no fluxo de baixa parcial.`);
@@ -259,9 +260,14 @@ export default function PartialWriteoffPage() {
             {results.length > 0 && (
               <div className="grid gap-2 md:grid-cols-2">
                 {results.map(budget => (
-                  <div key={budget.id} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
+                  <div key={`${budget.budget_kind}:${budget.id}`} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3">
                     <div className="min-w-0">
-                      <p className="font-semibold">Orçamento #{budget.codigo}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">Orçamento #{budget.codigo}</p>
+                        <Badge variant="outline">
+                          {budget.budget_kind === 'produto' ? 'Produto' : 'Serviço'}
+                        </Badge>
+                      </div>
                       <p className="truncate text-sm">{budget.nome_cliente}</p>
                       <p className="text-xs text-muted-foreground">{budget.nome_situacao} · R$ {budget.valor_total}</p>
                     </div>

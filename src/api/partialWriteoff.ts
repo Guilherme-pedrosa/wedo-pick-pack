@@ -67,6 +67,7 @@ export interface PartialWriteoffOperation {
 export interface PartialBudgetSearchResult {
   id: string;
   codigo: string;
+  budget_kind: 'produto' | 'servico';
   cliente_id: string;
   nome_cliente: string;
   data: string;
@@ -96,8 +97,15 @@ export async function searchPartialBudgets(term: string): Promise<PartialBudgetS
   return data.budgets || [];
 }
 
-export async function openPartialOperation(budgetId: string): Promise<PartialWriteoffOperation> {
-  const data = await invoke<{ operation: PartialWriteoffOperation }>({ action: 'open_operation', budget_id: budgetId });
+export async function openPartialOperation(
+  budgetId: string,
+  budgetKind: PartialBudgetSearchResult['budget_kind'],
+): Promise<PartialWriteoffOperation> {
+  const data = await invoke<{ operation: PartialWriteoffOperation }>({
+    action: 'open_operation',
+    budget_id: budgetId,
+    budget_kind: budgetKind,
+  });
   return data.operation;
 }
 

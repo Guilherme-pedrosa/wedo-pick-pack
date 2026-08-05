@@ -58,8 +58,11 @@ function friendlyError(error: unknown) {
   if (message.includes('CONFIGURE_OS_CONCLUSION_STATUS')) return 'Configure a situação padrão de conclusão de OS antes de consolidar.';
   if (message.includes('CONFIGURE_AUVO_USER_ID')) return 'Configure o ID de usuário Auvo antes de consolidar.';
   if (message.includes('SEARCH_TOO_SHORT')) return 'Digite pelo menos 2 caracteres para buscar.';
-  if (message.includes('SEARCH_BUDGET_KIND_REQUIRED')) return 'Escolha se o orçamento é de Produto ou Serviço.';
+  if (message.includes('SEARCH_BUDGET_KIND_REQUIRED')) return 'Escolha Orçamento de produto, Orçamento de serviço ou Venda.';
   if (message.includes('BUDGET_ALREADY_HAS_DOCUMENT')) return 'Este orçamento já gerou OS ou venda e não pode entrar na baixa parcial.';
+  if (message.includes('SALE_ALREADY_MOVED_STOCK')) return 'Esta venda já movimentou estoque e não pode entrar na baixa parcial.';
+  if (message.includes('SALE_FINAL_STOCK_NOT_APPLIED')) return 'A venda não confirmou a baixa definitiva de estoque. A operação foi travada para conferência.';
+  if (message.includes('SALE_FINAL_FINANCIAL_NOT_PRESERVED')) return 'O financeiro da venda não foi preservado como esperado. A operação foi travada para conferência.';
   return message;
 }
 
@@ -68,6 +71,20 @@ function statusClass(status: string) {
   if (status === 'reconciliation_required') return 'bg-red-100 text-red-800 border-red-200';
   if (status === 'ready_to_consolidate') return 'bg-blue-100 text-blue-800 border-blue-200';
   return 'bg-amber-100 text-amber-800 border-amber-200';
+}
+
+function sourceLabel(kind: PartialBudgetSearchResult['budget_kind']) {
+  if (kind === 'venda') return 'Venda';
+  return kind === 'produto' ? 'Orçamento de produto' : 'Orçamento de serviço';
+}
+
+function sourceNoun(kind: PartialBudgetSearchResult['budget_kind']) {
+  if (kind === 'venda') return 'venda';
+  return kind === 'produto' ? 'orçamento de produto' : 'orçamento de serviço';
+}
+
+function operationIsExistingSale(operation: PartialWriteoffOperation | null) {
+  return (operation?.budget_snapshot as Record<string, unknown> | undefined)?._partial_source_kind === 'venda';
 }
 
 export default function PartialWriteoffPage() {
@@ -143,7 +160,7 @@ export default function PartialWriteoffPage() {
 
   async function handleSearch() {
     if (!budgetKind) {
-      toast.error('Escolha se o orçamento é de Produto ou Serviço.');
+      toast.error('Escolha Orçamento de produto, Orçamento de serviço ou Venda.');
       return;
     }
     if (term.trim().length < 2) {
@@ -173,7 +190,7 @@ export default function PartialWriteoffPage() {
       const operation = await openPartialOperation(budget.id, budget.budget_kind);
       await refresh();
       setSelectedId(operation.id);
-      toast.success(`Orçamento #${operation.budget_code} entrou no fluxo de baixa parcial.`);
+      toast.success(`${budget.budget_kind === 'venda' ? 'Venda' : 'Orçamento'} #${operation.budget_code} entrou no fluxo de baixa parcial.`);
     } catch (error) {
       toast.error(friendlyError(error));
     } finally {
@@ -215,7 +232,9 @@ export default function PartialWriteoffPage() {
         manualEquipment,
       });
       await refresh();
-      toast.success(`${completed.document_type === 'os' ? 'OS' : 'Venda'} definitiva #${completed.definitive_document_code} criada e auxiliares compensados.`);
+      toast.success(operationIsExistingSale(completed)
+        ? `Venda #${completed.definitive_document_code} atualizada e baixa consolidada.`
+        : `${completed.document_type === 'os' ? 'OS' : 'Venda'} definitiva #${completed.definitive_document_code} criada e auxiliares compensados.`);
     } catch (error) {
       toast.error(friendlyError(error), { duration: 10000 });
       await refresh();
@@ -233,7 +252,7 @@ export default function PartialWriteoffPage() {
             <h1 className="text-2xl font-bold">Baixa Parcial</h1>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Retire apenas o que está disponível. O orçamento permanece como documento-mãe até a consolidação final.
+            Retire apenas o que está disponível. O orçamento ou a venda permanece como documento-mãe até a consolidação final.
           </p>
         </div>
 
@@ -247,12 +266,12 @@ export default function PartialWriteoffPage() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Localizar orçamento</CardTitle>
+            <CardTitle className="text-base">Localizar documento</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
-              <p className="text-sm font-medium">1. Este orçamento é de:</p>
-              <div className="grid max-w-md grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo do orçamento">
+              <p className="text-sm font-medium">1. O que você quer baixar?</p>
+              <div className="grid max-w-3xl grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Origem da baixa parcial">
                 <Button
                   type="button"
                   variant={budgetKind === 'produto' ? 'default' : 'outline'}
@@ -263,7 +282,7 @@ export default function PartialWriteoffPage() {
                     setHasSearched(false);
                   }}
                 >
-                  Produto
+                  Orçamento de produto
                 </Button>
                 <Button
                   type="button"
@@ -275,11 +294,23 @@ export default function PartialWriteoffPage() {
                     setHasSearched(false);
                   }}
                 >
-                  Serviço
+                  Orçamento de serviço
+                </Button>
+                <Button
+                  type="button"
+                  variant={budgetKind === 'venda' ? 'default' : 'outline'}
+                  aria-pressed={budgetKind === 'venda'}
+                  onClick={() => {
+                    setBudgetKind('venda');
+                    setResults([]);
+                    setHasSearched(false);
+                  }}
+                >
+                  Venda
                 </Button>
               </div>
             </div>
-            <p className="text-sm font-medium">2. Informe o orçamento:</p>
+            <p className="text-sm font-medium">2. Informe o número {budgetKind === 'venda' ? 'da venda' : 'do orçamento'}:</p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -291,7 +322,11 @@ export default function PartialWriteoffPage() {
                     setHasSearched(false);
                   }}
                   onKeyDown={event => event.key === 'Enter' && void handleSearch()}
-                  placeholder={budgetKind ? `Número, cliente ou CNPJ do orçamento de ${budgetKind}` : 'Primeiro escolha Produto ou Serviço'}
+                  placeholder={budgetKind
+                    ? budgetKind === 'venda'
+                      ? 'Número, cliente ou CNPJ da venda'
+                      : `Número, cliente ou CNPJ do ${sourceNoun(budgetKind)}`
+                    : 'Primeiro escolha Orçamento de produto, Orçamento de serviço ou Venda'}
                   className="pl-9"
                 />
               </div>
@@ -310,16 +345,18 @@ export default function PartialWriteoffPage() {
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="font-semibold">Orçamento #{budget.codigo}</p>
+                        <p className="font-semibold">{budget.budget_kind === 'venda' ? 'Venda' : 'Orçamento'} #{budget.codigo}</p>
                         <Badge variant="outline">
-                          {budget.budget_kind === 'produto' ? 'Produto' : 'Serviço'}
+                          {sourceLabel(budget.budget_kind)}
                         </Badge>
                       </div>
                       <p className="truncate text-sm">{budget.nome_cliente}</p>
                       <p className="text-xs text-muted-foreground">{budget.nome_situacao} · R$ {budget.valor_total}</p>
                       {!budget.eligible_for_partial_writeoff && (
                         <p className="mt-1 text-xs font-medium text-amber-800">
-                          Já possui {budget.nome_situacao.toLocaleLowerCase('pt-BR').includes('os') ? 'OS' : 'venda'} gerada. Baixa parcial bloqueada.
+                          {budget.budget_kind === 'venda'
+                            ? 'Esta venda já movimentou estoque. Baixa parcial bloqueada.'
+                            : `Já possui ${budget.nome_situacao.toLocaleLowerCase('pt-BR').includes('os') ? 'OS' : 'venda'} gerada. Baixa parcial bloqueada.`}
                         </p>
                       )}
                     </div>
@@ -331,7 +368,7 @@ export default function PartialWriteoffPage() {
                     >
                       {openingId === budget.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       {!budget.eligible_for_partial_writeoff
-                        ? 'Documento já gerado'
+                        ? budget.budget_kind === 'venda' ? 'Estoque já baixado' : 'Documento já gerado'
                         : budget.partial_operation ? 'Abrir controle' : 'Iniciar baixa'}
                     </Button>
                   </div>
@@ -340,7 +377,7 @@ export default function PartialWriteoffPage() {
             )}
             {!searching && hasSearched && results.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Nenhum orçamento de {budgetKind === 'produto' ? 'produto' : 'serviço'} encontrado para “{term.trim()}”.
+                Nenhum {budgetKind ? sourceNoun(budgetKind) : 'documento'} encontrado para “{term.trim()}”.
               </p>
             )}
           </CardContent>
@@ -377,14 +414,18 @@ export default function PartialWriteoffPage() {
           </Card>
 
           {!selected ? (
-            <Card><CardContent className="py-12 text-center text-muted-foreground">Busque um orçamento ou selecione uma operação.</CardContent></Card>
+            <Card><CardContent className="py-12 text-center text-muted-foreground">Busque um orçamento ou uma venda, ou selecione uma operação.</CardContent></Card>
           ) : (
             <Card>
               <CardHeader>
                 <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
                   <div>
-                    <CardTitle>Orçamento #{selected.budget_code}</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">{selected.client_name} · destino final: {selected.document_type === 'os' ? 'OS' : 'Venda'}</p>
+                    <CardTitle>{operationIsExistingSale(selected) ? 'Venda' : 'Orçamento'} #{selected.budget_code}</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {selected.client_name} · {operationIsExistingSale(selected)
+                        ? 'documento-mãe: Venda'
+                        : `destino final: ${selected.document_type === 'os' ? 'OS' : 'Venda'}`}
+                    </p>
                   </div>
                   <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
                 </div>
@@ -486,16 +527,22 @@ export default function PartialWriteoffPage() {
                       <CheckCircle2 className="mt-0.5 h-5 w-5 text-blue-700" />
                       <div>
                         <p className="font-semibold">Todas as peças foram retiradas</p>
-                        <p className="text-sm text-muted-foreground">Agora os auxiliares serão compensados e o documento definitivo completo será gerado com Auvo, serviços, financeiro e comissão normais.</p>
+                        <p className="text-sm text-muted-foreground">
+                          {operationIsExistingSale(selected)
+                            ? 'Agora os auxiliares serão compensados e a venda original receberá a baixa definitiva de estoque, mantendo o financeiro que já existe.'
+                            : 'Agora os auxiliares serão compensados e o documento definitivo completo será gerado com Auvo, serviços, financeiro e comissão normais.'}
+                        </p>
                       </div>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Input value={auvoCustomerId} onChange={event => setAuvoCustomerId(event.target.value)} placeholder="ID cliente Auvo (se necessário)" />
-                      <Input value={manualEquipment} onChange={event => setManualEquipment(event.target.value)} placeholder="Equipamento manual (opcional)" />
-                    </div>
+                    {!operationIsExistingSale(selected) && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Input value={auvoCustomerId} onChange={event => setAuvoCustomerId(event.target.value)} placeholder="ID cliente Auvo (se necessário)" />
+                        <Input value={manualEquipment} onChange={event => setManualEquipment(event.target.value)} placeholder="Equipamento manual (opcional)" />
+                      </div>
+                    )}
                     <Button onClick={handleConsolidate} disabled={consolidating} className="bg-blue-700 hover:bg-blue-800">
                       {consolidating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Consolidar documento definitivo
+                      {operationIsExistingSale(selected) ? 'Consolidar na venda original' : 'Consolidar documento definitivo'}
                     </Button>
                   </div>
                 )}
@@ -505,7 +552,9 @@ export default function PartialWriteoffPage() {
                     <CheckCircle2 className="h-4 w-4 text-green-700" />
                     <AlertTitle>Fluxo concluído</AlertTitle>
                     <AlertDescription>
-                      {selected.document_type === 'os' ? 'OS' : 'Venda'} definitiva #{selected.definitive_document_code} · Auvo #{selected.definitive_auvo_task_id || '—'}.
+                      {operationIsExistingSale(selected)
+                        ? `Venda original #${selected.definitive_document_code} atualizada com a baixa definitiva de estoque.`
+                        : `${selected.document_type === 'os' ? 'OS' : 'Venda'} definitiva #${selected.definitive_document_code} · Auvo #${selected.definitive_auvo_task_id || '—'}.`}
                     </AlertDescription>
                   </Alert>
                 )}

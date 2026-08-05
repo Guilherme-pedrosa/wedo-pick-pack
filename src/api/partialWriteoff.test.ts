@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildActivePartialDemand, PartialWriteoffOperation } from './partialWriteoff';
-import { documentTypeForBudgetKind, isBudgetEligibleForPartialWriteoff } from './partialWriteoffClient';
+import {
+  documentTypeForBudgetKind,
+  isBudgetEligibleForPartialWriteoff,
+  isSaleEligibleForPartialWriteoff,
+} from './partialWriteoffClient';
 
 function operation(withdrawn: number, status: PartialWriteoffOperation['status'] = 'awaiting_balance'): PartialWriteoffOperation {
   return {
@@ -80,6 +84,10 @@ describe('origem do orçamento no GestãoClick', () => {
     expect(documentTypeForBudgetKind('servico', { produtos: [{ id: 'product-1' }] })).toBe('os');
   });
 
+  it('mantém venda existente como venda', () => {
+    expect(documentTypeForBudgetKind('venda', { produtos: [{ id: 'product-1' }] })).toBe('venda');
+  });
+
   it('bloqueia orçamento que já gerou OS', () => {
     expect(isBudgetEligibleForPartialWriteoff({ nome_situacao: 'Aprovado - OS Gerada' })).toBe(false);
   });
@@ -90,5 +98,17 @@ describe('origem do orçamento no GestãoClick', () => {
 
   it('aceita orçamento aprovado que ainda não gerou documento', () => {
     expect(isBudgetEligibleForPartialWriteoff({ nome_situacao: 'Aprovado' })).toBe(true);
+  });
+
+  it('aceita venda que ainda não movimentou estoque', () => {
+    expect(isSaleEligibleForPartialWriteoff({ situacao_estoque: '0' })).toBe(true);
+  });
+
+  it('bloqueia venda que já movimentou estoque', () => {
+    expect(isSaleEligibleForPartialWriteoff({ situacao_estoque: '1' })).toBe(false);
+  });
+
+  it('bloqueia venda quando a API não informa a situação de estoque', () => {
+    expect(isSaleEligibleForPartialWriteoff({})).toBe(false);
   });
 });

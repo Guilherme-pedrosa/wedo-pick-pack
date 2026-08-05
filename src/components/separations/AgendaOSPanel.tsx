@@ -315,7 +315,8 @@ export default function AgendaOSPanel() {
       ) : (
         <div className="space-y-3">
           {filteredRows.map((row) => {
-            const { os, task, separation, suggested } = row;
+            const { os, task, separation, suggested, execTaskId } = row;
+
             const scheduled = !!task?.technician_name;
             const linked = !!separation?.technician_name;
             return (

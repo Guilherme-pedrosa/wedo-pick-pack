@@ -167,8 +167,8 @@ function normalizeTask(task: any, users: Map<number, string>, customers: Map<num
 async function fetchTasksByIds(token: string, taskIds: string[]): Promise<any[]> {
   const unique = Array.from(new Set(taskIds.filter((id) => /^\d+$/.test(id)))).slice(0, 300);
   const result: any[] = [];
-  for (let i = 0; i < unique.length; i += 10) {
-    await Promise.all(unique.slice(i, i + 10).map(async (taskId) => {
+  for (let i = 0; i < unique.length; i += 15) {
+    await Promise.all(unique.slice(i, i + 15).map(async (taskId) => {
       try {
         const data = await auvoRequest(token, `/tasks/${taskId}`);
         const task = data?.result ?? data;

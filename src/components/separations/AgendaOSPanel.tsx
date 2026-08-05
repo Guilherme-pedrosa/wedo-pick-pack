@@ -403,10 +403,14 @@ export default function AgendaOSPanel() {
     technicianFilter,
   ]);
 
+  const isResolvingExecutionTasks = executionTaskIds.length > 0 && executionTasksQuery.isLoading;
+
   const counts = useMemo(() => ({
     total: rows.length,
     scheduled: rows.filter((row) => row.bucket === 'scheduled-date').length,
-    available: rows.filter((row) => row.bucket === 'available').length,
+    available: rows.filter((row) => row.bucket === 'available' && (
+      !isResolvingExecutionTasks || !!row.task
+    )).length,
     separated: rows.filter((row) => !!row.separation && !row.separation.technician_name).length,
     linked: rows.reduce((total, row) => (
       row.separation?.technician_name
@@ -414,14 +418,14 @@ export default function AgendaOSPanel() {
         : total
     ), 0),
     orphans: orphanTasks.length,
-  }), [orphanTasks.length, rows]);
+  }), [isResolvingExecutionTasks, orphanTasks.length, rows]);
 
   const isLoading = osQuery.isLoading
     || separationsQuery.isLoading
     || localTechniciansQuery.isLoading
     || auvoUsersQuery.isLoading
-    || dayTasksQuery.isLoading
-    || (executionTaskIds.length > 0 && executionTasksQuery.isLoading);
+    || dayTasksQuery.isLoading;
+  const isRefreshing = isLoading || isResolvingExecutionTasks;
 
   const refreshAll = async () => {
     await Promise.all([
@@ -571,8 +575,8 @@ export default function AgendaOSPanel() {
             </p>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={refreshAll} disabled={isLoading} className="gap-2">
-          <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+        <Button variant="outline" size="sm" onClick={refreshAll} disabled={isRefreshing} className="gap-2">
+          <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
           Atualizar tudo
         </Button>
       </div>
@@ -724,6 +728,21 @@ export default function AgendaOSPanel() {
         </Card>
       )}
 
+      {!isLoading && isResolvingExecutionTasks && (
+        <Card className="border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>As OS já estão disponíveis. Atualizando técnico, data e status de {executionTaskIds.length} tarefas do Auvo em segundo plano…</span>
+          </div>
+        </Card>
+      )}
+
+      {executionTasksQuery.isError && (
+        <Card className="border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Algumas tarefas do Auvo não responderam. As OS continuam disponíveis; use “Atualizar tudo” para tentar novamente.
+        </Card>
+      )}
+
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Loader2 className="mb-2 h-7 w-7 animate-spin" />
@@ -734,6 +753,7 @@ export default function AgendaOSPanel() {
           {filteredRows.map((row) => {
             const expanded = expandedRows.has(row.os.id);
             const linked = !!row.separation?.technician_name;
+            const awaitingTask = isResolvingExecutionTasks && row.taskIds.length > 0 && !row.task;
             return (
               <Card key={row.os.id} className={cn('overflow-hidden border-l-4', row.bucket === 'scheduled-date' && 'border-l-blue-500', row.bucket === 'available' && 'border-l-amber-500', row.bucket === 'other-date' && 'border-l-slate-400', row.bucket === 'no-task' && 'border-l-red-400')}>
                 <div className="p-4">
@@ -742,7 +762,13 @@ export default function AgendaOSPanel() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge className="bg-primary text-primary-foreground">OS #{row.os.codigo}</Badge>
                         <Badge variant="outline">{row.os.nome_situacao}</Badge>
-                        <Badge variant="outline" className={BUCKET_META[row.bucket].className}>{BUCKET_META[row.bucket].label}</Badge>
+                        {awaitingTask ? (
+                          <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />Consultando Auvo
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className={BUCKET_META[row.bucket].className}>{BUCKET_META[row.bucket].label}</Badge>
+                        )}
                         {row.separation ? (
                           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
                             <PackageCheck className="mr-1 h-3 w-3" /> {separatedQuantity(row.items) || row.separation.items_confirmed || row.separation.items_total} peça(s) separada(s)

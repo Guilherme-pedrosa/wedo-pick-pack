@@ -202,14 +202,6 @@ export default function AgendamentoSeparacaoPage() {
         .select('produto_id, variacao_id, quantidade, nome_produto')
         .eq('separation_id', sep.id);
 
-      if (sepItems && sepItems.length > 0) {
-        console.log(`[LINK] Vinculando ${sepItems.length} itens da separação ao técnico ${tech.name}`);
-        // Aqui chamamos a edge function ou API que registra a movimentação de estoque
-        // para o "armazém virtual" ou controle de ativos do técnico.
-        // Como o padrão do projeto é usar o campo de observações para rastreio e
-        // atualizar o status do documento, o vínculo nominal já foi feito via customNote.
-      }
-
       await logSystemAction({
         module: 'separations',
         action: 'vincular_tecnico',

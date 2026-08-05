@@ -37,6 +37,7 @@ export default function AgendaOSPanel() {
   const [sortField, setSortField] = useState<SortField>('horario');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [technicians, setTechnicians] = useState<TechnicianRow[]>([]);
 

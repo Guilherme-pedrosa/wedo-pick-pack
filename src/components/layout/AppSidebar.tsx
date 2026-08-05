@@ -64,6 +64,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: "Checkout", icon: Package, href: "/checkout" },
       { title: "Separações", icon: PackageCheck, href: "/separations" },
+      { title: "Agendamento", icon: Calendar, href: "/separations?tab=agenda" },
       { title: "Devoluções", icon: Undo2, href: "/devolucoes" },
     ],
   },
@@ -151,7 +152,10 @@ export function AppSidebar({ collapsed, onToggle, mobileOpen, onMobileClose, isA
                 {group.items
                   .filter((item) => !item.adminOnly || isAdmin)
                   .map((item) => {
-                    const isActive = location.pathname === item.href;
+                    const [itemPath, itemQuery = ""] = item.href.split("?");
+                    const isActive =
+                      location.pathname === itemPath &&
+                      (location.search.replace(/^\?/, "") || "") === itemQuery;
                     return (
                       <li key={item.href}>
                         <NavLink

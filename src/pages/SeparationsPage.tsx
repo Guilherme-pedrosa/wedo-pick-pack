@@ -21,6 +21,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
 import { getAuvoAgenda, auvoStatusLabel, matchTechnician, normalizeName, AuvoAgendaTask } from '@/api/auvoAgenda';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useSearchParams } from 'react-router-dom';
 
 export default function SeparationsPage() {
   const queryClient = useQueryClient();
@@ -33,7 +34,11 @@ export default function SeparationsPage() {
   const [status, setStatus] = useState<'all' | 'valid' | 'invalid'>('all');
 
   // Agenda / Auvo States
-  const [activeTab, setActiveTab] = useState('separations');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'agenda' ? 'agenda' : 'separations';
+  const setActiveTab = (tab: string) => {
+    setSearchParams(tab === 'agenda' ? { tab: 'agenda' } : {}, { replace: true });
+  };
   const [agendaDate, setAgendaDate] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

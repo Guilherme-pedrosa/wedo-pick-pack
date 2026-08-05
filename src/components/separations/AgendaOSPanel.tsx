@@ -153,7 +153,7 @@ function gcOrderUrl(osId: string): string {
 }
 
 function auvoTaskUrl(taskId: string): string {
-  return `https://app.auvo.com.br/tasks/${taskId}`;
+  return `https://app2.auvo.com.br/relatorioTarefas/DetalheTarefa/${taskId}`;
 }
 
 

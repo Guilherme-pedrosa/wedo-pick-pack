@@ -32,6 +32,38 @@ export default function SeparationsPage() {
   const [orderType, setOrderType] = useState<'all' | 'os' | 'venda'>('all');
   const [status, setStatus] = useState<'all' | 'valid' | 'invalid'>('all');
 
+  // Agenda / Auvo States
+  const [activeTab, setActiveTab] = useState('separations');
+  const [agendaDate, setAgendaDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [selectedAgendaTech, setSelectedAgendaTech] = useState('all');
+  const [selectedAgendaStatus, setSelectedAgendaStatus] = useState('all');
+  const [technicians, setTechnicians] = useState<{ id: string; gc_id: string; name: string }[]>([]);
+  const [linkingTask, setLinkingTask] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase
+      .from('technicians')
+      .select('id, gc_id, name')
+      .eq('active', true)
+      .order('name')
+      .then(({ data }) => setTechnicians((data || []) as { id: string; gc_id: string; name: string }[]));
+  }, []);
+
+  const {
+    data: agendaTasks = [],
+    isLoading: isAgendaLoading,
+    isError: isAgendaError,
+    error: agendaError,
+    refetch: refetchAgenda,
+  } = useQuery({
+    queryKey: ['auvo-agenda', agendaDate],
+    queryFn: () => getAuvoAgenda(agendaDate),
+    enabled: activeTab === 'agenda',
+  });
+
   // Live GC status tracking
   const [liveStatuses, setLiveStatuses] = useState<Record<string, { nome_situacao: string; situacao_id: string; fetchedAt: string } | null>>({});
   const [fetchingLive, setFetchingLive] = useState(false);

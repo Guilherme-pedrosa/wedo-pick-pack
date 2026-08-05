@@ -135,7 +135,7 @@ export default function AgendaOSPanel() {
         </div>
       </aside>
       <section className="hidden min-w-0 flex-1 flex-col overflow-y-auto bg-background p-5 md:flex">{!selected ? <div className="m-auto text-center text-muted-foreground"><ClipboardList className="mx-auto mb-3 h-10 w-10 opacity-30" />Selecione uma OS ou tarefa</div> : <AgendaDetails row={selected} linking={linkingId === selected.key} onLink={() => handleLink(selected)} />}</section>
-      {selected && <div className="fixed inset-x-3 bottom-3 z-20 md:hidden"><Card className="p-3 shadow-xl"><AgendaDetails row={selected} compact linking={linkingId === selected.key} onLink={() => handleLink(selected)} /></Card></div>}
+      {selected && detailOpen && <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/40 md:hidden" onClick={() => setDetailOpen(false)}><Card className="max-h-[80vh] overflow-y-auto rounded-b-none p-3 shadow-xl" onClick={(event) => event.stopPropagation()}><div className="mb-2 flex justify-end"><Button variant="ghost" size="sm" onClick={() => setDetailOpen(false)}><X className="mr-1 h-4 w-4" />Fechar</Button></div><AgendaDetails row={selected} compact linking={linkingId === selected.key} onLink={() => handleLink(selected)} /></Card></div>}
     </div>
   );
 }

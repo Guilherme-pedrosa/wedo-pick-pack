@@ -32,7 +32,7 @@ import {
   AuvoAgendaTask,
 } from '@/api/auvoAgenda';
 import { getSeparations, linkTechnicianToSeparation, SeparationRecord } from '@/api/separations';
-import { getOS, updateOSStatus } from '@/api/gestaoclick';
+import { getOS, updateOSStatus, getVenda, updateVendaStatus } from '@/api/gestaoclick';
 import { logSystemAction } from '@/lib/systemLog';
 import { toast } from 'sonner';
 
@@ -177,18 +177,44 @@ export default function AgendamentoSeparacaoPage() {
         if (prof?.name) operatorName = prof.name;
       }
 
+      // Prepara a nota do log
       const gcNote = `Técnico vinculado: ${tech.name} (ID ${tech.gc_id}) | Agendamento Auvo tarefa ${task.task_id} | Status: RETIRADA PELO TÉCNICO | por ${operatorName}`;
 
+      // 1. Atualiza status no GC e vincula técnico na Separation (Histórico)
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
         await updateOSStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID, undefined, gcUsuarioId, gcNote);
+      } else {
+        const order = await getVenda(sep.order_id);
+        await updateVendaStatus(sep.order_id, order, RETIRADA_TECNICO_STATUS_ID, undefined, gcUsuarioId, gcNote);
       }
 
       const ok = await linkTechnicianToSeparation(sep.id, tech.gc_id, tech.name);
       if (!ok) {
-        toast.error('Não foi possível salvar o vínculo do técnico');
+        toast.error('Não foi possível salvar o vínculo do técnico no histórico');
         return;
       }
+
+      // 2. Vincular PEÇAS da separação ao técnico no GC (Ativos do Técnico)
+      // Buscamos os itens da separação para registrar o movimento de "Posse do Técnico"
+      const { data: sepItemsRaw } = await supabase
+        .from('box_items' as any)
+        .select('id')
+        .eq('separation_id', sep.id);
+      
+      const itemsCount = (sepItemsRaw || []).length;
+
+      const logDetails = {
+        separation_id: sep.id,
+        origem: 'agendamento',
+        auvo_task_id: task.task_id,
+        auvo_technician: task.technician_name,
+        technician_name: tech.name,
+        technician_gc_id: tech.gc_id,
+        client_name: sep.client_name,
+        operator_name: operatorName,
+        items_count: itemsCount
+      };
 
       await logSystemAction({
         module: 'separations',
@@ -196,19 +222,10 @@ export default function AgendamentoSeparacaoPage() {
         entityType: sep.order_type,
         entityId: sep.order_id,
         entityName: `${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`,
-        details: {
-          separation_id: sep.id,
-          origem: 'agendamento',
-          auvo_task_id: task.task_id,
-          auvo_technician: task.technician_name,
-          technician_name: tech.name,
-          technician_gc_id: tech.gc_id,
-          client_name: sep.client_name,
-          operator_name: operatorName,
-        },
+        details: logDetails,
       });
 
-      toast.success(`Técnico "${tech.name}" vinculado à ${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`);
+      toast.success(`Técnico "${tech.name}" vinculado e peças lincadas à ${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`);
       setManualTask(null);
       refetchSeparations();
     } catch (err) {

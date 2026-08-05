@@ -202,23 +202,25 @@ export default function AgendamentoSeparacaoPage() {
         .select('produto_id, variacao_id, quantidade, nome_produto')
         .eq('separation_id', sep.id);
 
+      const logDetails = {
+        separation_id: sep.id,
+        origem: 'agendamento',
+        auvo_task_id: task.task_id,
+        auvo_technician: task.technician_name,
+        technician_name: tech.name,
+        technician_gc_id: tech.gc_id,
+        client_name: sep.client_name,
+        operator_name: operatorName,
+        items_count: (sepItems || []).length
+      };
+
       await logSystemAction({
         module: 'separations',
         action: 'vincular_tecnico',
         entityType: sep.order_type,
         entityId: sep.order_id,
         entityName: `${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`,
-        details: {
-          separation_id: sep.id,
-          origem: 'agendamento',
-          auvo_task_id: task.task_id,
-          auvo_technician: task.technician_name,
-          technician_name: tech.name,
-          technician_gc_id: tech.gc_id,
-          client_name: sep.client_name,
-          operator_name: operatorName,
-          items_count: sepItems?.length || 0
-        },
+        details: logDetails,
       });
 
       toast.success(`Técnico "${tech.name}" vinculado e peças lincadas à ${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`);

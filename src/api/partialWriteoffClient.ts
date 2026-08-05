@@ -6,6 +6,7 @@ import type {
 
 type DocumentType = 'os' | 'venda';
 type BudgetKind = PartialBudgetSearchResult['budget_kind'];
+const EXISTING_SALE_FINAL_STATUS_ID = '8955109';
 type AuthContext = {
   id: string;
   email: string;
@@ -95,7 +96,7 @@ function lineKey(product: any, index: number): string {
 }
 
 export function documentTypeForBudgetKind(kind: BudgetKind | undefined, budget: any): DocumentType {
-  if (kind === 'produto') return 'venda';
+  if (kind === 'produto' || kind === 'venda') return 'venda';
   if (kind === 'servico') return 'os';
   const hasServices = Array.isArray(budget?.servicos) && budget.servicos.length > 0;
   return hasServices || numberValue(budget?.valor_servicos) > 0 ? 'os' : 'venda';
@@ -108,6 +109,33 @@ export function isBudgetEligibleForPartialWriteoff(budget: any): boolean {
     .toLocaleLowerCase('pt-BR');
   const generatedDocument = /\b(os|venda)\b.*\bgerad[ao]\b|\bgerad[ao]\b.*\b(os|venda)\b/.test(status);
   return !generatedDocument;
+}
+
+export function isSaleEligibleForPartialWriteoff(sale: any): boolean {
+  return String(sale?.situacao_estoque ?? '').trim() === '0';
+}
+
+function isSourceEligibleForPartialWriteoff(kind: BudgetKind, source: any): boolean {
+  return kind === 'venda'
+    ? isSaleEligibleForPartialWriteoff(source)
+    : isBudgetEligibleForPartialWriteoff(source);
+}
+
+function operationSourceKind(operation: PartialWriteoffOperation): BudgetKind | undefined {
+  const kind = (operation.budget_snapshot as any)?._partial_source_kind;
+  return kind === 'produto' || kind === 'servico' || kind === 'venda' ? kind : undefined;
+}
+
+function sourceOperationKey(kind: BudgetKind, sourceId: string): string {
+  return kind === 'venda' ? `venda:${sourceId}` : sourceId;
+}
+
+function operationSourceId(operation: PartialWriteoffOperation): string {
+  const snapshotId = normalizeId((operation.budget_snapshot as any)?._partial_source_id);
+  if (snapshotId) return snapshotId;
+  return operationSourceKind(operation) === 'venda'
+    ? operation.budget_id.replace(/^venda:/, '')
+    : operation.budget_id;
 }
 
 function operationItemsFromBudget(budget: any) {
@@ -126,8 +154,9 @@ function operationItemsFromBudget(budget: any) {
   }).filter((item: any) => item.product_id && item.original_quantity > 0);
 }
 
-async function fetchBudget(id: string): Promise<any> {
-  const response = await gcRequest(`/api/orcamentos/${encodeURIComponent(id)}`);
+async function fetchSource(id: string, kind: BudgetKind): Promise<any> {
+  const collection = kind === 'venda' ? '/api/vendas' : '/api/orcamentos';
+  const response = await gcRequest(`${collection}/${encodeURIComponent(id)}`);
   if (!response?.data?.id) throw new Error('BUDGET_NOT_FOUND');
   return response.data;
 }
@@ -135,9 +164,11 @@ async function fetchBudget(id: string): Promise<any> {
 async function searchBudgets(term: string, kind: BudgetKind): Promise<Array<any & { budget_kind: BudgetKind }>> {
   const value = term.trim();
   if (value.length < 2) throw new Error('SEARCH_TOO_SHORT');
-  if (kind !== 'produto' && kind !== 'servico') throw new Error('SEARCH_BUDGET_KIND_REQUIRED');
+  if (kind !== 'produto' && kind !== 'servico' && kind !== 'venda') throw new Error('SEARCH_BUDGET_KIND_REQUIRED');
   const encoded = encodeURIComponent(value);
-  const collection = kind === 'produto' ? '/api/orcamentos_produtos' : '/api/orcamentos_servicos';
+  const collection = kind === 'produto'
+    ? '/api/orcamentos_produtos'
+    : kind === 'servico' ? '/api/orcamentos_servicos' : '/api/vendas';
   const requests = [
     `${collection}?pagina=1&limite=100&codigo=${encoded}`,
     `${collection}?pagina=1&limite=100&nome=${encoded}`,
@@ -148,7 +179,7 @@ async function searchBudgets(term: string, kind: BudgetKind): Promise<Array<any 
     ? (result.value?.data || []).map((row: any) => ({
         ...row,
         budget_kind: kind,
-        eligible_for_partial_writeoff: isBudgetEligibleForPartialWriteoff(row),
+        eligible_for_partial_writeoff: isSourceEligibleForPartialWriteoff(kind, row),
       }))
     : []);
   const normalized = value.toLocaleLowerCase('pt-BR').replace(/\D/g, '');
@@ -261,7 +292,8 @@ function auxiliaryPayload(
 ) {
   const budget = operation.budget_snapshot || {};
   const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
-  const note = `[${marker}] BAIXA PARCIAL do orcamento #${operation.budget_code}. Documento auxiliar: sem financeiro, comissao, servicos ou Auvo.`;
+  const sourceLabel = operationSourceKind(operation) === 'venda' ? 'da venda' : 'do orcamento';
+  const note = `[${marker}] BAIXA PARCIAL ${sourceLabel} #${operation.budget_code}. Documento auxiliar: sem financeiro, comissao, servicos ou Auvo.`;
   const common: Record<string, any> = {
     cliente_id: operation.client_id,
     data: new Date().toISOString().slice(0, 10),
@@ -371,16 +403,27 @@ function sameQuantities(expected: Map<string, number>, actual: Map<string, numbe
 }
 
 async function handleOpenOperation(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
-  const budget = await fetchBudget(String(body.budget_id || ''));
-  if (!isBudgetEligibleForPartialWriteoff(budget)) throw new Error('BUDGET_ALREADY_HAS_DOCUMENT');
-  const items = operationItemsFromBudget(budget);
-  if (!items.length) throw new Error('BUDGET_HAS_NO_STOCK_ITEMS');
-  const kind: BudgetKind | undefined = body.budget_kind === 'produto' || body.budget_kind === 'servico'
+  const kind: BudgetKind | undefined = body.budget_kind === 'produto' || body.budget_kind === 'servico' || body.budget_kind === 'venda'
     ? body.budget_kind
     : undefined;
-  const type = documentTypeForBudgetKind(kind, budget);
+  if (!kind) throw new Error('SEARCH_BUDGET_KIND_REQUIRED');
+  const source = await fetchSource(String(body.budget_id || ''), kind);
+  if (!isSourceEligibleForPartialWriteoff(kind, source)) {
+    throw new Error(kind === 'venda' ? 'SALE_ALREADY_MOVED_STOCK' : 'BUDGET_ALREADY_HAS_DOCUMENT');
+  }
+  const sourceId = normalizeId(source.id);
+  const snapshot = {
+    ...source,
+    id: sourceOperationKey(kind, sourceId),
+    _partial_source_kind: kind,
+    _partial_source_id: sourceId,
+    _partial_source_code: String(source.codigo || ''),
+  };
+  const items = operationItemsFromBudget(snapshot);
+  if (!items.length) throw new Error('BUDGET_HAS_NO_STOCK_ITEMS');
+  const type = documentTypeForBudgetKind(kind, snapshot);
   const { data, error } = await cloud.rpc('partial_writeoff_open_operation', {
-    p_budget: budget,
+    p_budget: snapshot,
     p_document_type: type,
     p_items: items,
     p_created_by: auth.id,
@@ -395,6 +438,10 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const requested: Array<{ item_id: string; quantity: number }> = Array.isArray(body.items) ? body.items : [];
   if (!operationId || !requested.length) throw new Error('EMPTY_BATCH');
   const operation = await getOperationGraph(operationId);
+  if (operationSourceKind(operation) === 'venda') {
+    const sale = await fetchSource(operationSourceId(operation), 'venda');
+    if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');
+  }
   const selected = requested.map((request) => {
     const item = operation.items.find((candidate) => candidate.id === request.item_id);
     const quantity = numberValue(request.quantity);
@@ -518,6 +565,11 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   if (batchError || !batch) throw new Error('BATCH_NOT_FOUND');
   if (batch.status === 'confirmed') return getOperationGraph(batch.operation_id);
   if (batch.status !== 'awaiting_checkout') throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
+  const operation = await getOperationGraph(batch.operation_id);
+  if (operationSourceKind(operation) === 'venda') {
+    const sale = await fetchSource(operationSourceId(operation), 'venda');
+    if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');
+  }
 
   const { data: batchItems, error: itemsError } = await cloud
     .from('partial_writeoff_batch_items')
@@ -623,10 +675,16 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
   const operationId = String(body.operation_id || '');
   const operation = await getOperationGraph(operationId);
   if (operation.status === 'completed') return operation;
+  const sourceKind = operationSourceKind(operation);
+  const existingSale = sourceKind === 'venda';
+  if (existingSale) {
+    const sale = await fetchSource(operationSourceId(operation), 'venda');
+    if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');
+  }
   if (operation.document_type === 'os' && !auth.profile.default_os_conclusion_status) {
     throw new Error('CONFIGURE_OS_CONCLUSION_STATUS');
   }
-  if (!auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
+  if (!existingSale && !auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
 
   const { error: claimError } = await cloud.rpc('partial_writeoff_claim_consolidation', {
     p_operation_id: operationId,
@@ -654,24 +712,45 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
   }
 
   let generated: any;
+  let existingSaleUpdateAttempted = false;
   try {
-    const result = await supabase.functions.invoke('generate-os', {
-      body: {
-        orcamento: operation.budget_snapshot,
-        auvo_user_id: auth.profile.auvo_user_id,
-        gc_usuario_id: auth.profile.gc_usuario_id || undefined,
-        auvo_customer_id: body.auvo_customer_id || undefined,
-        manual_equipamento: body.manual_equipamento || undefined,
-      },
-    });
-    generated = result.data;
-    if (result.error || generated?.error) {
-      throw new Error(generated?.error || result.error?.message || 'Falha ao gerar documento definitivo');
-    }
-    if (operation.document_type === 'os') {
-      await updateDocumentStatus('os', String(generated.os_id), String(auth.profile.default_os_conclusion_status));
+    if (existingSale) {
+      existingSaleUpdateAttempted = true;
+      const sourceId = operationSourceId(operation);
+      const updatedSale = await updateDocumentStatus('venda', sourceId, EXISTING_SALE_FINAL_STATUS_ID);
+      if (numberValue(updatedSale.situacao_estoque) !== 1) throw new Error('SALE_FINAL_STOCK_NOT_APPLIED');
+      if (numberValue(updatedSale.situacao_financeiro) !== 1) throw new Error('SALE_FINAL_FINANCIAL_NOT_PRESERVED');
+      generated = {
+        doc_kind: 'venda',
+        existing_sale: true,
+        os_id: sourceId,
+        os_codigo: String(updatedSale.codigo || operation.budget_code),
+        gc_response: updatedSale,
+      };
+    } else {
+      const result = await supabase.functions.invoke('generate-os', {
+        body: {
+          orcamento: operation.budget_snapshot,
+          auvo_user_id: auth.profile.auvo_user_id,
+          gc_usuario_id: auth.profile.gc_usuario_id || undefined,
+          auvo_customer_id: body.auvo_customer_id || undefined,
+          manual_equipamento: body.manual_equipamento || undefined,
+        },
+      });
+      generated = result.data;
+      if (result.error || generated?.error) {
+        throw new Error(generated?.error || result.error?.message || 'Falha ao gerar documento definitivo');
+      }
+      if (operation.document_type === 'os') {
+        await updateDocumentStatus('os', String(generated.os_id), String(auth.profile.default_os_conclusion_status));
+      }
     }
   } catch (error) {
+    if (existingSaleUpdateAttempted) {
+      const message = `A atualização da venda original ficou inconclusiva e precisa ser conferida: ${compact(error)}`;
+      await finishConsolidation(operationId, false, auth, generated, message);
+      throw new Error(message);
+    }
     const compensated = generated?.os_id ? false : await compensateAuxiliaries(cancelled, settings);
     const message = generated?.os_id
       ? `Documento definitivo #${generated.os_codigo || generated.os_id} foi criado, mas nao foi possivel finaliza-lo: ${compact(error)}`
@@ -681,19 +760,21 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
     throw new Error(message);
   }
 
-  await cloud.from('os_generation_logs').insert({
-    orcamento_codigo: operation.budget_code,
-    orcamento_id: operation.budget_id,
-    nome_cliente: operation.client_name,
-    os_id: String(generated.os_id || ''),
-    os_codigo: String(generated.os_codigo || ''),
-    auvo_task_id: String(generated.auvo_task_id || ''),
-    operator_id: auth.id,
-    operator_name: auth.name,
-    valor_total: numberValue((operation.budget_snapshot as any)?.valor_total),
-    warnings: generated.warnings || null,
-    success: true,
-  });
+  if (!existingSale) {
+    await cloud.from('os_generation_logs').insert({
+      orcamento_codigo: operation.budget_code,
+      orcamento_id: operation.budget_id,
+      nome_cliente: operation.client_name,
+      os_id: String(generated.os_id || ''),
+      os_codigo: String(generated.os_codigo || ''),
+      auvo_task_id: String(generated.auvo_task_id || ''),
+      operator_id: auth.id,
+      operator_name: auth.name,
+      valor_total: numberValue((operation.budget_snapshot as any)?.valor_total),
+      warnings: generated.warnings || null,
+      success: true,
+    });
+  }
 
   await finishConsolidation(operationId, true, auth, generated);
   return getOperationGraph(operationId);
@@ -704,23 +785,23 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
   const action = String(body.action || '');
 
   if (action === 'search_budgets') {
-    const kind = body.budget_kind === 'produto' || body.budget_kind === 'servico'
+    const kind = body.budget_kind === 'produto' || body.budget_kind === 'servico' || body.budget_kind === 'venda'
       ? body.budget_kind
       : undefined;
     if (!kind) throw new Error('SEARCH_BUDGET_KIND_REQUIRED');
     const budgets = await searchBudgets(String(body.term || ''), kind);
-    const ids = budgets.map((budget) => String(budget.id));
-    const { data: operations } = ids.length
+    const operationKeys = budgets.map((budget) => sourceOperationKey(budget.budget_kind, String(budget.id)));
+    const { data: operations } = operationKeys.length
       ? await cloud
           .from('partial_writeoff_operations')
           .select('id, budget_id, status')
-          .in('budget_id', ids)
+          .in('budget_id', operationKeys)
           .not('status', 'in', '(completed,cancelled)')
       : { data: [] as any[] };
     const active = new Map((operations || []).map((operation: any) => [operation.budget_id, operation]));
     const result: PartialBudgetSearchResult[] = budgets.map((budget) => ({
       ...budget,
-      partial_operation: active.get(String(budget.id)) || null,
+      partial_operation: active.get(sourceOperationKey(budget.budget_kind, String(budget.id))) || null,
     }));
     return { budgets: result } as T;
   }

@@ -67,7 +67,7 @@ export interface PartialWriteoffOperation {
 export interface PartialBudgetSearchResult {
   id: string;
   codigo: string;
-  budget_kind: 'produto' | 'servico';
+  budget_kind: 'produto' | 'servico' | 'venda';
   eligible_for_partial_writeoff: boolean;
   cliente_id: string;
   nome_cliente: string;

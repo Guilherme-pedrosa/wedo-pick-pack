@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Calendar, User, Filter, Search, RefreshCw, Loader2, CheckCircle2, UserPlus, PackageCheck, PackageSearch, Clock, ClipboardList, ChevronDown, ArrowUpDown, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Calendar, User, Filter, Search, RefreshCw, Loader2, CheckCircle2, UserPlus, PackageCheck, PackageSearch, Clock, ClipboardList, ChevronDown, ArrowUpDown, ExternalLink, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';

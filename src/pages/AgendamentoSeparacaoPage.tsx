@@ -98,13 +98,22 @@ export default function AgendamentoSeparacaoPage() {
       .then(({ data }) => setTechnicians((data || []) as LocalTechnician[]));
   }, []);
 
-  /** Matches an Auvo task to a local separation (by order code in orientation, then client name). */
+  /** Matches an Auvo task to a local separation (by order code, then customer_id_gc, then client name). */
   const findSeparation = (task: AuvoAgendaTask): SeparationRecord | null => {
+    // 1. Match by Order Code (OS or Budget)
     const codes = [task.os_code, task.orcamento_code].filter(Boolean) as string[];
     for (const code of codes) {
       const byCode = separations.find((s) => s.order_code === code);
       if (byCode) return byCode;
     }
+
+    // 2. Match by GC Customer ID (if available in Auvo task)
+    if (task.customer_id_gc) {
+      const byCustomerId = separations.find((s) => s.client_id === task.customer_id_gc);
+      if (byCustomerId) return byCustomerId;
+    }
+
+    // 3. Match by Client Name
     const client = normalizeName(task.customer_name || '');
     if (!client) return null;
     return (

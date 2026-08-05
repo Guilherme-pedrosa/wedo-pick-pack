@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Calendar, User, Filter, Search, RefreshCw, Loader2, CheckCircle2, UserPlus, PackageCheck, PackageSearch, Clock, ClipboardList, ChevronDown, ArrowUpDown, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Calendar, User, Filter, Search, RefreshCw, Loader2, CheckCircle2, UserPlus, PackageCheck, PackageSearch, Clock, ClipboardList, ChevronDown, ArrowUpDown, ExternalLink, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
@@ -37,6 +37,7 @@ export default function AgendaOSPanel() {
   const [sortField, setSortField] = useState<SortField>('horario');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [technicians, setTechnicians] = useState<TechnicianRow[]>([]);
 
@@ -84,7 +85,7 @@ export default function AgendaOSPanel() {
     });
   }, [rows, debouncedSearch, agendaDate, techFilter, statusFilter, sortField]);
 
-  useEffect(() => { if (!selectedKey || !filteredRows.some((row) => row.key === selectedKey)) setSelectedKey(filteredRows[0]?.key || null); }, [filteredRows, selectedKey]);
+  useEffect(() => { if (selectedKey && !filteredRows.some((row) => row.key === selectedKey)) { setSelectedKey(null); setDetailOpen(false); } }, [filteredRows, selectedKey]);
   const selected = filteredRows.find((row) => row.key === selectedKey) || null;
   const isLoading = osQuery.isLoading || dailyTasksQuery.isLoading || separationsQuery.isLoading;
   const isFetching = osQuery.isFetching || linkedTasksQuery.isFetching || dailyTasksQuery.isFetching || separationsQuery.isFetching;
@@ -126,7 +127,7 @@ export default function AgendaOSPanel() {
           {filteredRows.map((row) => {
             const client = row.os?.nome_cliente || row.task?.customer_name || 'Cliente não identificado';
             const unscheduled = Boolean(row.os && !row.task?.technician_name);
-            return <Card key={row.key} onClick={() => setSelectedKey(row.key)} className={cn('cursor-pointer border-l-4 p-3 transition-all hover:shadow-md', selectedKey === row.key && 'border-l-primary bg-accent', selectedKey !== row.key && row.taskWithoutGC && 'border-l-destructive bg-destructive/5', selectedKey !== row.key && unscheduled && 'border-l-warning bg-warning/10', selectedKey !== row.key && !row.taskWithoutGC && !unscheduled && 'border-l-transparent')}>
+            return <Card key={row.key} onClick={() => { setSelectedKey(row.key); setDetailOpen(true); }} className={cn('cursor-pointer border-l-4 p-3 transition-all hover:shadow-md', selectedKey === row.key && 'border-l-primary bg-accent', selectedKey !== row.key && row.taskWithoutGC && 'border-l-destructive bg-destructive/5', selectedKey !== row.key && unscheduled && 'border-l-warning bg-warning/10', selectedKey !== row.key && !row.taskWithoutGC && !unscheduled && 'border-l-transparent')}>
               <div className="mb-1 flex items-start justify-between gap-2"><div className="flex min-w-0 items-center gap-2"><Badge>{row.os ? 'OS' : 'AUVO'}</Badge><span className="truncate text-sm font-semibold">#{row.os?.codigo || row.task?.task_id}</span></div>{row.taskWithoutGC ? <Badge variant="destructive">Sem GC</Badge> : unscheduled ? <Badge className="bg-warning text-warning-foreground">Não agendada</Badge> : <Badge variant="secondary">{formatTimeStr(row.task?.task_date || null)}</Badge>}</div>
               <p className="truncate text-sm font-medium text-foreground">{client}</p><div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground"><span className="truncate">{row.task?.technician_name || row.os?.nome_situacao || 'Sem técnico'}</span>{row.os && row.task && <><span>·</span><span className="truncate">{row.os.nome_situacao}</span></>}</div>
             </Card>;
@@ -134,7 +135,7 @@ export default function AgendaOSPanel() {
         </div>
       </aside>
       <section className="hidden min-w-0 flex-1 flex-col overflow-y-auto bg-background p-5 md:flex">{!selected ? <div className="m-auto text-center text-muted-foreground"><ClipboardList className="mx-auto mb-3 h-10 w-10 opacity-30" />Selecione uma OS ou tarefa</div> : <AgendaDetails row={selected} linking={linkingId === selected.key} onLink={() => handleLink(selected)} />}</section>
-      {selected && <div className="fixed inset-x-3 bottom-3 z-20 md:hidden"><Card className="p-3 shadow-xl"><AgendaDetails row={selected} compact linking={linkingId === selected.key} onLink={() => handleLink(selected)} /></Card></div>}
+      {selected && detailOpen && <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/40 md:hidden" onClick={() => setDetailOpen(false)}><Card className="max-h-[80vh] overflow-y-auto rounded-b-none p-3 shadow-xl" onClick={(event) => event.stopPropagation()}><div className="mb-2 flex justify-end"><Button variant="ghost" size="sm" onClick={() => setDetailOpen(false)}><X className="mr-1 h-4 w-4" />Fechar</Button></div><AgendaDetails row={selected} compact linking={linkingId === selected.key} onLink={() => handleLink(selected)} /></Card></div>}
     </div>
   );
 }

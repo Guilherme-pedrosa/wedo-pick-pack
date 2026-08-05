@@ -47,7 +47,9 @@ interface AgendaRow {
   task: AuvoAgendaTask | null;
   separation: SeparationRecord | null;
   suggested: TechnicianRow | null;
+  execTaskId: string | null;
 }
+
 
 function todayISO() {
   const d = new Date();

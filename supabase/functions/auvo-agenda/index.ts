@@ -46,6 +46,25 @@ async function fetchTasks(token: string, startDate: string, endDate: string) {
   return all;
 }
 
+/** Fetch specific tasks by ID (used when the OS carries the exec task id in GC). */
+async function fetchTasksByIds(token: string, ids: string[]) {
+  const out: any[] = [];
+  const CONCURRENCY = 6;
+  const unique = [...new Set(ids.filter((id) => /^\d+$/.test(String(id))))].slice(0, 400);
+  for (let i = 0; i < unique.length; i += CONCURRENCY) {
+    const slice = unique.slice(i, i + CONCURRENCY);
+    await Promise.all(slice.map(async (id) => {
+      try {
+        const data = await auvoGet(token, `/tasks/${encodeURIComponent(id)}`);
+        const t = data?.result ?? data;
+        if (t && (t.taskID || t.id)) out.push(t);
+      } catch (_) { /* tarefa inexistente/removida no Auvo */ }
+    }));
+  }
+  return out;
+}
+
+
 async function fetchUsers(token: string): Promise<Map<number, string>> {
   const map = new Map<number, string>();
   for (let page = 1; page <= 10; page++) {
@@ -96,13 +115,17 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const startDate: string = body?.start_date || new Date().toISOString().slice(0, 10);
     const endDate: string = body?.end_date || startDate;
+    const taskIds: string[] = Array.isArray(body?.task_ids) ? body.task_ids.map(String) : [];
 
     const token = await auvoLogin();
 
+    // Quando o cliente envia os IDs das TAREFAS DE EXECUÇÃO lidos da OS do GC,
+    // buscamos exatamente essas tarefas (vínculo pelo campo da OS, não por nome/código).
     const [tasks, users] = await Promise.all([
-      fetchTasks(token, startDate, endDate),
+      taskIds.length > 0 ? fetchTasksByIds(token, taskIds) : fetchTasks(token, startDate, endDate),
       fetchUsers(token).catch(() => new Map<number, string>()),
     ]);
+
 
     const customerIds = Array.from(
       new Set(

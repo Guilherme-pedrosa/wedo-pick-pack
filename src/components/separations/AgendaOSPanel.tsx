@@ -2,12 +2,20 @@ import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listOSMultiStatus } from '@/api/gestaoclick';
 import { getSeparations, linkTechnicianToSeparation, SeparationRecord } from '@/api/separations';
-import { getAuvoAgenda, auvoStatusLabel, matchTechnician, normalizeName, AuvoAgendaTask } from '@/api/auvoAgenda';
+import {
+  getAuvoTasksByIds,
+  auvoStatusLabel,
+  matchTechnician,
+  normalizeName,
+  getExecTaskIdsFromOS,
+  AuvoAgendaTask,
+} from '@/api/auvoAgenda';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { GCOrdemServico } from '@/api/types';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -39,7 +47,9 @@ interface AgendaRow {
   task: AuvoAgendaTask | null;
   separation: SeparationRecord | null;
   suggested: TechnicianRow | null;
+  execTaskId: string | null;
 }
+
 
 function todayISO() {
   const d = new Date();
@@ -92,17 +102,36 @@ export default function AgendaOSPanel() {
     staleTime: 60_000,
   });
 
-  // 2) Agenda do Auvo (tarefas de execução)
+  const orders = useMemo(() => osQueue?.data || [], [osQueue]);
+
+  // 2) IDs da TAREFA DE EXECUÇÃO lidos do próprio campo da OS no GC (atributo 73344).
+  //    É a OS que aponta para a tarefa do Auvo — nunca o contrário.
+  const execTaskByOS = useMemo(() => {
+    const map = new Map<string, string>();
+    orders.forEach((os) => {
+      const ids = getExecTaskIdsFromOS((os as GCOrdemServico).atributos);
+      if (ids.length > 0) map.set(os.id, ids[0]);
+    });
+    return map;
+  }, [orders]);
+
+  const execTaskIds = useMemo(
+    () => Array.from(new Set(execTaskByOS.values())).sort(),
+    [execTaskByOS],
+  );
+
+  // 3) Tarefas do Auvo buscadas exatamente pelos IDs gravados nas OS
   const {
     data: tasks = [],
     isLoading: loadingAgenda,
     refetch: refetchAgenda,
   } = useQuery({
-    queryKey: ['auvo-agenda', agendaDate],
-    queryFn: () => getAuvoAgenda(agendaDate),
+    queryKey: ['auvo-tasks-by-id', execTaskIds.join(',')],
+    queryFn: () => getAuvoTasksByIds(execTaskIds),
+    enabled: execTaskIds.length > 0,
   });
 
-  // 3) Histórico de separações (para saber o que já foi separado / vinculado)
+  // 4) Histórico de separações (para saber o que já foi separado / vinculado)
   const {
     data: separations = [],
     isLoading: loadingSeps,
@@ -113,32 +142,19 @@ export default function AgendaOSPanel() {
     refetchInterval: 60_000,
   });
 
-  const orders = osQueue?.data || [];
-
   const rows = useMemo<AgendaRow[]>(() => {
-    const taskByCode = new Map<string, AuvoAgendaTask>();
-    const tasksByClient: AuvoAgendaTask[] = [];
-    tasks.forEach((t) => {
-      if (t.os_code) taskByCode.set(String(t.os_code).trim(), t);
-      tasksByClient.push(t);
-    });
+    const taskById = new Map<string, AuvoAgendaTask>();
+    tasks.forEach((t) => taskById.set(String(t.task_id).trim(), t));
 
     return orders.map((os) => {
-      let task = taskByCode.get(String(os.codigo).trim()) || null;
-      if (!task) {
-        const client = normalizeName(os.nome_cliente);
-        task =
-          tasksByClient.find((t) => {
-            const tc = normalizeName(t.customer_name || '');
-            return !!tc && !!client && (tc === client || tc.includes(client) || client.includes(tc));
-          }) || null;
-      }
+      const execId = execTaskByOS.get(os.id) || null;
+      const task = execId ? taskById.get(execId) || null : null;
       const separation =
         separations.find((s) => s.order_type === 'os' && (s.order_id === os.id || s.order_code === os.codigo)) || null;
       const suggested = matchTechnician(task?.technician_name || null, technicians);
-      return { os, task, separation, suggested };
+      return { os, task, separation, suggested, execTaskId: execId };
     });
-  }, [orders, tasks, separations, technicians]);
+  }, [orders, tasks, separations, technicians, execTaskByOS]);
 
   const situacaoOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -156,9 +172,11 @@ export default function AgendaOSPanel() {
     const term = normalizeName(search);
     return rows
       .filter(({ os, task }) => {
-        // Data de agendamento é o filtro principal: mostra OS agendadas no dia
-        // e também as OS ainda sem tarefa de execução (não agendadas).
-        const scheduled = !!task;
+        // Data de agendamento = data da TAREFA DE EXECUÇÃO no Auvo.
+        // OS sem tarefa de execução aparecem sempre (destacadas em amarelo).
+        const taskDay = task?.task_date ? String(task.task_date).slice(0, 10) : null;
+        const matchesDate = !taskDay || taskDay === agendaDate;
+        if (task && !matchesDate) return false;
 
         const matchesTech =
           techFilter === 'all' ||
@@ -173,7 +191,7 @@ export default function AgendaOSPanel() {
           String(os.codigo).includes(search.trim()) ||
           normalizeName(task?.technician_name || '').includes(term);
 
-        return (scheduled || techFilter === 'all' || techFilter === 'none') && matchesTech && matchesSituacao && matchesSearch;
+        return matchesTech && matchesSituacao && matchesSearch;
       })
       .sort((a, b) => {
         // Agendadas primeiro por horário; não agendadas no fim
@@ -183,7 +201,8 @@ export default function AgendaOSPanel() {
         if (at !== bt) return at.localeCompare(bt);
         return String(a.os.codigo).localeCompare(String(b.os.codigo), 'pt-BR', { numeric: true });
       });
-  }, [rows, search, techFilter, situacaoFilter]);
+  }, [rows, search, techFilter, situacaoFilter, agendaDate]);
+
 
   const scheduledCount = filteredRows.filter((r) => r.task).length;
   const unscheduledCount = filteredRows.length - scheduledCount;
@@ -296,7 +315,8 @@ export default function AgendaOSPanel() {
       ) : (
         <div className="space-y-3">
           {filteredRows.map((row) => {
-            const { os, task, separation, suggested } = row;
+            const { os, task, separation, suggested, execTaskId } = row;
+
             const scheduled = !!task?.technician_name;
             const linked = !!separation?.technician_name;
             return (
@@ -347,9 +367,12 @@ export default function AgendaOSPanel() {
                           </span>
                           <span>{auvoStatusLabel(task.status)}</span>
                         </>
+                      ) : execTaskId ? (
+                        <span>Tarefa de execução #{execTaskId} não encontrada no Auvo</span>
                       ) : (
-                        <span>Sem tarefa de execução no Auvo em {agendaDate.split('-').reverse().join('/')}</span>
+                        <span>OS sem "TAREFA EXECUÇÃO" preenchida no GestãoClick (atributo 73344)</span>
                       )}
+
                     </div>
                   </div>
 

@@ -66,6 +66,7 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
     .from('separations')
     .insert({
       user_id: user.id,
+      client_id: input.client_id || null,
       ...input,
     })
     .select()

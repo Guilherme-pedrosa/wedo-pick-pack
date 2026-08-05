@@ -1274,8 +1274,8 @@ export type Database = {
           invalidated: boolean
           invalidated_at: string | null
           invalidated_reason: string | null
-          items_confirmed: number
           items: Json
+          items_confirmed: number
           items_total: number
           observations: string | null
           operator_name: string
@@ -1302,8 +1302,8 @@ export type Database = {
           invalidated?: boolean
           invalidated_at?: string | null
           invalidated_reason?: string | null
-          items_confirmed?: number
           items?: Json
+          items_confirmed?: number
           items_total?: number
           observations?: string | null
           operator_name?: string
@@ -1330,8 +1330,8 @@ export type Database = {
           invalidated?: boolean
           invalidated_at?: string | null
           invalidated_reason?: string | null
-          items_confirmed?: number
           items?: Json
+          items_confirmed?: number
           items_total?: number
           observations?: string | null
           operator_name?: string

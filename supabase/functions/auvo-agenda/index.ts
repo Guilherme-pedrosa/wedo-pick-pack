@@ -115,13 +115,17 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const startDate: string = body?.start_date || new Date().toISOString().slice(0, 10);
     const endDate: string = body?.end_date || startDate;
+    const taskIds: string[] = Array.isArray(body?.task_ids) ? body.task_ids.map(String) : [];
 
     const token = await auvoLogin();
 
+    // Quando o cliente envia os IDs das TAREFAS DE EXECUÇÃO lidos da OS do GC,
+    // buscamos exatamente essas tarefas (vínculo pelo campo da OS, não por nome/código).
     const [tasks, users] = await Promise.all([
-      fetchTasks(token, startDate, endDate),
+      taskIds.length > 0 ? fetchTasksByIds(token, taskIds) : fetchTasks(token, startDate, endDate),
       fetchUsers(token).catch(() => new Map<number, string>()),
     ]);
+
 
     const customerIds = Array.from(
       new Set(

@@ -152,6 +152,11 @@ function gcOrderUrl(osId: string): string {
   return `https://gestaoclick.com/ordens_servicos/editar/${osId}?retorno=%2Fordens_servicos`;
 }
 
+function auvoTaskUrl(taskId: string): string {
+  return `https://app.auvo.com.br/tasks/${taskId}`;
+}
+
+
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
   const [agendaDate, setAgendaDate] = useState(todayISO);
@@ -854,6 +859,11 @@ export default function AgendaOSPanel() {
                         </Button>
                       )}
                       <Button asChild variant="ghost" size="icon" title="Abrir OS no GestãoClick"><a href={gcOrderUrl(row.os.id)} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>
+                      {(row.task?.task_id || row.taskIds[0]) && (
+                        <Button asChild variant="ghost" size="icon" title="Abrir tarefa no Auvo">
+                          <a href={auvoTaskUrl(row.task?.task_id || row.taskIds[0])} target="_blank" rel="noreferrer"><Calendar className="h-4 w-4" /></a>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -880,7 +890,14 @@ export default function AgendaOSPanel() {
                   </div>
                   {task.orientation && <p className="line-clamp-2 max-w-4xl text-xs text-muted-foreground">{task.orientation}</p>}
                 </div>
-                <p className="max-w-sm text-xs text-red-700">Esta tarefa é exibida para conferência, mas não pode receber peças: nenhum atributo 73344 de uma OS aberta aponta para ela.</p>
+                <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
+                  <p className="max-w-sm text-xs text-red-700">Esta tarefa é exibida para conferência, mas não pode receber peças: nenhum atributo 73344 de uma OS aberta aponta para ela.</p>
+                  <Button asChild variant="outline" size="sm">
+                    <a href={auvoTaskUrl(task.task_id)} target="_blank" rel="noreferrer">
+                      <ExternalLink className="mr-1.5 h-3.5 w-3.5" />Abrir no Auvo
+                    </a>
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}

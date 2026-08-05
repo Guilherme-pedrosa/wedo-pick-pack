@@ -132,6 +132,7 @@ Deno.serve(async (req: Request) => {
         orientation,
         orcamento_code: extractOrcamentoCode(orientation),
         os_code: extractOsCode(orientation),
+        customer_id_gc: t?.idClientExternal || null,
       };
     });
 

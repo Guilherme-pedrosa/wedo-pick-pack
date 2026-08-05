@@ -9,6 +9,7 @@ export interface SeparationRecord {
   client_name: string;
   status_name: string;
   status_id: string;
+  client_id: string | null;
   target_status_id: string;
   target_status_name: string;
   total_value: string;
@@ -40,6 +41,7 @@ export interface CreateSeparationInput {
   items_total: number;
   items_confirmed: number;
   operator_name: string;
+  client_id?: string;
   equipment_name?: string;
   started_at: string;
   observations?: string;
@@ -64,6 +66,7 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
     .from('separations')
     .insert({
       user_id: user.id,
+      client_id: input.client_id || null,
       ...input,
     })
     .select()

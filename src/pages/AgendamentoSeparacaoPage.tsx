@@ -98,13 +98,22 @@ export default function AgendamentoSeparacaoPage() {
       .then(({ data }) => setTechnicians((data || []) as LocalTechnician[]));
   }, []);
 
-  /** Matches an Auvo task to a local separation (by order code in orientation, then client name). */
+  /** Matches an Auvo task to a local separation (by order code, then customer_id_gc, then client name). */
   const findSeparation = (task: AuvoAgendaTask): SeparationRecord | null => {
+    // 1. Match by Order Code (OS or Budget)
     const codes = [task.os_code, task.orcamento_code].filter(Boolean) as string[];
     for (const code of codes) {
       const byCode = separations.find((s) => s.order_code === code);
       if (byCode) return byCode;
     }
+
+    // 2. Match by GC Customer ID (if available in Auvo task)
+    if (task.customer_id_gc) {
+      const byCustomerId = separations.find((s) => s.client_id === task.customer_id_gc);
+      if (byCustomerId) return byCustomerId;
+    }
+
+    // 3. Match by Client Name
     const client = normalizeName(task.customer_name || '');
     if (!client) return null;
     return (
@@ -243,7 +252,7 @@ export default function AgendamentoSeparacaoPage() {
       </div>
 
       <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Calendar className="h-3 w-3" /> Data de agendamento
@@ -288,17 +297,18 @@ export default function AgendamentoSeparacaoPage() {
             <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <Search className="h-3 w-3" /> Buscar
             </label>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Cliente, OS ou orçamento..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1"
-              />
-              <Button variant="outline" size="icon" onClick={() => refetch()}>
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
+            <Input
+              placeholder="Código OS ou Cliente..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-end">
+            <Button variant="outline" className="w-full gap-2" onClick={() => refetch()} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
           </div>
         </div>
       </Card>

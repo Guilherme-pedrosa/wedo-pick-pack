@@ -15,6 +15,7 @@ export interface AuvoAgendaTask {
   orientation: string;
   orcamento_code: string | null;
   os_code: string | null;
+  customer_id_gc: string | null;
 }
 
 export const AUVO_STATUS_LABEL: Record<number, string> = {

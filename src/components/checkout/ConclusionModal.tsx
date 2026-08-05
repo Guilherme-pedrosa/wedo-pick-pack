@@ -102,6 +102,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         order_id: session.refId,
         order_code: session.codigo,
         client_name: session.nomeCliente,
+        client_id: session.rawOrder.cliente_id,
         status_name: session.nomeSituacao,
         status_id: session.situacaoId,
         target_status_id: effectiveStatus,

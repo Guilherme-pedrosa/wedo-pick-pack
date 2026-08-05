@@ -6,6 +6,7 @@ import { useCheckoutStore } from '@/store/checkoutStore';
 import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
 import { GCOrdemServico, GCVenda, PickingItem } from '@/api/types';
 import { createSeparation, snapshotPickingItems } from '@/api/separations';
+import { confirmPartialBatch } from '@/api/partialWriteoff';
 import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const config = useCheckoutStore(s => s.config);
   const concludeSession = useCheckoutStore(s => s.concludeSession);
   const queryClient = useQueryClient();
+  const isPartialWriteoff = !!session?.partialWriteoff;
 
   const configuredDefaultStatus = session?.tipo === 'os'
     ? config.defaultOSConclusionStatus
@@ -52,14 +54,14 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const statusQuery = useQuery({
     queryKey: ['statuses-conclusion', session?.tipo],
     queryFn: () => session?.tipo === 'os' ? getStatusOS() : getStatusVendas(),
-    enabled: open,
+    enabled: open && !isPartialWriteoff,
   });
 
   const defaultStatus = statusQuery.data?.some((s) => s.id === configuredDefaultStatus)
     ? configuredDefaultStatus
     : '';
   const hasDefault = !!defaultStatus;
-  const effectiveStatus = hasDefault ? defaultStatus : selectedStatus;
+  const effectiveStatus = isPartialWriteoff ? 'partial-writeoff' : (hasDefault ? defaultStatus : selectedStatus);
   const configuredStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome || (hasDefault ? `Status #${defaultStatus}` : '');
 
   if (!session) return null;
@@ -78,23 +80,36 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   };
 
   const handleConfirm = async () => {
-    if (!effectiveStatus) {
+    if (isPartialWriteoff && (forced || session.items.some(item => !item.conferido))) {
+      toast.error('A baixa parcial exige a conferência completa do lote.');
+      return;
+    }
+    if (!isPartialWriteoff && !effectiveStatus) {
       toast.error('Selecione um status');
       return;
     }
-    if (!statusQuery.data?.some((status) => status.id === effectiveStatus)) {
+    if (!isPartialWriteoff && !statusQuery.data?.some((status) => status.id === effectiveStatus)) {
       toast.error('A situação selecionada não pertence a este tipo de documento.');
       return;
     }
     setSubmitting(true);
     try {
-      if (session.tipo === 'os') {
+      let targetStatusName: string;
+      let targetStatusId: string;
+      if (isPartialWriteoff) {
+        await confirmPartialBatch(session.partialWriteoff!.batchId);
+        targetStatusName = 'Baixa parcial aplicada (somente estoque)';
+        targetStatusId = `partial:${session.partialWriteoff!.batchId}`;
+      } else if (session.tipo === 'os') {
         await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, effectiveStatus, config.operatorName, config.gcUsuarioId);
+        targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
+        targetStatusId = effectiveStatus;
       } else {
         await updateVendaStatus(session.refId, session.rawOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
+        targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
+        targetStatusId = effectiveStatus;
       }
 
-      const targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
       const concludedAt = new Date().toISOString();
 
       await createSeparation({
@@ -105,7 +120,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         client_id: session.rawOrder.cliente_id,
         status_name: session.nomeSituacao,
         status_id: session.situacaoId,
-        target_status_id: effectiveStatus,
+        target_status_id: targetStatusId,
         target_status_name: targetStatusName,
         total_value: session.valorTotal,
         items_total: session.items.length,
@@ -158,13 +173,18 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           concluded_at: concludedAt,
           duration: `${durationMins}min ${durationSecs}s`,
           target_status: targetStatusName,
+          partial_writeoff: session.partialWriteoff || null,
           observations: observations.trim() || null,
         },
       });
 
       concludeSession();
       queryClient.invalidateQueries({ queryKey: ['separations'] });
-      toast.success('✓ Separação concluída! Status atualizado no GestãoClick.');
+      queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
+      queryClient.invalidateQueries({ queryKey: ['partial-writeoff-operations'] });
+      toast.success(isPartialWriteoff
+        ? '✓ Baixa parcial confirmada e saldo pendente atualizado.'
+        : '✓ Separação concluída! Status atualizado no GestãoClick.');
 
       // Notify parent to show receipt
       onConcluded?.(receiptData);
@@ -215,7 +235,15 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           )}
         </div>
 
-        {hasDefault ? (
+        {isPartialWriteoff ? (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Movimento no GestãoClick:</label>
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+              <strong>Baixa parcial — somente estoque.</strong><br />
+              Financeiro, comissão, serviços e Auvo não serão lançados neste lote.
+            </div>
+          </div>
+        ) : hasDefault ? (
           <div className="space-y-2">
             <label className="text-sm font-medium">Novo status no GestãoClick:</label>
             <div className="bg-muted rounded-md px-3 py-2 text-sm font-medium">

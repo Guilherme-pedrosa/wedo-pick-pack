@@ -15,7 +15,7 @@ interface CheckoutStore {
   session: PickingSession | null;
   concludedSessions: string[];
   config: CheckoutConfig;
-  startSession: (tipo: OrderType, order: Order) => void;
+  startSession: (tipo: OrderType, order: Order, partialWriteoff?: PickingSession['partialWriteoff']) => void;
   confirmItem: (itemId: string, qtd?: number) => void;
   concludeSession: () => void;
   cancelSession: () => void;
@@ -58,7 +58,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
         operatorName: '',
         gcUsuarioId: '',
       },
-      startSession: (tipo, order) => {
+      startSession: (tipo, order, partialWriteoff) => {
         // Extract equipment name from OS equipamentos array
         let equipmentName: string | undefined;
         if ('equipamentos' in order && Array.isArray(order.equipamentos) && order.equipamentos.length > 0) {
@@ -80,6 +80,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
           rawOrder: order,
           items: buildItems(order),
           startedAt: new Date().toISOString(),
+          partialWriteoff,
         };
         set({ session });
       },

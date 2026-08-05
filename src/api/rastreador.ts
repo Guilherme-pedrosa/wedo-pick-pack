@@ -2,6 +2,7 @@ import { GCOrcamento, GCProdutoDetalhe, OrcamentoConvertidoWarning, GCOrdemCompr
 import { getStatusOrcamentos, listOrcamentos, getProdutoDetalhe, buildOSIndex, OSReservedDemand, listOrdensCompra } from './compras';
 import { getOS } from './gestaoclick';
 import { supabase } from '@/integrations/supabase/client';
+import { getActivePartialDemand } from './partialWriteoff';
 
 export interface OrcamentoReadiness {
   orcamento: GCOrcamento;
@@ -159,6 +160,8 @@ export async function rastrearOrcamentos(
   let filteredOrcamentos = nomeCliente
     ? deduped.filter(o => o.nome_cliente.toLowerCase().includes(nomeCliente.toLowerCase()))
     : deduped;
+  const partialDemand = await getActivePartialDemand();
+  filteredOrcamentos = filteredOrcamentos.filter(o => !partialDemand.activeBudgetIds.has(o.id));
   console.info('[RASTREADOR] 📦 Após filtro nome:', filteredOrcamentos.length);
 
   // Date filter (data >= dataInicio). GC dates come as YYYY-MM-DD, so string compare works.

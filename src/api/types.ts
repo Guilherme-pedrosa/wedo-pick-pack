@@ -105,6 +105,12 @@ export interface PickingSession {
   items: PickingItem[];
   startedAt: string;
   concludedAt?: string;
+  partialWriteoff?: {
+    operationId: string;
+    batchId: string;
+    budgetCode: string;
+    marker: string;
+  };
 }
 
 // --- COMPRAS MODULE ---

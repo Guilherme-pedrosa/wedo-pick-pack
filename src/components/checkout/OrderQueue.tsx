@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listOS, listVendas, listOSMultiStatus, listVendasMultiStatus, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict, BelowCostWarning } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
+import { findPartialBatchByDocument, getPartialCheckoutQueue, PartialCheckoutEntry } from '@/api/partialWriteoff';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -12,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle, ChevronDown, Filter } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle, ChevronDown, Filter, PackageMinus } from 'lucide-react';
 import { toast } from 'sonner';
 
 type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
@@ -50,6 +51,20 @@ export default function OrderQueue() {
     refetchOnWindowFocus: false,
   });
   const separatedIds = separatedQuery.data || new Set<string>();
+
+  const partialQueueQuery = useQuery({
+    queryKey: ['partial-checkout-queue'],
+    queryFn: getPartialCheckoutQueue,
+    refetchInterval: 30000,
+    staleTime: 10000,
+    refetchOnWindowFocus: true,
+  });
+  const partialQueue = partialQueueQuery.data || [];
+  const partialForType = partialQueue.filter(entry => entry.type === activeType);
+  const partialDocumentIds = useMemo(
+    () => new Set(partialQueue.map(entry => `${entry.type}:${entry.documentId}`)),
+    [partialQueue],
+  );
 
   const statusQuery = useQuery({
     queryKey: ['statuses', activeType],
@@ -110,7 +125,7 @@ export default function OrderQueue() {
       : [...filteredByStock];
 
     // Hide already-separated orders
-    result = result.filter(o => !separatedIds.has(o.id));
+    result = result.filter(o => !separatedIds.has(o.id) && !partialDocumentIds.has(`${activeType}:${o.id}`));
 
     // Sort
     result.sort((a, b) => {
@@ -131,7 +146,7 @@ export default function OrderQueue() {
     });
 
     return result;
-  }, [filteredByStock, debouncedSearch, sortField, separatedIds]);
+  }, [filteredByStock, debouncedSearch, sortField, separatedIds, partialDocumentIds, activeType]);
 
   // Compute which orders can't be fulfilled because stock ran out (allocated to earlier orders by code)
   const outOfStockOrderIds = useMemo(() => {
@@ -217,13 +232,19 @@ export default function OrderQueue() {
     }
   }, [filteredByConfig]);
 
-  const loadAndStart = useCallback(async (tipo: OrderType, id: string) => {
+  const loadAndStart = useCallback(async (tipo: OrderType, id: string, partialEntry?: PartialCheckoutEntry | null) => {
     setLoading(true);
     try {
       const order = tipo === 'os' ? await getOS(id) : await getVenda(id);
       const enrichedProdutos = await enrichOrderProducts(order.produtos);
       order.produtos = enrichedProdutos;
-      startSession(tipo, order);
+      const linkedPartial = partialEntry ?? await findPartialBatchByDocument(tipo, id);
+      startSession(tipo, order, linkedPartial ? {
+        operationId: linkedPartial.operationId,
+        batchId: linkedPartial.batchId,
+        budgetCode: linkedPartial.budgetCode,
+        marker: linkedPartial.marker,
+      } : undefined);
     } catch (err) {
       toast.error('Erro ao carregar pedido');
     } finally {
@@ -349,6 +370,7 @@ export default function OrderQueue() {
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ['orders'] });
               queryClient.invalidateQueries({ queryKey: ['statuses'] });
+              queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
               separatedQuery.refetch();
               setStockFilter(null);
               setStockConflicts([]);
@@ -486,10 +508,47 @@ export default function OrderQueue() {
 
       {/* Order list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {partialForType.length > 0 && (
+          <div className="mb-3 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-amber-800">
+              <PackageMinus className="h-4 w-4" />
+              Baixas parciais aguardando conferência ({partialForType.length})
+            </div>
+            {partialForType.map(entry => {
+              const isActive = session?.partialWriteoff?.batchId === entry.batchId && !session.concludedAt;
+              return (
+                <Card
+                  key={entry.batchId}
+                  className={`p-3 cursor-pointer border-l-4 border-l-amber-500 bg-amber-50/70 hover:shadow-md ${isActive ? 'ring-2 ring-amber-400' : ''} ${loading ? 'pointer-events-none opacity-50' : ''}`}
+                  onClick={() => {
+                    if (session && session.refId !== entry.documentId && !session.concludedAt) {
+                      setConfirmSwitch({ tipo: entry.type, id: entry.documentId });
+                      return;
+                    }
+                    void loadAndStart(entry.type, entry.documentId, entry);
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-amber-600 text-white">BAIXA PARCIAL</Badge>
+                        <span className="font-semibold text-sm">{entry.type === 'os' ? 'OS' : 'Venda'} #{entry.documentCode}</span>
+                      </div>
+                      <p className="text-sm font-medium mt-1">{entry.clientName}</p>
+                      <p className="text-xs text-muted-foreground">Orçamento-mãe #{entry.budgetCode} · Lote aguardando Checkout</p>
+                    </div>
+                    {isActive && <Badge variant="outline">Em andamento</Badge>}
+                  </div>
+                </Card>
+              );
+            })}
+            <div className="border-b border-border pt-1" />
+          </div>
+        )}
         {ordersQuery.isLoading && (
           <div className="text-center text-muted-foreground py-8">Carregando...</div>
         )}
-        {!ordersQuery.isLoading && filtered.length === 0 && (
+        {!ordersQuery.isLoading && filtered.length === 0 && partialForType.length === 0 && (
           <div className="text-center text-muted-foreground py-8">Nenhum pedido encontrado</div>
         )}
         {filtered.map(order => {

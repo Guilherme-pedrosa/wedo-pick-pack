@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildActivePartialDemand, PartialWriteoffOperation } from './partialWriteoff';
+import { documentTypeForBudgetKind, isBudgetEligibleForPartialWriteoff } from './partialWriteoffClient';
 
 function operation(withdrawn: number, status: PartialWriteoffOperation['status'] = 'awaiting_balance'): PartialWriteoffOperation {
   return {
@@ -67,5 +68,27 @@ describe('demanda da baixa parcial', () => {
     const result = buildActivePartialDemand([operation(10, 'completed')]);
     expect(result.activeBudgetIds.size).toBe(0);
     expect(result.pendingByBudgetAndProduct.size).toBe(0);
+  });
+});
+
+describe('origem do orçamento no GestãoClick', () => {
+  it('mantém orçamento de produto como venda mesmo quando possui serviço adicional', () => {
+    expect(documentTypeForBudgetKind('produto', { servicos: [{ id: 'service-1' }] })).toBe('venda');
+  });
+
+  it('mantém orçamento de serviço como OS mesmo quando possui somente produtos', () => {
+    expect(documentTypeForBudgetKind('servico', { produtos: [{ id: 'product-1' }] })).toBe('os');
+  });
+
+  it('bloqueia orçamento que já gerou OS', () => {
+    expect(isBudgetEligibleForPartialWriteoff({ nome_situacao: 'Aprovado - OS Gerada' })).toBe(false);
+  });
+
+  it('bloqueia orçamento que já gerou venda', () => {
+    expect(isBudgetEligibleForPartialWriteoff({ nome_situacao: 'Aprovado - Venda Gerada' })).toBe(false);
+  });
+
+  it('aceita orçamento aprovado que ainda não gerou documento', () => {
+    expect(isBudgetEligibleForPartialWriteoff({ nome_situacao: 'Aprovado' })).toBe(true);
   });
 });

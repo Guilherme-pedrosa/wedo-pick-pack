@@ -26,6 +26,7 @@ import { deslocamentoMemoRows, extrasMemoRows, resultadoMemo } from "@/lib/orcam
 import ExtrasCard from "./ExtrasCard";
 import {
   AnalysisConfig,
+  AnalysisOverrides,
   ClienteResumo,
   DEFAULT_DESLOCAMENTO,
   DeslocamentoInput,
@@ -54,11 +55,12 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
   const [desl, setDesl] = useState<DeslocamentoInput>(DEFAULT_DESLOCAMENTO);
   const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(config));
   const [mostrarMemoria, setMostrarMemoria] = useState(true);
+  const [overrides, setOverrides] = useState<AnalysisOverrides>({});
 
 
   const analysis = useMemo(
-    () => (orcamentos.length ? analyzeGrupo(orcamentos, config, desl, extras) : null),
-    [orcamentos, config, desl, extras]
+    () => (orcamentos.length ? analyzeGrupo(orcamentos, config, desl, extras, overrides) : null),
+    [orcamentos, config, desl, extras, overrides]
   );
 
   const buscarClientes = async () => {
@@ -581,43 +583,89 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
               </div>
             </CardHeader>
             <CardContent className="space-y-1.5 text-sm">
-              {[
-                {
-                  label: "Peças (venda)",
-                  valor: analysis.itens.reduce((s, i) => s + i.receitaProdutos, 0),
-                  memo: `Soma da venda de peças de ${analysis.itens.length} orçamento(s): ${analysis.itens
-                    .map((i) => `#${i.codigo} ${formatBRL(i.receitaProdutos)}`)
-                    .join(" + ")}`,
-                },
-                {
-                  label: "Serviços (venda)",
-                  valor: analysis.itens.reduce((s, i) => s + i.receitaServicos, 0),
-                  memo: `Soma da venda de serviços: ${analysis.itens
-                    .map((i) => `#${i.codigo} ${formatBRL(i.receitaServicos)}`)
-                    .join(" + ")}`,
-                },
-                {
-                  label: "Custo das peças",
-                  valor: -analysis.itens.reduce((s, i) => s + i.custoProdutos, 0),
-                  memo: "Soma de (custo unitário × quantidade) das linhas de peças de cada orçamento.",
-                },
-                {
-                  label: "Custo dos serviços",
-                  valor: -analysis.itens.reduce((s, i) => s + i.custoServicos, 0),
-                  memo: "Soma de (custo unitário × quantidade) das linhas de serviço de cada orçamento — inclui as linhas de deslocamento/KM cobradas, cujo custo já está aqui dentro.",
-                },
-              ]
-                .map((r) => (
-                  <div key={r.label} className="border-b border-border/50 py-1">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">{r.label}</span>
-                      <span className={cn("tabular-nums", r.valor < 0 && "text-muted-foreground")}>
-                        {formatBRL(r.valor)}
-                      </span>
+              {(
+                [
+                  [
+                    "Peças (venda)",
+                    analysis.receitaProdutos,
+                    "receitaProdutos",
+                    false,
+                    `Soma da venda de peças de ${analysis.itens.length} orçamento(s): ${analysis.itens
+                      .map((i) => `#${i.codigo} ${formatBRL(i.receitaProdutos)}`)
+                      .join(" + ")}`,
+                  ],
+                  [
+                    "Serviços (venda)",
+                    analysis.receitaServicos,
+                    "receitaServicos",
+                    false,
+                    `Soma da venda de serviços: ${analysis.itens
+                      .map((i) => `#${i.codigo} ${formatBRL(i.receitaServicos)}`)
+                      .join(" + ")}`,
+                  ],
+                  [
+                    "Desconto adicional do conjunto",
+                    overrides.descontoCabecalho ?? 0,
+                    "descontoCabecalho",
+                    true,
+                    "Desconto negociado para o conjunto, aplicado sobre a receita líquida somada.",
+                  ],
+                  [
+                    "Custo das peças",
+                    analysis.custoProdutos,
+                    "custoProdutos",
+                    true,
+                    "Soma de (custo unitário × quantidade) das linhas de peças de cada orçamento.",
+                  ],
+                  [
+                    "Custo dos serviços",
+                    analysis.custoServicos,
+                    "custoServicos",
+                    true,
+                    "Soma de (custo unitário × quantidade) das linhas de serviço de cada orçamento — inclui as linhas de deslocamento/KM cobradas, cujo custo já está aqui dentro.",
+                  ],
+                ] as Array<[string, number, keyof AnalysisOverrides, boolean, string]>
+              ).map(([label, v, key, negativo, memo]) => (
+                <div key={label} className="border-b border-border/50 py-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">{label}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground">{negativo ? "-R$" : "R$"}</span>
+                      <Input
+                        inputMode="decimal"
+                        aria-label={label}
+                        className={cn(
+                          "h-7 w-28 border-transparent bg-transparent px-1 text-right tabular-nums hover:border-input focus:border-input",
+                          overrides[key] !== undefined && "border-primary/60 font-medium"
+                        )}
+                        value={(overrides[key] ?? v).toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+                          setOverrides((prev) => ({ ...prev, [key]: parseFloat(raw) || 0 }));
+                        }}
+                      />
                     </div>
-                    {mostrarMemoria && <p className="pt-0.5 text-xs text-muted-foreground/70">{r.memo}</p>}
                   </div>
-                ))}
+                  {mostrarMemoria && (
+                    <p className="pt-0.5 text-xs text-muted-foreground/70">
+                      {overrides[key] !== undefined ? `Valor editado manualmente. Original: ${formatBRL(v)} · ` : ""}
+                      {memo}
+                    </p>
+                  )}
+                </div>
+              ))}
+
+              {Object.keys(overrides).length > 0 && (
+                <div className="flex justify-end pt-1">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOverrides({})}>
+                    Restaurar valores dos orçamentos
+                  </Button>
+                </div>
+              )}
+
 
               {[...deslocamentoMemoRows(analysis), ...extrasMemoRows(analysis, extras)]
                 .filter((r) => r.valor !== 0 || r.tone !== "positivo")

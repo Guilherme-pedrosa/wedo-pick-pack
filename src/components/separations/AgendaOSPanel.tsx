@@ -957,7 +957,6 @@ export default function AgendaOSPanel() {
           )}
         </div>
       )}
-      )}
 
       <Dialog open={!!scheduleRow} onOpenChange={(open) => !open && !savingSchedule && setScheduleRow(null)}>
         <DialogContent className="max-w-md">

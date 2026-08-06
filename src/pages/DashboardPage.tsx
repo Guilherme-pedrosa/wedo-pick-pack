@@ -38,6 +38,7 @@ import {
   type IntegrationOperationsDashboard,
 } from '@/api/operationsDashboard';
 import ComprasSnapshotDialog from '@/components/dashboard/ComprasSnapshotDialog';
+import ReturnsSummaryCard from '@/components/dashboard/ReturnsSummaryCard';
 
 type AlertLevel = 'critical' | 'warning' | 'info';
 
@@ -522,6 +523,10 @@ const DashboardPage = () => {
           onClick={() => setComprasDialogOpen(true)}
         />
       </div>
+
+      <ReturnsSummaryCard />
+
+
 
       <section className="space-y-3">
         <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">

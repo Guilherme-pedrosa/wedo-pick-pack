@@ -54,11 +54,12 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
   const [desl, setDesl] = useState<DeslocamentoInput>(DEFAULT_DESLOCAMENTO);
   const [extras, setExtras] = useState<ExtrasInput>(() => defaultExtras(config));
   const [mostrarMemoria, setMostrarMemoria] = useState(true);
+  const [overrides, setOverrides] = useState<AnalysisOverrides>({});
 
 
   const analysis = useMemo(
-    () => (orcamentos.length ? analyzeGrupo(orcamentos, config, desl, extras) : null),
-    [orcamentos, config, desl, extras]
+    () => (orcamentos.length ? analyzeGrupo(orcamentos, config, desl, extras, overrides) : null),
+    [orcamentos, config, desl, extras, overrides]
   );
 
   const buscarClientes = async () => {

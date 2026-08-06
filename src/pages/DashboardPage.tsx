@@ -38,6 +38,7 @@ import {
   type IntegrationOperationsDashboard,
 } from '@/api/operationsDashboard';
 import ComprasSnapshotDialog from '@/components/dashboard/ComprasSnapshotDialog';
+import ReturnsSummaryCard from '@/components/dashboard/ReturnsSummaryCard';
 
 type AlertLevel = 'critical' | 'warning' | 'info';
 

@@ -1038,10 +1038,30 @@ export function analyzeGrupo(
     };
   });
 
-  const receitaLiquida = itens.reduce((s, i) => s + i.receita, 0);
-  const custoDireto = itens.reduce((s, i) => s + i.custoDireto, 0);
-  const receitaProdutos = itens.reduce((s, i) => s + i.receitaProdutos, 0);
-  const receitaServicos = itens.reduce((s, i) => s + i.receitaServicos, 0);
+  const receitaLiquidaBase = itens.reduce((s, i) => s + i.receita, 0);
+  const custoDiretoBase = itens.reduce((s, i) => s + i.custoDireto, 0);
+  const receitaProdutosBase = itens.reduce((s, i) => s + i.receitaProdutos, 0);
+  const receitaServicosBase = itens.reduce((s, i) => s + i.receitaServicos, 0);
+  const custoProdutosBase = itens.reduce((s, i) => s + i.custoProdutos, 0);
+  const custoServicosBase = itens.reduce((s, i) => s + i.custoServicos, 0);
+
+  const numOv = (v: number | undefined, fallback: number) =>
+    typeof v === 'number' && isFinite(v) ? v : fallback;
+
+  const receitaProdutos = numOv(overrides.receitaProdutos, receitaProdutosBase);
+  const receitaServicos = numOv(overrides.receitaServicos, receitaServicosBase);
+  const custoProdutos = numOv(overrides.custoProdutos, custoProdutosBase);
+  const custoServicos = numOv(overrides.custoServicos, custoServicosBase);
+  const descontoExtra = numOv(overrides.descontoCabecalho, 0);
+
+  // preserva frete/descontos já embutidos na receita líquida original
+  const receitaLiquida =
+    receitaLiquidaBase +
+    (receitaProdutos - receitaProdutosBase) +
+    (receitaServicos - receitaServicosBase) -
+    descontoExtra;
+  const custoDireto = custoDiretoBase + (custoProdutos - custoProdutosBase) + (custoServicos - custoServicosBase);
+
 
   // Deslocamento compartilhado
   const kmDetectado = itens.reduce((s, i) => s + i.kmDetectado, 0);

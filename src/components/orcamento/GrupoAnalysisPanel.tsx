@@ -26,6 +26,7 @@ import { deslocamentoMemoRows, extrasMemoRows, resultadoMemo } from "@/lib/orcam
 import ExtrasCard from "./ExtrasCard";
 import {
   AnalysisConfig,
+  AnalysisOverrides,
   ClienteResumo,
   DEFAULT_DESLOCAMENTO,
   DeslocamentoInput,

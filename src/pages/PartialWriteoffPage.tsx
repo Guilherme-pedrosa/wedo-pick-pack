@@ -154,9 +154,27 @@ export default function PartialWriteoffPage() {
   async function refresh() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['partial-writeoff-operations'] }),
+      queryClient.invalidateQueries({ queryKey: ['partial-writeoff-stock'] }),
       queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] }),
     ]);
   }
+
+  async function handleManualRefresh() {
+    if (manualRefreshing) return;
+    setManualRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
+      await queryClient.invalidateQueries({ queryKey: ['partial-writeoff-stock'] });
+      const result = await operationsQuery.refetch();
+      if (result.error) throw result.error;
+      toast.success('Lista atualizada.');
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setManualRefreshing(false);
+    }
+  }
+
 
   async function handleSearch() {
     if (!budgetKind) {

@@ -270,7 +270,7 @@ function buildAttentionItems(
     items.push({
       id: 'purchase-tracker',
       level: 'critical',
-      title: 'Acompanhamento de compras sem cobertura',
+      title: 'Acompanhamento de compras (comprado ag chegada)',
       description: cloud.purchaseTracker?.errorMessage || 'O rastreador de pedidos ainda não possui uma leitura válida.',
       href: '/compras/acompanhamento',
       action: 'Configurar situações',

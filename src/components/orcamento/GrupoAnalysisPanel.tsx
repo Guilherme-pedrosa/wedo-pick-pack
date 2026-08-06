@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { deslocamentoMemoRows, extrasMemoRows, resultadoMemo } from "@/lib/orcamentoMemoria";
 
 import ExtrasCard from "./ExtrasCard";
+import { MoneyInput } from "./MoneyInput";
 import {
   AnalysisConfig,
   AnalysisOverrides,

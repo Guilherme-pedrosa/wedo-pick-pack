@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { deslocamentoMemoRows, extrasMemoRows, resultadoMemo } from "@/lib/orcamentoMemoria";
 
 import ExtrasCard from "./ExtrasCard";
+import { MoneyInput } from "./MoneyInput";
 import {
   AnalysisConfig,
   AnalysisOverrides,
@@ -631,23 +632,14 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
                     <span className="text-muted-foreground">{label}</span>
                     <div className="flex items-center gap-1">
                       <span className="text-muted-foreground">{negativo ? "-R$" : "R$"}</span>
-                      <Input
-                        inputMode="decimal"
-                        aria-label={label}
-                        className={cn(
-                          "h-7 w-28 border-transparent bg-transparent px-1 text-right tabular-nums hover:border-input focus:border-input",
-                          overrides[key] !== undefined && "border-primary/60 font-medium"
-                        )}
-                        value={(overrides[key] ?? v).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
-                          setOverrides((prev) => ({ ...prev, [key]: parseFloat(raw) || 0 }));
-                        }}
+                      <MoneyInput
+                        ariaLabel={label}
+                        edited={overrides[key] !== undefined}
+                        value={overrides[key] ?? v}
+                        onValueChange={(next) => setOverrides((prev) => ({ ...prev, [key]: next }))}
                       />
                     </div>
+
                   </div>
                   {mostrarMemoria && (
                     <p className="pt-0.5 text-xs text-muted-foreground/70">

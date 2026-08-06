@@ -37,6 +37,7 @@ import { deslocamentoMemoRows, extrasMemoRows, resultadoMemo } from "@/lib/orcam
 
 import ExtrasCard from "@/components/orcamento/ExtrasCard";
 import GrupoAnalysisPanel from "@/components/orcamento/GrupoAnalysisPanel";
+import { MoneyInput } from "@/components/orcamento/MoneyInput";
 import {
   AnalysisConfig,
   AnalysisOverrides,
@@ -598,22 +599,16 @@ export default function OrcamentoAnalysisPage() {
                     <div className="flex items-center gap-1">
                       {negativo && <span className="text-muted-foreground">-R$</span>}
                       {!negativo && <span className="text-muted-foreground">R$</span>}
-                      <Input
-                        inputMode="decimal"
-                        className={cn(
-                          "h-7 w-28 border-transparent bg-transparent px-1 text-right tabular-nums hover:border-input focus:border-input",
-                          overrides[key] !== undefined && "border-primary/60 font-medium"
-                        )}
-                        value={(overrides[key] ?? v).toLocaleString("pt-BR", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
-                          updateOverrides({ [key]: parseFloat(raw) || 0 } as AnalysisOverrides);
-                        }}
+                      <MoneyInput
+                        ariaLabel={label}
+                        edited={overrides[key] !== undefined}
+                        value={overrides[key] ?? v}
+                        onValueChange={(next) =>
+                          updateOverrides({ [key]: next } as AnalysisOverrides)
+                        }
                       />
                     </div>
+
                   </div>
                   {mostrarMemoria && (
                     <p className="pt-0.5 text-xs text-muted-foreground/70">

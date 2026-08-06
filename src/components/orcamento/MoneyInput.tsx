@@ -29,10 +29,8 @@ interface MoneyInputProps {
 export function MoneyInput({ value, onValueChange, ariaLabel, edited, className }: MoneyInputProps) {
   const [text, setText] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (text === null) return;
-    // mantém o texto local enquanto o usuário edita
-  }, [value, text]);
+
+
 
   return (
     <Input

@@ -119,17 +119,34 @@ Deno.serve(async (req: Request) => {
       .limit(1)
       .maybeSingle();
 
-    const ids: string[] = settings?.watched_situacao_ids ?? [];
+    let ids: string[] = settings?.watched_situacao_ids ?? [];
+
+    // Fallback padrão: sempre acompanhar "COMPRADO - AG CHEGADA" quando nada estiver configurado
+    if (!ids.length) {
+      try {
+        const sits = await gcGet('/api/situacoes?tipo=compra');
+        const list = (sits?.data || []).map((w: any) => w?.Situacao ?? w?.situacao ?? w);
+        const match = list.find((s: any) => {
+          const nome = String(s?.nome ?? '').toUpperCase();
+          return nome.includes('COMPRADO') && nome.includes('CHEGADA');
+        });
+        if (match?.id) ids = [String(match.id)];
+      } catch (e) {
+        console.error('fallback situacao lookup failed', e);
+      }
+    }
+
     if (!ids.length) {
       await supabase.from('purchase_tracker_snapshots').insert({
         status: 'skipped',
-        error_message: 'Nenhuma situação configurada',
+        error_message: 'Situação "COMPRADO - AG CHEGADA" não encontrada no GestãoClick',
         duration_ms: Date.now() - started,
       });
       return new Response(JSON.stringify({ ok: true, skipped: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
 
     const all = new Map<string, Row>();
     for (const sid of ids) {

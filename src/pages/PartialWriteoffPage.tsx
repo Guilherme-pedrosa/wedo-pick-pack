@@ -225,7 +225,7 @@ export default function PartialWriteoffPage() {
     setPreparing(true);
     try {
       if (!batchRequestKey.current) batchRequestKey.current = crypto.randomUUID();
-      await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current);
+      await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current as string);
       batchRequestKey.current = null;
       await refresh();
       toast.success('Documento auxiliar criado. O lote já está na fila do Checkout.');

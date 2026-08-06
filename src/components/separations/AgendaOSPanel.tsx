@@ -1,6 +1,11 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 import {
   Calendar,
   CheckCircle2,
@@ -10,6 +15,7 @@ import {
   Clock,
   ExternalLink,
   Filter,
+  LayoutGrid,
   Link2Off,
   Loader2,
   MapPin,

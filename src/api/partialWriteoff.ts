@@ -135,7 +135,7 @@ export async function listPartialOperations(): Promise<PartialWriteoffOperation[
 export async function preparePartialBatch(
   operationId: string,
   items: Array<{ item_id: string; quantity: number }>,
-  idempotencyKey = crypto.randomUUID(),
+  idempotencyKey: string = crypto.randomUUID(),
 ): Promise<PartialWriteoffOperation> {
   const data = await invoke<{ operation: PartialWriteoffOperation }>({
     action: 'prepare_batch',

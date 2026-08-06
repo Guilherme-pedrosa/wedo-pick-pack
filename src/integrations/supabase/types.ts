@@ -867,6 +867,308 @@ export type Database = {
         }
         Relationships: []
       }
+      partial_writeoff_batch_items: {
+        Row: {
+          batch_id: string
+          item_id: string
+          quantity: number
+        }
+        Insert: {
+          batch_id: string
+          item_id: string
+          quantity: number
+        }
+        Update: {
+          batch_id?: string
+          item_id?: string
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partial_writeoff_batch_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partial_writeoff_batch_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_item_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partial_writeoff_batch_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partial_writeoff_batches: {
+        Row: {
+          auxiliary_document_code: string | null
+          auxiliary_document_id: string | null
+          auxiliary_document_type: string
+          confirmed_at: string | null
+          created_at: string
+          error_message: string | null
+          gc_create_response: Json | null
+          id: string
+          idempotency_key: string
+          marker: string
+          operation_id: string
+          sequence: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          auxiliary_document_code?: string | null
+          auxiliary_document_id?: string | null
+          auxiliary_document_type: string
+          confirmed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          gc_create_response?: Json | null
+          id?: string
+          idempotency_key: string
+          marker: string
+          operation_id: string
+          sequence: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          auxiliary_document_code?: string | null
+          auxiliary_document_id?: string | null
+          auxiliary_document_type?: string
+          confirmed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          gc_create_response?: Json | null
+          id?: string
+          idempotency_key?: string
+          marker?: string
+          operation_id?: string
+          sequence?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partial_writeoff_batches_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partial_writeoff_events: {
+        Row: {
+          actor_id: string | null
+          actor_name: string | null
+          batch_id: string | null
+          created_at: string
+          event_type: string
+          id: number
+          operation_id: string
+          payload: Json
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_name?: string | null
+          batch_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: number
+          operation_id: string
+          payload?: Json
+        }
+        Update: {
+          actor_id?: string | null
+          actor_name?: string | null
+          batch_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: number
+          operation_id?: string
+          payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partial_writeoff_events_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partial_writeoff_events_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partial_writeoff_items: {
+        Row: {
+          created_at: string
+          id: string
+          line_key: string
+          line_snapshot: Json
+          operation_id: string
+          original_quantity: number
+          product_code: string
+          product_id: string
+          product_name: string
+          reserved_quantity: number
+          unit: string
+          updated_at: string
+          variation_id: string
+          withdrawn_quantity: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          line_key: string
+          line_snapshot: Json
+          operation_id: string
+          original_quantity: number
+          product_code?: string
+          product_id: string
+          product_name: string
+          reserved_quantity?: number
+          unit?: string
+          updated_at?: string
+          variation_id?: string
+          withdrawn_quantity?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          line_key?: string
+          line_snapshot?: Json
+          operation_id?: string
+          original_quantity?: number
+          product_code?: string
+          product_id?: string
+          product_name?: string
+          reserved_quantity?: number
+          unit?: string
+          updated_at?: string
+          variation_id?: string
+          withdrawn_quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partial_writeoff_items_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partial_writeoff_operations: {
+        Row: {
+          budget_code: string
+          budget_id: string
+          budget_snapshot: Json
+          client_id: string
+          client_name: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          created_by_name: string | null
+          definitive_auvo_task_id: string | null
+          definitive_document_code: string | null
+          definitive_document_id: string | null
+          document_type: string
+          id: string
+          reconciliation_reason: string | null
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          budget_code: string
+          budget_id: string
+          budget_snapshot: Json
+          client_id: string
+          client_name: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
+          definitive_auvo_task_id?: string | null
+          definitive_document_code?: string | null
+          definitive_document_id?: string | null
+          document_type: string
+          id?: string
+          reconciliation_reason?: string | null
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          budget_code?: string
+          budget_id?: string
+          budget_snapshot?: Json
+          client_id?: string
+          client_name?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
+          definitive_auvo_task_id?: string | null
+          definitive_document_code?: string | null
+          definitive_document_id?: string | null
+          document_type?: string
+          id?: string
+          reconciliation_reason?: string | null
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      partial_writeoff_settings: {
+        Row: {
+          os_cancel_status_id: string
+          os_stock_status_id: string
+          os_waiting_status_id: string
+          singleton: boolean
+          updated_at: string
+          venda_cancel_status_id: string
+          venda_stock_status_id: string
+          venda_waiting_status_id: string
+        }
+        Insert: {
+          os_cancel_status_id?: string
+          os_stock_status_id?: string
+          os_waiting_status_id?: string
+          singleton?: boolean
+          updated_at?: string
+          venda_cancel_status_id?: string
+          venda_stock_status_id?: string
+          venda_waiting_status_id?: string
+        }
+        Update: {
+          os_cancel_status_id?: string
+          os_stock_status_id?: string
+          os_waiting_status_id?: string
+          singleton?: boolean
+          updated_at?: string
+          venda_cancel_status_id?: string
+          venda_stock_status_id?: string
+          venda_waiting_status_id?: string
+        }
+        Relationships: []
+      }
       pedidos_compra: {
         Row: {
           codigo: string
@@ -1748,7 +2050,71 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      partial_writeoff_item_balances: {
+        Row: {
+          available_to_reserve_quantity: number | null
+          created_at: string | null
+          id: string | null
+          line_key: string | null
+          line_snapshot: Json | null
+          operation_id: string | null
+          original_quantity: number | null
+          pending_purchase_quantity: number | null
+          product_code: string | null
+          product_id: string | null
+          product_name: string | null
+          reserved_quantity: number | null
+          unit: string | null
+          updated_at: string | null
+          variation_id: string | null
+          withdrawn_quantity: number | null
+        }
+        Insert: {
+          available_to_reserve_quantity?: never
+          created_at?: string | null
+          id?: string | null
+          line_key?: string | null
+          line_snapshot?: Json | null
+          operation_id?: string | null
+          original_quantity?: number | null
+          pending_purchase_quantity?: never
+          product_code?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          reserved_quantity?: number | null
+          unit?: string | null
+          updated_at?: string | null
+          variation_id?: string | null
+          withdrawn_quantity?: number | null
+        }
+        Update: {
+          available_to_reserve_quantity?: never
+          created_at?: string | null
+          id?: string | null
+          line_key?: string | null
+          line_snapshot?: Json | null
+          operation_id?: string | null
+          original_quantity?: number | null
+          pending_purchase_quantity?: never
+          product_code?: string | null
+          product_id?: string | null
+          product_name?: string | null
+          reserved_quantity?: number | null
+          unit?: string | null
+          updated_at?: string | null
+          variation_id?: string | null
+          withdrawn_quantity?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partial_writeoff_items_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       has_any_admin: { Args: never; Returns: boolean }
@@ -1758,6 +2124,88 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      partial_writeoff_attach_auxiliary: {
+        Args: {
+          p_batch_id: string
+          p_document_code: string
+          p_document_id: string
+          p_gc_response?: Json
+        }
+        Returns: undefined
+      }
+      partial_writeoff_claim_confirmation: {
+        Args: { p_batch_id: string }
+        Returns: string
+      }
+      partial_writeoff_claim_consolidation: {
+        Args: { p_operation_id: string }
+        Returns: string
+      }
+      partial_writeoff_finish_confirmation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_batch_id: string
+          p_error_message?: string
+          p_success: boolean
+        }
+        Returns: string
+      }
+      partial_writeoff_finish_consolidation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_auvo_task_id?: string
+          p_document_code?: string
+          p_document_id?: string
+          p_error_message?: string
+          p_operation_id: string
+          p_success: boolean
+        }
+        Returns: string
+      }
+      partial_writeoff_mark_batch_reconciliation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_batch_id: string
+          p_document?: Json
+          p_error_message: string
+        }
+        Returns: undefined
+      }
+      partial_writeoff_open_operation: {
+        Args: {
+          p_budget: Json
+          p_created_by?: string
+          p_created_by_name?: string
+          p_document_type: string
+          p_items: Json
+        }
+        Returns: string
+      }
+      partial_writeoff_release_batch: {
+        Args: { p_batch_id: string; p_error_message: string }
+        Returns: undefined
+      }
+      partial_writeoff_reserve_batch: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_idempotency_key: string
+          p_items: Json
+          p_operation_id: string
+        }
+        Returns: Json
+      }
+      partial_writeoff_reset_consolidation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_operation_id: string
+        }
+        Returns: string
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

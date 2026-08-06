@@ -102,6 +102,7 @@ export default function PartialWriteoffPage() {
   const [consolidating, setConsolidating] = useState(false);
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const batchRequestKey = useRef<string | null>(null);
 
   const operationsQuery = useQuery({
@@ -154,9 +155,27 @@ export default function PartialWriteoffPage() {
   async function refresh() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['partial-writeoff-operations'] }),
+      queryClient.invalidateQueries({ queryKey: ['partial-writeoff-stock'] }),
       queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] }),
     ]);
   }
+
+  async function handleManualRefresh() {
+    if (manualRefreshing) return;
+    setManualRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
+      await queryClient.invalidateQueries({ queryKey: ['partial-writeoff-stock'] });
+      const result = await operationsQuery.refetch();
+      if (result.error) throw result.error;
+      toast.success('Lista atualizada.');
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setManualRefreshing(false);
+    }
+  }
+
 
   async function handleSearch() {
     if (!budgetKind) {
@@ -206,7 +225,7 @@ export default function PartialWriteoffPage() {
     setPreparing(true);
     try {
       if (!batchRequestKey.current) batchRequestKey.current = crypto.randomUUID();
-      await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current);
+      await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current as string);
       batchRequestKey.current = null;
       await refresh();
       toast.success('Documento auxiliar criado. O lote já está na fila do Checkout.');
@@ -388,8 +407,8 @@ export default function PartialWriteoffPage() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Operacões</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => refresh()} disabled={operationsQuery.isFetching}>
-                  <RefreshCw className={`h-4 w-4 ${operationsQuery.isFetching ? 'animate-spin' : ''}`} />
+                <Button variant="ghost" size="icon" onClick={handleManualRefresh} disabled={manualRefreshing}>
+                  <RefreshCw className={`h-4 w-4 ${manualRefreshing || operationsQuery.isFetching ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
             </CardHeader>

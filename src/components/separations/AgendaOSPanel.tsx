@@ -623,10 +623,32 @@ export default function AgendaOSPanel() {
             </p>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={refreshAll} disabled={isRefreshing} className="gap-2">
-          <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
-          Atualizar tudo
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-md border bg-muted p-1">
+            <Button
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className="h-8 px-3 text-xs"
+            >
+              <LayoutGrid className="mr-2 h-3.5 w-3.5" />
+              Lista
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('calendar')}
+              className="h-8 px-3 text-xs"
+            >
+              <Calendar className="mr-2 h-3.5 w-3.5" />
+              Calendário
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={refreshAll} disabled={isRefreshing} className="gap-2 h-10">
+            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+            Atualizar tudo
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">

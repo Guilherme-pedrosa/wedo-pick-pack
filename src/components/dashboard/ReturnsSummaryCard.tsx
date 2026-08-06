@@ -26,9 +26,7 @@ async function fetchReturnsSummary(): Promise<ReturnsCounts> {
 
   const dates: Date[] = [];
 
-  const { data: agendaLogs } = await (supabase.from('system_logs') as never as {
-    select: (s: string) => never;
-  } extends never ? never : supabase.from('system_logs'))
+  const { data: agendaLogs } = await (supabase.from('system_logs') as any)
     .select('created_at')
     .eq('module', 'separations')
     .eq('action', 'devolucao_agenda')

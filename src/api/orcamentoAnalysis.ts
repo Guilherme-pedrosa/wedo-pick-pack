@@ -998,7 +998,8 @@ export function analyzeGrupo(
   orcamentos: any[],
   config: AnalysisConfig,
   desl: DeslocamentoInput,
-  extrasInput: ExtrasInput
+  extrasInput: ExtrasInput,
+  overrides: AnalysisOverrides = {}
 ): GrupoAnalysis {
   const semExtras: ExtrasInput = {
     ...extrasInput,

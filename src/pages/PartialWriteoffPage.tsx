@@ -165,8 +165,8 @@ export default function PartialWriteoffPage() {
     setManualRefreshing(true);
     try {
       await queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
-      await queryClient.invalidateQueries({ queryKey: ['partial-writeoff-stock'] });
       const result = await operationsQuery.refetch();
+      await queryClient.refetchQueries({ queryKey: ['partial-writeoff-stock'] });
       if (result.error) throw result.error;
       toast.success('Lista atualizada.');
     } catch (error) {

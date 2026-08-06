@@ -37,6 +37,7 @@ import { deslocamentoMemoRows, extrasMemoRows, resultadoMemo } from "@/lib/orcam
 
 import ExtrasCard from "@/components/orcamento/ExtrasCard";
 import GrupoAnalysisPanel from "@/components/orcamento/GrupoAnalysisPanel";
+import { MoneyInput } from "@/components/orcamento/MoneyInput";
 import {
   AnalysisConfig,
   AnalysisOverrides,

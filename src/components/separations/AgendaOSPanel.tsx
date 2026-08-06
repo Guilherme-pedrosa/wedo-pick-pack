@@ -1,6 +1,10 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
 import {
   Calendar,
   CheckCircle2,
@@ -10,6 +14,7 @@ import {
   Clock,
   ExternalLink,
   Filter,
+  LayoutGrid,
   Link2Off,
   Loader2,
   MapPin,
@@ -159,6 +164,7 @@ function auvoTaskUrl(taskId: string): string {
 
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [agendaDate, setAgendaDate] = useState(todayISO);
   const [dateFilterActive, setDateFilterActive] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState<AgendaFilter>('all');
@@ -184,6 +190,9 @@ export default function AgendaOSPanel() {
   const [assignmentTechnicianId, setAssignmentTechnicianId] = useState('');
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<AgendaOsRow | null>(null);
+
 
 
 
@@ -614,10 +623,32 @@ export default function AgendaOSPanel() {
             </p>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={refreshAll} disabled={isRefreshing} className="gap-2">
-          <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
-          Atualizar tudo
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-md border bg-muted p-1">
+            <Button
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className="h-8 px-3 text-xs"
+            >
+              <LayoutGrid className="mr-2 h-3.5 w-3.5" />
+              Lista
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('calendar')}
+              className="h-8 px-3 text-xs"
+            >
+              <Calendar className="mr-2 h-3.5 w-3.5" />
+              Calendário
+            </Button>
+          </div>
+          <Button variant="outline" size="sm" onClick={refreshAll} disabled={isRefreshing} className="gap-2 h-10">
+            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+            Atualizar tudo
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
@@ -818,90 +849,77 @@ export default function AgendaOSPanel() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredRows.map((row) => {
-            const expanded = expandedRows.has(row.os.id);
-            const linked = !!row.separation?.technician_name;
-            const awaitingTask = isResolvingExecutionTasks && row.taskIds.length > 0 && !row.task;
-            return (
-              <Card key={row.os.id} className={cn('overflow-hidden border-l-4', row.bucket === 'scheduled-date' && 'border-l-blue-500', row.bucket === 'available' && 'border-l-amber-500', row.bucket === 'other-date' && 'border-l-slate-400', row.bucket === 'no-task' && 'border-l-red-400')}>
-                <div className="p-4">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="bg-primary text-primary-foreground">OS #{row.os.codigo}</Badge>
-                        <Badge variant="outline">{row.os.nome_situacao}</Badge>
-                        {awaitingTask ? (
-                          <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />Consultando Auvo
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className={BUCKET_META[row.bucket].className}>{BUCKET_META[row.bucket].label}</Badge>
-                        )}
-                        {row.separation ? (
-                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                            <PackageCheck className="mr-1 h-3 w-3" /> {separatedQuantity(row.items) || row.separation.items_confirmed || row.separation.items_total} peça(s) separada(s)
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">
-                            <PackageSearch className="mr-1 h-3 w-3" /> Aguardando separação
-                          </Badge>
-                        )}
-                        {linked && (
-                          <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
-                            <CheckCircle2 className="mr-1 h-3 w-3" /> Peças com {row.separation?.technician_name}
-                          </Badge>
-                        )}
-                      </div>
-
-                      <div>
-                        <p className="font-semibold text-foreground">{row.os.nome_cliente || 'Cliente não informado no GC'}</p>
-                        {equipmentName(row.os) && <p className="mt-0.5 text-xs text-muted-foreground"><Wrench className="mr-1 inline h-3 w-3" />{equipmentName(row.os)}</p>}
-                      </div>
-
-                      <div className="grid gap-x-5 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
-                        <span><strong className="text-foreground">Téc. OS:</strong> {row.os.nome_tecnico || '—'}</span>
-                        <span><strong className="text-foreground">Téc. execução:</strong> {row.task?.technician_name || 'Sem técnico'}</span>
-                        <span><strong className="text-foreground">Tarefa:</strong> {row.taskIds.length ? row.taskIds.join(' / ') : '73344 ausente'}</span>
-                        <span><strong className="text-foreground">Execução:</strong> {row.task ? `${formatDate(row.task.task_date)} ${formatTime(row.task.task_date)}` : 'Sem agenda'}</span>
-                        <span><strong className="text-foreground">Data OS:</strong> {formatDate(row.os.data_entrada || row.os.data)}</span>
-                        <span><strong className="text-foreground">Status Auvo:</strong> {row.task ? taskStatus(row.task) : '—'}</span>
-                        <span><strong className="text-foreground">Valor:</strong> {formatMoney(row.os.valor_total)}</span>
-                        <span><strong className="text-foreground">Separação:</strong> {row.separation ? formatDate(row.separation.concluded_at) : 'Pendente'}</span>
-                      </div>
+          {viewMode === 'calendar' ? (
+            <Card className="p-4">
+              <FullCalendar
+                plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+                initialView="dayGridMonth"
+                headerToolbar={{
+                  left: 'prev,next today',
+                  center: 'title',
+                  right: 'dayGridMonth,timeGridWeek,timeGridDay',
+                }}
+                locale="pt-br"
+                height="auto"
+                events={filteredRows.filter(r => r.task?.task_date).map(row => ({
+                  id: row.os.id,
+                  title: `OS #${row.os.codigo} - ${row.os.nome_cliente.split(' ')[0]}`,
+                  start: row.task?.task_date || '',
+                  backgroundColor: row.bucket === 'scheduled-date' ? '#3B82F6' : '#94A3B8',
+                  borderColor: row.bucket === 'scheduled-date' ? '#2563EB' : '#64748B',
+                  extendedProps: { row }
+                }))}
+                eventClick={(info) => {
+                  setSelectedCalendarEvent(info.event.extendedProps.row);
+                }}
+              />
+              
+              {selectedCalendarEvent && (
+                <Dialog open={!!selectedCalendarEvent} onOpenChange={(open) => !open && setSelectedCalendarEvent(null)}>
+                  <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                      <DialogTitle>Detalhes da OS #{selectedCalendarEvent.os.codigo}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <AgendaRowContent 
+                        row={selectedCalendarEvent}
+                        expanded={true}
+                        onToggleItems={() => toggleItems(selectedCalendarEvent)}
+                        onSchedule={() => openSchedule(selectedCalendarEvent)}
+                        onLink={() => openAssignment(selectedCalendarEvent)}
+                        isLoadingItems={loadingItemsId === selectedCalendarEvent.os.id}
+                        detailItems={detailItemsByOsId[selectedCalendarEvent.os.id]}
+                        isResolvingExecutionTasks={isResolvingExecutionTasks}
+                        referencedTaskIds={referencedTaskIds}
+                      />
                     </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </Card>
+          ) : (
+            <>
+              {filteredRows.map((row) => (
+                <AgendaRowContent 
+                  key={row.os.id}
+                  row={row}
+                  expanded={expandedRows.has(row.os.id)}
+                  onToggleItems={() => toggleItems(row)}
+                  onSchedule={() => openSchedule(row)}
+                  onLink={() => openAssignment(row)}
+                  isLoadingItems={loadingItemsId === row.os.id}
+                  detailItems={detailItemsByOsId[row.os.id]}
+                  isResolvingExecutionTasks={isResolvingExecutionTasks}
+                  referencedTaskIds={referencedTaskIds}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
-                    <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-[420px] xl:justify-end">
-                      <Button variant="outline" size="sm" onClick={() => toggleItems(row)} disabled={loadingItemsId === row.os.id}>
-                        {loadingItemsId === row.os.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <PackageOpen className="mr-1.5 h-3.5 w-3.5" />}
-                        Peças ({row.items.length || row.separation?.items_total || 'carregar'})
-                        {expanded ? <ChevronUp className="ml-1 h-3.5 w-3.5" /> : <ChevronDown className="ml-1 h-3.5 w-3.5" />}
-                      </Button>
-                      {!row.separation && (
-                        <Button asChild variant="outline" size="sm"><Link to="/checkout"><PackageSearch className="mr-1.5 h-3.5 w-3.5" />Separar</Link></Button>
-                      )}
-                      <Button variant="outline" size="sm" onClick={() => openSchedule(row)} disabled={row.taskIds.length === 0}>
-                        <Calendar className="mr-1.5 h-3.5 w-3.5" />{row.task ? 'Alterar agenda' : 'Agendar visita'}
-                      </Button>
-                      {row.separation && (
-                        <Button size="sm" onClick={() => openAssignment(row)}>
-                          <UserPlus className="mr-1.5 h-3.5 w-3.5" />{linked ? 'Alterar vínculo' : 'Vincular peças'}
-                        </Button>
-                      )}
-                      <Button asChild variant="ghost" size="icon" title="Abrir OS no GestãoClick"><a href={gcOrderUrl(row.os.id)} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>
-                      {(row.task?.task_id || row.taskIds[0]) && (
-                        <Button asChild variant="ghost" size="icon" title="Abrir tarefa no Auvo">
-                          <a href={auvoTaskUrl(row.task?.task_id || row.taskIds[0])} target="_blank" rel="noreferrer"><Calendar className="h-4 w-4" /></a>
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {expanded && row.items.length > 0 && <ItemsPanel items={row.items} technicianName={row.separation?.technician_name || null} />}
-              </Card>
-            );
-          })}
-
+      {!isLoading && (
+        <div className="space-y-3">
           {filteredOrphans.map((task) => (
             <Card key={`orphan-${task.task_id}`} className="border-l-4 border-l-red-400 bg-red-50/30 p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1068,5 +1086,115 @@ function ItemsPanel({ items, technicianName }: { items: SeparationItemSnapshot[]
         ))}
       </div>
     </div>
+  );
+}
+
+
+function AgendaRowContent({ 
+  row, 
+  expanded, 
+  onToggleItems, 
+  onSchedule, 
+  onLink, 
+  isLoadingItems, 
+  detailItems,
+  isResolvingExecutionTasks,
+  referencedTaskIds
+}: { 
+  row: AgendaOsRow; 
+  expanded: boolean; 
+  onToggleItems: () => void; 
+  onSchedule: () => void; 
+  onLink: () => void; 
+  isLoadingItems: boolean;
+  detailItems?: SeparationItemSnapshot[];
+  isResolvingExecutionTasks: boolean;
+  referencedTaskIds: Set<string>;
+}) {
+  const linked = !!row.separation?.technician_name;
+  const awaitingTask = isResolvingExecutionTasks && row.taskIds.length > 0 && !row.task;
+  
+  return (
+    <Card className={cn('overflow-hidden border-l-4', 
+      row.bucket === 'scheduled-date' && 'border-l-blue-500', 
+      row.bucket === 'available' && 'border-l-amber-500', 
+      row.bucket === 'other-date' && 'border-l-slate-400', 
+      row.bucket === 'no-task' && 'border-l-red-400'
+    )}>
+      <div className="p-4">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-primary text-primary-foreground">OS #{row.os.codigo}</Badge>
+              <Badge variant="outline">{row.os.nome_situacao}</Badge>
+              {awaitingTask ? (
+                <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />Consultando Auvo
+                </Badge>
+              ) : (
+                <Badge variant="outline" className={BUCKET_META[row.bucket].className}>{BUCKET_META[row.bucket].label}</Badge>
+              )}
+              {row.separation ? (
+                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                  <PackageCheck className="mr-1 h-3 w-3" /> {separatedQuantity(row.items) || row.separation.items_confirmed || row.separation.items_total} peça(s) separada(s)
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground">
+                  <PackageSearch className="mr-1 h-3 w-3" /> Aguardando separação
+                </Badge>
+              )}
+              {linked && (
+                <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
+                  <CheckCircle2 className="mr-1 h-3 w-3" /> Peças com {row.separation?.technician_name}
+                </Badge>
+              )}
+            </div>
+
+            <div>
+              <p className="font-semibold text-foreground">{row.os.nome_cliente || 'Cliente não informado no GC'}</p>
+              {equipmentName(row.os) && <p className="mt-0.5 text-xs text-muted-foreground"><Wrench className="mr-1 inline h-3 w-3" />{equipmentName(row.os)}</p>}
+            </div>
+
+            <div className="grid gap-x-5 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+              <span><strong className="text-foreground">Téc. OS:</strong> {row.os.nome_tecnico || '—'}</span>
+              <span><strong className="text-foreground">Téc. execução:</strong> {row.task?.technician_name || 'Sem técnico'}</span>
+              <span><strong className="text-foreground">Tarefa:</strong> {row.taskIds.length ? row.taskIds.join(' / ') : '73344 ausente'}</span>
+              <span><strong className="text-foreground">Execução:</strong> {row.task ? `${formatDate(row.task.task_date)} ${formatTime(row.task.task_date)}` : 'Sem agenda'}</span>
+              <span><strong className="text-foreground">Data OS:</strong> {formatDate(row.os.data_entrada || row.os.data)}</span>
+              <span><strong className="text-foreground">Status Auvo:</strong> {row.task ? taskStatus(row.task) : '—'}</span>
+              <span><strong className="text-foreground">Valor:</strong> {formatMoney(row.os.valor_total)}</span>
+              <span><strong className="text-foreground">Separação:</strong> {row.separation ? formatDate(row.separation.concluded_at) : 'Pendente'}</span>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-[420px] xl:justify-end">
+            <Button variant="outline" size="sm" onClick={onToggleItems} disabled={isLoadingItems}>
+              {isLoadingItems ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <PackageOpen className="mr-1.5 h-3.5 w-3.5" />}
+              Peças ({row.items.length || row.separation?.items_total || 'carregar'})
+              {expanded ? <ChevronUp className="ml-1 h-3.5 w-3.5" /> : <ChevronDown className="ml-1 h-3.5 w-3.5" />}
+            </Button>
+            {!row.separation && (
+              <Button asChild variant="outline" size="sm"><Link to="/checkout"><PackageSearch className="mr-1.5 h-3.5 w-3.5" />Separar</Link></Button>
+            )}
+            <Button variant="outline" size="sm" onClick={onSchedule} disabled={row.taskIds.length === 0}>
+              <Calendar className="mr-1.5 h-3.5 w-3.5" />{row.task ? 'Alterar agenda' : 'Agendar visita'}
+            </Button>
+            {row.separation && (
+              <Button size="sm" onClick={onLink}>
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />{linked ? 'Alterar vínculo' : 'Vincular peças'}
+              </Button>
+            )}
+            <Button asChild variant="ghost" size="icon" title="Abrir OS no GestãoClick"><a href={gcOrderUrl(row.os.id)} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a></Button>
+            {(row.task?.task_id || row.taskIds[0]) && (
+              <Button asChild variant="ghost" size="icon" title="Abrir tarefa no Auvo">
+                <a href={auvoTaskUrl(row.task?.task_id || row.taskIds[0])} target="_blank" rel="noreferrer"><Calendar className="h-4 w-4" /></a>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {expanded && row.items.length > 0 && <ItemsPanel items={row.items} technicianName={row.separation?.technician_name || null} />}
+    </Card>
   );
 }

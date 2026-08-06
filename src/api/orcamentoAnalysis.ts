@@ -968,6 +968,10 @@ export interface GrupoAnalysis {
   itens: GrupoItem[];
   receitaLiquida: number;
   custoDireto: number;
+  receitaProdutos: number;
+  receitaServicos: number;
+  custoProdutos: number;
+  custoServicos: number;
   deslocamento: DeslocamentoResumo;
   custoDeslocamentoAdicional: number;
   extras: ExtrasResumo;

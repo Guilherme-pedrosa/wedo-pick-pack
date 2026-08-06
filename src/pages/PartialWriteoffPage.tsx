@@ -102,6 +102,7 @@ export default function PartialWriteoffPage() {
   const [consolidating, setConsolidating] = useState(false);
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const batchRequestKey = useRef<string | null>(null);
 
   const operationsQuery = useQuery({

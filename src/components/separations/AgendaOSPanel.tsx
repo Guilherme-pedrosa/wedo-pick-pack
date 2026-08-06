@@ -183,6 +183,9 @@ export default function AgendaOSPanel() {
   const [assignmentRow, setAssignmentRow] = useState<AgendaOsRow | null>(null);
   const [assignmentTechnicianId, setAssignmentTechnicianId] = useState('');
   const [savingAssignment, setSavingAssignment] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+
+
 
   const osQuery = useQuery({
     queryKey: ['agenda-open-orders'],
@@ -435,18 +438,44 @@ export default function AgendaOSPanel() {
     || localTechniciansQuery.isLoading
     || auvoUsersQuery.isLoading
     || dayTasksQuery.isLoading;
-  const isRefreshing = isLoading || isResolvingExecutionTasks;
+  const isRefreshing = isLoading
+    || isResolvingExecutionTasks
+    || manualRefreshing
+    || osQuery.isFetching
+    || separationsQuery.isFetching
+    || dayTasksQuery.isFetching
+    || executionTasksQuery.isFetching;
 
   const refreshAll = async () => {
-    await Promise.all([
-      osQuery.refetch(),
-      separationsQuery.refetch(),
-      executionTasksQuery.refetch(),
-      dayTasksQuery.refetch(),
-      localTechniciansQuery.refetch(),
-      auvoUsersQuery.refetch(),
-    ]);
+    setManualRefreshing(true);
+    try {
+      // Zera o cache do GC/Auvo para forçar leitura nova (não só revalidação).
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['agenda-open-orders'] }),
+        queryClient.invalidateQueries({ queryKey: ['auvo-agenda'] }),
+        queryClient.invalidateQueries({ queryKey: ['auvo-execution-tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['auvo-agenda-users'] }),
+        queryClient.invalidateQueries({ queryKey: ['separations'] }),
+        queryClient.invalidateQueries({ queryKey: ['technicians'] }),
+      ]);
+      await Promise.all([
+        osQuery.refetch(),
+        separationsQuery.refetch(),
+        dayTasksQuery.refetch(),
+        localTechniciansQuery.refetch(),
+        auvoUsersQuery.refetch(),
+        executionTaskIds.length > 0 ? executionTasksQuery.refetch() : Promise.resolve(),
+      ]);
+      // As tarefas de execução dependem das OS recém-carregadas.
+      await queryClient.refetchQueries({ queryKey: ['auvo-execution-tasks'], type: 'active' });
+      toast.success('Agenda atualizada (GestãoClick + Auvo)');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível atualizar a agenda');
+    } finally {
+      setManualRefreshing(false);
+    }
   };
+
 
   const loadRowItems = async (row: AgendaOsRow): Promise<SeparationItemSnapshot[]> => {
     if (row.items.length > 0) return row.items;

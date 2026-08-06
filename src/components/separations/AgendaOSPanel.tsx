@@ -916,7 +916,10 @@ export default function AgendaOSPanel() {
             </>
           )}
         </div>
+      )}
 
+      {!isLoading && (
+        <div className="space-y-3">
           {filteredOrphans.map((task) => (
             <Card key={`orphan-${task.task_id}`} className="border-l-4 border-l-red-400 bg-red-50/30 p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -952,9 +955,8 @@ export default function AgendaOSPanel() {
               <p className="text-sm text-muted-foreground">Nenhum registro encontrado para os filtros aplicados.</p>
             </div>
           )}
-            </>
-          )}
         </div>
+      )}
       )}
 
       <Dialog open={!!scheduleRow} onOpenChange={(open) => !open && !savingSchedule && setScheduleRow(null)}>

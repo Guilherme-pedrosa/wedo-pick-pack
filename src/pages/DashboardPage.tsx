@@ -275,7 +275,40 @@ function buildAttentionItems(
       href: '/compras/acompanhamento',
       action: 'Configurar situações',
     });
+  } else {
+    const tracker = cloud.purchaseTracker;
+    if ((tracker.overdue ?? 0) > 0) {
+      items.push({
+        id: 'purchase-arrival-overdue',
+        level: 'critical',
+        title: 'Pedidos de compra com chegada atrasada',
+        description: `${tracker.overdue} pedido(s) em "comprado ag chegada" passaram da previsão de chegada.`,
+        href: '/compras/acompanhamento',
+        action: 'Ver pedidos',
+      });
+    }
+    if ((tracker.critical ?? 0) > 0) {
+      items.push({
+        id: 'purchase-stuck',
+        level: 'critical',
+        title: 'Pedidos de compra parados há mais de 30 dias',
+        description: `${tracker.critical} pedido(s) sem mudança de situação há mais de 30 dias.`,
+        href: '/compras/acompanhamento',
+        action: 'Ver pedidos',
+      });
+    }
+    if ((tracker.warning ?? 0) > 0) {
+      items.push({
+        id: 'purchase-warning',
+        level: 'warning',
+        title: 'Pedidos de compra sem movimentação',
+        description: `${tracker.warning} pedido(s) sem atualização há mais de 15 dias.`,
+        href: '/compras/acompanhamento',
+        action: 'Ver pedidos',
+      });
+    }
   }
+
   if (cloud.partialWriteoff.reconciliationRequired > 0) {
     items.push({
       id: 'partial-reconciliation',

@@ -523,6 +523,10 @@ const DashboardPage = () => {
         />
       </div>
 
+      <ReturnsSummaryCard />
+
+
+
       <section className="space-y-3">
         <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
           <div>

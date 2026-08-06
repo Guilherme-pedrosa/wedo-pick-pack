@@ -1025,6 +1025,8 @@ export default function AgendaOSPanel() {
               <p className="text-sm text-muted-foreground">Nenhum registro encontrado para os filtros aplicados.</p>
             </div>
           )}
+            </>
+          )}
         </div>
       )}
 

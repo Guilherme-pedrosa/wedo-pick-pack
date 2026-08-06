@@ -164,6 +164,7 @@ function auvoTaskUrl(taskId: string): string {
 
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [agendaDate, setAgendaDate] = useState(todayISO);
   const [dateFilterActive, setDateFilterActive] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState<AgendaFilter>('all');
@@ -189,6 +190,9 @@ export default function AgendaOSPanel() {
   const [assignmentTechnicianId, setAssignmentTechnicianId] = useState('');
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<AgendaOsRow | null>(null);
+
 
 
 

@@ -402,10 +402,20 @@ async function syncIncremental(
       // Update progress after each batch
       await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
 
+      // Orçamento de tempo: encerra de forma limpa antes do runtime matar o processo
+      if (Date.now() - startedMs > TIME_BUDGET_MS) {
+        notes.push(`Interrompido por tempo após ${processedCount}/${totalProducts} produtos.`);
+        break;
+      }
+
       if (i + BATCH_SIZE < uniqueIds.length) await wait(BATCH_DELAY_MS);
     }
 
-    const status = errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
+    const incomplete = processedCount < totalProducts;
+    const status = incomplete
+      ? 'partial'
+      : errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
+
 
     await supabaseAdmin
       .from('sync_runs')

@@ -407,8 +407,8 @@ export default function PartialWriteoffPage() {
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Operacões</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => refresh()} disabled={operationsQuery.isFetching}>
-                  <RefreshCw className={`h-4 w-4 ${operationsQuery.isFetching ? 'animate-spin' : ''}`} />
+                <Button variant="ghost" size="icon" onClick={handleManualRefresh} disabled={manualRefreshing}>
+                  <RefreshCw className={`h-4 w-4 ${manualRefreshing || operationsQuery.isFetching ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
             </CardHeader>

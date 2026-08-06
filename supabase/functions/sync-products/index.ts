@@ -88,6 +88,20 @@ async function getProductDetail(
   }
 }
 
+// Marca execuções órfãs (processo morto sem gravar finished_at) como falha
+async function closeStaleRuns(supabaseAdmin: ReturnType<typeof createClient>) {
+  const cutoff = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+  await supabaseAdmin
+    .from('sync_runs')
+    .update({
+      status: 'failed',
+      finished_at: new Date().toISOString(),
+      notes: 'Execução interrompida (sem conclusão registrada) — encerrada automaticamente.',
+    })
+    .eq('status', 'running')
+    .lt('started_at', cutoff);
+}
+
 // Helper to update progress in sync_runs
 async function updateProgress(
   supabaseAdmin: ReturnType<typeof createClient>,
@@ -103,6 +117,7 @@ async function updateProgress(
     })
     .eq('id', runId);
 }
+
 
 async function syncFull(
   supabaseAdmin: ReturnType<typeof createClient>,

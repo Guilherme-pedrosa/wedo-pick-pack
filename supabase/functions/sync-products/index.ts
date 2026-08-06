@@ -9,6 +9,7 @@ const corsHeaders = {
 const GC_API_URL = 'https://api.gestaoclick.com';
 const BATCH_SIZE = 3;
 const BATCH_DELAY_MS = 1100;
+const TIME_BUDGET_MS = 100_000;
 
 function wait(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -88,6 +89,20 @@ async function getProductDetail(
   }
 }
 
+// Marca execuções órfãs (processo morto sem gravar finished_at) como falha
+async function closeStaleRuns(supabaseAdmin: ReturnType<typeof createClient>) {
+  const cutoff = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+  await supabaseAdmin
+    .from('sync_runs')
+    .update({
+      status: 'failed',
+      finished_at: new Date().toISOString(),
+      notes: 'Execução interrompida (sem conclusão registrada) — encerrada automaticamente.',
+    })
+    .eq('status', 'running')
+    .lt('started_at', cutoff);
+}
+
 // Helper to update progress in sync_runs
 async function updateProgress(
   supabaseAdmin: ReturnType<typeof createClient>,
@@ -103,6 +118,7 @@ async function updateProgress(
     })
     .eq('id', runId);
 }
+
 
 async function syncFull(
   supabaseAdmin: ReturnType<typeof createClient>,
@@ -265,6 +281,7 @@ async function syncIncremental(
     .single();
   const runId = run!.id;
 
+  const startedMs = Date.now();
   let processedCount = 0;
   let upsertCount = 0;
   let errorsCount = 0;
@@ -387,10 +404,20 @@ async function syncIncremental(
       // Update progress after each batch
       await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
 
+      // Orçamento de tempo: encerra de forma limpa antes do runtime matar o processo
+      if (Date.now() - startedMs > TIME_BUDGET_MS) {
+        notes.push(`Interrompido por tempo após ${processedCount}/${totalProducts} produtos.`);
+        break;
+      }
+
       if (i + BATCH_SIZE < uniqueIds.length) await wait(BATCH_DELAY_MS);
     }
 
-    const status = errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
+    const incomplete = processedCount < totalProducts;
+    const status = incomplete
+      ? 'partial'
+      : errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
+
 
     await supabaseAdmin
       .from('sync_runs')
@@ -449,6 +476,7 @@ Deno.serve(async (req: Request) => {
   const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
+    await closeStaleRuns(supabaseAdmin);
     const body = await req.json();
     const runType = body.run_type || 'full';
 

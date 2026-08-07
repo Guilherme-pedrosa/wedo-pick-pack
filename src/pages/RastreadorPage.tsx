@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
 import { getStatusOS } from '@/api/gestaoclick';
@@ -226,6 +226,24 @@ export default function RastreadorPage() {
   const [isPrintView, setIsPrintView] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [blockedExpanded, setBlockedExpanded] = useState(true);
+  const [sortMode, setSortMode] = useState<'padrao' | 'valor_desc' | 'valor_asc'>('padrao');
+
+  const sortByValue = <T extends { orcamento: { valor_total?: string | number } }>(list: T[]): T[] => {
+    if (sortMode === 'padrao') return list;
+    const dir = sortMode === 'valor_desc' ? -1 : 1;
+    return [...list].sort(
+      (a, b) => (Number(a.orcamento?.valor_total || 0) - Number(b.orcamento?.valor_total || 0)) * dir
+    );
+  };
+
+  const prontosOrdenados = useMemo(
+    () => sortByValue(result?.orcamentosProntos ?? []),
+    [result, sortMode]
+  );
+  const pendentesOrdenados = useMemo(
+    () => sortByValue(result?.orcamentosPendentes ?? []),
+    [result, sortMode]
+  );
 
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);
@@ -1135,9 +1153,29 @@ export default function RastreadorPage() {
               )}
             </div>
 
-            <p className="text-xs text-muted-foreground text-right">
-              Escaneado em {new Date(result.scannedAt).toLocaleString('pt-BR')}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Ordenar por valor:</span>
+                {([
+                  { key: 'padrao', label: 'Padrão' },
+                  { key: 'valor_desc', label: 'Maior → menor' },
+                  { key: 'valor_asc', label: 'Menor → maior' },
+                ] as const).map(opt => (
+                  <Button
+                    key={opt.key}
+                    size="sm"
+                    variant={sortMode === opt.key ? 'default' : 'outline'}
+                    className="h-7 text-xs"
+                    onClick={() => setSortMode(opt.key)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Escaneado em {new Date(result.scannedAt).toLocaleString('pt-BR')}
+              </p>
+            </div>
 
             {/* Blocked budgets section */}
             {result.orcamentosBloqueados.length > 0 && (
@@ -1269,7 +1307,7 @@ export default function RastreadorPage() {
                   </h2>
                 </div>
                 <div className="space-y-2">
-                  {result.orcamentosProntos.map(entry => (
+                  {prontosOrdenados.map(entry => (
                     <OrcamentoCard key={entry.orcamento.id} entry={entry} ready />
                   ))}
                 </div>
@@ -1354,7 +1392,7 @@ export default function RastreadorPage() {
                   </h2>
                 </div>
                 <div className="space-y-2">
-                  {result.orcamentosPendentes.map(entry => (
+                  {pendentesOrdenados.map(entry => (
                     <OrcamentoCard key={entry.orcamento.id} entry={entry} ready={false} />
                   ))}
                 </div>

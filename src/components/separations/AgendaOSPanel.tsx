@@ -88,7 +88,20 @@ interface AgendaOsRow {
 type AgendaFilter = 'all' | AgendaBucket | 'orphan';
 type SeparationFilter = 'all' | 'pending' | 'separated' | 'linked';
 type ExecutionFilter = 'all' | 'em_andamento' | 'pausada' | 'finalizada' | 'sem_exec';
+type ExecutionKey = Exclude<ExecutionFilter, 'all'>;
 type RepairLocationFilter = 'all' | 'galpao' | 'cliente' | 'sem_info';
+
+/** Multi-seleção: conjunto vazio = todas. Um status casa se pertencer a qualquer filtro marcado. */
+function matchesExecutionFilters(filters: Set<ExecutionKey>, status: string, hasTask: boolean) {
+  if (filters.size === 0) return true;
+  const checks: Record<ExecutionKey, boolean> = {
+    em_andamento: status.includes('andamento') || status.includes('deslocamento') || status.includes('check-in'),
+    pausada: status.includes('paus'),
+    finalizada: status.includes('finalizada') || status.includes('check-out'),
+    sem_exec: !hasTask || !status || status.includes('aberta') || status.includes('agendada'),
+  };
+  return Array.from(filters).some((key) => checks[key]);
+}
 
 const BUCKET_META: Record<AgendaBucket, { label: string; className: string }> = {
   'scheduled-date': {
@@ -171,7 +184,7 @@ export default function AgendaOSPanel() {
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [excludedSituations, setExcludedSituations] = useState<Set<string>>(new Set());
   const [situationSearch, setSituationSearch] = useState('');
-  const [executionFilter, setExecutionFilter] = useState<ExecutionFilter>('all');
+  const [executionFilters, setExecutionFilters] = useState<Set<Exclude<ExecutionFilter, 'all'>>>(new Set());
   const [repairLocationFilter, setRepairLocationFilter] = useState<RepairLocationFilter>('all');
   const [separationFilter, setSeparationFilter] = useState<SeparationFilter>('all');
   const [search, setSearch] = useState('');
@@ -337,23 +350,7 @@ export default function AgendaOSPanel() {
         || (separationFilter === 'separated' && !!separation && !separation.technician_name)
         || (separationFilter === 'linked' && !!separation?.technician_name);
       const executionStatus = normalizeFilterText(task ? taskStatus(task) : '');
-      const matchesExecution = executionFilter === 'all'
-        || (executionFilter === 'em_andamento' && (
-          executionStatus.includes('andamento')
-          || executionStatus.includes('deslocamento')
-          || executionStatus.includes('check-in')
-        ))
-        || (executionFilter === 'pausada' && executionStatus.includes('paus'))
-        || (executionFilter === 'finalizada' && (
-          executionStatus.includes('finalizada')
-          || executionStatus.includes('check-out')
-        ))
-        || (executionFilter === 'sem_exec' && (
-          !task
-          || !executionStatus
-          || executionStatus.includes('aberta')
-          || executionStatus.includes('agendada')
-        ));
+      const matchesExecution = matchesExecutionFilters(executionFilters, executionStatus, !!task);
       const repairLocation = normalizeFilterText(
         getOsAttributeValue(os, GC_REPAIR_LOCATION_ATTRIBUTE_ID),
       );
@@ -382,7 +379,7 @@ export default function AgendaOSPanel() {
     agendaFilter,
     dateFilterActive,
     excludedSituations,
-    executionFilter,
+    executionFilters,
     repairLocationFilter,
     rows,
     search,
@@ -405,19 +402,13 @@ export default function AgendaOSPanel() {
         || (technicianFilter === 'none' && !task.technician_name)
         || task.technician_name === technicianFilter;
       const status = normalizeFilterText(taskStatus(task));
-      const matchesExecution = executionFilter === 'all'
-        || (executionFilter === 'em_andamento' && (
-          status.includes('andamento') || status.includes('deslocamento') || status.includes('check-in')
-        ))
-        || (executionFilter === 'pausada' && status.includes('paus'))
-        || (executionFilter === 'finalizada' && (status.includes('finalizada') || status.includes('check-out')))
-        || (executionFilter === 'sem_exec' && (!status || status.includes('aberta') || status.includes('agendada')));
+      const matchesExecution = matchesExecutionFilters(executionFilters, status, true);
       return matchesSearch && matchesTechnician && matchesExecution;
     });
   }, [
     agendaFilter,
     excludedSituations.size,
-    executionFilter,
+    executionFilters,
     orphanTasks,
     repairLocationFilter,
     search,
@@ -780,8 +771,15 @@ export default function AgendaOSPanel() {
               </PopoverContent>
             </Popover>
 
+            <Button
+              variant={executionFilters.size === 0 ? 'default' : 'outline'}
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setExecutionFilters(new Set())}
+            >
+              Todas
+            </Button>
             {([
-              ['all', 'Todas'],
               ['em_andamento', '🔄 Em andamento'],
               ['pausada', '⏸ Pausada'],
               ['finalizada', '✅ Finalizada'],
@@ -789,10 +787,15 @@ export default function AgendaOSPanel() {
             ] as const).map(([value, label]) => (
               <Button
                 key={value}
-                variant={executionFilter === value ? 'default' : 'outline'}
+                variant={executionFilters.has(value) ? 'default' : 'outline'}
                 size="sm"
                 className="h-8 text-xs"
-                onClick={() => setExecutionFilter(value)}
+                onClick={() => setExecutionFilters((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(value)) next.delete(value);
+                  else next.add(value);
+                  return next;
+                })}
               >
                 {label}
               </Button>

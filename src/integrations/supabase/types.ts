@@ -2073,52 +2073,12 @@ export type Database = {
           product_code: string | null
           product_id: string | null
           product_name: string | null
-          reserved_quantity: number | null
           reserved_other_operations_quantity: number | null
+          reserved_quantity: number | null
           unit: string | null
           updated_at: string | null
           variation_id: string | null
           withdrawn_quantity: number | null
-        }
-        Insert: {
-          available_to_reserve_quantity?: never
-          created_at?: string | null
-          global_reserved_quantity?: never
-          id?: string | null
-          line_key?: string | null
-          line_snapshot?: Json | null
-          operation_id?: string | null
-          original_quantity?: number | null
-          pending_purchase_quantity?: never
-          product_code?: string | null
-          product_id?: string | null
-          product_name?: string | null
-          reserved_quantity?: number | null
-          reserved_other_operations_quantity?: never
-          unit?: string | null
-          updated_at?: string | null
-          variation_id?: string | null
-          withdrawn_quantity?: number | null
-        }
-        Update: {
-          available_to_reserve_quantity?: never
-          created_at?: string | null
-          global_reserved_quantity?: never
-          id?: string | null
-          line_key?: string | null
-          line_snapshot?: Json | null
-          operation_id?: string | null
-          original_quantity?: number | null
-          pending_purchase_quantity?: never
-          product_code?: string | null
-          product_id?: string | null
-          product_name?: string | null
-          reserved_quantity?: number | null
-          reserved_other_operations_quantity?: never
-          unit?: string | null
-          updated_at?: string | null
-          variation_id?: string | null
-          withdrawn_quantity?: number | null
         }
         Relationships: [
           {

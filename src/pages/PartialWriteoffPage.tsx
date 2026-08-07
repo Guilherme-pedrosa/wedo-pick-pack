@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  cancelPartialBatch,
   cancelPartialOperation,
+
   consolidatePartialOperation,
   getPartialStockAvailability,
   listPartialOperations,
@@ -112,6 +114,8 @@ export default function PartialWriteoffPage() {
   const [preparing, setPreparing] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
+
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
   const [manualRefreshing, setManualRefreshing] = useState(false);
@@ -170,7 +174,9 @@ export default function PartialWriteoffPage() {
     if (!selected) return false;
     if (['completed', 'cancelled', 'consolidating'].includes(selected.status)) return false;
     const hasGcDocument = selected.batches.some(batch =>
-      !!batch.auxiliary_document_id || batch.status === 'confirmed');
+      !['cancelled', 'failed'].includes(batch.status)
+      && (!!batch.auxiliary_document_id || batch.status === 'confirmed'));
+
     if (hasGcDocument) return false;
     return !selected.items.some(item => Number(item.withdrawn_quantity) > 0);
   }, [selected]);
@@ -191,6 +197,24 @@ export default function PartialWriteoffPage() {
       setCancelling(false);
     }
   }
+
+  async function handleCancelBatch(batchId: string, sequence: number) {
+    if (cancellingBatchId) return;
+    if (!window.confirm(`Cancelar o lote ${sequence}? Use isso quando o documento auxiliar foi cancelado no GestãoClick. As reservas das peças serão liberadas.`)) return;
+
+    setCancellingBatchId(batchId);
+    try {
+      await cancelPartialBatch(batchId, 'Documento auxiliar cancelado no GestãoClick');
+      toast.success('Lote cancelado e reservas liberadas.');
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setCancellingBatchId(null);
+    }
+  }
+
+
 
 
   async function refresh() {
@@ -627,8 +651,23 @@ export default function PartialWriteoffPage() {
                               </p>
                             )}
                           </div>
-                          <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status}</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
+                            {!['confirmed', 'cancelled'].includes(batch.status) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={cancellingBatchId === batch.id}
+                                onClick={() => handleCancelBatch(batch.id, batch.sequence)}
+                                className="border-red-200 text-red-700 hover:bg-red-50"
+                              >
+                                {cancellingBatchId === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                                Cancelar lote
+                              </Button>
+                            )}
+                          </div>
                         </div>
+
                       ))}
 
                     </div>

@@ -27,6 +27,8 @@ function generation(overrides: Partial<GenerationLog>): GenerationLog {
     success: true,
     valor_total: 100,
     warnings: null,
+    partial_auxiliaries: null,
+
     ...overrides,
   };
 }

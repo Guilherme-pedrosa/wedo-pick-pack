@@ -408,7 +408,7 @@ export default function AgendaOSPanel() {
   }, [
     agendaFilter,
     excludedSituations.size,
-    executionFilter,
+    executionFilters,
     orphanTasks,
     repairLocationFilter,
     search,

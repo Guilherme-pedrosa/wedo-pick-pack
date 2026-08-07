@@ -194,6 +194,24 @@ export default function PartialWriteoffPage() {
     }
   }
 
+  async function handleCancelBatch(batchId: string, sequence: number) {
+    if (cancellingBatchId) return;
+    if (!window.confirm(`Cancelar o lote ${sequence}? Use isso quando o documento auxiliar foi cancelado no GestãoClick. As reservas das peças serão liberadas.`)) return;
+
+    setCancellingBatchId(batchId);
+    try {
+      await cancelPartialBatch(batchId, 'Documento auxiliar cancelado no GestãoClick');
+      toast.success('Lote cancelado e reservas liberadas.');
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setCancellingBatchId(null);
+    }
+  }
+
+
+
 
   async function refresh() {
     await Promise.all([

@@ -274,6 +274,11 @@ export async function cancelPartialOperation(
 }
 
 /** Exclui definitivamente uma baixa parcial cancelada (sem retiradas e sem documentos válidos). */
+export async function retryBatchAuvoTask(batchId: string): Promise<void> {
+  const { createBatchAuvoTask } = await import('./partialWriteoffClient');
+  await createBatchAuvoTask(batchId);
+}
+
 export async function deletePartialOperation(operationId: string): Promise<void> {
   await invoke<{ deleted: boolean }>({ action: 'delete_operation', operation_id: operationId });
 }

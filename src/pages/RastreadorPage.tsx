@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
-import { gcCompraUrl } from '@/lib/gcLinks';
+import { gcCompraUrl, gcOrcamentoUrl, gcOsUrl } from '@/lib/gcLinks';
 
 type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string };
 
@@ -574,7 +574,20 @@ export default function RastreadorPage() {
             }
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm">#{entry.orcamento.codigo}</span>
+                {gcOrcamentoUrl(entry.orcamento.id) ? (
+                  <a
+                    href={gcOrcamentoUrl(entry.orcamento.id)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-sm underline hover:text-primary"
+                    title="Abrir orçamento no GestãoClick"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    #{entry.orcamento.codigo}
+                  </a>
+                ) : (
+                  <span className="font-semibold text-sm">#{entry.orcamento.codigo}</span>
+                )}
                 {equip && (
                   <span
                     className="text-xs text-muted-foreground font-medium truncate max-w-[160px]"
@@ -603,7 +616,19 @@ export default function RastreadorPage() {
           <div className="flex items-center gap-2">
             {entry.osLinked && (
               <Badge variant="outline" className="text-[10px] px-1.5 border-blue-500 text-blue-600" title={`Já é OS #${entry.osLinked.os_codigo} [${entry.osLinked.nome_situacao}] — ignorada pelo filtro`}>
-                Já é OS #{entry.osLinked.os_codigo} [{entry.osLinked.nome_situacao}]
+                {gcOsUrl(entry.osLinked.os_id) ? (
+                  <a
+                    href={gcOsUrl(entry.osLinked.os_id)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Já é OS #{entry.osLinked.os_codigo} [{entry.osLinked.nome_situacao}]
+                  </a>
+                ) : (
+                  <>Já é OS #{entry.osLinked.os_codigo} [{entry.osLinked.nome_situacao}]</>
+                )}
               </Badge>
             )}
             {!entry.osLinked && ready && alreadyGenerated && (

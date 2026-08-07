@@ -364,7 +364,15 @@ async function createPartialAuvoTask(
     `Documento auxiliar: ${operation.document_type === 'os' ? 'OS' : 'Venda'} #${batch.auxiliary_document_code || batch.auxiliary_document_id}`,
     '',
     '📦 PEÇAS DESTA ENTREGA:',
-    ...selected.map(({ item, quantity }) => `  • ${item.product_name} — Qtd: ${qtyString(quantity)}`),
+    ...selected.map(({ item, quantity }) => {
+      const line: any = item.line_snapshot || {};
+      const unit = numberValue(line.valor_venda ?? line.valor_unitario ?? line.valor);
+      const suffix = unit > 0
+        ? ` — Valor: ${unit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} un. (Total: ${(unit * Number(quantity)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`
+        : '';
+      return `  • ${item.product_name} — Qtd: ${qtyString(quantity)}${suffix}`;
+    }),
+
     '',
     'Esta é uma entrega parcial. As demais peças serão entregues quando chegarem e o orçamento será reagrupado numa OS/Venda final.',
   ].filter(Boolean).join('\n');

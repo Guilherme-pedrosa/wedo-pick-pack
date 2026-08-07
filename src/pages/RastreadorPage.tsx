@@ -75,6 +75,11 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
                 {label}
               </a>
             ) : label}
+            {compra ? (
+              <span className="ml-1 text-muted-foreground">🛒 Compra: {compra}</span>
+            ) : (
+              <span className="ml-1 text-muted-foreground italic">🛒 sem data de compra</span>
+            )}
             {chegada ? (
               <span className={atrasado ? 'ml-1 font-medium text-red-600' : 'ml-1 text-muted-foreground'}>
                 📅 Chegada: {chegada}{atrasado ? ' (atrasado)' : ''}
@@ -82,6 +87,7 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
             ) : (
               <span className="ml-1 text-muted-foreground italic">📅 sem data de chegada</span>
             )}
+
           </span>
         );
       })}

@@ -453,12 +453,11 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
     metas = (await gcRequest(listPath))?.data || [];
   } catch (e) {
     console.warn('[partial-writeoff] falha ao listar atributos do GC:', compact(e));
-    return [];
   }
-  const findAttr = (...tokens: string[]) => metas.find((meta) => {
+  const findAttr = (fallbackId: string, ...tokens: string[]) => String(metas.find((meta) => {
     const nome = normalizeText(meta?.nome ?? meta?.descricao);
     return tokens.every((token) => nome.includes(normalizeText(token)));
-  })?.id || null;
+  })?.id || fallbackId);
 
   const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
   const push = (id: string | null, conteudo: string) => {
@@ -471,16 +470,19 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
     const tarefaOs = budgetAttrValue(budget, '73341', 'tarefa os');
     const localReparo = budgetAttrValue(budget, '73350', 'local do reparo');
     const horas = budgetAttrValue(budget, '67350', 'horas tecnicas');
-    push(findAttr('numero', 'orcamento'), numeroOrcamento);
-    push(findAttr('tarefa', 'os'), tarefaOs || '-');
+    // IDs oficiais do cadastro de atributos de OS no GC. A descoberta por nome
+    // continua sendo usada, mas nunca pode fazer o POST perder campos obrigatórios.
+    push(findAttr('81831', 'numero', 'orcamento'), numeroOrcamento);
+    push(findAttr('73343', 'tarefa', 'os'), tarefaOs || '-');
     // Preenchido de verdade logo após a criação da tarefa Auvo desta entrega.
-    push(findAttr('tarefa', 'execu'), tarefaOs || '-');
-    push(findAttr('local', 'reparo'), localReparo || 'CLIENTE');
-    push(findAttr('horas', 'tecnicas'), horas || '0');
+    push(findAttr('73344', 'tarefa', 'execu'), tarefaOs || '-');
+    push(findAttr('68658', 'local', 'reparo'), localReparo || 'CLIENTE');
+    push(findAttr('73897', 'horas', 'tecnic'), horas || '0');
   } else {
-    push(findAttr('numero', 'orcamento'), numeroOrcamento);
-    push(findAttr('tarefa', 'entrega'), '-');
+    push(findAttr('', 'numero', 'orcamento'), numeroOrcamento);
+    push(findAttr('', 'tarefa', 'entrega'), '-');
   }
+  console.log(`[partial-writeoff] atributos ${type}: ${atributos.map((entry) => `${entry.atributo.atributo_id}=${entry.atributo.conteudo}`).join(', ')}`);
   return atributos;
 }
 

@@ -88,7 +88,20 @@ interface AgendaOsRow {
 type AgendaFilter = 'all' | AgendaBucket | 'orphan';
 type SeparationFilter = 'all' | 'pending' | 'separated' | 'linked';
 type ExecutionFilter = 'all' | 'em_andamento' | 'pausada' | 'finalizada' | 'sem_exec';
+type ExecutionKey = Exclude<ExecutionFilter, 'all'>;
 type RepairLocationFilter = 'all' | 'galpao' | 'cliente' | 'sem_info';
+
+/** Multi-seleção: conjunto vazio = todas. Um status casa se pertencer a qualquer filtro marcado. */
+function matchesExecutionFilters(filters: Set<ExecutionKey>, status: string, hasTask: boolean) {
+  if (filters.size === 0) return true;
+  const checks: Record<ExecutionKey, boolean> = {
+    em_andamento: status.includes('andamento') || status.includes('deslocamento') || status.includes('check-in'),
+    pausada: status.includes('paus'),
+    finalizada: status.includes('finalizada') || status.includes('check-out'),
+    sem_exec: !hasTask || !status || status.includes('aberta') || status.includes('agendada'),
+  };
+  return Array.from(filters).some((key) => checks[key]);
+}
 
 const BUCKET_META: Record<AgendaBucket, { label: string; className: string }> = {
   'scheduled-date': {

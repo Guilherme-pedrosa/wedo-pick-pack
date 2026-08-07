@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
 import { gcCompraUrl, gcOrcamentoUrl, gcOsUrl } from '@/lib/gcLinks';
 
-type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string };
+type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string; data_emissao?: string };
 
 /** Converte "dd/mm/aaaa", "dd/mm" ou ISO em Date local. */
 function parseChegada(v?: string): Date | null {

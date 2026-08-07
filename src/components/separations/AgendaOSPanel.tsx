@@ -87,9 +87,16 @@ interface AgendaOsRow {
 
 type AgendaFilter = 'all' | AgendaBucket | 'orphan';
 type SeparationFilter = 'all' | 'pending' | 'separated' | 'linked';
-type ExecutionFilter = 'all' | 'em_andamento' | 'pausada' | 'finalizada' | 'sem_exec';
-type ExecutionKey = Exclude<ExecutionFilter, 'all'>;
+type ExecutionKey = 'em_andamento' | 'pausada' | 'finalizada' | 'sem_exec' | 'excluida';
 type RepairLocationFilter = 'all' | 'galpao' | 'cliente' | 'sem_info';
+
+const EXECUTION_FILTER_OPTIONS: ReadonlyArray<{ value: ExecutionKey; label: string }> = [
+  { value: 'em_andamento', label: '🔄 Em andamento' },
+  { value: 'pausada', label: '⏸ Pausada' },
+  { value: 'finalizada', label: '✅ Finalizada' },
+  { value: 'sem_exec', label: 'Sem execução' },
+  { value: 'excluida', label: 'Excluídas' },
+];
 
 /** Multi-seleção: conjunto vazio = todas. Um status casa se pertencer a qualquer filtro marcado. */
 function matchesExecutionFilters(filters: Set<ExecutionKey>, status: string, hasTask: boolean) {
@@ -99,6 +106,7 @@ function matchesExecutionFilters(filters: Set<ExecutionKey>, status: string, has
     pausada: status.includes('paus'),
     finalizada: status.includes('finalizada') || status.includes('check-out'),
     sem_exec: !hasTask || !status || status.includes('aberta') || status.includes('agendada'),
+    excluida: status.includes('cancelada') || status.includes('excluida'),
   };
   return Array.from(filters).some((key) => checks[key]);
 }
@@ -184,7 +192,7 @@ export default function AgendaOSPanel() {
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [excludedSituations, setExcludedSituations] = useState<Set<string>>(new Set());
   const [situationSearch, setSituationSearch] = useState('');
-  const [executionFilters, setExecutionFilters] = useState<Set<Exclude<ExecutionFilter, 'all'>>>(new Set());
+  const [executionFilters, setExecutionFilters] = useState<Set<ExecutionKey>>(new Set());
   const [repairLocationFilter, setRepairLocationFilter] = useState<RepairLocationFilter>('all');
   const [separationFilter, setSeparationFilter] = useState<SeparationFilter>('all');
   const [search, setSearch] = useState('');
@@ -772,24 +780,25 @@ export default function AgendaOSPanel() {
             </Popover>
 
             <Button
-              variant={executionFilters.size === 0 ? 'default' : 'outline'}
+              variant={executionFilters.size === EXECUTION_FILTER_OPTIONS.length ? 'default' : 'outline'}
               size="sm"
               className="h-8 text-xs"
-              onClick={() => setExecutionFilters(new Set())}
+              aria-pressed={executionFilters.size === EXECUTION_FILTER_OPTIONS.length}
+              onClick={() => setExecutionFilters((current) => (
+                current.size === EXECUTION_FILTER_OPTIONS.length
+                  ? new Set()
+                  : new Set(EXECUTION_FILTER_OPTIONS.map(({ value }) => value))
+              ))}
             >
               Todas
             </Button>
-            {([
-              ['em_andamento', '🔄 Em andamento'],
-              ['pausada', '⏸ Pausada'],
-              ['finalizada', '✅ Finalizada'],
-              ['sem_exec', 'Sem execução'],
-            ] as const).map(([value, label]) => (
+            {EXECUTION_FILTER_OPTIONS.map(({ value, label }) => (
               <Button
                 key={value}
                 variant={executionFilters.has(value) ? 'default' : 'outline'}
                 size="sm"
                 className="h-8 text-xs"
+                aria-pressed={executionFilters.has(value)}
                 onClick={() => setExecutionFilters((prev) => {
                   const next = new Set(prev);
                   if (next.has(value)) next.delete(value);

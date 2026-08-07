@@ -174,7 +174,9 @@ export default function PartialWriteoffPage() {
     if (!selected) return false;
     if (['completed', 'cancelled', 'consolidating'].includes(selected.status)) return false;
     const hasGcDocument = selected.batches.some(batch =>
-      !!batch.auxiliary_document_id || batch.status === 'confirmed');
+      !['cancelled', 'failed'].includes(batch.status)
+      && (!!batch.auxiliary_document_id || batch.status === 'confirmed'));
+
     if (hasGcDocument) return false;
     return !selected.items.some(item => Number(item.withdrawn_quantity) > 0);
   }, [selected]);

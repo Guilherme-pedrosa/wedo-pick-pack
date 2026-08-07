@@ -977,20 +977,28 @@ export default function RastreadorPage() {
                   <Loader2 className="h-4 w-4 animate-spin" /> Carregando situações de compra…
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-3">
-                  {(statusCompraQuery.data || []).map(s => (
-                    <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <Checkbox
-                        checked={selectedSituacoesCompra.includes(s.id)}
-                        onCheckedChange={() => toggleSituacaoCompra(s.id)}
-                        disabled={scanning}
-                      />
-                      {s.nome}
-                    </label>
-                  ))}
-                </div>
+                <>
+                  <div className="flex flex-wrap gap-3">
+                    {(statusCompraQuery.data || []).map(s => (
+                      <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <Checkbox
+                          checked={selectedSituacoesCompra.includes(String(s.id))}
+                          onCheckedChange={() => toggleSituacaoCompra(String(s.id))}
+                          disabled={scanning}
+                        />
+                        {s.nome}
+                      </label>
+                    ))}
+                  </div>
+                  {selectedSituacoesCompra.length === 0 && (
+                    <p className="text-[11px] text-amber-600">
+                      ⚠️ Nenhuma situação marcada — nenhum pedido de compra será considerado no cruzamento.
+                    </p>
+                  )}
+                </>
               )}
             </div>
+
 
             {/* OS situations: which ones count as "blocked / already became OS" */}
             <div className="pt-3 border-t border-border space-y-1.5">

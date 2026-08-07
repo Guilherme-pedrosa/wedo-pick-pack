@@ -226,6 +226,7 @@ export default function RastreadorPage() {
   const [isPrintView, setIsPrintView] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [blockedExpanded, setBlockedExpanded] = useState(true);
+  const [sortMode, setSortMode] = useState<'padrao' | 'valor_desc' | 'valor_asc'>('padrao');
 
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);

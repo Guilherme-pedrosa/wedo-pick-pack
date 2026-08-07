@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelPartialOperation,
   consolidatePartialOperation,
-
+  getPartialStockAvailability,
   listPartialOperations,
   openPartialOperation,
   PartialBudgetSearchResult,
@@ -54,6 +54,10 @@ function fmtDate(value: string) {
 
 function friendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('INSUFFICIENT_COMMITTED_STOCK:')) {
+    const [, product, stock, committed, available] = message.split(':');
+    return `Estoque já comprometido para ${product}. Saldo físico: ${fmtQty(Number(stock))}; reservado em OS/vendas: ${fmtQty(Number(committed))}; disponível real: ${fmtQty(Number(available))}.`;
+  }
   if (message.includes('INSUFFICIENT_STOCK:')) {
     const [, product, stock] = message.split(':');
     return `Saldo insuficiente para ${product}. Saldo atual: ${fmtQty(Number(stock))}.`;
@@ -271,6 +275,7 @@ export default function PartialWriteoffPage() {
       const message = error instanceof Error ? error.message : String(error);
       const ambiguous = /failed to send|network|fetch|timeout|BATCH_CREATION_IN_PROGRESS/i.test(message);
       if (!ambiguous) batchRequestKey.current = null;
+      if (message.includes('INSUFFICIENT_COMMITTED_STOCK')) await refresh();
       toast.error(message.includes('BATCH_CREATION_IN_PROGRESS')
         ? 'O lote ainda está sendo criado. Aguarde alguns segundos e tente novamente.'
         : friendlyError(error), { duration: 8000 });
@@ -510,26 +515,43 @@ export default function PartialWriteoffPage() {
                   </Alert>
                 )}
 
+                {selected.items.some(item => {
+                  const stock = stockQuery.data?.[item.id];
+                  return stock !== undefined && getPartialStockAvailability(item, stock).overcommitted;
+                }) && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Há reservas acima do saldo físico atual</AlertTitle>
+                    <AlertDescription>
+                      Essas reservas foram criadas antes da correção. Novas retiradas estão bloqueadas até o saldo reservado ser regularizado.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full min-w-[760px] text-sm">
+                  <table className="w-full min-w-[980px] text-sm">
                     <thead className="bg-muted/70 text-xs">
                       <tr>
                         <th className="px-3 py-2 text-left">Produto</th>
                         <th className="px-3 py-2 text-right">Solicitado</th>
                         <th className="px-3 py-2 text-right">Já retirado</th>
-                        <th className="px-3 py-2 text-right">Reservado</th>
+                        <th className="px-3 py-2 text-right">Reservado nesta OS</th>
                         <th className="px-3 py-2 text-right">Pendente</th>
-                        <th className="px-3 py-2 text-right">Saldo GC</th>
+                        <th className="px-3 py-2 text-right">Saldo físico GC</th>
+                        <th className="px-3 py-2 text-right">Comprometido global</th>
+                        <th className="px-3 py-2 text-right">Disponível real</th>
                         <th className="px-3 py-2 text-right">Retirar agora</th>
                       </tr>
                     </thead>
                     <tbody>
                       {selected.items.map(item => {
                         const stock = stockQuery.data?.[item.id];
-                        const max = Math.max(0, Math.min(Number(item.available_to_reserve_quantity), stock ?? Number(item.available_to_reserve_quantity)));
+                        const availability = getPartialStockAvailability(item, stock);
+                        const overcommitted = stock !== undefined && availability.overcommitted;
+                        const max = availability.maxReservable;
                         const disabled = max <= 0 || !['awaiting_separation', 'partial_separation', 'awaiting_balance'].includes(selected.status);
                         return (
-                          <tr key={item.id} className="border-t">
+                          <tr key={item.id} className={`border-t ${overcommitted ? 'bg-red-50' : ''}`}>
                             <td className="px-3 py-2">
                               <p className="font-medium">{item.product_name}</p>
                               <p className="text-xs text-muted-foreground">{item.product_code || item.product_id}</p>
@@ -539,6 +561,12 @@ export default function PartialWriteoffPage() {
                             <td className="px-3 py-2 text-right text-amber-700">{fmtQty(item.reserved_quantity)}</td>
                             <td className="px-3 py-2 text-right font-semibold">{fmtQty(item.pending_purchase_quantity)}</td>
                             <td className="px-3 py-2 text-right">{stockQuery.isLoading ? '…' : fmtQty(stock)}</td>
+                            <td className={`px-3 py-2 text-right ${Number(item.global_reserved_quantity) > 0 ? 'font-medium text-amber-700' : ''}`}>
+                              {fmtQty(item.global_reserved_quantity)}
+                            </td>
+                            <td className={`px-3 py-2 text-right font-semibold ${overcommitted ? 'text-red-700' : 'text-green-700'}`}>
+                              {stockQuery.isLoading ? '…' : fmtQty(availability.availableStock)}
+                            </td>
                             <td className="px-3 py-2">
                               <Input
                                 type="number"

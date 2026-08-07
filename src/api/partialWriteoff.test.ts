@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildActivePartialDemand, PartialWriteoffOperation } from './partialWriteoff';
+import { buildActivePartialDemand, getPartialStockAvailability, PartialWriteoffOperation } from './partialWriteoff';
 import {
   documentTypeForBudgetKind,
   isBudgetEligibleForPartialWriteoff,
@@ -38,6 +38,8 @@ function operation(withdrawn: number, status: PartialWriteoffOperation['status']
       withdrawn_quantity: withdrawn,
       pending_purchase_quantity: 10 - withdrawn,
       available_to_reserve_quantity: 10 - withdrawn,
+      global_reserved_quantity: 0,
+      reserved_other_operations_quantity: 0,
       line_snapshot: {},
     }],
     batches: withdrawn > 0 ? [{
@@ -75,6 +77,30 @@ describe('demanda da baixa parcial', () => {
     const result = buildActivePartialDemand([operation(10, 'completed')]);
     expect(result.activeBudgetIds.size).toBe(0);
     expect(result.pendingByBudgetAndProduct.size).toBe(0);
+  });
+});
+
+describe('comprometimento global de estoque', () => {
+  it('bloqueia uma segunda OS quando todo o saldo físico já está reservado', () => {
+    const availability = getPartialStockAvailability({
+      available_to_reserve_quantity: 1,
+      global_reserved_quantity: 1,
+    }, 1);
+
+    expect(availability.availableStock).toBe(0);
+    expect(availability.maxReservable).toBe(0);
+    expect(availability.overcommitted).toBe(false);
+  });
+
+  it('sinaliza reservas antigas acima do saldo físico', () => {
+    const availability = getPartialStockAvailability({
+      available_to_reserve_quantity: 2,
+      global_reserved_quantity: 3,
+    }, 1);
+
+    expect(availability.availableStock).toBe(0);
+    expect(availability.maxReservable).toBe(0);
+    expect(availability.overcommitted).toBe(true);
   });
 });
 

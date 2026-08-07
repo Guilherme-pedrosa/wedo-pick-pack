@@ -26,7 +26,33 @@ export interface PartialWriteoffItem {
   withdrawn_quantity: number;
   pending_purchase_quantity: number;
   available_to_reserve_quantity: number;
+  global_reserved_quantity: number;
+  reserved_other_operations_quantity: number;
   line_snapshot: unknown;
+}
+
+export interface PartialStockAvailability {
+  physicalStock: number;
+  globallyCommitted: number;
+  availableStock: number;
+  maxReservable: number;
+  overcommitted: boolean;
+}
+
+export function getPartialStockAvailability(
+  item: Pick<PartialWriteoffItem, 'available_to_reserve_quantity' | 'global_reserved_quantity'>,
+  currentStock: number | null | undefined,
+): PartialStockAvailability {
+  const physicalStock = Math.max(0, Number(currentStock ?? 0));
+  const globallyCommitted = Math.max(0, Number(item.global_reserved_quantity || 0));
+  const availableStock = Math.max(0, physicalStock - globallyCommitted);
+  return {
+    physicalStock,
+    globallyCommitted,
+    availableStock,
+    maxReservable: Math.max(0, Math.min(Number(item.available_to_reserve_quantity || 0), availableStock)),
+    overcommitted: globallyCommitted > physicalStock,
+  };
 }
 
 export interface PartialWriteoffBatch {

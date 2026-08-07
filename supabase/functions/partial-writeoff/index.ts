@@ -640,17 +640,23 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     return { item, quantity };
   });
 
+  const selectedWithStock = [];
   for (const { item, quantity } of selected) {
     const detail = unwrapProductDetail(await gcRequest(`/api/produtos/${encodeURIComponent(item.product_id)}`));
     const stock = currentStock(detail, item.variation_id);
     if (quantity > stock) throw new Error(`INSUFFICIENT_STOCK:${item.product_name}:${stock}`);
+    selectedWithStock.push({ item, quantity, stockQuantity: stock });
   }
 
   const idempotencyKey = String(body.idempotency_key || crypto.randomUUID());
   const { data: reservation, error: reserveError } = await service.rpc('partial_writeoff_reserve_batch', {
     p_operation_id: operationId,
     p_idempotency_key: idempotencyKey,
-    p_items: selected.map(({ item, quantity }) => ({ item_id: item.id, quantity })),
+    p_items: selectedWithStock.map(({ item, quantity, stockQuantity }) => ({
+      item_id: item.id,
+      quantity,
+      stock_quantity: stockQuantity,
+    })),
     p_actor_id: auth.id,
     p_actor_name: auth.name,
   });

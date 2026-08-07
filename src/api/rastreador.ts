@@ -342,21 +342,27 @@ export async function rastrearOrcamentos(
   if (situacaoCompraIds && situacaoCompraIds.length > 0) {
     onProgress?.('Buscando pedidos de compra…', 0, 1);
     try {
-      const allOrdens: GCOrdemCompra[] = [];
+      const selectedIds = new Set(situacaoCompraIds.map(id => String(id)));
+      const ordensById = new Map<string, GCOrdemCompra>();
       for (const sid of situacaoCompraIds) {
         let page = 1;
         while (true) {
           const res = await listOrdensCompra(sid, page);
-          allOrdens.push(...res.data);
+          for (const o of res.data) {
+            const oid = String((o as any)?.id ?? (o as any)?.codigo ?? '');
+            if (!oid || ordensById.has(oid)) continue;
+            ordensById.set(oid, o);
+          }
           if (page >= res.meta.total_paginas) break;
           page++;
           await new Promise(r => setTimeout(r, 400));
         }
       }
+      const allOrdens: GCOrdemCompra[] = [...ordensById.values()];
       for (const ordem of allOrdens) {
-        // Considerar somente pedidos ainda aguardando chegada ("COMPRADO - AG CHEGADA")
-        const sit = String(ordem.nome_situacao ?? '').toUpperCase();
-        if (!(sit.includes('COMPRADO') && sit.includes('CHEGADA'))) continue;
+        // Respeita EXCLUSIVAMENTE as situações escolhidas pelo usuário
+        const ordemSitId = String((ordem as any)?.situacao_id ?? '');
+        if (ordemSitId && !selectedIds.has(ordemSitId)) continue;
         for (const p of ordem.produtos || []) {
 
           const pid = normalizeId(p.produto.produto_id);

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
-import { gcCompraUrl } from '@/lib/gcLinks';
+import { gcCompraUrl, gcOrcamentoUrl, gcOsUrl } from '@/lib/gcLinks';
 
 type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string };
 

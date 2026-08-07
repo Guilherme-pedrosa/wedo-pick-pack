@@ -154,6 +154,34 @@ export default function PartialWriteoffPage() {
       .filter(item => Number.isFinite(item.quantity) && item.quantity > 0);
   }, [quantities, selected]);
 
+  // Só é possível cancelar enquanto nada foi efetivado no GestãoClick:
+  // nenhum documento auxiliar criado, nenhuma peça reservada ou retirada.
+  const canCancelSelected = useMemo(() => {
+    if (!selected) return false;
+    if (['completed', 'cancelled', 'consolidating'].includes(selected.status)) return false;
+    const hasGcDocument = selected.batches.some(batch =>
+      !!batch.auxiliary_document_id || !['failed', 'cancelled'].includes(batch.status));
+    if (hasGcDocument) return false;
+    return !selected.items.some(item => Number(item.withdrawn_quantity) > 0 || Number(item.reserved_quantity) > 0);
+  }, [selected]);
+
+  async function handleCancelOperation() {
+    if (!selected || cancelling) return;
+    if (!window.confirm(`Cancelar a baixa parcial do #${selected.budget_code}? Nada foi efetivado no GestãoClick.`)) return;
+    setCancelling(true);
+    try {
+      await cancelPartialOperation(selected.id);
+      toast.success('Baixa parcial cancelada.');
+      setSelectedId(null);
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+
   async function refresh() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['partial-writeoff-operations'] }),

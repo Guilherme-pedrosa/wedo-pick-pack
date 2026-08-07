@@ -424,10 +424,56 @@ async function attachAuvoTaskToAuxiliary(
   await gcRequest(path, 'PUT', payload);
 }
 
-function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity: number }>, waitingStatusId: string, marker: string, gcUserId?: string) {
+/**
+ * Atributos obrigatórios do documento auxiliar — mesma receita da geração de OS.
+ * O GC recusa (400) a OS sem LOCAL DO REPARO, TAREFA OS, TAREFA EXECUÇÃO,
+ * HORAS TÉCNICAS e NÚMERO ORÇAMENTO. Os IDs do orçamento são diferentes dos IDs
+ * de OS, então descobrimos os IDs corretos pelo nome no registro de atributos.
+ */
+async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
+  const budget = operation.budget_snapshot || {};
+  const listPath = type === 'os' ? '/api/atributos_ordens_servicos' : '/api/atributos_vendas';
+  let metas: any[] = [];
+  try {
+    metas = (await gcRequest(listPath))?.data || [];
+  } catch (e) {
+    console.warn('[partial-writeoff] falha ao listar atributos do GC:', compact(e));
+    return [];
+  }
+  const findAttr = (...tokens: string[]) => metas.find((meta) => {
+    const nome = normalizeText(meta?.nome ?? meta?.descricao);
+    return tokens.every((token) => nome.includes(normalizeText(token)));
+  })?.id || null;
+
+  const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+  const push = (id: string | null, conteudo: string) => {
+    if (!id) return;
+    atributos.push({ atributo: { atributo_id: String(id), conteudo: String(conteudo ?? '') } });
+  };
+
+  const numeroOrcamento = String(operation.budget_code || '');
+  if (type === 'os') {
+    const tarefaOs = budgetAttrValue(budget, '73341', 'tarefa os');
+    const localReparo = budgetAttrValue(budget, '73350', 'local do reparo');
+    const horas = budgetAttrValue(budget, '67350', 'horas tecnicas');
+    push(findAttr('numero', 'orcamento'), numeroOrcamento);
+    push(findAttr('tarefa', 'os'), tarefaOs || '-');
+    // Preenchido de verdade logo após a criação da tarefa Auvo desta entrega.
+    push(findAttr('tarefa', 'execu'), tarefaOs || '-');
+    push(findAttr('local', 'reparo'), localReparo || 'CLIENTE');
+    push(findAttr('horas', 'tecnicas'), horas || '0');
+  } else {
+    push(findAttr('numero', 'orcamento'), numeroOrcamento);
+    push(findAttr('tarefa', 'entrega'), '-');
+  }
+  return atributos;
+}
+
+async function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity: number }>, waitingStatusId: string, marker: string, gcUserId?: string) {
   const budget = operation.budget_snapshot || {};
   const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
   const note = `[${marker}] BAIXA PARCIAL do orçamento #${operation.budget_code}. Documento auxiliar: sem financeiro, comissão nem serviços.`;
+  const atributos = await buildAuxiliaryAtributos(operation, operation.document_type);
 
   const common: Record<string, any> = {
     cliente_id: operation.client_id,
@@ -441,10 +487,12 @@ function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity:
     observacoes: note,
     observacoes_interna: marker,
   };
+  if (atributos.length) common.atributos = atributos;
   return operation.document_type === 'os'
     ? { ...common, servicos: [], equipamentos: [] }
     : { ...common, tipo: 'produto' };
 }
+
 
 function unwrapListDocument(entry: any): any {
   return entry?.OrdemServico || entry?.ordem_servico || entry?.Venda || entry?.venda || entry;

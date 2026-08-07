@@ -193,6 +193,21 @@ export async function consolidatePartialOperation(
   return data.operation;
 }
 
+/** Cancela um lote cujo documento auxiliar foi cancelado no GestãoClick, liberando as reservas. */
+export async function cancelPartialBatch(
+  batchId: string,
+  reason?: string,
+): Promise<PartialWriteoffOperation> {
+  const data = await invoke<{ operation: PartialWriteoffOperation }>({
+    action: 'cancel_batch',
+    batch_id: batchId,
+    reason: reason?.trim() || undefined,
+  });
+  return data.operation;
+}
+
+
+
 /** Cancela uma baixa parcial que ainda não gerou nenhum documento no GestãoClick. */
 export async function cancelPartialOperation(
   operationId: string,

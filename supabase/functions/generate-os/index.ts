@@ -10,6 +10,45 @@ const AUVO_API_URL = 'https://api.auvo.com.br/v2';
 // ---------- helpers ----------
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Quantidades já entregues (reservadas ou retiradas) por baixa parcial deste orçamento.
+ * Chave: `${produto_id}` ou `${produto_id}::${variacao_id}`.
+ */
+async function fetchPartialDeliveredQuantities(budgetId: string): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (!budgetId) return result;
+  try {
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const query =
+      `${url}/rest/v1/partial_writeoff_operations` +
+      `?budget_id=in.(${encodeURIComponent(`"${budgetId}","venda:${budgetId}"`)})` +
+      `&status=not.in.(cancelled)` +
+      `&select=id,status,items:partial_writeoff_items(product_id,variation_id,reserved_quantity,withdrawn_quantity)`;
+    const res = await fetch(query, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    if (!res.ok) {
+      console.warn('[generate-os] Falha ao ler baixas parciais:', res.status, await res.text());
+      return result;
+    }
+    const rows = await res.json();
+    for (const op of Array.isArray(rows) ? rows : []) {
+      for (const item of op?.items || []) {
+        const pid = String(item?.product_id ?? '').trim();
+        if (!pid) continue;
+        const vid = String(item?.variation_id ?? '').trim();
+        const mapKey = vid ? `${pid}::${vid}` : pid;
+        const qty = Math.max(Number(item?.withdrawn_quantity ?? 0), Number(item?.reserved_quantity ?? 0));
+        if (!Number.isFinite(qty) || qty <= 0) continue;
+        result.set(mapKey, (result.get(mapKey) || 0) + qty);
+      }
+    }
+  } catch (err) {
+    console.warn('[generate-os] Erro ao consultar baixas parciais:', err);
+  }
+  return result;
+}
+
+
 function compactApiMessage(value: unknown): string {
   if (value == null) return '';
   const text = typeof value === 'string' ? value : JSON.stringify(value);

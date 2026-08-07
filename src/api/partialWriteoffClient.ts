@@ -863,7 +863,9 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
       operator_name: auth.name,
       valor_total: numberValue((operation.budget_snapshot as any)?.valor_total),
       warnings: generated.warnings || null,
+      partial_auxiliaries: generated.partial_auxiliaries?.length ? generated.partial_auxiliaries : null,
       success: true,
+
     });
   }
 

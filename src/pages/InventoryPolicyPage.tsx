@@ -49,10 +49,25 @@ export default function InventoryPolicyPage() {
   const [syncResult, setSyncResult] = useState<any>(null);
   const [syncProgress, setSyncProgress] = useState<any>(null);
 
-   // Last sync date — stored in localStorage since edge function doesn't write to sync_runs
-  const [lastSyncDate, setLastSyncDate] = useState<string | null>(() => {
-    return localStorage.getItem('last-consumption-sync-date');
+  // Histórico real de sincronizações (system_logs), independente do navegador
+  const syncLogsQuery = useQuery({
+    queryKey: ['inventory-consumption-sync-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('system_logs' as any)
+        .select('id, created_at, user_name, details')
+        .eq('module', 'inventory')
+        .ilike('action', 'Sincroniza%')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return (data as any[]) || [];
+    },
+    refetchInterval: 60_000,
   });
+  const lastSyncLog = syncLogsQuery.data?.[0] || null;
+  const lastSyncDate = lastSyncLog?.created_at || localStorage.getItem('last-consumption-sync-date');
+
 
   // Load config from DB
   const configQuery = useQuery({
@@ -214,7 +229,8 @@ export default function InventoryPolicyPage() {
           const stats = data.stats || cursor?.stats || {};
           const now = new Date().toISOString();
           localStorage.setItem('last-consumption-sync-date', now);
-          setLastSyncDate(now);
+          setTimeout(() => syncLogsQuery.refetch(), 1500);
+
           setSyncResult({ success: true, stats, period: data.period || null });
           toast.success(`Sincronização concluída! ${stats.os_debited || 0} OSs + ${stats.vendas_debited || 0} vendas processadas, ${stats.pecas_created || 0} peças.`);
           break;
@@ -530,24 +546,70 @@ export default function InventoryPolicyPage() {
       {/* Sync */}
       <Card className="p-6 space-y-4">
         <div>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-lg font-semibold">Sincronização de Consumo</h2>
-            {lastSyncDate && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                <Clock className="h-3.5 w-3.5" />
-                <span>Última sync: {new Date(lastSyncDate).toLocaleString('pt-BR')}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+              <Clock className="h-3.5 w-3.5" />
+              <span>
+                {syncLogsQuery.isLoading
+                  ? 'Carregando última sincronização...'
+                  : lastSyncDate
+                    ? `Última sincronização: ${new Date(lastSyncDate).toLocaleString('pt-BR')}`
+                    : 'Nenhuma sincronização registrada'}
+              </span>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
             O processo é idempotente — rodar múltiplas vezes não duplica dados.
           </p>
         </div>
+
+        {/* Log das últimas sincronizações */}
+        <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Log de sincronizações
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => syncLogsQuery.refetch()}
+              disabled={syncLogsQuery.isFetching}
+            >
+              {syncLogsQuery.isFetching ? 'Atualizando...' : 'Atualizar'}
+            </Button>
+          </div>
+          {(syncLogsQuery.data?.length ?? 0) === 0 ? (
+            <p className="text-xs text-muted-foreground">Nenhum registro encontrado.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {syncLogsQuery.data!.map((log: any) => {
+                const d = log.details || {};
+                return (
+                  <li key={log.id} className="text-xs text-muted-foreground border-b border-border/50 last:border-0 pb-1.5 last:pb-0">
+                    <span className="font-medium text-foreground">
+                      {new Date(log.created_at).toLocaleString('pt-BR')}
+                    </span>
+                    {log.user_name && <span> · {log.user_name}</span>}
+                    <div>
+                      OSs: {d.os_seen ?? 0} ({d.os_debited ?? 0} novas) · Vendas: {d.vendas_seen ?? 0} ({d.vendas_debited ?? 0} novas) · Peças: {d.pecas_created ?? 0}
+                      {d.errors > 0 && <span className="text-destructive"> · Erros: {d.errors}</span>}
+                    </div>
+                    {d.period && <div>Período: {d.period}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
         <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {syncing ? 'Sincronizando...' : `Sincronizar consumo (${config.lookback_days}d)`}
         </Button>
+
 
         {/* Progress indicator */}
         {syncing && syncProgress && (

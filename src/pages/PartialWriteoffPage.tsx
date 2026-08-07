@@ -104,6 +104,7 @@ export default function PartialWriteoffPage() {
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [preparing, setPreparing] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
   const [manualRefreshing, setManualRefreshing] = useState(false);

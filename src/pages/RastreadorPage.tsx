@@ -1392,68 +1392,56 @@ export default function RastreadorPage() {
             )}
 
             {/* Conflicts */}
-            {result.conflitos.length > 0 && (
+            {conflitosFiltrados.length > 0 && (
               <>
                 <Separator />
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-red-500" />
                     <h2 className="text-sm font-bold text-foreground">
-                      Conflitos de estoque ({result.conflitos.length})
+                      Conflitos de estoque ({conflitosFiltrados.length}
+                      {conflitosFiltrados.length !== result.conflitos.length && ` de ${result.conflitos.length}`})
                     </h2>
+                    <Button
+                      size="sm"
+                      variant={agruparConflitos ? 'default' : 'outline'}
+                      className="h-7 text-xs ml-auto"
+                      onClick={() => setAgruparConflitos(v => !v)}
+                    >
+                      {agruparConflitos ? 'Agrupado por cliente' : 'Agrupar por cliente'}
+                    </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Peças disputadas por múltiplos orçamentos ou reservadas por OSs pendentes — o estoque não atende todos.
                   </p>
-                  <div className="space-y-2">
-                    {result.conflitos.map(c => (
-                      <Card key={c.produto_key} className="p-3 border-l-4 border-l-red-500">
-                        <p className="font-medium text-sm">
-                          {c.codigo_produto && <span className="font-mono text-muted-foreground">[{c.codigo_produto}]</span>}{' '}
-                          {c.nome_produto}
-                        </p>
-                        <div className="flex gap-3 text-xs text-muted-foreground mt-1">
-                          <span>Estoque: <strong className="text-foreground">{c.estoque_total}</strong></span>
-                          <span>Demanda total: <strong className="text-red-500">{c.demanda_total}</strong></span>
-                        </div>
-                        <div className="mt-2 space-y-0.5">
-                          {c.orcamentos_envolvidos.map(o => {
-                            const isOS = o.id.startsWith('os-');
-                            return (
-                              <div key={o.id} className={`text-xs ${isOS ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
-                                {isOS ? '🔧' : '📋'} {isOS ? o.codigo : `#${o.codigo}`} — {o.nome_cliente} — precisa {o.qtd}
-                                {isOS && <span className="text-[10px] ml-1">(reservado, sem mov. estoque)</span>}
+                  {agruparConflitos ? (
+                    <div className="space-y-3">
+                      {conflitosAgrupados.map(([cliente, itens]) => (
+                        <Collapsible key={cliente} defaultOpen>
+                          <div className="rounded-lg border border-border">
+                            <CollapsibleTrigger asChild>
+                              <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 rounded-t-lg">
+                                <span className="text-xs font-bold text-foreground flex-1">{cliente}</span>
+                                <Badge variant="destructive" className="text-[10px]">{itens.length}</Badge>
+                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                              </button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="p-2 space-y-2">
+                                {itens.map(c => renderConflitoCard(c))}
                               </div>
-                            );
-                          })}
-                        </div>
-                        <div className="mt-2 text-xs">
-                          {(c.qtd_em_compra ?? 0) > 0 ? (
-                            <span className="text-blue-600">
-                              🛒 Em compra: <strong>{formatQty(c.qtd_em_compra)}</strong>
-                              {c.ordens_compra && c.ordens_compra.length > 0 && (
-                                <span className="text-muted-foreground ml-1">
-                                  (<OrdensCompraLinks ordens={c.ordens_compra} />)
-                                </span>
-                              )}
-                              {(() => {
-                                const falta = c.demanda_total - c.estoque_total;
-                                const cobre = (c.qtd_em_compra ?? 0) >= falta;
-                                return cobre
-                                  ? <span className="ml-1 text-green-600 font-medium">✓ Cobre falta de {formatQty(falta)}</span>
-                                  : <span className="ml-1 text-red-500 font-medium">✗ Cobre só {formatQty(c.qtd_em_compra)}/{formatQty(falta)}</span>;
-                              })()}
-                            </span>
-                          ) : (
-                            selectedSituacoesCompra.length > 0
-                              ? <span className="text-red-500 font-medium">⛔ Sem pedido de compra nos status selecionados</span>
-                              : <span className="text-muted-foreground italic">Selecione status de PC nos filtros para ver cobertura</span>
-                          )}
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
+                            </CollapsibleContent>
+                          </div>
+                        </Collapsible>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {conflitosFiltrados.map(c => renderConflitoCard(c))}
+                    </div>
+                  )}
                 </div>
+
               </>
             )}
 

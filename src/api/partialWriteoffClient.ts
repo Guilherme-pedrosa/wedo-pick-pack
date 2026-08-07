@@ -609,7 +609,26 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
     }
     throw attachError;
   }
+  }
+
+  // Tarefa Auvo da entrega parcial: roda no servidor (credenciais Auvo são secretas).
+  // Falha aqui NÃO invalida o lote — fica registrado o aviso para nova tentativa.
+  try {
+    await createBatchAuvoTask(batchId, body.auvo_customer_id ? String(body.auvo_customer_id) : undefined);
+  } catch (taskError) {
+    console.error('[partial-writeoff] falha ao criar tarefa Auvo:', compact(taskError));
+  }
   return getOperationGraph(operationId);
+}
+
+/** Cria a tarefa Auvo do lote via edge function (usa AUVO_API_KEY/TOKEN do servidor). */
+export async function createBatchAuvoTask(batchId: string, auvoCustomerId?: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('partial-writeoff', {
+    body: { action: 'create_batch_task', batch_id: batchId, auvo_customer_id: auvoCustomerId },
+  });
+  if (error || (data as any)?.error) {
+    throw new Error((data as any)?.error || error?.message || 'Falha ao criar tarefa no Auvo');
+  }
 }
 
 async function handleConfirmBatch(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {

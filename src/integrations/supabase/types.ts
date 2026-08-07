@@ -973,6 +973,13 @@ export type Database = {
             referencedRelation: "partial_writeoff_operations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "partial_writeoff_batches_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_reservation_sources"
+            referencedColumns: ["operation_id"]
+          },
         ]
       }
       partial_writeoff_events: {
@@ -1020,6 +1027,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "partial_writeoff_operations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partial_writeoff_events_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_reservation_sources"
+            referencedColumns: ["operation_id"]
           },
         ]
       }
@@ -1079,6 +1093,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "partial_writeoff_operations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partial_writeoff_items_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_reservation_sources"
+            referencedColumns: ["operation_id"]
           },
         ]
       }
@@ -2088,7 +2109,31 @@ export type Database = {
             referencedRelation: "partial_writeoff_operations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "partial_writeoff_items_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "partial_writeoff_reservation_sources"
+            referencedColumns: ["operation_id"]
+          },
         ]
+      }
+      partial_writeoff_reservation_sources: {
+        Row: {
+          budget_code: string | null
+          client_name: string | null
+          definitive_document_code: string | null
+          document_type: string | null
+          operation_id: string | null
+          product_code: string | null
+          product_id: string | null
+          product_name: string | null
+          reserved_quantity: number | null
+          status: string | null
+          updated_at: string | null
+          variation_id: string | null
+        }
+        Relationships: []
       }
     }
     Functions: {

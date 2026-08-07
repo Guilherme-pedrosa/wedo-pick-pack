@@ -145,6 +145,12 @@ export default function PartialWriteoffPage() {
   }, [operations, selectedId]);
 
   useEffect(() => {
+    setAudits({});
+    setAuditedAt(null);
+  }, [selectedId]);
+
+
+  useEffect(() => {
     if (!selected) return;
     const next: Record<string, string> = {};
     for (const item of selected.items) next[item.id] = '';

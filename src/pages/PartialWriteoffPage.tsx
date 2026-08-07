@@ -5,6 +5,7 @@ import {
   auditPartialDocuments,
   cancelPartialBatch,
   deletePartialOperation,
+  retryBatchAuvoTask,
   cancelPartialOperation,
   PartialDocumentAudit,
 
@@ -122,6 +123,7 @@ export default function PartialWriteoffPage() {
   const [consolidating, setConsolidating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
   const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
   const [audits, setAudits] = useState<Record<string, PartialDocumentAudit>>({});
@@ -207,6 +209,20 @@ export default function PartialWriteoffPage() {
     if (hasGcDocument) return false;
     return !selected.items.some(item => Number(item.withdrawn_quantity) > 0);
   }, [selected]);
+  async function handleRetryAuvoTask(batchId: string) {
+    if (retryingTaskId) return;
+    setRetryingTaskId(batchId);
+    try {
+      await retryBatchAuvoTask(batchId);
+      toast.success('Tarefa criada no Auvo.');
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setRetryingTaskId(null);
+    }
+  }
+
 
   async function handleDeleteOperation(operation: PartialWriteoffOperation) {
     if (deletingId) return;
@@ -786,9 +802,23 @@ export default function PartialWriteoffPage() {
                                 Tarefa Auvo #{batch.auvo_task_id}
                               </a>
                             ) : (
-                              <p className="text-xs text-destructive">
-                                {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
-                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs text-destructive">
+                                  {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
+                                </p>
+                                {batch.auxiliary_document_id && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs"
+                                    disabled={retryingTaskId === batch.id}
+                                    onClick={() => handleRetryAuvoTask(batch.id)}
+                                  >
+                                    {retryingTaskId === batch.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                                    Gerar tarefa Auvo
+                                  </Button>
+                                )}
+                              </div>
                             )}
                             {audit && (
                               <p className={`text-xs font-medium ${auditTone}`}>

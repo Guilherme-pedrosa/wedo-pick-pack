@@ -996,6 +996,85 @@ async function handleConsolidate(body: any, auth: AuthContext) {
   return getOperationGraph(operationId);
 }
 
+/**
+ * Cria (ou recria) a tarefa Auvo de um lote já vinculado a um documento auxiliar.
+ * Usado pelo fluxo de baixa parcial logo após criar a OS/Venda auxiliar e também
+ * como "tentar novamente" quando a criação da tarefa falhou.
+ */
+async function handleCreateBatchTask(body: any, auth: AuthContext) {
+  const batchId = String(body.batch_id || '');
+  if (!batchId) throw new Error('BATCH_ID_REQUIRED');
+
+  const { data: batch, error: batchError } = await service
+    .from('partial_writeoff_batches')
+    .select('*')
+    .eq('id', batchId)
+    .single();
+  if (batchError || !batch) throw new Error('BATCH_NOT_FOUND');
+  if (!batch.auxiliary_document_id) throw new Error('BATCH_WITHOUT_DOCUMENT');
+  if (batch.auvo_task_id) return batch;
+  if (!auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
+
+  const operation = await getOperationGraph(String(batch.operation_id));
+  const { data: batchItems, error: itemsError } = await service
+    .from('partial_writeoff_batch_items')
+    .select('quantity, partial_writeoff_items(*)')
+    .eq('batch_id', batchId);
+  if (itemsError) throw itemsError;
+  const selected = (batchItems || []).map((entry: any) => ({
+    item: entry.partial_writeoff_items,
+    quantity: numberValue(entry.quantity),
+  }));
+
+  try {
+    const taskId = await createPartialAuvoTask(
+      operation,
+      batch,
+      selected,
+      String(auth.profile.auvo_user_id),
+      body.auvo_customer_id ? String(body.auvo_customer_id) : undefined,
+    );
+    try {
+      await attachAuvoTaskToAuxiliary(
+        batch.auxiliary_document_type as DocumentType,
+        String(batch.auxiliary_document_id),
+        taskId,
+        String(operation.budget_code || ''),
+      );
+    } catch (linkError) {
+      console.warn('[partial-writeoff] tarefa criada mas não vinculada ao GC:', compact(linkError));
+    }
+    const { data: updated } = await service
+      .from('partial_writeoff_batches')
+      .update({ auvo_task_id: taskId, auvo_task_error: null })
+      .eq('id', batchId)
+      .select('*')
+      .single();
+    await service.from('partial_writeoff_events').insert({
+      operation_id: batch.operation_id,
+      batch_id: batchId,
+      event_type: 'auvo_task_created',
+      payload: { auvo_task_id: taskId, document_code: String(batch.auxiliary_document_code || '') },
+      actor_id: auth.id,
+      actor_name: auth.name,
+    });
+    return updated || { ...batch, auvo_task_id: taskId, auvo_task_error: null };
+  } catch (taskError) {
+    const message = compact(taskError).slice(0, 500) || 'Falha desconhecida ao criar tarefa no Auvo';
+    console.error('[partial-writeoff] falha ao criar tarefa Auvo:', message);
+    await service.from('partial_writeoff_batches').update({ auvo_task_error: message }).eq('id', batchId);
+    await service.from('partial_writeoff_events').insert({
+      operation_id: batch.operation_id,
+      batch_id: batchId,
+      event_type: 'auvo_task_failed',
+      payload: { error: message },
+      actor_id: auth.id,
+      actor_name: auth.name,
+    });
+    throw new Error(message);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'METHOD_NOT_ALLOWED' }, 405);
@@ -1020,6 +1099,7 @@ Deno.serve(async (req: Request) => {
     if (action === 'prepare_batch') return json({ operation: await handlePrepareBatch(body, auth) });
     if (action === 'confirm_batch') return json({ operation: await handleConfirmBatch(body, auth) });
     if (action === 'consolidate') return json({ operation: await handleConsolidate(body, auth) });
+    if (action === 'create_batch_task') return json({ batch: await handleCreateBatchTask(body, auth) });
     return json({ error: 'UNKNOWN_ACTION' }, 400);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -265,6 +265,40 @@ export default function RastreadorPage() {
     [result, sortMode, listSearch]
   );
 
+  // Conflitos: filtro pelo mesmo termo + agrupamento por cliente
+  const [agruparConflitos, setAgruparConflitos] = useState(() => localStorage.getItem('rastreador:agruparConflitos') !== '0');
+  useEffect(() => {
+    localStorage.setItem('rastreador:agruparConflitos', agruparConflitos ? '1' : '0');
+  }, [agruparConflitos]);
+
+  const conflitosFiltrados = useMemo(() => {
+    const term = listSearch.trim().toLowerCase();
+    const list = result?.conflitos ?? [];
+    if (!term) return list;
+    return list.filter(c =>
+      String(c.nome_produto || '').toLowerCase().includes(term) ||
+      String(c.codigo_produto || '').toLowerCase().includes(term) ||
+      (c.orcamentos_envolvidos || []).some(o =>
+        String(o.codigo || '').toLowerCase().includes(term) ||
+        String(o.nome_cliente || '').toLowerCase().includes(term)
+      )
+    );
+  }, [result, listSearch]);
+
+  const conflitosAgrupados = useMemo(() => {
+    const groups = new Map<string, typeof conflitosFiltrados>();
+    for (const c of conflitosFiltrados) {
+      const clientes = Array.from(new Set((c.orcamentos_envolvidos || []).map(o => o.nome_cliente || 'Sem cliente')));
+      const key = clientes.length === 0 ? 'Sem cliente' : clientes.length === 1 ? clientes[0] : 'Disputado entre clientes';
+      const arr = groups.get(key) || [];
+      arr.push(c);
+      groups.set(key, arr);
+    }
+    return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'pt-BR'));
+  }, [conflitosFiltrados]);
+
+
+
 
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);

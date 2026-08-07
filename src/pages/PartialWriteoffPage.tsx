@@ -446,8 +446,23 @@ export default function PartialWriteoffPage() {
                         : `destino final: ${selected.document_type === 'os' ? 'OS' : 'Venda'}`}
                     </p>
                   </div>
-                  <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
+                    {canCancelSelected && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCancelOperation}
+                        disabled={cancelling}
+                        className="border-red-200 text-red-700 hover:bg-red-50"
+                      >
+                        {cancelling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                        Cancelar baixa parcial
+                      </Button>
+                    )}
+                  </div>
                 </div>
+
               </CardHeader>
               <CardContent className="space-y-5">
                 {selected.status === 'reconciliation_required' && (

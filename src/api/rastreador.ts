@@ -194,6 +194,7 @@ export async function rastrearOrcamentos(
   const generatedOSFallback = await fetchGeneratedOSFallback(filteredOrcamentos);
 
   for (const o of filteredOrcamentos) {
+    const partialAtivo = partialDemand.activeBudgetIds.has(o.id);
     const flagFin = String(o.situacao_financeiro ?? '');
     const flagEst = String(o.situacao_estoque ?? '');
     const byFlags = ['1', 'true', 'sim'].includes(flagFin.toLowerCase()) ||
@@ -203,6 +204,13 @@ export async function rastrearOrcamentos(
     // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo (para fins de bloqueio).
     const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(normalizeSituacaoNome(osMatch.nome_situacao));
     const osMatchPasses = osMatch && !osMatchIgnored;
+
+    // Baixa parcial em andamento: o orçamento NUNCA some do rastreador — as OS/vendas
+    // auxiliares são parciais e o saldo restante continua pendente.
+    if (partialAtivo) {
+      uniqueOrcamentos.push(o);
+      continue;
+    }
 
     // Se a OS vinculada está numa situação marcada para ocultar, oculta TUDO antes
     // de qualquer outro bloqueio por flag. Assim não aparece nem em prontos,
@@ -214,6 +222,7 @@ export async function rastrearOrcamentos(
 
     if (byFlags || osMatchPasses) {
       const reason = byFlags ? 'flag' as const : 'os_index' as const;
+
       let warning = '';
       if (osMatchPasses) {
         warning = `Orçamento #${o.codigo} → já é OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}]`;

@@ -206,6 +206,29 @@ export async function cancelPartialBatch(
   return data.operation;
 }
 
+export type PartialDocumentAuditState = 'ok' | 'missing' | 'cancelled' | 'status_changed' | 'unchecked' | 'error';
+
+export interface PartialDocumentAudit {
+  batchId: string;
+  sequence: number;
+  type: OrderType;
+  batchStatus: string;
+  documentId: string | null;
+  documentCode: string | null;
+  situacaoId: string | null;
+  situacaoNome: string | null;
+  state: PartialDocumentAuditState;
+  message: string;
+}
+
+/** Verifica no GestãoClick se cada documento auxiliar ainda existe, foi excluído ou mudou de situação. */
+export async function auditPartialDocuments(operationId: string): Promise<PartialDocumentAudit[]> {
+  const data = await invoke<{ audits: PartialDocumentAudit[] }>({
+    action: 'audit_documents',
+    operation_id: operationId,
+  });
+  return data.audits || [];
+}
 
 
 /** Cancela uma baixa parcial que ainda não gerou nenhum documento no GestãoClick. */

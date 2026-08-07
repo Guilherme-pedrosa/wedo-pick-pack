@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  auditPartialDocuments,
   cancelPartialBatch,
   cancelPartialOperation,
+  PartialDocumentAudit,
 
   consolidatePartialOperation,
   getPartialStockAvailability,
@@ -115,6 +117,11 @@ export default function PartialWriteoffPage() {
   const [consolidating, setConsolidating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
+  const [auditing, setAuditing] = useState(false);
+  const [audits, setAudits] = useState<Record<string, PartialDocumentAudit>>({});
+  const [auditedAt, setAuditedAt] = useState<string | null>(null);
+
+
 
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
@@ -136,6 +143,12 @@ export default function PartialWriteoffPage() {
       setSelectedId((firstActive || operations[0]).id);
     }
   }, [operations, selectedId]);
+
+  useEffect(() => {
+    setAudits({});
+    setAuditedAt(null);
+  }, [selectedId]);
+
 
   useEffect(() => {
     if (!selected) return;
@@ -214,6 +227,29 @@ export default function PartialWriteoffPage() {
     }
   }
 
+  async function handleAuditDocuments() {
+    if (!selected || auditing) return;
+    setAuditing(true);
+    try {
+      const result = await auditPartialDocuments(selected.id);
+      setAudits(Object.fromEntries(result.map(item => [item.batchId, item])));
+      setAuditedAt(new Date().toISOString());
+      const missing = result.filter(item => item.state === 'missing').length;
+      const cancelled = result.filter(item => item.state === 'cancelled').length;
+      const changed = result.filter(item => item.state === 'status_changed').length;
+      if (missing || cancelled) {
+        toast.error(`Auditoria: ${missing} documento(s) excluído(s) e ${cancelled} cancelado(s) no GestãoClick. Cancele os lotes para liberar as reservas.`, { duration: 10000 });
+      } else if (changed) {
+        toast.warning(`Auditoria: ${changed} documento(s) com situação diferente da esperada.`);
+      } else {
+        toast.success('Auditoria: todos os documentos existem e estão na situação esperada.');
+      }
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setAuditing(false);
+    }
+  }
 
 
 
@@ -626,12 +662,32 @@ export default function PartialWriteoffPage() {
 
                 <Separator />
                 <div>
-                  <h3 className="mb-3 flex items-center gap-2 font-semibold"><ClipboardCheck className="h-4 w-4" /> Histórico de retiradas</h3>
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="flex items-center gap-2 font-semibold"><ClipboardCheck className="h-4 w-4" /> Histórico de retiradas</h3>
+                    <div className="flex items-center gap-2">
+                      {auditedAt && (
+                        <span className="text-xs text-muted-foreground">Auditado em {fmtDate(auditedAt)}</span>
+                      )}
+                      <Button variant="outline" size="sm" onClick={handleAuditDocuments} disabled={auditing || selected.batches.length === 0}>
+                        {auditing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                        Auditar documentos no GC
+                      </Button>
+                    </div>
+                  </div>
                   {selected.batches.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Nenhum lote criado.</p>
                   ) : (
                     <div className="space-y-2">
-                      {selected.batches.map(batch => (
+                      {selected.batches.map(batch => {
+                        const audit = audits[batch.id];
+                        const auditTone = audit?.state === 'ok'
+                          ? 'text-emerald-700'
+                          : audit?.state === 'missing' || audit?.state === 'cancelled'
+                            ? 'text-red-700'
+                            : audit?.state === 'status_changed'
+                              ? 'text-amber-700'
+                              : 'text-muted-foreground';
+                        return (
                         <div key={batch.id} className="flex flex-col justify-between gap-2 rounded-lg border p-3 sm:flex-row sm:items-center">
                           <div className="space-y-1">
                             <p className="font-medium">Lote {batch.sequence} · {batch.auxiliary_document_type === 'os' ? 'OS' : 'Venda'} #{batch.auxiliary_document_code || '—'}</p>
@@ -650,7 +706,13 @@ export default function PartialWriteoffPage() {
                                 {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
                               </p>
                             )}
+                            {audit && (
+                              <p className={`text-xs font-medium ${auditTone}`}>
+                                {audit.state === 'ok' ? '✓ ' : audit.state === 'unchecked' ? '• ' : '⚠ '}{audit.message}
+                              </p>
+                            )}
                           </div>
+
                           <div className="flex items-center gap-2">
                             <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
                             {!['confirmed', 'cancelled'].includes(batch.status) && (
@@ -667,8 +729,9 @@ export default function PartialWriteoffPage() {
                             )}
                           </div>
                         </div>
+                        );
+                      })}
 
-                      ))}
 
                     </div>
                   )}

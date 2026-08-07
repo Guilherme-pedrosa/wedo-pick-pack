@@ -1020,6 +1020,7 @@ Deno.serve(async (req: Request) => {
     if (action === 'prepare_batch') return json({ operation: await handlePrepareBatch(body, auth) });
     if (action === 'confirm_batch') return json({ operation: await handleConfirmBatch(body, auth) });
     if (action === 'consolidate') return json({ operation: await handleConsolidate(body, auth) });
+    if (action === 'create_batch_task') return json({ batch: await handleCreateBatchTask(body, auth) });
     return json({ error: 'UNKNOWN_ACTION' }, 400);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

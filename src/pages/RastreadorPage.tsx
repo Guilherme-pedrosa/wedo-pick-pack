@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
 import { gcCompraUrl, gcOrcamentoUrl, gcOsUrl } from '@/lib/gcLinks';
 
-type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string };
+type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string; data_emissao?: string };
 
 /** Converte "dd/mm/aaaa", "dd/mm" ou ISO em Date local. */
 function parseChegada(v?: string): Date | null {
@@ -60,7 +60,13 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
         const url = gcCompraUrl(o.id);
         const label = `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`;
         const chegada = (o.previsao_chegada || '').trim();
+        const rawCompra = (o.data_emissao || '').trim();
+        const compra = /^\d{4}-\d{2}-\d{2}/.test(rawCompra)
+          ? rawCompra.slice(0, 10).split('-').reverse().join('/')
+          : rawCompra;
         const atrasado = isChegadaAtrasada(chegada);
+
+
         return (
           <span key={o.id || o.codigo}>
             {i > 0 && ' • '}
@@ -75,6 +81,11 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
                 {label}
               </a>
             ) : label}
+            {compra ? (
+              <span className="ml-1 text-muted-foreground">🛒 Compra: {compra}</span>
+            ) : (
+              <span className="ml-1 text-muted-foreground italic">🛒 sem data de compra</span>
+            )}
             {chegada ? (
               <span className={atrasado ? 'ml-1 font-medium text-red-600' : 'ml-1 text-muted-foreground'}>
                 📅 Chegada: {chegada}{atrasado ? ' (atrasado)' : ''}
@@ -82,6 +93,7 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
             ) : (
               <span className="ml-1 text-muted-foreground italic">📅 sem data de chegada</span>
             )}
+
           </span>
         );
       })}

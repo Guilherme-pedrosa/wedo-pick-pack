@@ -1392,7 +1392,7 @@ export default function RastreadorPage() {
                   </h2>
                 </div>
                 <div className="space-y-2">
-                  {result.orcamentosPendentes.map(entry => (
+                  {pendentesOrdenados.map(entry => (
                     <OrcamentoCard key={entry.orcamento.id} entry={entry} ready={false} />
                   ))}
                 </div>

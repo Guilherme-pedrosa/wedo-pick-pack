@@ -872,6 +872,85 @@ async function handleCancelBatch(body: any, auth: AuthContext): Promise<PartialW
   return getOperationGraph(String((batch as any).operation_id));
 }
 
+/**
+ * Audita, no GestãoClick, cada documento auxiliar gerado pela baixa parcial:
+ * verifica se ainda existe, se foi excluído e se a situação continua a esperada.
+ */
+async function handleAuditDocuments(body: any): Promise<any[]> {
+  const operationId = String(body.operation_id || '');
+  if (!operationId) throw new Error('OPERATION_ID_REQUIRED');
+
+  const { data: batches, error } = await cloud
+    .from('partial_writeoff_batches' as any)
+    .select('id, sequence, status, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code')
+    .eq('operation_id', operationId)
+    .order('sequence', { ascending: true });
+  if (error) throw new Error(error.message);
+
+  let settings: Record<string, string> = {};
+  try {
+    settings = await getSettings();
+  } catch {
+    settings = {};
+  }
+
+  const results: any[] = [];
+  for (const batch of (batches || []) as any[]) {
+    const type: DocumentType = batch.auxiliary_document_type === 'os' ? 'os' : 'venda';
+    const base = {
+      batchId: batch.id,
+      sequence: Number(batch.sequence),
+      type,
+      batchStatus: String(batch.status),
+      documentId: batch.auxiliary_document_id ? String(batch.auxiliary_document_id) : null,
+      documentCode: batch.auxiliary_document_code ? String(batch.auxiliary_document_code) : null,
+      situacaoId: null as string | null,
+      situacaoNome: null as string | null,
+    };
+
+    if (!batch.auxiliary_document_id) {
+      results.push({ ...base, state: 'unchecked', message: 'Lote sem documento no GestãoClick.' });
+      continue;
+    }
+
+    const path = type === 'os'
+      ? `/api/ordens_servicos/${encodeURIComponent(String(batch.auxiliary_document_id))}`
+      : `/api/vendas/${encodeURIComponent(String(batch.auxiliary_document_id))}`;
+
+    try {
+      const document = (await gcRequest(path))?.data;
+      if (!document || !normalizeId(document.id)) {
+        results.push({ ...base, state: 'missing', message: 'Documento não existe mais no GestãoClick (excluído).' });
+        continue;
+      }
+      const situacaoId = normalizeId(document.situacao_id);
+      const situacaoNome = String(document.nome_situacao || '').trim() || '—';
+      const cancelId = normalizeId(settings[`${type}_cancel_status_id`]);
+      const waitingId = normalizeId(settings[`${type}_waiting_status_id`]);
+      const stockId = normalizeId(settings[`${type}_stock_status_id`]);
+      const expected = [waitingId, stockId].filter(Boolean);
+
+      const enriched = { ...base, situacaoId, situacaoNome, documentCode: String(document.codigo || base.documentCode || '') };
+
+      if (cancelId && situacaoId === cancelId) {
+        results.push({ ...enriched, state: 'cancelled', message: `Documento cancelado no GestãoClick ("${situacaoNome}").` });
+      } else if (expected.length && !expected.includes(situacaoId)) {
+        results.push({ ...enriched, state: 'status_changed', message: `Situação mudou no GestãoClick: "${situacaoNome}".` });
+      } else {
+        results.push({ ...enriched, state: 'ok', message: `Documento existe e está em "${situacaoNome}".` });
+      }
+    } catch (auditError) {
+      const message = auditError instanceof Error ? auditError.message : String(auditError);
+      if (/\(404\)|not found|nao encontrad|não encontrad/i.test(message)) {
+        results.push({ ...base, state: 'missing', message: 'Documento não encontrado no GestãoClick (excluído).' });
+      } else {
+        results.push({ ...base, state: 'error', message: `Falha ao consultar o GestãoClick: ${message}` });
+      }
+    }
+  }
+
+  return results;
+}
 
 
 export async function invokePartialWriteoffClient<T>(body: Record<string, unknown>): Promise<T> {

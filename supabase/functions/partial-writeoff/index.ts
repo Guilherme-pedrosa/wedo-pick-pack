@@ -409,16 +409,31 @@ async function attachAuvoTaskToAuxiliary(
 
   const taskAttrId = type === 'os' ? findAttr('tarefa', 'execu') : findAttr('tarefa', 'entrega');
   const budgetAttrId = findAttr('numero', 'orcamento');
-  const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-  if (taskAttrId) atributos.push({ atributo: { atributo_id: String(taskAttrId), conteudo: taskId } });
-  if (budgetAttrId) atributos.push({ atributo: { atributo_id: String(budgetAttrId), conteudo: String(budgetCode) } });
-  if (!atributos.length) return;
-
   const path = type === 'os'
     ? `/api/ordens_servicos/${encodeURIComponent(documentId)}`
     : `/api/vendas/${encodeURIComponent(documentId)}`;
   const latest = (await gcRequest(path))?.data;
   if (!latest) return;
+
+  // Preserva TODOS os atributos obrigatórios já gravados e só sobrescreve os dois alvos.
+  const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+  for (const entry of latest.atributos || []) {
+    const attr = entry?.atributo || entry;
+    const id = String(attr?.atributo_id || attr?.id || '');
+    if (!id) continue;
+    atributos.push({ atributo: { atributo_id: id, conteudo: String(attr?.conteudo ?? '') } });
+  }
+  const upsert = (id: string | null, conteudo: string) => {
+    if (!id) return;
+    const key = String(id);
+    const idx = atributos.findIndex((a) => a.atributo.atributo_id === key);
+    if (idx >= 0) atributos[idx] = { atributo: { atributo_id: key, conteudo } };
+    else atributos.push({ atributo: { atributo_id: key, conteudo } });
+  };
+  upsert(taskAttrId, taskId);
+  upsert(budgetAttrId, String(budgetCode));
+  if (!atributos.length) return;
+
   const payload = statusUpdatePayload(latest, normalizeId(latest.situacao_id), type);
   payload.atributos = atributos;
   await gcRequest(path, 'PUT', payload);

@@ -50,6 +50,9 @@ function operation(withdrawn: number, status: PartialWriteoffOperation['status']
       auxiliary_document_id: `aux-${withdrawn}`,
       auxiliary_document_code: '100',
       error_message: null,
+      auvo_task_id: null,
+      auvo_task_error: null,
+
       created_at: '2026-08-05T00:00:00Z',
       confirmed_at: '2026-08-05T00:00:00Z',
     }] : [],

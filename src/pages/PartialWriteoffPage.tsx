@@ -175,6 +175,14 @@ export default function PartialWriteoffPage() {
     staleTime: 15000,
   });
 
+  const sourcesQuery = useQuery({
+    queryKey: ['partial-writeoff-reservation-sources', selected?.id, selected?.version],
+    queryFn: () => listPartialReservationSources((selected?.items || []).map(item => item.product_id)),
+    enabled: !!selected && (selected.items || []).length > 0,
+    staleTime: 15000,
+  });
+
+
   const requestedItems = useMemo(() => {
     if (!selected) return [];
     return selected.items.map(item => ({ item_id: item.id, quantity: Number(String(quantities[item.id] || '').replace(',', '.')) }))

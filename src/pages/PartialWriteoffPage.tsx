@@ -729,8 +729,9 @@ export default function PartialWriteoffPage() {
                             )}
                           </div>
                         </div>
+                        );
+                      })}
 
-                      ))}
 
                     </div>
                   )}

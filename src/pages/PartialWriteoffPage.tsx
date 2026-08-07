@@ -112,6 +112,8 @@ export default function PartialWriteoffPage() {
   const [preparing, setPreparing] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
+
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
   const [manualRefreshing, setManualRefreshing] = useState(false);

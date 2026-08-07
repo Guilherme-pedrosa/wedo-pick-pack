@@ -229,7 +229,8 @@ export default function InventoryPolicyPage() {
           const stats = data.stats || cursor?.stats || {};
           const now = new Date().toISOString();
           localStorage.setItem('last-consumption-sync-date', now);
-          setLastSyncDate(now);
+          setTimeout(() => syncLogsQuery.refetch(), 1500);
+
           setSyncResult({ success: true, stats, period: data.period || null });
           toast.success(`Sincronização concluída! ${stats.os_debited || 0} OSs + ${stats.vendas_debited || 0} vendas processadas, ${stats.pecas_created || 0} peças.`);
           break;

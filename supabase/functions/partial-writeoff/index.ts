@@ -688,7 +688,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
   const settings = await getSettings();
   const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
   if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
-  const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id);
+  const payload = await auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id);
   const path = operation.document_type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
 
   let document: any = null;

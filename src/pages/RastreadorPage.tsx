@@ -64,6 +64,8 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
         const compra = /^\d{4}-\d{2}-\d{2}/.test(rawCompra)
           ? rawCompra.slice(0, 10).split('-').reverse().join('/')
           : rawCompra;
+        const atrasado = isChegadaAtrasada(chegada);
+
 
         return (
           <span key={o.id || o.codigo}>

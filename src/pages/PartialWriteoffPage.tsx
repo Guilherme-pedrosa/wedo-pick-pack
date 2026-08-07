@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  cancelPartialOperation,
   consolidatePartialOperation,
+
   listPartialOperations,
   openPartialOperation,
   PartialBudgetSearchResult,
@@ -26,6 +28,8 @@ import {
   PackageMinus,
   RefreshCw,
   Search,
+  XCircle,
+
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -57,6 +61,9 @@ function friendlyError(error: unknown) {
   if (message.includes('QUANTITY_EXCEEDS_PENDING')) return 'A quantidade informada ultrapassa o saldo pendente.';
   if (message.includes('CONFIGURE_OS_CONCLUSION_STATUS')) return 'Configure a situação padrão de conclusão de OS antes de consolidar.';
   if (message.includes('CONFIGURE_AUVO_USER_ID')) return 'Configure o ID de usuário Auvo antes de consolidar.';
+  if (message.includes('OPERATION_HAS_GC_DOCUMENTS')) return 'Não dá para cancelar: esta baixa já gerou documento no GestãoClick.';
+  if (message.includes('OPERATION_HAS_MOVEMENTS')) return 'Não dá para cancelar: já existem peças reservadas ou retiradas nesta baixa.';
+  if (message.includes('OPERATION_NOT_CANCELLABLE')) return 'Esta operação não pode mais ser cancelada.';
   if (message.includes('SEARCH_TOO_SHORT')) return 'Digite pelo menos 2 caracteres para buscar.';
   if (message.includes('SEARCH_BUDGET_KIND_REQUIRED')) return 'Escolha Orçamento de produto, Orçamento de serviço ou Venda.';
   if (message.includes('BUDGET_ALREADY_HAS_DOCUMENT')) return 'Este orçamento já gerou OS ou venda e não pode entrar na baixa parcial.';
@@ -100,6 +107,7 @@ export default function PartialWriteoffPage() {
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [preparing, setPreparing] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
   const [manualRefreshing, setManualRefreshing] = useState(false);
@@ -151,6 +159,34 @@ export default function PartialWriteoffPage() {
     return selected.items.map(item => ({ item_id: item.id, quantity: Number(String(quantities[item.id] || '').replace(',', '.')) }))
       .filter(item => Number.isFinite(item.quantity) && item.quantity > 0);
   }, [quantities, selected]);
+
+  // Só é possível cancelar enquanto nada foi efetivado no GestãoClick:
+  // nenhum documento auxiliar criado, nenhuma peça reservada ou retirada.
+  const canCancelSelected = useMemo(() => {
+    if (!selected) return false;
+    if (['completed', 'cancelled', 'consolidating'].includes(selected.status)) return false;
+    const hasGcDocument = selected.batches.some(batch =>
+      !!batch.auxiliary_document_id || !['failed', 'cancelled'].includes(batch.status));
+    if (hasGcDocument) return false;
+    return !selected.items.some(item => Number(item.withdrawn_quantity) > 0 || Number(item.reserved_quantity) > 0);
+  }, [selected]);
+
+  async function handleCancelOperation() {
+    if (!selected || cancelling) return;
+    if (!window.confirm(`Cancelar a baixa parcial do #${selected.budget_code}? Nada foi efetivado no GestãoClick.`)) return;
+    setCancelling(true);
+    try {
+      await cancelPartialOperation(selected.id);
+      toast.success('Baixa parcial cancelada.');
+      setSelectedId(null);
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
 
   async function refresh() {
     await Promise.all([
@@ -446,8 +482,23 @@ export default function PartialWriteoffPage() {
                         : `destino final: ${selected.document_type === 'os' ? 'OS' : 'Venda'}`}
                     </p>
                   </div>
-                  <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
+                    {canCancelSelected && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCancelOperation}
+                        disabled={cancelling}
+                        className="border-red-200 text-red-700 hover:bg-red-50"
+                      >
+                        {cancelling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                        Cancelar baixa parcial
+                      </Button>
+                    )}
+                  </div>
                 </div>
+
               </CardHeader>
               <CardContent className="space-y-5">
                 {selected.status === 'reconciliation_required' && (

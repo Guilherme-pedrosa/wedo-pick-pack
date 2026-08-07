@@ -167,6 +167,21 @@ export async function consolidatePartialOperation(
   return data.operation;
 }
 
+/** Cancela uma baixa parcial que ainda não gerou nenhum documento no GestãoClick. */
+export async function cancelPartialOperation(
+  operationId: string,
+  reason?: string,
+): Promise<PartialWriteoffOperation> {
+  const data = await invoke<{ operation: PartialWriteoffOperation }>({
+    action: 'cancel_operation',
+    operation_id: operationId,
+    reason: reason?.trim() || undefined,
+  });
+  return data.operation;
+}
+
+
+
 export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]> {
   const operations = await listPartialOperations();
   return operations.flatMap((operation) => operation.batches

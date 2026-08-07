@@ -2143,6 +2143,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      partial_writeoff_cancel_operation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_operation_id: string
+          p_reason?: string
+        }
+        Returns: string
+      }
       partial_writeoff_claim_confirmation: {
         Args: { p_batch_id: string }
         Returns: string

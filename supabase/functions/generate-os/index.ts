@@ -1032,8 +1032,9 @@ Deno.serve(async (req: Request) => {
           else vendaAtributos.push(entry);
         };
         if (vendaAttrIds.tarefaEntrega) {
-          upsertVendaAttr(vendaAttrIds.tarefaEntrega, String(auvoTaskId));
-          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${vendaAttrIds.tarefaEntrega}) = ${auvoTaskId}`);
+          upsertVendaAttr(vendaAttrIds.tarefaEntrega, buildTaskChain(auvoTaskId));
+          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${vendaAttrIds.tarefaEntrega}) = ${buildTaskChain(auvoTaskId)}`);
+
         } else {
           console.warn('[generate-os] ⚠️ Atributo "TAREFA DE ENTREGA" não encontrado nos atributos de venda.');
         }

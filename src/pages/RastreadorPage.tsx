@@ -616,7 +616,19 @@ export default function RastreadorPage() {
           <div className="flex items-center gap-2">
             {entry.osLinked && (
               <Badge variant="outline" className="text-[10px] px-1.5 border-blue-500 text-blue-600" title={`Já é OS #${entry.osLinked.os_codigo} [${entry.osLinked.nome_situacao}] — ignorada pelo filtro`}>
-                Já é OS #{entry.osLinked.os_codigo} [{entry.osLinked.nome_situacao}]
+                {gcOsUrl(entry.osLinked.os_id) ? (
+                  <a
+                    href={gcOsUrl(entry.osLinked.os_id)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Já é OS #{entry.osLinked.os_codigo} [{entry.osLinked.nome_situacao}]
+                  </a>
+                ) : (
+                  <>Já é OS #{entry.osLinked.os_codigo} [{entry.osLinked.nome_situacao}]</>
+                )}
               </Badge>
             )}
             {!entry.osLinked && ready && alreadyGenerated && (

@@ -60,7 +60,11 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
         const url = gcCompraUrl(o.id);
         const label = `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`;
         const chegada = (o.previsao_chegada || '').trim();
-        const atrasado = isChegadaAtrasada(chegada);
+        const rawCompra = (o.data_emissao || '').trim();
+        const compra = /^\d{4}-\d{2}-\d{2}/.test(rawCompra)
+          ? rawCompra.slice(0, 10).split('-').reverse().join('/')
+          : rawCompra;
+
         return (
           <span key={o.id || o.codigo}>
             {i > 0 && ' • '}

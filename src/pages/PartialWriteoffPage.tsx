@@ -36,6 +36,7 @@ import {
   PackageMinus,
   RefreshCw,
   Search,
+  Trash2,
   XCircle,
 
 } from 'lucide-react';

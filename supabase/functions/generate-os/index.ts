@@ -533,6 +533,23 @@ Deno.serve(async (req: Request) => {
       const doc = `${String(entry.document_type || '').toLowerCase() === 'venda' ? 'Venda' : 'OS'} #${entry.document_code || entry.document_id || '?'}`;
       return `  • Entrega ${entry.sequence ?? '?'} — ${doc}${entry.auvo_task_id ? ` — Tarefa Auvo #${entry.auvo_task_id}` : ' — sem tarefa Auvo'}`;
     });
+    // IDs das tarefas Auvo já criadas nas entregas parciais. Precisam ficar
+    // gravados no MESMO atributo do documento final (TAREFA EXECUÇÃO / TAREFA DE
+    // ENTREGA) para que o sistema consiga enxergar que existe mais de uma tarefa
+    // para o mesmo orçamento — sem isso o histórico das parciais se perde na
+    // unificação.
+    const partialTaskIds = Array.from(new Set(
+      partialDeliveries
+        .map((entry) => String(entry.auvo_task_id ?? '').trim())
+        .filter((id) => id && id !== 'null' && id !== 'undefined')
+    ));
+    // Tarefa final SEMPRE primeiro (mantém compatibilidade com leitores que usam
+    // só o primeiro número); as parciais seguem na sequência, separadas por vírgula.
+    const buildTaskChain = (finalTaskId: string | number) => {
+      const ids = [String(finalTaskId).trim(), ...partialTaskIds.filter((id) => id !== String(finalTaskId).trim())];
+      return ids.filter(Boolean).join(', ');
+    };
+
 
     let orcamento = body.orcamento; // GCOrcamento object from frontend
 
@@ -927,7 +944,7 @@ Deno.serve(async (req: Request) => {
       };
 
       upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
-      upsertAttr(attrIds.tarefaExecucao, String(auvoTaskId));
+      upsertAttr(attrIds.tarefaExecucao, buildTaskChain(auvoTaskId));
 
       // Map orçamento attribute values to OS mandatory attribute IDs
       // Orçamento attrs have different IDs than OS attrs, so we find by name/content
@@ -1015,8 +1032,9 @@ Deno.serve(async (req: Request) => {
           else vendaAtributos.push(entry);
         };
         if (vendaAttrIds.tarefaEntrega) {
-          upsertVendaAttr(vendaAttrIds.tarefaEntrega, String(auvoTaskId));
-          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${vendaAttrIds.tarefaEntrega}) = ${auvoTaskId}`);
+          upsertVendaAttr(vendaAttrIds.tarefaEntrega, buildTaskChain(auvoTaskId));
+          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${vendaAttrIds.tarefaEntrega}) = ${buildTaskChain(auvoTaskId)}`);
+
         } else {
           console.warn('[generate-os] ⚠️ Atributo "TAREFA DE ENTREGA" não encontrado nos atributos de venda.');
         }

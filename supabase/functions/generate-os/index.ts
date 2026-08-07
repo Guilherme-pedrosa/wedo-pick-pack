@@ -534,6 +534,53 @@ Deno.serve(async (req: Request) => {
     orcamento.produtos = dedupeGCLines(orcamento.produtos, 'produto');
     orcamento.servicos = dedupeGCLines(orcamento.servicos, 'servico');
 
+    // ============================================
+    // ANTI-ENTREGA DUPLICADA (BAIXA PARCIAL)
+    // Se o orçamento já teve peças entregues por baixa parcial, a OS/Venda final
+    // NÃO pode levar a quantidade cheia — senão o cliente recebe a peça 2x.
+    // Descontamos aqui, no servidor, o que já saiu (reservado + retirado).
+    // ============================================
+    const alreadyDelivered = await fetchPartialDeliveredQuantities(String(orcamento.id));
+    const deductionNotes: string[] = [];
+    if (alreadyDelivered.size) {
+      const remaining: any[] = [];
+      for (const line of orcamento.produtos || []) {
+        const prod = line?.produto || line;
+        const pid = String(prod?.produto_id ?? '').trim();
+        const vid = String(prod?.variacao_id ?? '').trim();
+        const key = vid ? `${pid}::${vid}` : pid;
+        const originalQty = parseMoney(prod?.quantidade);
+        const delivered = alreadyDelivered.get(key) || 0;
+        if (delivered <= 0 || originalQty <= 0) { remaining.push(line); continue; }
+        const consume = Math.min(delivered, originalQty);
+        alreadyDelivered.set(key, delivered - consume);
+        const newQty = Number((originalQty - consume).toFixed(4));
+        const name = String(prod?.nome_produto || pid);
+        if (newQty <= 0) {
+          deductionNotes.push(`  • ${name} — ${originalQty} já entregue(s) na baixa parcial (linha removida)`);
+          continue;
+        }
+        const ratio = newQty / originalQty;
+        const scaled = { ...prod, quantidade: String(newQty) };
+        for (const field of ['valor_total', 'desconto_valor'] as const) {
+          const raw = (prod as any)?.[field];
+          if (raw != null && String(raw).trim() !== '') {
+            const isPct = String((prod as any)?.desconto_tipo || '').toUpperCase() === 'P';
+            if (field === 'desconto_valor' && isPct) continue;
+            (scaled as any)[field] = (parseMoney(raw) * ratio).toFixed(2);
+          }
+        }
+        deductionNotes.push(`  • ${name} — ${consume} já entregue(s), restam ${newQty} nesta OS`);
+        remaining.push(line?.produto ? { ...line, produto: scaled } : scaled);
+      }
+      orcamento.produtos = remaining;
+      // O total do orçamento não vale mais: deixe o GC recalcular pelas linhas.
+      delete orcamento.valor_total;
+      delete orcamento.pagamentos;
+      console.log(`[generate-os] Baixa parcial: ${deductionNotes.length} linha(s) ajustada(s); produtos restantes=${orcamento.produtos.length}`);
+    }
+
+
 
     // Regra de negócio: orçamento com QUALQUER linha de serviço vira OS.
     // Orçamento só de produto vira Venda.

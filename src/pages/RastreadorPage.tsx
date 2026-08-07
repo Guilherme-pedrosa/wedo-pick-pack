@@ -228,6 +228,23 @@ export default function RastreadorPage() {
   const [blockedExpanded, setBlockedExpanded] = useState(true);
   const [sortMode, setSortMode] = useState<'padrao' | 'valor_desc' | 'valor_asc'>('padrao');
 
+  const sortByValue = <T extends { orcamento: { valor_total?: string | number } }>(list: T[]): T[] => {
+    if (sortMode === 'padrao') return list;
+    const dir = sortMode === 'valor_desc' ? -1 : 1;
+    return [...list].sort(
+      (a, b) => (Number(a.orcamento?.valor_total || 0) - Number(b.orcamento?.valor_total || 0)) * dir
+    );
+  };
+
+  const prontosOrdenados = useMemo(
+    () => sortByValue(result?.orcamentosProntos ?? []),
+    [result, sortMode]
+  );
+  const pendentesOrdenados = useMemo(
+    () => sortByValue(result?.orcamentosPendentes ?? []),
+    [result, sortMode]
+  );
+
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);

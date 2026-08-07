@@ -273,6 +273,11 @@ export async function cancelPartialOperation(
   return data.operation;
 }
 
+/** Exclui definitivamente uma baixa parcial cancelada (sem retiradas e sem documentos válidos). */
+export async function deletePartialOperation(operationId: string): Promise<void> {
+  await invoke<{ deleted: boolean }>({ action: 'delete_operation', operation_id: operationId });
+}
+
 
 
 export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]> {

@@ -865,6 +865,10 @@ Deno.serve(async (req: Request) => {
       if (orcamento.vendedor_id) osPayload.vendedor_id = orcamento.vendedor_id;
       if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
       if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
+      if (partialNote) {
+        osPayload.observacoes_interna = [osPayload.observacoes_interna, partialNote].filter(Boolean).join('\n');
+      }
+
       if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
       // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado

@@ -25,7 +25,9 @@ export interface OrcamentoReadiness {
   itensProntos: number;
   pronto: boolean;
   temComprometido: boolean;      // true if any item is in a conflict
+  partialAtivo?: boolean;        // baixa parcial em andamento (saldo restante ainda pendente)
   osLinked?: { os_codigo: string; os_id: string; nome_situacao: string }; // set when budget is already an OS but its OS situation was ignored by the filter
+
 }
 
 export interface ConflictInfo {
@@ -161,7 +163,9 @@ export async function rastrearOrcamentos(
     ? deduped.filter(o => o.nome_cliente.toLowerCase().includes(nomeCliente.toLowerCase()))
     : deduped;
   const partialDemand = await getActivePartialDemand();
-  filteredOrcamentos = filteredOrcamentos.filter(o => !partialDemand.activeBudgetIds.has(o.id));
+  // Orçamentos com baixa parcial em andamento CONTINUAM visíveis no rastreador
+  // (ainda faltam peças). Apenas ficam marcados.
+
   console.info('[RASTREADOR] 📦 Após filtro nome:', filteredOrcamentos.length);
 
   // Date filter (data >= dataInicio). GC dates come as YYYY-MM-DD, so string compare works.
@@ -192,6 +196,7 @@ export async function rastrearOrcamentos(
   const generatedOSFallback = await fetchGeneratedOSFallback(filteredOrcamentos);
 
   for (const o of filteredOrcamentos) {
+    const partialAtivo = partialDemand.activeBudgetIds.has(o.id);
     const flagFin = String(o.situacao_financeiro ?? '');
     const flagEst = String(o.situacao_estoque ?? '');
     const byFlags = ['1', 'true', 'sim'].includes(flagFin.toLowerCase()) ||
@@ -201,6 +206,13 @@ export async function rastrearOrcamentos(
     // Se o filtro de ignorar está ativo e a situação da OS está na lista, ignora o vínculo (para fins de bloqueio).
     const osMatchIgnored = osMatch && osIgnoreActive && osIgnoreSet.has(normalizeSituacaoNome(osMatch.nome_situacao));
     const osMatchPasses = osMatch && !osMatchIgnored;
+
+    // Baixa parcial em andamento: o orçamento NUNCA some do rastreador — as OS/vendas
+    // auxiliares são parciais e o saldo restante continua pendente.
+    if (partialAtivo) {
+      uniqueOrcamentos.push(o);
+      continue;
+    }
 
     // Se a OS vinculada está numa situação marcada para ocultar, oculta TUDO antes
     // de qualquer outro bloqueio por flag. Assim não aparece nem em prontos,
@@ -212,6 +224,7 @@ export async function rastrearOrcamentos(
 
     if (byFlags || osMatchPasses) {
       const reason = byFlags ? 'flag' as const : 'os_index' as const;
+
       let warning = '';
       if (osMatchPasses) {
         warning = `Orçamento #${o.codigo} → já é OS #${osMatch!.os_codigo} [${osMatch!.nome_situacao}]`;
@@ -467,6 +480,8 @@ export async function rastrearOrcamentos(
 
   for (const orc of uniqueOrcamentos) {
     const itens: OrcamentoReadiness['itens'] = [];
+    const partialPending = partialDemand.pendingByBudgetAndProduct.get(orc.id);
+    const partialAtivo = partialDemand.activeBudgetIds.has(orc.id);
 
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
@@ -474,7 +489,13 @@ export async function rastrearOrcamentos(
       if (!pid) continue;
 
       const key = makeKey(pid, vid);
-      const qtd = parseDecimal(p.produto.quantidade);
+      let qtd = parseDecimal(p.produto.quantidade);
+      if (partialPending) {
+        const pk = vid ? `${pid}::${vid}` : pid;
+        const pend = partialPending.get(pk);
+        if (pend !== undefined) qtd = pend;
+      }
+      if (partialAtivo && qtd <= 0) continue; // item já entregue nas parciais
       const stockTotal = stockMapOriginal.get(key) ?? 0;
 
       const compraInfo = getCompraInfo(pid, key);
@@ -507,10 +528,13 @@ export async function rastrearOrcamentos(
       totalItens: itens.length,
       itensProntos: itens.filter(i => i.pronto).length,
       // Se o orçamento já é OS (apenas com situação ignorada), nunca tratar como "pronto p/ virar OS"
-      pronto: allReady && !osLinked,
+      // Em baixa parcial, a conclusão é feita na tela de Baixa Parcial (nunca gerar OS aqui).
+      pronto: allReady && !osLinked && !partialAtivo,
       temComprometido,
+      ...(partialAtivo ? { partialAtivo: true } : {}),
       ...(osLinked ? { osLinked } : {}),
     };
+
 
     if (entry.pronto) prontos.push(entry);
     else pendentes.push(entry);

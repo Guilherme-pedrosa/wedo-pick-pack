@@ -670,7 +670,13 @@ export default function RastreadorPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {entry.partialAtivo && (
+              <Badge variant="outline" className="text-[10px] px-1.5 border-amber-500 text-amber-600" title="Baixa parcial em andamento — saldo restante ainda pendente">
+                Baixa parcial em andamento
+              </Badge>
+            )}
             {entry.osLinked && (
+
               <Badge variant="outline" className="text-[10px] px-1.5 border-blue-500 text-blue-600" title={`Já é OS #${entry.osLinked.os_codigo} [${entry.osLinked.nome_situacao}] — ignorada pelo filtro`}>
                 {gcOsUrl(entry.osLinked.os_id) ? (
                   <a

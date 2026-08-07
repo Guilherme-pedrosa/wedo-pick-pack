@@ -593,13 +593,30 @@ Deno.serve(async (req: Request) => {
     // ============================================
     // STEP 2: Build orientation (product/service list)
     // ============================================
+    const brl = (value: unknown): string => {
+      const n = Number(String(value ?? '').replace(/\./g, '').replace(',', '.'));
+      if (!Number.isFinite(n) || n <= 0) return '';
+      return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    };
+    const priceSuffix = (line: any, qty: unknown): string => {
+      const unit = brl(line?.valor_venda ?? line?.valor_unitario ?? line?.valor);
+      const total = brl(line?.valor_total) || (() => {
+        const u = Number(String(line?.valor_venda ?? line?.valor_unitario ?? line?.valor ?? '').replace(/\./g, '').replace(',', '.'));
+        const q = Number(String(qty ?? 1).replace(',', '.'));
+        return Number.isFinite(u) && Number.isFinite(q) ? brl(u * q) : '';
+      })();
+      if (!unit && !total) return '';
+      if (unit && total && unit !== total) return ` — Valor: ${unit} un. (Total: ${total})`;
+      return ` — Valor: ${unit || total}`;
+    };
+
     const prodLines: string[] = [];
     if (orcamento.produtos?.length) {
       prodLines.push('📦 PRODUTOS:');
       for (const p of orcamento.produtos) {
         const prod = p.produto || p;
         const qty = prod.quantidade || prod.qtd_necessaria || 1;
-        prodLines.push(`  • ${prod.nome_produto} — Qtd: ${qty}`);
+        prodLines.push(`  • ${prod.nome_produto} — Qtd: ${qty}${priceSuffix(prod, qty)}`);
       }
     }
     if (orcamento.servicos?.length) {
@@ -607,9 +624,11 @@ Deno.serve(async (req: Request) => {
       prodLines.push('🔧 SERVIÇOS:');
       for (const s of orcamento.servicos) {
         const svc = s.servico || s;
-        prodLines.push(`  • ${svc.nome_servico || svc.nome || 'Serviço'} — Qtd: ${svc.quantidade || 1}`);
+        const qty = svc.quantidade || 1;
+        prodLines.push(`  • ${svc.nome_servico || svc.nome || 'Serviço'} — Qtd: ${qty}${priceSuffix(svc, qty)}`);
       }
     }
+
 
     // Equipment info — check atributos first (campo extra "Equipamento"), then equipamentos array, then manual input
     let equipText = '';

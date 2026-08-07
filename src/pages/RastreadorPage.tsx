@@ -1174,13 +1174,28 @@ export default function RastreadorPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Ordenar por valor:</span>
+            <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b border-border flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar nº do orçamento ou cliente…"
+                    value={listSearch}
+                    onChange={e => setListSearch(e.target.value)}
+                    className="h-7 text-xs pl-7 w-[240px]"
+                  />
+                </div>
+                {listSearch && (
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setListSearch('')}>Limpar</Button>
+                )}
+                <span className="text-xs text-muted-foreground ml-2">Ordenar:</span>
                 {([
                   { key: 'padrao', label: 'Padrão' },
-                  { key: 'valor_desc', label: 'Maior → menor' },
-                  { key: 'valor_asc', label: 'Menor → maior' },
+                  { key: 'valor_desc', label: 'Maior valor' },
+                  { key: 'valor_asc', label: 'Menor valor' },
+                  { key: 'data_desc', label: 'Mais recente' },
+                  { key: 'data_asc', label: 'Mais antigo' },
+                  { key: 'cliente_asc', label: 'Cliente A-Z' },
                 ] as const).map(opt => (
                   <Button
                     key={opt.key}
@@ -1193,6 +1208,7 @@ export default function RastreadorPage() {
                   </Button>
                 ))}
               </div>
+
               <p className="text-xs text-muted-foreground">
                 Escaneado em {new Date(result.scannedAt).toLocaleString('pt-BR')}
               </p>

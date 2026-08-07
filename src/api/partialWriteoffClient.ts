@@ -283,6 +283,32 @@ function selectedLine(snapshot: any, quantity: number): any {
   return cloned;
 }
 
+function budgetAttributeValue(budget: Record<string, any>, attributeId: string): string {
+  for (const entry of budget.atributos || []) {
+    const attribute = entry?.atributo || entry;
+    if (String(attribute?.atributo_id || attribute?.id || '') === attributeId) {
+      return String(attribute?.conteudo ?? '').trim();
+    }
+  }
+  return '';
+}
+
+/**
+ * Os IDs dos campos do orçamento são diferentes dos IDs exigidos na OS.
+ * Mantém o mesmo mapeamento usado pelo fluxo funcional de geração do Rastreador.
+ */
+function auxiliaryOsAttributes(operation: PartialWriteoffOperation) {
+  const budget = operation.budget_snapshot || {};
+  const sourceTaskId = budgetAttributeValue(budget, '73341');
+  return [
+    { atributo: { atributo_id: '81831', conteudo: String(operation.budget_code || '-') } },
+    { atributo: { atributo_id: '73343', conteudo: sourceTaskId || '-' } },
+    { atributo: { atributo_id: '73344', conteudo: sourceTaskId || '-' } },
+    { atributo: { atributo_id: '68658', conteudo: budgetAttributeValue(budget, '73350') || 'CLIENTE' } },
+    { atributo: { atributo_id: '73897', conteudo: budgetAttributeValue(budget, '67350') || '0' } },
+  ];
+}
+
 function auxiliaryPayload(
   operation: PartialWriteoffOperation,
   selected: Array<{ item: any; quantity: number }>,
@@ -307,7 +333,12 @@ function auxiliaryPayload(
     observacoes_interna: marker,
   };
   return operation.document_type === 'os'
-    ? { ...common, servicos: [], equipamentos: [] }
+    ? {
+        ...common,
+        servicos: [],
+        equipamentos: [],
+        atributos: auxiliaryOsAttributes(operation),
+      }
     : { ...common, tipo: 'produto' };
 }
 

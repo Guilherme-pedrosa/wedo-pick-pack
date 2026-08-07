@@ -830,6 +830,19 @@ async function handleConsolidate(body: any, auth: AuthContext) {
     throw new Error(message);
   }
 
+  // Rastreio: todas as entregas parciais (documento auxiliar + tarefa Auvo)
+  // são enviadas ao gerador para ficarem amarradas à OS/Venda final.
+  const partialAuxiliaries = operation.batches
+    .filter((batch: any) => batch.auxiliary_document_id)
+    .map((batch: any) => ({
+      sequence: batch.sequence,
+      document_type: batch.auxiliary_document_type,
+      document_id: String(batch.auxiliary_document_id || ''),
+      document_code: String(batch.auxiliary_document_code || ''),
+      auvo_task_id: batch.auvo_task_id ? String(batch.auvo_task_id) : null,
+      confirmed_at: batch.confirmed_at || null,
+    }));
+
   let generated: any;
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-os`, {
@@ -845,8 +858,10 @@ async function handleConsolidate(body: any, auth: AuthContext) {
         gc_usuario_id: auth.profile.gc_usuario_id || undefined,
         auvo_customer_id: body.auvo_customer_id || undefined,
         manual_equipamento: body.manual_equipamento || undefined,
+        partial_auxiliaries: partialAuxiliaries,
       }),
     });
+
     generated = await response.json();
     if (!response.ok || generated?.error) throw new Error(generated?.error || `generate-os ${response.status}`);
 

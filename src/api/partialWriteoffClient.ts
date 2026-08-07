@@ -541,7 +541,16 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const settings = await getSettings();
   const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
   if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
-  const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id);
+  // Igual ao Rastreador: busca o orçamento COMPLETO no GC (o snapshot local pode
+  // estar sem `atributos`), para preencher TAREFA OS/EXECUÇÃO, LOCAL e HORAS.
+  let freshBudget: Record<string, any> | undefined;
+  try {
+    freshBudget = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
+  } catch {
+    freshBudget = undefined;
+  }
+  const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id, freshBudget);
+
   const path = operation.document_type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
 
   let document: any = null;

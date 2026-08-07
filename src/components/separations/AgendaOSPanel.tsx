@@ -771,8 +771,15 @@ export default function AgendaOSPanel() {
               </PopoverContent>
             </Popover>
 
+            <Button
+              variant={executionFilters.size === 0 ? 'default' : 'outline'}
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setExecutionFilters(new Set())}
+            >
+              Todas
+            </Button>
             {([
-              ['all', 'Todas'],
               ['em_andamento', '🔄 Em andamento'],
               ['pausada', '⏸ Pausada'],
               ['finalizada', '✅ Finalizada'],
@@ -780,10 +787,15 @@ export default function AgendaOSPanel() {
             ] as const).map(([value, label]) => (
               <Button
                 key={value}
-                variant={executionFilter === value ? 'default' : 'outline'}
+                variant={executionFilters.has(value) ? 'default' : 'outline'}
                 size="sm"
                 className="h-8 text-xs"
-                onClick={() => setExecutionFilter(value)}
+                onClick={() => setExecutionFilters((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(value)) next.delete(value);
+                  else next.add(value);
+                  return next;
+                })}
               >
                 {label}
               </Button>

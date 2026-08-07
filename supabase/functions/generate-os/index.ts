@@ -486,7 +486,15 @@ Deno.serve(async (req: Request) => {
       gc_usuario_id,    // optional - GC user ID for attribution
       auvo_customer_id, // optional - Auvo customer ID (when no source task to clone from)
       manual_equipamento, // optional - manual equipment text when not in orçamento
+      partial_auxiliaries, // optional - entregas parciais já feitas (baixa parcial)
     } = body;
+    // Rastreio das entregas parciais: documento auxiliar + tarefa Auvo de cada lote.
+    const partialDeliveries: Array<Record<string, any>> = Array.isArray(partial_auxiliaries) ? partial_auxiliaries : [];
+    const partialSummaryLines = partialDeliveries.map((entry) => {
+      const doc = `${String(entry.document_type || '').toLowerCase() === 'venda' ? 'Venda' : 'OS'} #${entry.document_code || entry.document_id || '?'}`;
+      return `  • Entrega ${entry.sequence ?? '?'} — ${doc}${entry.auvo_task_id ? ` — Tarefa Auvo #${entry.auvo_task_id}` : ' — sem tarefa Auvo'}`;
+    });
+
     let orcamento = body.orcamento; // GCOrcamento object from frontend
 
     if (!orcamento || !auvo_user_id) {

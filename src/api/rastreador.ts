@@ -354,7 +354,11 @@ export async function rastrearOrcamentos(
         }
       }
       for (const ordem of allOrdens) {
+        // Considerar somente pedidos ainda aguardando chegada ("COMPRADO - AG CHEGADA")
+        const sit = String(ordem.nome_situacao ?? '').toUpperCase();
+        if (!(sit.includes('COMPRADO') && sit.includes('CHEGADA'))) continue;
         for (const p of ordem.produtos || []) {
+
           const pid = normalizeId(p.produto.produto_id);
           if (!pid) continue;
           const vid = normalizeId(p.produto.variacao_id);

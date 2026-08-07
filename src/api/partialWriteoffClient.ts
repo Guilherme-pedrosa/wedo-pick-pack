@@ -851,6 +851,29 @@ async function handleCancelOperation(body: any, auth: AuthContext): Promise<Part
   return getOperationGraph(operationId);
 }
 
+/** Cancela um lote cujo documento auxiliar foi cancelado no GestaoClick. */
+async function handleCancelBatch(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  const batchId = String(body.batch_id || '');
+  if (!batchId) throw new Error('BATCH_ID_REQUIRED');
+  const { data: batch, error: batchError } = await cloud
+    .from('partial_writeoff_batches' as any)
+    .select('operation_id')
+    .eq('id', batchId)
+    .maybeSingle();
+  if (batchError) throw new Error(batchError.message);
+  if (!batch) throw new Error('BATCH_NOT_FOUND');
+  const { error } = await (cloud as any).rpc('partial_writeoff_cancel_batch', {
+    p_batch_id: batchId,
+    p_actor_id: auth.id,
+    p_actor_name: auth.name,
+    p_reason: String(body.reason || ''),
+  });
+  if (error) throw new Error(error.message || 'BATCH_NOT_CANCELLABLE');
+  return getOperationGraph(String((batch as any).operation_id));
+}
+
+
+
 export async function invokePartialWriteoffClient<T>(body: Record<string, unknown>): Promise<T> {
   const auth = await authenticate();
   const action = String(body.action || '');

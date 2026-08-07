@@ -666,7 +666,54 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     }
     throw attachError;
   }
+  // Tarefa Auvo da entrega parcial (mesma receita da geração de OS).
+  // Falha aqui NÃO invalida a baixa: o lote fica registrado com o aviso.
+  const batchWithDocument = {
+    ...batch,
+    auxiliary_document_id: String(document.id),
+    auxiliary_document_code: String(document.codigo || ''),
+  };
+  try {
+    if (!auth.profile.auvo_user_id) throw new Error('Usuário sem "auvo_user_id" configurado no perfil');
+    const taskId = await createPartialAuvoTask(
+      operation,
+      batchWithDocument,
+      selected,
+      String(auth.profile.auvo_user_id),
+      body.auvo_customer_id ? String(body.auvo_customer_id) : undefined,
+    );
+    try {
+      await attachAuvoTaskToAuxiliary(operation.document_type, String(document.id), taskId, operation.budget_code);
+    } catch (linkError) {
+      console.warn('[partial-writeoff] tarefa criada mas não vinculada ao GC:', compact(linkError));
+    }
+    await service.from('partial_writeoff_batches')
+      .update({ auvo_task_id: taskId, auvo_task_error: null })
+      .eq('id', batchId);
+    await service.from('partial_writeoff_events').insert({
+      operation_id: operationId,
+      batch_id: batchId,
+      event_type: 'auvo_task_created',
+      payload: { auvo_task_id: taskId, document_code: String(document.codigo || '') },
+      actor_id: auth.id,
+      actor_name: auth.name,
+    });
+  } catch (taskError) {
+    const message = compact(taskError).slice(0, 500) || 'Falha desconhecida ao criar tarefa no Auvo';
+    console.error('[partial-writeoff] falha ao criar tarefa Auvo:', message);
+    await service.from('partial_writeoff_batches').update({ auvo_task_error: message }).eq('id', batchId);
+    await service.from('partial_writeoff_events').insert({
+      operation_id: operationId,
+      batch_id: batchId,
+      event_type: 'auvo_task_failed',
+      payload: { error: message },
+      actor_id: auth.id,
+      actor_name: auth.name,
+    });
+  }
+
   return getOperationGraph(operationId);
+
 }
 
 async function handleConfirmBatch(body: any, auth: AuthContext) {

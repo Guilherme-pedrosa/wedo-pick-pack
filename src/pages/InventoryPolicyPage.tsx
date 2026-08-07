@@ -49,10 +49,25 @@ export default function InventoryPolicyPage() {
   const [syncResult, setSyncResult] = useState<any>(null);
   const [syncProgress, setSyncProgress] = useState<any>(null);
 
-   // Last sync date — stored in localStorage since edge function doesn't write to sync_runs
-  const [lastSyncDate, setLastSyncDate] = useState<string | null>(() => {
-    return localStorage.getItem('last-consumption-sync-date');
+  // Histórico real de sincronizações (system_logs), independente do navegador
+  const syncLogsQuery = useQuery({
+    queryKey: ['inventory-consumption-sync-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('system_logs' as any)
+        .select('id, created_at, user_name, details')
+        .eq('module', 'inventory')
+        .ilike('action', 'Sincroniza%')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return (data as any[]) || [];
+    },
+    refetchInterval: 60_000,
   });
+  const lastSyncLog = syncLogsQuery.data?.[0] || null;
+  const lastSyncDate = lastSyncLog?.created_at || localStorage.getItem('last-consumption-sync-date');
+
 
   // Load config from DB
   const configQuery = useQuery({

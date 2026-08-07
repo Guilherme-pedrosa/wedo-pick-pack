@@ -297,6 +297,55 @@ export default function RastreadorPage() {
     return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'pt-BR'));
   }, [conflitosFiltrados]);
 
+  const renderConflitoCard = (c: ConflictInfo) => (
+    <Card key={c.produto_key} className="p-3 border-l-4 border-l-red-500">
+      <p className="font-medium text-sm">
+        {c.codigo_produto && <span className="font-mono text-muted-foreground">[{c.codigo_produto}]</span>}{' '}
+        {c.nome_produto}
+      </p>
+      <div className="flex gap-3 text-xs text-muted-foreground mt-1">
+        <span>Estoque: <strong className="text-foreground">{c.estoque_total}</strong></span>
+        <span>Demanda total: <strong className="text-red-500">{c.demanda_total}</strong></span>
+      </div>
+      <div className="mt-2 space-y-0.5">
+        {c.orcamentos_envolvidos.map(o => {
+          const isOS = o.id.startsWith('os-');
+          return (
+            <div key={o.id} className={`text-xs ${isOS ? 'text-amber-600 font-medium' : 'text-muted-foreground'}`}>
+              {isOS ? '🔧' : '📋'} {isOS ? o.codigo : `#${o.codigo}`} — {o.nome_cliente} — precisa {o.qtd}
+              {isOS && <span className="text-[10px] ml-1">(reservado, sem mov. estoque)</span>}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 text-xs">
+        {(c.qtd_em_compra ?? 0) > 0 ? (
+          <span className="text-blue-600">
+            🛒 Em compra: <strong>{formatQty(c.qtd_em_compra)}</strong>
+            {c.ordens_compra && c.ordens_compra.length > 0 && (
+              <span className="text-muted-foreground ml-1">
+                (<OrdensCompraLinks ordens={c.ordens_compra} />)
+              </span>
+            )}
+            {(() => {
+              const falta = c.demanda_total - c.estoque_total;
+              const cobre = (c.qtd_em_compra ?? 0) >= falta;
+              return cobre
+                ? <span className="ml-1 text-green-600 font-medium">✓ Cobre falta de {formatQty(falta)}</span>
+                : <span className="ml-1 text-red-500 font-medium">✗ Cobre só {formatQty(c.qtd_em_compra)}/{formatQty(falta)}</span>;
+            })()}
+          </span>
+        ) : (
+          selectedSituacoesCompra.length > 0
+            ? <span className="text-red-500 font-medium">⛔ Sem pedido de compra nos status selecionados</span>
+            : <span className="text-muted-foreground italic">Selecione status de PC nos filtros para ver cobertura</span>
+        )}
+      </div>
+    </Card>
+  );
+
+
+
 
 
 

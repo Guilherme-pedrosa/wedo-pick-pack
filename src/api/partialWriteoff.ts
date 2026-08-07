@@ -161,6 +161,35 @@ export async function listPartialOperations(): Promise<PartialWriteoffOperation[
   }
 }
 
+export interface PartialReservationSource {
+  product_id: string;
+  variation_id: string;
+  product_code: string;
+  product_name: string;
+  reserved_quantity: number;
+  operation_id: string;
+  budget_code: string;
+  client_name: string;
+  document_type: OrderType;
+  status: PartialWriteoffStatus;
+  definitive_document_code: string | null;
+  updated_at: string;
+}
+
+/** Quem está segurando a reserva de cada peça (todas as operações de baixa parcial ativas). */
+export async function listPartialReservationSources(productIds: string[]): Promise<PartialReservationSource[]> {
+  const ids = Array.from(new Set(productIds.filter(Boolean)));
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('partial_writeoff_reservation_sources')
+    .select('*')
+    .in('product_id', ids);
+  if (error) throw new Error(error.message);
+  return (data || []) as unknown as PartialReservationSource[];
+}
+
+
+
 export async function preparePartialBatch(
   operationId: string,
   items: Array<{ item_id: string; quantity: number }>,

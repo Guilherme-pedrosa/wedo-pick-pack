@@ -10,12 +10,15 @@ import {
   consolidatePartialOperation,
   getPartialStockAvailability,
   listPartialOperations,
+  listPartialReservationSources,
   openPartialOperation,
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
   preparePartialBatch,
   searchPartialBudgets,
 } from '@/api/partialWriteoff';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
 import { getProductStock } from '@/api/gestaoclick';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -174,6 +177,14 @@ export default function PartialWriteoffPage() {
     enabled: !!selected && !['completed', 'cancelled'].includes(selected.status),
     staleTime: 15000,
   });
+
+  const sourcesQuery = useQuery({
+    queryKey: ['partial-writeoff-reservation-sources', selected?.id, selected?.version],
+    queryFn: () => listPartialReservationSources((selected?.items || []).map(item => item.product_id)),
+    enabled: !!selected && (selected.items || []).length > 0,
+    staleTime: 15000,
+  });
+
 
   const requestedItems = useMemo(() => {
     if (!selected) return [];
@@ -622,8 +633,44 @@ export default function PartialWriteoffPage() {
                             <td className="px-3 py-2 text-right font-semibold">{fmtQty(item.pending_purchase_quantity)}</td>
                             <td className="px-3 py-2 text-right">{stockQuery.isLoading ? '…' : fmtQty(stock)}</td>
                             <td className={`px-3 py-2 text-right ${Number(item.global_reserved_quantity) > 0 ? 'font-medium text-amber-700' : ''}`}>
-                              {fmtQty(item.global_reserved_quantity)}
+                              {Number(item.global_reserved_quantity) > 0 ? (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button type="button" className="underline decoration-dotted underline-offset-4">
+                                      {fmtQty(item.global_reserved_quantity)}
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="end" className="w-80 text-left">
+                                    <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Reservado nestas OS/Vendas</p>
+                                    {(sourcesQuery.data || [])
+                                      .filter(source => source.product_id === item.product_id && (source.variation_id || '') === (item.variation_id || ''))
+                                      .map(source => (
+                                        <div key={source.operation_id} className="border-t py-2 text-sm first:border-t-0 first:pt-0">
+                                          <p className="font-medium">
+                                            {source.document_type === 'os' ? 'OS' : 'Venda'} · Orçamento #{source.budget_code}
+                                            {source.definitive_document_code ? ` · Doc ${source.definitive_document_code}` : ''}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">{source.client_name}</p>
+                                          <p className="text-xs">
+                                            Reservado: <span className="font-medium text-amber-700">{fmtQty(source.reserved_quantity)}</span>
+                                            {' · '}{statusLabels[source.status] || source.status}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    {sourcesQuery.isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+                                    {!sourcesQuery.isLoading &&
+                                      (sourcesQuery.data || []).filter(
+                                        source => source.product_id === item.product_id && (source.variation_id || '') === (item.variation_id || ''),
+                                      ).length === 0 && (
+                                        <p className="text-sm text-muted-foreground">Nenhuma reserva ativa encontrada.</p>
+                                      )}
+                                  </PopoverContent>
+                                </Popover>
+                              ) : (
+                                fmtQty(item.global_reserved_quantity)
+                              )}
                             </td>
+
                             <td className={`px-3 py-2 text-right font-semibold ${overcommitted ? 'text-red-700' : 'text-green-700'}`}>
                               {stockQuery.isLoading ? '…' : fmtQty(availability.availableStock)}
                             </td>

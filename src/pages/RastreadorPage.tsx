@@ -1444,52 +1444,61 @@ export default function RastreadorPage() {
             {conflitosFiltrados.length > 0 && (
               <>
                 <Separator />
-                <div className="space-y-2">
+                <Collapsible open={conflitosAbertos} onOpenChange={setConflitosAbertos} className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-red-500" />
                     <h2 className="text-sm font-bold text-foreground">
                       Conflitos de estoque ({conflitosFiltrados.length}
                       {conflitosFiltrados.length !== result.conflitos.length && ` de ${result.conflitos.length}`})
                     </h2>
+                    <CollapsibleTrigger asChild>
+                      <Button size="sm" variant="outline" className="h-7 text-xs ml-auto gap-1">
+                        {conflitosAbertos ? 'Recolher' : 'Expandir'}
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${conflitosAbertos ? 'rotate-180' : ''}`} />
+                      </Button>
+                    </CollapsibleTrigger>
                     <Button
                       size="sm"
                       variant={agruparConflitos ? 'default' : 'outline'}
-                      className="h-7 text-xs ml-auto"
+                      className="h-7 text-xs"
                       onClick={() => setAgruparConflitos(v => !v)}
                     >
                       {agruparConflitos ? 'Agrupado por cliente' : 'Agrupar por cliente'}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Peças disputadas por múltiplos orçamentos ou reservadas por OSs pendentes — o estoque não atende todos.
-                  </p>
-                  {agruparConflitos ? (
-                    <div className="space-y-3">
-                      {conflitosAgrupados.map(([cliente, itens]) => (
-                        <Collapsible key={cliente} defaultOpen>
-                          <div className="rounded-lg border border-border">
-                            <CollapsibleTrigger asChild>
-                              <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 rounded-t-lg">
-                                <span className="text-xs font-bold text-foreground flex-1">{cliente}</span>
-                                <Badge variant="destructive" className="text-[10px]">{itens.length}</Badge>
-                                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                              </button>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="p-2 space-y-2">
-                                {itens.map(c => renderConflitoCard(c))}
-                              </div>
-                            </CollapsibleContent>
-                          </div>
-                        </Collapsible>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {conflitosFiltrados.map(c => renderConflitoCard(c))}
-                    </div>
-                  )}
-                </div>
+                  <CollapsibleContent className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Peças disputadas por múltiplos orçamentos ou reservadas por OSs pendentes — o estoque não atende todos.
+                    </p>
+                    {agruparConflitos ? (
+                      <div className="space-y-3">
+                        {conflitosAgrupados.map(([cliente, itens]) => (
+                          <Collapsible key={cliente} defaultOpen>
+                            <div className="rounded-lg border border-border">
+                              <CollapsibleTrigger asChild>
+                                <button className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 rounded-t-lg">
+                                  <span className="text-xs font-bold text-foreground flex-1">{cliente}</span>
+                                  <Badge variant="destructive" className="text-[10px]">{itens.length}</Badge>
+                                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                </button>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="p-2 space-y-2">
+                                  {itens.map(c => renderConflitoCard(c))}
+                                </div>
+                              </CollapsibleContent>
+                            </div>
+                          </Collapsible>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {conflitosFiltrados.map(c => renderConflitoCard(c))}
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+
 
               </>
             )}

@@ -208,6 +208,22 @@ export default function PartialWriteoffPage() {
     return !selected.items.some(item => Number(item.withdrawn_quantity) > 0);
   }, [selected]);
 
+  async function handleDeleteOperation(operation: PartialWriteoffOperation) {
+    if (deletingId) return;
+    if (!window.confirm(`Excluir definitivamente a baixa parcial cancelada do #${operation.budget_code}? Esse registro sairá do histórico.`)) return;
+    setDeletingId(operation.id);
+    try {
+      await deletePartialOperation(operation.id);
+      toast.success('Baixa parcial cancelada excluída.');
+      if (selectedId === operation.id) setSelectedId(null);
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   async function handleCancelOperation() {
     if (!selected || cancelling) return;
     if (!window.confirm(`Cancelar a baixa parcial do #${selected.budget_code}? As reservas internas serão liberadas e nada foi efetivado no GestãoClick.`)) return;

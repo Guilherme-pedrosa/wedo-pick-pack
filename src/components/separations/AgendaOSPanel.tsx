@@ -171,7 +171,7 @@ export default function AgendaOSPanel() {
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [excludedSituations, setExcludedSituations] = useState<Set<string>>(new Set());
   const [situationSearch, setSituationSearch] = useState('');
-  const [executionFilter, setExecutionFilter] = useState<ExecutionFilter>('all');
+  const [executionFilters, setExecutionFilters] = useState<Set<Exclude<ExecutionFilter, 'all'>>>(new Set());
   const [repairLocationFilter, setRepairLocationFilter] = useState<RepairLocationFilter>('all');
   const [separationFilter, setSeparationFilter] = useState<SeparationFilter>('all');
   const [search, setSearch] = useState('');

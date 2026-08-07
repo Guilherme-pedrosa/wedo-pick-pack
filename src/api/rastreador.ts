@@ -478,6 +478,8 @@ export async function rastrearOrcamentos(
 
   for (const orc of uniqueOrcamentos) {
     const itens: OrcamentoReadiness['itens'] = [];
+    const partialPending = partialDemand.pendingByBudgetAndProduct.get(orc.id);
+    const partialAtivo = partialDemand.activeBudgetIds.has(orc.id);
 
     for (const p of orc.produtos || []) {
       const pid = normalizeId(p.produto.produto_id);
@@ -485,7 +487,13 @@ export async function rastrearOrcamentos(
       if (!pid) continue;
 
       const key = makeKey(pid, vid);
-      const qtd = parseDecimal(p.produto.quantidade);
+      let qtd = parseDecimal(p.produto.quantidade);
+      if (partialPending) {
+        const pk = vid ? `${pid}::${vid}` : pid;
+        const pend = partialPending.get(pk);
+        if (pend !== undefined) qtd = pend;
+      }
+      if (partialAtivo && qtd <= 0) continue; // item já entregue nas parciais
       const stockTotal = stockMapOriginal.get(key) ?? 0;
 
       const compraInfo = getCompraInfo(pid, key);
@@ -518,10 +526,13 @@ export async function rastrearOrcamentos(
       totalItens: itens.length,
       itensProntos: itens.filter(i => i.pronto).length,
       // Se o orçamento já é OS (apenas com situação ignorada), nunca tratar como "pronto p/ virar OS"
-      pronto: allReady && !osLinked,
+      // Em baixa parcial, a conclusão é feita na tela de Baixa Parcial (nunca gerar OS aqui).
+      pronto: allReady && !osLinked && !partialAtivo,
       temComprometido,
+      ...(partialAtivo ? { partialAtivo: true } : {}),
       ...(osLinked ? { osLinked } : {}),
     };
+
 
     if (entry.pronto) prontos.push(entry);
     else pendentes.push(entry);

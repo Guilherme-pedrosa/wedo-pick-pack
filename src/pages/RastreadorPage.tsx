@@ -226,24 +226,45 @@ export default function RastreadorPage() {
   const [isPrintView, setIsPrintView] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [blockedExpanded, setBlockedExpanded] = useState(true);
-  const [sortMode, setSortMode] = useState<'padrao' | 'valor_desc' | 'valor_asc'>('padrao');
+  const [sortMode, setSortMode] = useState<'padrao' | 'valor_desc' | 'valor_asc' | 'data_desc' | 'data_asc' | 'cliente_asc'>('padrao');
+  const [listSearch, setListSearch] = useState('');
 
-  const sortByValue = <T extends { orcamento: { valor_total?: string | number } }>(list: T[]): T[] => {
-    if (sortMode === 'padrao') return list;
-    const dir = sortMode === 'valor_desc' ? -1 : 1;
-    return [...list].sort(
-      (a, b) => (Number(a.orcamento?.valor_total || 0) - Number(b.orcamento?.valor_total || 0)) * dir
-    );
+  const applyFilters = <T extends { orcamento: { valor_total?: string | number; codigo?: string | number; nome_cliente?: string; data?: string } }>(list: T[]): T[] => {
+    const term = listSearch.trim().toLowerCase();
+    let out = term
+      ? list.filter(e =>
+          String(e.orcamento?.codigo || '').toLowerCase().includes(term) ||
+          String(e.orcamento?.nome_cliente || '').toLowerCase().includes(term)
+        )
+      : list;
+    if (sortMode === 'padrao') return out;
+    const toTime = (d?: string) => {
+      if (!d) return 0;
+      const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d);
+      return br ? new Date(`${br[3]}-${br[2]}-${br[1]}`).getTime() : new Date(d).getTime() || 0;
+    };
+    out = [...out].sort((a, b) => {
+      switch (sortMode) {
+        case 'valor_desc': return Number(b.orcamento?.valor_total || 0) - Number(a.orcamento?.valor_total || 0);
+        case 'valor_asc': return Number(a.orcamento?.valor_total || 0) - Number(b.orcamento?.valor_total || 0);
+        case 'data_desc': return toTime(b.orcamento?.data) - toTime(a.orcamento?.data);
+        case 'data_asc': return toTime(a.orcamento?.data) - toTime(b.orcamento?.data);
+        case 'cliente_asc': return String(a.orcamento?.nome_cliente || '').localeCompare(String(b.orcamento?.nome_cliente || ''), 'pt-BR');
+        default: return 0;
+      }
+    });
+    return out;
   };
 
   const prontosOrdenados = useMemo(
-    () => sortByValue(result?.orcamentosProntos ?? []),
-    [result, sortMode]
+    () => applyFilters(result?.orcamentosProntos ?? []),
+    [result, sortMode, listSearch]
   );
   const pendentesOrdenados = useMemo(
-    () => sortByValue(result?.orcamentosPendentes ?? []),
-    [result, sortMode]
+    () => applyFilters(result?.orcamentosPendentes ?? []),
+    [result, sortMode, listSearch]
   );
+
 
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);
@@ -1153,13 +1174,28 @@ export default function RastreadorPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Ordenar por valor:</span>
+            <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b border-border flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar nº do orçamento ou cliente…"
+                    value={listSearch}
+                    onChange={e => setListSearch(e.target.value)}
+                    className="h-7 text-xs pl-7 w-[240px]"
+                  />
+                </div>
+                {listSearch && (
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setListSearch('')}>Limpar</Button>
+                )}
+                <span className="text-xs text-muted-foreground ml-2">Ordenar:</span>
                 {([
                   { key: 'padrao', label: 'Padrão' },
-                  { key: 'valor_desc', label: 'Maior → menor' },
-                  { key: 'valor_asc', label: 'Menor → maior' },
+                  { key: 'valor_desc', label: 'Maior valor' },
+                  { key: 'valor_asc', label: 'Menor valor' },
+                  { key: 'data_desc', label: 'Mais recente' },
+                  { key: 'data_asc', label: 'Mais antigo' },
+                  { key: 'cliente_asc', label: 'Cliente A-Z' },
                 ] as const).map(opt => (
                   <Button
                     key={opt.key}
@@ -1172,6 +1208,7 @@ export default function RastreadorPage() {
                   </Button>
                 ))}
               </div>
+
               <p className="text-xs text-muted-foreground">
                 Escaneado em {new Date(result.scannedAt).toLocaleString('pt-BR')}
               </p>
@@ -1298,12 +1335,12 @@ export default function RastreadorPage() {
             )}
 
             {/* Ready budgets */}
-            {result.orcamentosProntos.length > 0 && (
+            {prontosOrdenados.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <PackageCheck className="h-4 w-4 text-green-600" />
                   <h2 className="text-sm font-bold text-foreground">
-                    Prontos para virar OS ({result.orcamentosProntos.length})
+                    Prontos para virar OS ({prontosOrdenados.length})
                   </h2>
                 </div>
                 <div className="space-y-2">
@@ -1383,12 +1420,12 @@ export default function RastreadorPage() {
             <Separator />
 
             {/* Pending budgets */}
-            {result.orcamentosPendentes.length > 0 && (
+            {pendentesOrdenados.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-amber-600" />
                   <h2 className="text-sm font-bold text-foreground">
-                    Aguardando peças ({result.orcamentosPendentes.length})
+                    Aguardando peças ({pendentesOrdenados.length})
                   </h2>
                 </div>
                 <div className="space-y-2">

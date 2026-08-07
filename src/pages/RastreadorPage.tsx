@@ -1153,9 +1153,29 @@ export default function RastreadorPage() {
               )}
             </div>
 
-            <p className="text-xs text-muted-foreground text-right">
-              Escaneado em {new Date(result.scannedAt).toLocaleString('pt-BR')}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Ordenar por valor:</span>
+                {([
+                  { key: 'padrao', label: 'Padrão' },
+                  { key: 'valor_desc', label: 'Maior → menor' },
+                  { key: 'valor_asc', label: 'Menor → maior' },
+                ] as const).map(opt => (
+                  <Button
+                    key={opt.key}
+                    size="sm"
+                    variant={sortMode === opt.key ? 'default' : 'outline'}
+                    className="h-7 text-xs"
+                    onClick={() => setSortMode(opt.key)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Escaneado em {new Date(result.scannedAt).toLocaleString('pt-BR')}
+              </p>
+            </div>
 
             {/* Blocked budgets section */}
             {result.orcamentosBloqueados.length > 0 && (

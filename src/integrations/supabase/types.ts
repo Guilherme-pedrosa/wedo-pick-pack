@@ -2180,6 +2180,14 @@ export type Database = {
         Args: { p_operation_id: string }
         Returns: string
       }
+      partial_writeoff_delete_operation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_operation_id: string
+        }
+        Returns: undefined
+      }
       partial_writeoff_finish_confirmation: {
         Args: {
           p_actor_id?: string

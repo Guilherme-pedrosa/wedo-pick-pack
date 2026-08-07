@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   auditPartialDocuments,
   cancelPartialBatch,
+  deletePartialOperation,
   cancelPartialOperation,
   PartialDocumentAudit,
 
@@ -35,6 +36,7 @@ import {
   PackageMinus,
   RefreshCw,
   Search,
+  Trash2,
   XCircle,
 
 } from 'lucide-react';
@@ -119,6 +121,7 @@ export default function PartialWriteoffPage() {
   const [preparing, setPreparing] = useState(false);
   const [consolidating, setConsolidating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
   const [audits, setAudits] = useState<Record<string, PartialDocumentAudit>>({});
@@ -204,6 +207,22 @@ export default function PartialWriteoffPage() {
     if (hasGcDocument) return false;
     return !selected.items.some(item => Number(item.withdrawn_quantity) > 0);
   }, [selected]);
+
+  async function handleDeleteOperation(operation: PartialWriteoffOperation) {
+    if (deletingId) return;
+    if (!window.confirm(`Excluir definitivamente a baixa parcial cancelada do #${operation.budget_code}? Esse registro sairá do histórico.`)) return;
+    setDeletingId(operation.id);
+    try {
+      await deletePartialOperation(operation.id);
+      toast.success('Baixa parcial cancelada excluída.');
+      if (selectedId === operation.id) setSelectedId(null);
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   async function handleCancelOperation() {
     if (!selected || cancelling) return;
@@ -528,19 +547,37 @@ export default function PartialWriteoffPage() {
             <CardContent className="space-y-2">
               {operations.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma baixa parcial iniciada.</p>}
               {operations.map(operation => (
-                <button
+                <div
                   key={operation.id}
-                  type="button"
-                  onClick={() => setSelectedId(operation.id)}
-                  className={`w-full rounded-lg border p-3 text-left transition ${selectedId === operation.id ? 'border-primary bg-primary/5' : 'bg-background hover:bg-muted/50'}`}
+                  className={`relative rounded-lg border transition ${selectedId === operation.id ? 'border-primary bg-primary/5' : 'bg-background hover:bg-muted/50'}`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold">#{operation.budget_code}</span>
-                    <Badge variant="outline" className={statusClass(operation.status)}>{statusLabels[operation.status] || operation.status}</Badge>
-                  </div>
-                  <p className="mt-1 truncate text-sm">{operation.client_name}</p>
-                  <p className="text-xs text-muted-foreground">{operation.document_type === 'os' ? 'Ordem de Serviço' : 'Venda'} · {fmtDate(operation.updated_at)}</p>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(operation.id)}
+                    className="w-full p-3 text-left"
+                  >
+                    <div className="flex items-center justify-between gap-2 pr-7">
+                      <span className="font-semibold">#{operation.budget_code}</span>
+                      <Badge variant="outline" className={statusClass(operation.status)}>{statusLabels[operation.status] || operation.status}</Badge>
+                    </div>
+                    <p className="mt-1 truncate text-sm">{operation.client_name}</p>
+                    <p className="text-xs text-muted-foreground">{operation.document_type === 'os' ? 'Ordem de Serviço' : 'Venda'} · {fmtDate(operation.updated_at)}</p>
+                  </button>
+                  {operation.status === 'cancelled' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Excluir esta baixa parcial cancelada"
+                      className="absolute right-1 top-1 h-7 w-7 text-muted-foreground hover:text-destructive"
+                      disabled={deletingId === operation.id}
+                      onClick={() => handleDeleteOperation(operation)}
+                    >
+                      {deletingId === operation.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5" />}
+                    </Button>
+                  )}
+                </div>
               ))}
             </CardContent>
           </Card>

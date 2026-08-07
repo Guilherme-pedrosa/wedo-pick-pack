@@ -609,7 +609,6 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
     }
     throw attachError;
   }
-  }
 
   // Tarefa Auvo da entrega parcial: roda no servidor (credenciais Auvo são secretas).
   // Falha aqui NÃO invalida o lote — fica registrado o aviso para nova tentativa.

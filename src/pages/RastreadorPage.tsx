@@ -574,7 +574,20 @@ export default function RastreadorPage() {
             }
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm">#{entry.orcamento.codigo}</span>
+                {gcOrcamentoUrl(entry.orcamento.id) ? (
+                  <a
+                    href={gcOrcamentoUrl(entry.orcamento.id)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-sm underline hover:text-primary"
+                    title="Abrir orçamento no GestãoClick"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    #{entry.orcamento.codigo}
+                  </a>
+                ) : (
+                  <span className="font-semibold text-sm">#{entry.orcamento.codigo}</span>
+                )}
                 {equip && (
                   <span
                     className="text-xs text-muted-foreground font-medium truncate max-w-[160px]"

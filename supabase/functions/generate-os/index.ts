@@ -743,11 +743,14 @@ Deno.serve(async (req: Request) => {
       '',
       ...prodLines,
       ...(partialSummaryLines.length ? ['', '🔁 ENTREGAS PARCIAIS JÁ REALIZADAS:', ...partialSummaryLines] : []),
+      ...(deductionNotes.length ? ['', '⚠️ QUANTIDADES JÁ ENTREGUES (DESCONTADAS DESTA OS):', ...deductionNotes] : []),
     ].filter(Boolean);
     const orientation = orientationParts.join('\n');
-    const partialNote = partialSummaryLines.length
-      ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join('\n')}`
-      : '';
+    const partialNote = [
+      partialSummaryLines.length ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join('\n')}` : '',
+      deductionNotes.length ? `Quantidades descontadas por baixa parcial:\n${deductionNotes.join('\n')}` : '',
+    ].filter(Boolean).join('\n');
+
 
 
     const readOrcAttrByIdOrName = (targetId: string, nameIncludes: string): string => {

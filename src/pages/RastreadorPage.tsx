@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
 import { getStatusOS } from '@/api/gestaoclick';

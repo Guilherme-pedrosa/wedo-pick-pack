@@ -221,6 +221,29 @@ export default function PartialWriteoffPage() {
     }
   }
 
+  async function handleAuditDocuments() {
+    if (!selected || auditing) return;
+    setAuditing(true);
+    try {
+      const result = await auditPartialDocuments(selected.id);
+      setAudits(Object.fromEntries(result.map(item => [item.batchId, item])));
+      setAuditedAt(new Date().toISOString());
+      const missing = result.filter(item => item.state === 'missing').length;
+      const cancelled = result.filter(item => item.state === 'cancelled').length;
+      const changed = result.filter(item => item.state === 'status_changed').length;
+      if (missing || cancelled) {
+        toast.error(`Auditoria: ${missing} documento(s) excluído(s) e ${cancelled} cancelado(s) no GestãoClick. Cancele os lotes para liberar as reservas.`, { duration: 10000 });
+      } else if (changed) {
+        toast.warning(`Auditoria: ${changed} documento(s) com situação diferente da esperada.`);
+      } else {
+        toast.success('Auditoria: todos os documentos existem e estão na situação esperada.');
+      }
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setAuditing(false);
+    }
+  }
 
 
 

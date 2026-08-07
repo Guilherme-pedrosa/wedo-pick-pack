@@ -248,9 +248,11 @@ export interface GCOrdemCompra {
   data_emissao: string;
   situacao_id: string;
   nome_situacao: string;
+  previsao_chegada?: string;
   valor_total: string;
   produtos: Array<{ produto: GCCompraProduto }>;
 }
+
 
 export interface GCSituacaoCompra {
   id: string;

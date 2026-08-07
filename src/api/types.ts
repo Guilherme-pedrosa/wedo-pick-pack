@@ -185,7 +185,7 @@ export interface OrcamentoConvertidoWarning {
     pronto: boolean;
     comprometido: boolean;
     qtd_em_compra?: number;
-    ordens_compra?: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string }>;
+    ordens_compra?: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string }>;
   }>;
   totalItens?: number;
   itensProntos?: number;
@@ -248,9 +248,11 @@ export interface GCOrdemCompra {
   data_emissao: string;
   situacao_id: string;
   nome_situacao: string;
+  previsao_chegada?: string;
   valor_total: string;
   produtos: Array<{ produto: GCCompraProduto }>;
 }
+
 
 export interface GCSituacaoCompra {
   id: string;

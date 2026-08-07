@@ -387,6 +387,16 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1, extraQue
 
   const data: GCOrdemCompra[] = (raw.data || []).map((row: any) => {
     const compra = unwrapCompraRecord(row);
+    // "DATA DA CHEGADA DAS PEÇAS" vindo dos campos extras
+    let previsaoChegada = '';
+    for (const w of compra?.campos_extras || []) {
+      const e = w?.extras ?? w;
+      const desc = String(e?.descricao ?? '').toUpperCase();
+      if (desc.includes('CHEGADA') && desc.includes('PE')) {
+        const v = String(e?.conteudo ?? '').trim();
+        if (v) { previsaoChegada = v; break; }
+      }
+    }
     return {
       id: String(compra?.id ?? ''),
       codigo: String(compra?.codigo ?? ''),
@@ -395,7 +405,9 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1, extraQue
       data_emissao: String(compra?.data_emissao ?? ''),
       situacao_id: String(compra?.situacao_id ?? ''),
       nome_situacao: String(compra?.nome_situacao ?? ''),
+      previsao_chegada: previsaoChegada,
       valor_total: String(compra?.valor_total ?? '0'),
+
       produtos: (compra?.produtos || []).map((p: any) => {
         const produto = p?.produto ?? p;
         return {

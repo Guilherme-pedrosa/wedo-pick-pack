@@ -780,9 +780,24 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
   return getOperationGraph(operationId);
 }
 
+/** Cancela a baixa parcial que ainda nao foi efetivada no GestaoClick. */
+async function handleCancelOperation(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  const operationId = String(body.operation_id || '');
+  if (!operationId) throw new Error('OPERATION_ID_REQUIRED');
+  const { error } = await cloud.rpc('partial_writeoff_cancel_operation', {
+    p_operation_id: operationId,
+    p_actor_id: auth.id,
+    p_actor_name: auth.name,
+    p_reason: String(body.reason || ''),
+  });
+  if (error) throw new Error(error.message || 'OPERATION_NOT_CANCELLABLE');
+  return getOperationGraph(operationId);
+}
+
 export async function invokePartialWriteoffClient<T>(body: Record<string, unknown>): Promise<T> {
   const auth = await authenticate();
   const action = String(body.action || '');
+
 
   if (action === 'search_budgets') {
     const kind = body.budget_kind === 'produto' || body.budget_kind === 'servico' || body.budget_kind === 'venda'

@@ -10,12 +10,15 @@ import {
   consolidatePartialOperation,
   getPartialStockAvailability,
   listPartialOperations,
+  listPartialReservationSources,
   openPartialOperation,
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
   preparePartialBatch,
   searchPartialBudgets,
 } from '@/api/partialWriteoff';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
 import { getProductStock } from '@/api/gestaoclick';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';

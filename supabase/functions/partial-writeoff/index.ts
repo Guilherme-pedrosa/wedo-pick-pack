@@ -898,7 +898,9 @@ async function handleConsolidate(body: any, auth: AuthContext) {
     operator_name: auth.name,
     valor_total: numberValue(operation.budget_snapshot?.valor_total),
     warnings: generated.warnings || null,
+    partial_auxiliaries: partialAuxiliaries.length ? partialAuxiliaries : null,
     success: true,
+
   });
 
   const { error: finishError } = await service.rpc('partial_writeoff_finish_consolidation', {

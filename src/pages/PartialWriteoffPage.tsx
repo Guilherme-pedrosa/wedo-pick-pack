@@ -61,6 +61,9 @@ function friendlyError(error: unknown) {
   if (message.includes('QUANTITY_EXCEEDS_PENDING')) return 'A quantidade informada ultrapassa o saldo pendente.';
   if (message.includes('CONFIGURE_OS_CONCLUSION_STATUS')) return 'Configure a situação padrão de conclusão de OS antes de consolidar.';
   if (message.includes('CONFIGURE_AUVO_USER_ID')) return 'Configure o ID de usuário Auvo antes de consolidar.';
+  if (message.includes('OPERATION_HAS_GC_DOCUMENTS')) return 'Não dá para cancelar: esta baixa já gerou documento no GestãoClick.';
+  if (message.includes('OPERATION_HAS_MOVEMENTS')) return 'Não dá para cancelar: já existem peças reservadas ou retiradas nesta baixa.';
+  if (message.includes('OPERATION_NOT_CANCELLABLE')) return 'Esta operação não pode mais ser cancelada.';
   if (message.includes('SEARCH_TOO_SHORT')) return 'Digite pelo menos 2 caracteres para buscar.';
   if (message.includes('SEARCH_BUDGET_KIND_REQUIRED')) return 'Escolha Orçamento de produto, Orçamento de serviço ou Venda.';
   if (message.includes('BUDGET_ALREADY_HAS_DOCUMENT')) return 'Este orçamento já gerou OS ou venda e não pode entrar na baixa parcial.';

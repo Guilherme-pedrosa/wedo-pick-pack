@@ -161,7 +161,9 @@ export async function rastrearOrcamentos(
     ? deduped.filter(o => o.nome_cliente.toLowerCase().includes(nomeCliente.toLowerCase()))
     : deduped;
   const partialDemand = await getActivePartialDemand();
-  filteredOrcamentos = filteredOrcamentos.filter(o => !partialDemand.activeBudgetIds.has(o.id));
+  // Orçamentos com baixa parcial em andamento CONTINUAM visíveis no rastreador
+  // (ainda faltam peças). Apenas ficam marcados.
+
   console.info('[RASTREADOR] 📦 Após filtro nome:', filteredOrcamentos.length);
 
   // Date filter (data >= dataInicio). GC dates come as YYYY-MM-DD, so string compare works.

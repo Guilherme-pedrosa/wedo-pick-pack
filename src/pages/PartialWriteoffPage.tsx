@@ -627,8 +627,23 @@ export default function PartialWriteoffPage() {
                               </p>
                             )}
                           </div>
-                          <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status}</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
+                            {!['confirmed', 'cancelled'].includes(batch.status) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={cancellingBatchId === batch.id}
+                                onClick={() => handleCancelBatch(batch.id, batch.sequence)}
+                                className="border-red-200 text-red-700 hover:bg-red-50"
+                              >
+                                {cancellingBatchId === batch.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
+                                Cancelar lote
+                              </Button>
+                            )}
+                          </div>
                         </div>
+
                       ))}
 
                     </div>

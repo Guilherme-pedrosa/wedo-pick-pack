@@ -5,6 +5,7 @@ import {
   auditPartialDocuments,
   cancelPartialBatch,
   deletePartialOperation,
+  retryBatchAuvoTask,
   cancelPartialOperation,
   PartialDocumentAudit,
 

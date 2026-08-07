@@ -637,8 +637,13 @@ Deno.serve(async (req: Request) => {
       equipText ? `Equipamento: ${equipText}` : '',
       '',
       ...prodLines,
+      ...(partialSummaryLines.length ? ['', '🔁 ENTREGAS PARCIAIS JÁ REALIZADAS:', ...partialSummaryLines] : []),
     ].filter(Boolean);
     const orientation = orientationParts.join('\n');
+    const partialNote = partialSummaryLines.length
+      ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join('\n')}`
+      : '';
+
 
     const readOrcAttrByIdOrName = (targetId: string, nameIncludes: string): string => {
       if (!orcamento.atributos?.length) return '';

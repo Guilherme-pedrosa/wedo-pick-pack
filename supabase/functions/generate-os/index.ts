@@ -10,6 +10,45 @@ const AUVO_API_URL = 'https://api.auvo.com.br/v2';
 // ---------- helpers ----------
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Quantidades já entregues (reservadas ou retiradas) por baixa parcial deste orçamento.
+ * Chave: `${produto_id}` ou `${produto_id}::${variacao_id}`.
+ */
+async function fetchPartialDeliveredQuantities(budgetId: string): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  if (!budgetId) return result;
+  try {
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const query =
+      `${url}/rest/v1/partial_writeoff_operations` +
+      `?budget_id=in.(${encodeURIComponent(`"${budgetId}","venda:${budgetId}"`)})` +
+      `&status=not.in.(cancelled)` +
+      `&select=id,status,items:partial_writeoff_items(product_id,variation_id,reserved_quantity,withdrawn_quantity)`;
+    const res = await fetch(query, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+    if (!res.ok) {
+      console.warn('[generate-os] Falha ao ler baixas parciais:', res.status, await res.text());
+      return result;
+    }
+    const rows = await res.json();
+    for (const op of Array.isArray(rows) ? rows : []) {
+      for (const item of op?.items || []) {
+        const pid = String(item?.product_id ?? '').trim();
+        if (!pid) continue;
+        const vid = String(item?.variation_id ?? '').trim();
+        const mapKey = vid ? `${pid}::${vid}` : pid;
+        const qty = Math.max(Number(item?.withdrawn_quantity ?? 0), Number(item?.reserved_quantity ?? 0));
+        if (!Number.isFinite(qty) || qty <= 0) continue;
+        result.set(mapKey, (result.get(mapKey) || 0) + qty);
+      }
+    }
+  } catch (err) {
+    console.warn('[generate-os] Erro ao consultar baixas parciais:', err);
+  }
+  return result;
+}
+
+
 function compactApiMessage(value: unknown): string {
   if (value == null) return '';
   const text = typeof value === 'string' ? value : JSON.stringify(value);
@@ -534,6 +573,53 @@ Deno.serve(async (req: Request) => {
     orcamento.produtos = dedupeGCLines(orcamento.produtos, 'produto');
     orcamento.servicos = dedupeGCLines(orcamento.servicos, 'servico');
 
+    // ============================================
+    // ANTI-ENTREGA DUPLICADA (BAIXA PARCIAL)
+    // Se o orçamento já teve peças entregues por baixa parcial, a OS/Venda final
+    // NÃO pode levar a quantidade cheia — senão o cliente recebe a peça 2x.
+    // Descontamos aqui, no servidor, o que já saiu (reservado + retirado).
+    // ============================================
+    const alreadyDelivered = await fetchPartialDeliveredQuantities(String(orcamento.id));
+    const deductionNotes: string[] = [];
+    if (alreadyDelivered.size) {
+      const remaining: any[] = [];
+      for (const line of orcamento.produtos || []) {
+        const prod = line?.produto || line;
+        const pid = String(prod?.produto_id ?? '').trim();
+        const vid = String(prod?.variacao_id ?? '').trim();
+        const key = vid ? `${pid}::${vid}` : pid;
+        const originalQty = parseMoney(prod?.quantidade);
+        const delivered = alreadyDelivered.get(key) || 0;
+        if (delivered <= 0 || originalQty <= 0) { remaining.push(line); continue; }
+        const consume = Math.min(delivered, originalQty);
+        alreadyDelivered.set(key, delivered - consume);
+        const newQty = Number((originalQty - consume).toFixed(4));
+        const name = String(prod?.nome_produto || pid);
+        if (newQty <= 0) {
+          deductionNotes.push(`  • ${name} — ${originalQty} já entregue(s) na baixa parcial (linha removida)`);
+          continue;
+        }
+        const ratio = newQty / originalQty;
+        const scaled = { ...prod, quantidade: String(newQty) };
+        for (const field of ['valor_total', 'desconto_valor'] as const) {
+          const raw = (prod as any)?.[field];
+          if (raw != null && String(raw).trim() !== '') {
+            const isPct = String((prod as any)?.desconto_tipo || '').toUpperCase() === 'P';
+            if (field === 'desconto_valor' && isPct) continue;
+            (scaled as any)[field] = (parseMoney(raw) * ratio).toFixed(2);
+          }
+        }
+        deductionNotes.push(`  • ${name} — ${consume} já entregue(s), restam ${newQty} nesta OS`);
+        remaining.push(line?.produto ? { ...line, produto: scaled } : scaled);
+      }
+      orcamento.produtos = remaining;
+      // O total do orçamento não vale mais: deixe o GC recalcular pelas linhas.
+      delete orcamento.valor_total;
+      delete orcamento.pagamentos;
+      console.log(`[generate-os] Baixa parcial: ${deductionNotes.length} linha(s) ajustada(s); produtos restantes=${orcamento.produtos.length}`);
+    }
+
+
 
     // Regra de negócio: orçamento com QUALQUER linha de serviço vira OS.
     // Orçamento só de produto vira Venda.
@@ -657,11 +743,14 @@ Deno.serve(async (req: Request) => {
       '',
       ...prodLines,
       ...(partialSummaryLines.length ? ['', '🔁 ENTREGAS PARCIAIS JÁ REALIZADAS:', ...partialSummaryLines] : []),
+      ...(deductionNotes.length ? ['', '⚠️ QUANTIDADES JÁ ENTREGUES (DESCONTADAS DESTA OS):', ...deductionNotes] : []),
     ].filter(Boolean);
     const orientation = orientationParts.join('\n');
-    const partialNote = partialSummaryLines.length
-      ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join('\n')}`
-      : '';
+    const partialNote = [
+      partialSummaryLines.length ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join('\n')}` : '',
+      deductionNotes.length ? `Quantidades descontadas por baixa parcial:\n${deductionNotes.join('\n')}` : '',
+    ].filter(Boolean).join('\n');
+
 
 
     const readOrcAttrByIdOrName = (targetId: string, nameIncludes: string): string => {

@@ -348,7 +348,7 @@ function auxiliaryPayload(
         ...common,
         servicos: [],
         equipamentos: [],
-        atributos: auxiliaryOsAttributes(operation),
+        atributos: auxiliaryOsAttributes(operation, budget),
       }
     : { ...common, tipo: 'produto' };
 }

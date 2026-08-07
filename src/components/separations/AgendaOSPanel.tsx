@@ -402,13 +402,7 @@ export default function AgendaOSPanel() {
         || (technicianFilter === 'none' && !task.technician_name)
         || task.technician_name === technicianFilter;
       const status = normalizeFilterText(taskStatus(task));
-      const matchesExecution = executionFilter === 'all'
-        || (executionFilter === 'em_andamento' && (
-          status.includes('andamento') || status.includes('deslocamento') || status.includes('check-in')
-        ))
-        || (executionFilter === 'pausada' && status.includes('paus'))
-        || (executionFilter === 'finalizada' && (status.includes('finalizada') || status.includes('check-out')))
-        || (executionFilter === 'sem_exec' && (!status || status.includes('aberta') || status.includes('agendada')));
+      const matchesExecution = matchesExecutionFilters(executionFilters, status, true);
       return matchesSearch && matchesTechnician && matchesExecution;
     });
   }, [

@@ -267,6 +267,10 @@ export default function RastreadorPage() {
 
   // Conflitos: filtro pelo mesmo termo + agrupamento por cliente
   const [agruparConflitos, setAgruparConflitos] = useState(() => localStorage.getItem('rastreador:agruparConflitos') !== '0');
+  const [conflitosAbertos, setConflitosAbertos] = useState(() => localStorage.getItem('rastreador:conflitosAbertos') !== '0');
+  useEffect(() => {
+    localStorage.setItem('rastreador:conflitosAbertos', conflitosAbertos ? '1' : '0');
+  }, [conflitosAbertos]);
   useEffect(() => {
     localStorage.setItem('rastreador:agruparConflitos', agruparConflitos ? '1' : '0');
   }, [agruparConflitos]);

@@ -620,9 +620,14 @@ export default function RastreadorPage() {
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground truncate max-w-[250px]">
+              <p className="text-xs text-muted-foreground truncate max-w-[320px]">
                 {entry.orcamento.nome_cliente}
+                <span className="mx-1">·</span>
+                <span className="font-semibold text-foreground">
+                  {Number(entry.orcamento.valor_total || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
               </p>
+
             </div>
           </div>
           <div className="flex items-center gap-2">

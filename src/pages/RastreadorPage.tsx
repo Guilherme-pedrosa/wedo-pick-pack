@@ -226,24 +226,45 @@ export default function RastreadorPage() {
   const [isPrintView, setIsPrintView] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [blockedExpanded, setBlockedExpanded] = useState(true);
-  const [sortMode, setSortMode] = useState<'padrao' | 'valor_desc' | 'valor_asc'>('padrao');
+  const [sortMode, setSortMode] = useState<'padrao' | 'valor_desc' | 'valor_asc' | 'data_desc' | 'data_asc' | 'cliente_asc'>('padrao');
+  const [listSearch, setListSearch] = useState('');
 
-  const sortByValue = <T extends { orcamento: { valor_total?: string | number } }>(list: T[]): T[] => {
-    if (sortMode === 'padrao') return list;
-    const dir = sortMode === 'valor_desc' ? -1 : 1;
-    return [...list].sort(
-      (a, b) => (Number(a.orcamento?.valor_total || 0) - Number(b.orcamento?.valor_total || 0)) * dir
-    );
+  const applyFilters = <T extends { orcamento: { valor_total?: string | number; codigo?: string | number; nome_cliente?: string; data?: string } }>(list: T[]): T[] => {
+    const term = listSearch.trim().toLowerCase();
+    let out = term
+      ? list.filter(e =>
+          String(e.orcamento?.codigo || '').toLowerCase().includes(term) ||
+          String(e.orcamento?.nome_cliente || '').toLowerCase().includes(term)
+        )
+      : list;
+    if (sortMode === 'padrao') return out;
+    const toTime = (d?: string) => {
+      if (!d) return 0;
+      const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d);
+      return br ? new Date(`${br[3]}-${br[2]}-${br[1]}`).getTime() : new Date(d).getTime() || 0;
+    };
+    out = [...out].sort((a, b) => {
+      switch (sortMode) {
+        case 'valor_desc': return Number(b.orcamento?.valor_total || 0) - Number(a.orcamento?.valor_total || 0);
+        case 'valor_asc': return Number(a.orcamento?.valor_total || 0) - Number(b.orcamento?.valor_total || 0);
+        case 'data_desc': return toTime(b.orcamento?.data) - toTime(a.orcamento?.data);
+        case 'data_asc': return toTime(a.orcamento?.data) - toTime(b.orcamento?.data);
+        case 'cliente_asc': return String(a.orcamento?.nome_cliente || '').localeCompare(String(b.orcamento?.nome_cliente || ''), 'pt-BR');
+        default: return 0;
+      }
+    });
+    return out;
   };
 
   const prontosOrdenados = useMemo(
-    () => sortByValue(result?.orcamentosProntos ?? []),
-    [result, sortMode]
+    () => applyFilters(result?.orcamentosProntos ?? []),
+    [result, sortMode, listSearch]
   );
   const pendentesOrdenados = useMemo(
-    () => sortByValue(result?.orcamentosPendentes ?? []),
-    [result, sortMode]
+    () => applyFilters(result?.orcamentosPendentes ?? []),
+    [result, sortMode, listSearch]
   );
+
 
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);

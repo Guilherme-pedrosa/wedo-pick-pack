@@ -379,7 +379,7 @@ export default function AgendaOSPanel() {
     agendaFilter,
     dateFilterActive,
     excludedSituations,
-    executionFilter,
+    executionFilters,
     repairLocationFilter,
     rows,
     search,

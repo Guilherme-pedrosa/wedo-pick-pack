@@ -24,7 +24,32 @@ import { toast } from 'sonner';
 import { logSystemAction } from '@/lib/systemLog';
 import { gcCompraUrl } from '@/lib/gcLinks';
 
-type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string };
+type OrdemCompraRef = { id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; previsao_chegada?: string };
+
+/** Converte "dd/mm/aaaa", "dd/mm" ou ISO em Date local. */
+function parseChegada(v?: string): Date | null {
+  if (!v) return null;
+  const t = v.trim();
+  const br = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (br) {
+    let y = Number(br[3]);
+    if (y < 100) y += 2000;
+    return new Date(y, Number(br[2]) - 1, Number(br[1]));
+  }
+  const brShort = t.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (brShort) return new Date(new Date().getFullYear(), Number(brShort[2]) - 1, Number(brShort[1]));
+  const iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  return null;
+}
+
+function isChegadaAtrasada(v?: string): boolean {
+  const d = parseChegada(v);
+  if (!d) return false;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return d.getTime() < today.getTime();
+}
 
 /** Renderiza as ordens de compra como links clicáveis para o GestãoClick. */
 function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
@@ -34,6 +59,8 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
       {ordens.map((o, i) => {
         const url = gcCompraUrl(o.id);
         const label = `#${o.codigo} ${o.nome_fornecedor} [${o.situacao}] ×${formatQty(o.qtd)}`;
+        const chegada = (o.previsao_chegada || '').trim();
+        const atrasado = isChegadaAtrasada(chegada);
         return (
           <span key={o.id || o.codigo}>
             {i > 0 && ' • '}
@@ -48,12 +75,20 @@ function OrdensCompraLinks({ ordens }: { ordens?: OrdemCompraRef[] }) {
                 {label}
               </a>
             ) : label}
+            {chegada ? (
+              <span className={atrasado ? 'ml-1 font-medium text-red-600' : 'ml-1 text-muted-foreground'}>
+                📅 Chegada: {chegada}{atrasado ? ' (atrasado)' : ''}
+              </span>
+            ) : (
+              <span className="ml-1 text-muted-foreground italic">📅 sem data de chegada</span>
+            )}
           </span>
         );
       })}
     </>
   );
 }
+
 
 function exportCSV(result: RastreadorResult) {
   const header = [

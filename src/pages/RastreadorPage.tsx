@@ -1335,12 +1335,12 @@ export default function RastreadorPage() {
             )}
 
             {/* Ready budgets */}
-            {result.orcamentosProntos.length > 0 && (
+            {prontosOrdenados.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <PackageCheck className="h-4 w-4 text-green-600" />
                   <h2 className="text-sm font-bold text-foreground">
-                    Prontos para virar OS ({result.orcamentosProntos.length})
+                    Prontos para virar OS ({prontosOrdenados.length})
                   </h2>
                 </div>
                 <div className="space-y-2">
@@ -1420,12 +1420,12 @@ export default function RastreadorPage() {
             <Separator />
 
             {/* Pending budgets */}
-            {result.orcamentosPendentes.length > 0 && (
+            {pendentesOrdenados.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-amber-600" />
                   <h2 className="text-sm font-bold text-foreground">
-                    Aguardando peças ({result.orcamentosPendentes.length})
+                    Aguardando peças ({pendentesOrdenados.length})
                   </h2>
                 </div>
                 <div className="space-y-2">

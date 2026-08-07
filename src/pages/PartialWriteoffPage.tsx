@@ -160,20 +160,21 @@ export default function PartialWriteoffPage() {
       .filter(item => Number.isFinite(item.quantity) && item.quantity > 0);
   }, [quantities, selected]);
 
-  // Só é possível cancelar enquanto nada foi efetivado no GestãoClick:
-  // nenhum documento auxiliar criado, nenhuma peça reservada ou retirada.
+  // Cancelamento liberado enquanto nada foi efetivado no GestãoClick:
+  // sem documento auxiliar confirmado e sem peças já retiradas (reservas são liberadas).
   const canCancelSelected = useMemo(() => {
     if (!selected) return false;
     if (['completed', 'cancelled', 'consolidating'].includes(selected.status)) return false;
     const hasGcDocument = selected.batches.some(batch =>
-      !!batch.auxiliary_document_id || !['failed', 'cancelled'].includes(batch.status));
+      !!batch.auxiliary_document_id || batch.status === 'confirmed');
     if (hasGcDocument) return false;
-    return !selected.items.some(item => Number(item.withdrawn_quantity) > 0 || Number(item.reserved_quantity) > 0);
+    return !selected.items.some(item => Number(item.withdrawn_quantity) > 0);
   }, [selected]);
 
   async function handleCancelOperation() {
     if (!selected || cancelling) return;
-    if (!window.confirm(`Cancelar a baixa parcial do #${selected.budget_code}? Nada foi efetivado no GestãoClick.`)) return;
+    if (!window.confirm(`Cancelar a baixa parcial do #${selected.budget_code}? As reservas internas serão liberadas e nada foi efetivado no GestãoClick.`)) return;
+
     setCancelling(true);
     try {
       await cancelPartialOperation(selected.id);

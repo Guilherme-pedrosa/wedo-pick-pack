@@ -786,9 +786,23 @@ export default function PartialWriteoffPage() {
                                 Tarefa Auvo #{batch.auvo_task_id}
                               </a>
                             ) : (
-                              <p className="text-xs text-destructive">
-                                {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
-                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs text-destructive">
+                                  {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
+                                </p>
+                                {batch.auxiliary_document_id && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-xs"
+                                    disabled={retryingTaskId === batch.id}
+                                    onClick={() => handleRetryAuvoTask(batch.id)}
+                                  >
+                                    {retryingTaskId === batch.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                                    Gerar tarefa Auvo
+                                  </Button>
+                                )}
+                              </div>
                             )}
                             {audit && (
                               <p className={`text-xs font-medium ${auditTone}`}>

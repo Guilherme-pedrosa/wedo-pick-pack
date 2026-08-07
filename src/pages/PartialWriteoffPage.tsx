@@ -529,13 +529,28 @@ export default function PartialWriteoffPage() {
                     <div className="space-y-2">
                       {selected.batches.map(batch => (
                         <div key={batch.id} className="flex flex-col justify-between gap-2 rounded-lg border p-3 sm:flex-row sm:items-center">
-                          <div>
+                          <div className="space-y-1">
                             <p className="font-medium">Lote {batch.sequence} · {batch.auxiliary_document_type === 'os' ? 'OS' : 'Venda'} #{batch.auxiliary_document_code || '—'}</p>
                             <p className="text-xs text-muted-foreground">{fmtDate(batch.created_at)} · {batch.marker}</p>
+                            {batch.auvo_task_id ? (
+                              <a
+                                href={`https://app2.auvo.com.br/relatorioTarefas/DetalheTarefa/${batch.auvo_task_id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex text-xs font-medium text-primary underline"
+                              >
+                                Tarefa Auvo #{batch.auvo_task_id}
+                              </a>
+                            ) : (
+                              <p className="text-xs text-destructive">
+                                {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
+                              </p>
+                            )}
                           </div>
                           <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status}</Badge>
                         </div>
                       ))}
+
                     </div>
                   )}
                 </div>

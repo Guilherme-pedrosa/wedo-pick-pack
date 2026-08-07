@@ -245,10 +245,182 @@ function selectedLine(snapshot: any, quantity: number): any {
   return cloned;
 }
 
+// ============================================================
+// AUVO — mesma receita usada pelo gerador de OS (generate-os):
+// login, criação de tarefa (PUT /tasks), clone de cliente/equipamentos a
+// partir da "TAREFA OS" do orçamento e tipo de atividade por tipo de doc.
+// Cada baixa parcial gera a sua própria tarefa; nenhuma tarefa parcial é
+// apagada na consolidação — todas ficam amarradas à OS/Venda final.
+// ============================================================
+const AUVO_API_URL = 'https://api.auvo.com.br/v2';
+const AUVO_TASK_TYPE_OS = 180177;
+const AUVO_TASK_TYPE_VENDA = 200268;
+const AUVO_QUESTIONNAIRE_ID = 214757;
+const INT32_MAX = 2147483647;
+
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+async function auvoLogin(): Promise<string> {
+  const apiKey = Deno.env.get('AUVO_API_KEY');
+  const apiToken = Deno.env.get('AUVO_API_TOKEN');
+  if (!apiKey || !apiToken) throw new Error('AUVO_CREDENTIALS_NOT_CONFIGURED');
+  const url = `${AUVO_API_URL}/login/?apiKey=${encodeURIComponent(apiKey)}&apiToken=${encodeURIComponent(apiToken)}`;
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' } });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.result?.accessToken) throw new Error(`Auvo login falhou (${res.status})`);
+  return data.result.accessToken as string;
+}
+
+async function auvoCreateTask(token: string, payload: Record<string, unknown>): Promise<string> {
+  const res = await fetch(`${AUVO_API_URL}/tasks`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  if (!res.ok) throw new Error(`Auvo rejeitou a tarefa (${res.status}): ${compact(data).slice(0, 300)}`);
+  const taskId = data?.result?.taskID ?? data?.result?.[0]?.taskID ?? data?.taskID ?? null;
+  if (!taskId) throw new Error('Auvo não retornou o número da tarefa');
+  return String(taskId);
+}
+
+async function auvoGetTask(token: string, taskId: string): Promise<any> {
+  const res = await fetch(`${AUVO_API_URL}/tasks/${encodeURIComponent(taskId)}`, {
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Auvo get task ${taskId} (${res.status})`);
+  return res.json();
+}
+
+function budgetAttrValue(budget: any, targetId: string, nameIncludes: string): string {
+  for (const entry of budget?.atributos || []) {
+    const attr = entry?.atributo || entry;
+    const id = String(attr?.atributo_id || attr?.id || '');
+    if (id === targetId || normalizeText(attr?.descricao).includes(normalizeText(nameIncludes))) {
+      return String(attr?.conteudo ?? '').trim();
+    }
+  }
+  return '';
+}
+
+function budgetEquipmentText(budget: any): string {
+  const fromAttr = budgetAttrValue(budget, '', 'equipamento');
+  if (fromAttr) return fromAttr;
+  const equip = budget?.equipamentos?.[0]?.equipamento;
+  if (!equip) return '';
+  return [equip.equipamento, equip.marca, equip.modelo].filter(Boolean).join(' · ');
+}
+
+/** Cria a tarefa Auvo da baixa parcial. Nunca derruba o lote: erros viram aviso. */
+async function createPartialAuvoTask(
+  operation: any,
+  batch: any,
+  selected: Array<{ item: any; quantity: number }>,
+  auvoUserId: string,
+  fallbackCustomerId?: string,
+): Promise<string> {
+  const budget = operation.budget_snapshot || {};
+  const token = await auvoLogin();
+
+  const sourceTaskId = budgetAttrValue(budget, '73341', 'tarefa os');
+  let customerId = Number(fallbackCustomerId || budget.auvo_customer_id || 0);
+  let equipmentIds: number[] = String(budgetAttrValue(budget, '88695', 'id equipamento') || '')
+    .split(/[^0-9]+/)
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= INT32_MAX);
+
+  if (sourceTaskId) {
+    try {
+      const source = (await auvoGetTask(token, sourceTaskId))?.result || {};
+      if (Number(source?.customerId) > 0) customerId = Number(source.customerId);
+      if (!equipmentIds.length && Array.isArray(source?.equipmentsId)) {
+        equipmentIds = source.equipmentsId
+          .map((v: unknown) => Number(v))
+          .filter((n: number) => Number.isFinite(n) && n > 0 && n <= INT32_MAX);
+      }
+    } catch { /* segue sem clone */ }
+  }
+
+  if (!Number.isFinite(customerId) || customerId <= 0) {
+    throw new Error('Cliente Auvo não identificado para a tarefa parcial');
+  }
+
+  const equipText = budgetEquipmentText(budget);
+  const address = [budget.endereco, budget.cidade, budget.estado, budget.cep].filter(Boolean).join(', ')
+    || operation.client_name;
+
+  const orientation = [
+    `ENTREGA PARCIAL ${batch.sequence} — Orçamento #${operation.budget_code}`,
+    `Cliente: ${operation.client_name}`,
+    equipText ? `Equipamento: ${equipText}` : '',
+    `Documento auxiliar: ${operation.document_type === 'os' ? 'OS' : 'Venda'} #${batch.auxiliary_document_code || batch.auxiliary_document_id}`,
+    '',
+    '📦 PEÇAS DESTA ENTREGA:',
+    ...selected.map(({ item, quantity }) => `  • ${item.product_name} — Qtd: ${qtyString(quantity)}`),
+    '',
+    'Esta é uma entrega parcial. As demais peças serão entregues quando chegarem e o orçamento será reagrupado numa OS/Venda final.',
+  ].filter(Boolean).join('\n');
+
+  const payload: Record<string, unknown> = {
+    taskType: operation.document_type === 'venda' ? AUVO_TASK_TYPE_VENDA : AUVO_TASK_TYPE_OS,
+    idUserFrom: Number(auvoUserId),
+    orientation,
+    priority: 2,
+    questionnaireId: AUVO_QUESTIONNAIRE_ID,
+    address,
+    latitude: -23.55,
+    longitude: -46.63,
+    customerId,
+  };
+  if (equipmentIds.length) payload.equipmentsId = equipmentIds;
+
+  return auvoCreateTask(token, payload);
+}
+
+/** Grava o número da tarefa Auvo no campo extra do documento auxiliar no GC. */
+async function attachAuvoTaskToAuxiliary(
+  type: DocumentType,
+  documentId: string,
+  taskId: string,
+  budgetCode: string,
+): Promise<void> {
+  const listPath = type === 'os' ? '/api/atributos_ordens_servicos' : '/api/atributos_vendas';
+  const metas: any[] = (await gcRequest(listPath))?.data || [];
+  const findAttr = (...tokens: string[]) => metas.find((meta) => {
+    const nome = normalizeText(meta?.nome);
+    return tokens.every((token) => nome.includes(normalizeText(token)));
+  })?.id || null;
+
+  const taskAttrId = type === 'os' ? findAttr('tarefa', 'execu') : findAttr('tarefa', 'entrega');
+  const budgetAttrId = findAttr('numero', 'orcamento');
+  const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+  if (taskAttrId) atributos.push({ atributo: { atributo_id: String(taskAttrId), conteudo: taskId } });
+  if (budgetAttrId) atributos.push({ atributo: { atributo_id: String(budgetAttrId), conteudo: String(budgetCode) } });
+  if (!atributos.length) return;
+
+  const path = type === 'os'
+    ? `/api/ordens_servicos/${encodeURIComponent(documentId)}`
+    : `/api/vendas/${encodeURIComponent(documentId)}`;
+  const latest = (await gcRequest(path))?.data;
+  if (!latest) return;
+  const payload = statusUpdatePayload(latest, normalizeId(latest.situacao_id), type);
+  payload.atributos = atributos;
+  await gcRequest(path, 'PUT', payload);
+}
+
 function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity: number }>, waitingStatusId: string, marker: string, gcUserId?: string) {
   const budget = operation.budget_snapshot || {};
   const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
-  const note = `[${marker}] BAIXA PARCIAL do orçamento #${operation.budget_code}. Documento auxiliar: sem financeiro, comissão, serviços ou Auvo.`;
+  const note = `[${marker}] BAIXA PARCIAL do orçamento #${operation.budget_code}. Documento auxiliar: sem financeiro, comissão nem serviços.`;
+
   const common: Record<string, any> = {
     cliente_id: operation.client_id,
     data: new Date().toISOString().slice(0, 10),
@@ -494,7 +666,54 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     }
     throw attachError;
   }
+  // Tarefa Auvo da entrega parcial (mesma receita da geração de OS).
+  // Falha aqui NÃO invalida a baixa: o lote fica registrado com o aviso.
+  const batchWithDocument = {
+    ...batch,
+    auxiliary_document_id: String(document.id),
+    auxiliary_document_code: String(document.codigo || ''),
+  };
+  try {
+    if (!auth.profile.auvo_user_id) throw new Error('Usuário sem "auvo_user_id" configurado no perfil');
+    const taskId = await createPartialAuvoTask(
+      operation,
+      batchWithDocument,
+      selected,
+      String(auth.profile.auvo_user_id),
+      body.auvo_customer_id ? String(body.auvo_customer_id) : undefined,
+    );
+    try {
+      await attachAuvoTaskToAuxiliary(operation.document_type, String(document.id), taskId, operation.budget_code);
+    } catch (linkError) {
+      console.warn('[partial-writeoff] tarefa criada mas não vinculada ao GC:', compact(linkError));
+    }
+    await service.from('partial_writeoff_batches')
+      .update({ auvo_task_id: taskId, auvo_task_error: null })
+      .eq('id', batchId);
+    await service.from('partial_writeoff_events').insert({
+      operation_id: operationId,
+      batch_id: batchId,
+      event_type: 'auvo_task_created',
+      payload: { auvo_task_id: taskId, document_code: String(document.codigo || '') },
+      actor_id: auth.id,
+      actor_name: auth.name,
+    });
+  } catch (taskError) {
+    const message = compact(taskError).slice(0, 500) || 'Falha desconhecida ao criar tarefa no Auvo';
+    console.error('[partial-writeoff] falha ao criar tarefa Auvo:', message);
+    await service.from('partial_writeoff_batches').update({ auvo_task_error: message }).eq('id', batchId);
+    await service.from('partial_writeoff_events').insert({
+      operation_id: operationId,
+      batch_id: batchId,
+      event_type: 'auvo_task_failed',
+      payload: { error: message },
+      actor_id: auth.id,
+      actor_name: auth.name,
+    });
+  }
+
   return getOperationGraph(operationId);
+
 }
 
 async function handleConfirmBatch(body: any, auth: AuthContext) {
@@ -611,6 +830,19 @@ async function handleConsolidate(body: any, auth: AuthContext) {
     throw new Error(message);
   }
 
+  // Rastreio: todas as entregas parciais (documento auxiliar + tarefa Auvo)
+  // são enviadas ao gerador para ficarem amarradas à OS/Venda final.
+  const partialAuxiliaries = operation.batches
+    .filter((batch: any) => batch.auxiliary_document_id)
+    .map((batch: any) => ({
+      sequence: batch.sequence,
+      document_type: batch.auxiliary_document_type,
+      document_id: String(batch.auxiliary_document_id || ''),
+      document_code: String(batch.auxiliary_document_code || ''),
+      auvo_task_id: batch.auvo_task_id ? String(batch.auvo_task_id) : null,
+      confirmed_at: batch.confirmed_at || null,
+    }));
+
   let generated: any;
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-os`, {
@@ -626,8 +858,10 @@ async function handleConsolidate(body: any, auth: AuthContext) {
         gc_usuario_id: auth.profile.gc_usuario_id || undefined,
         auvo_customer_id: body.auvo_customer_id || undefined,
         manual_equipamento: body.manual_equipamento || undefined,
+        partial_auxiliaries: partialAuxiliaries,
       }),
     });
+
     generated = await response.json();
     if (!response.ok || generated?.error) throw new Error(generated?.error || `generate-os ${response.status}`);
 
@@ -664,7 +898,9 @@ async function handleConsolidate(body: any, auth: AuthContext) {
     operator_name: auth.name,
     valor_total: numberValue(operation.budget_snapshot?.valor_total),
     warnings: generated.warnings || null,
+    partial_auxiliaries: partialAuxiliaries.length ? partialAuxiliaries : null,
     success: true,
+
   });
 
   const { error: finishError } = await service.rpc('partial_writeoff_finish_consolidation', {

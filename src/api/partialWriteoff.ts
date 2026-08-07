@@ -39,8 +39,11 @@ export interface PartialWriteoffBatch {
   auxiliary_document_id: string | null;
   auxiliary_document_code: string | null;
   error_message: string | null;
+  auvo_task_id: string | null;
+  auvo_task_error: string | null;
   created_at: string;
   confirmed_at: string | null;
+
 }
 
 export interface PartialWriteoffOperation {

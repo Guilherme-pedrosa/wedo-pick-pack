@@ -486,7 +486,15 @@ Deno.serve(async (req: Request) => {
       gc_usuario_id,    // optional - GC user ID for attribution
       auvo_customer_id, // optional - Auvo customer ID (when no source task to clone from)
       manual_equipamento, // optional - manual equipment text when not in orçamento
+      partial_auxiliaries, // optional - entregas parciais já feitas (baixa parcial)
     } = body;
+    // Rastreio das entregas parciais: documento auxiliar + tarefa Auvo de cada lote.
+    const partialDeliveries: Array<Record<string, any>> = Array.isArray(partial_auxiliaries) ? partial_auxiliaries : [];
+    const partialSummaryLines = partialDeliveries.map((entry) => {
+      const doc = `${String(entry.document_type || '').toLowerCase() === 'venda' ? 'Venda' : 'OS'} #${entry.document_code || entry.document_id || '?'}`;
+      return `  • Entrega ${entry.sequence ?? '?'} — ${doc}${entry.auvo_task_id ? ` — Tarefa Auvo #${entry.auvo_task_id}` : ' — sem tarefa Auvo'}`;
+    });
+
     let orcamento = body.orcamento; // GCOrcamento object from frontend
 
     if (!orcamento || !auvo_user_id) {
@@ -629,8 +637,13 @@ Deno.serve(async (req: Request) => {
       equipText ? `Equipamento: ${equipText}` : '',
       '',
       ...prodLines,
+      ...(partialSummaryLines.length ? ['', '🔁 ENTREGAS PARCIAIS JÁ REALIZADAS:', ...partialSummaryLines] : []),
     ].filter(Boolean);
     const orientation = orientationParts.join('\n');
+    const partialNote = partialSummaryLines.length
+      ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join('\n')}`
+      : '';
+
 
     const readOrcAttrByIdOrName = (targetId: string, nameIncludes: string): string => {
       if (!orcamento.atributos?.length) return '';
@@ -852,6 +865,10 @@ Deno.serve(async (req: Request) => {
       if (orcamento.vendedor_id) osPayload.vendedor_id = orcamento.vendedor_id;
       if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
       if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
+      if (partialNote) {
+        osPayload.observacoes_interna = [osPayload.observacoes_interna, partialNote].filter(Boolean).join('\n');
+      }
+
       if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
       // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
@@ -922,6 +939,10 @@ Deno.serve(async (req: Request) => {
       if (orcamento.vendedor_id) vendaPayload.vendedor_id = orcamento.vendedor_id;
       if (orcamento.observacoes) vendaPayload.observacoes = orcamento.observacoes;
       if (orcamento.observacoes_interna) vendaPayload.observacoes_interna = orcamento.observacoes_interna;
+      if (partialNote) {
+        vendaPayload.observacoes_interna = [vendaPayload.observacoes_interna, partialNote].filter(Boolean).join('\n');
+      }
+
       if (orcamento.valor_total) vendaPayload.valor_total = orcamento.valor_total;
       if (orcamento.pagamentos?.length) vendaPayload.pagamentos = orcamento.pagamentos;
       // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado

@@ -827,6 +827,7 @@ export type Database = {
           orcamento_id: string
           os_codigo: string | null
           os_id: string | null
+          partial_auxiliaries: Json | null
           success: boolean
           valor_total: number | null
           warnings: string[] | null
@@ -844,6 +845,7 @@ export type Database = {
           orcamento_id: string
           os_codigo?: string | null
           os_id?: string | null
+          partial_auxiliaries?: Json | null
           success?: boolean
           valor_total?: number | null
           warnings?: string[] | null
@@ -861,6 +863,7 @@ export type Database = {
           orcamento_id?: string
           os_codigo?: string | null
           os_id?: string | null
+          partial_auxiliaries?: Json | null
           success?: boolean
           valor_total?: number | null
           warnings?: string[] | null
@@ -909,6 +912,8 @@ export type Database = {
       }
       partial_writeoff_batches: {
         Row: {
+          auvo_task_error: string | null
+          auvo_task_id: string | null
           auxiliary_document_code: string | null
           auxiliary_document_id: string | null
           auxiliary_document_type: string
@@ -925,6 +930,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auvo_task_error?: string | null
+          auvo_task_id?: string | null
           auxiliary_document_code?: string | null
           auxiliary_document_id?: string | null
           auxiliary_document_type: string
@@ -941,6 +948,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auvo_task_error?: string | null
+          auvo_task_id?: string | null
           auxiliary_document_code?: string | null
           auxiliary_document_id?: string | null
           auxiliary_document_type?: string

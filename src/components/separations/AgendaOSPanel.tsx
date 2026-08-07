@@ -927,6 +927,10 @@ export default function AgendaOSPanel() {
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700"><Link2Off className="mr-1 h-3 w-3" />Tarefa Auvo sem OS aberta</Badge>
                     <Badge variant="secondary">Tarefa #{task.task_id}</Badge>
+                    {/^\s*entrega parcial/i.test(task.orientation || '') && (
+                      <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Entrega parcial</Badge>
+                    )}
+
                     <Badge variant="outline">{taskStatus(task)}</Badge>
                   </div>
                   <p className="font-semibold">{task.customer_name || 'Cliente não informado no Auvo'}</p>

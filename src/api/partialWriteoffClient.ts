@@ -909,5 +909,7 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
   if (action === 'confirm_batch') return { operation: await handleConfirmBatch(body, auth) } as T;
   if (action === 'consolidate') return { operation: await handleConsolidate(body, auth) } as T;
   if (action === 'cancel_operation') return { operation: await handleCancelOperation(body, auth) } as T;
+  if (action === 'cancel_batch') return { operation: await handleCancelBatch(body, auth) } as T;
+
   throw new Error('UNKNOWN_ACTION');
 }

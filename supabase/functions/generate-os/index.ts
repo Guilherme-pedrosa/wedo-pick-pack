@@ -944,7 +944,7 @@ Deno.serve(async (req: Request) => {
       };
 
       upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
-      upsertAttr(attrIds.tarefaExecucao, String(auvoTaskId));
+      upsertAttr(attrIds.tarefaExecucao, buildTaskChain(auvoTaskId));
 
       // Map orçamento attribute values to OS mandatory attribute IDs
       // Orçamento attrs have different IDs than OS attrs, so we find by name/content

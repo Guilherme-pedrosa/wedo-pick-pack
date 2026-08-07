@@ -1307,7 +1307,7 @@ export default function RastreadorPage() {
                   </h2>
                 </div>
                 <div className="space-y-2">
-                  {result.orcamentosProntos.map(entry => (
+                  {prontosOrdenados.map(entry => (
                     <OrcamentoCard key={entry.orcamento.id} entry={entry} ready />
                   ))}
                 </div>

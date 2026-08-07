@@ -192,7 +192,9 @@ export default function AgendaOSPanel() {
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [excludedSituations, setExcludedSituations] = useState<Set<string>>(new Set());
   const [situationSearch, setSituationSearch] = useState('');
-  const [executionFilters, setExecutionFilters] = useState<Set<ExecutionKey>>(new Set());
+  const [executionFilters, setExecutionFilters] = useState<Set<ExecutionKey>>(
+    () => new Set(EXECUTION_FILTER_OPTIONS.map(({ value }) => value)),
+  );
   const [repairLocationFilter, setRepairLocationFilter] = useState<RepairLocationFilter>('all');
   const [separationFilter, setSeparationFilter] = useState<SeparationFilter>('all');
   const [search, setSearch] = useState('');
@@ -779,36 +781,48 @@ export default function AgendaOSPanel() {
               </PopoverContent>
             </Popover>
 
-            <Button
-              variant={executionFilters.size === EXECUTION_FILTER_OPTIONS.length ? 'default' : 'outline'}
-              size="sm"
-              className="h-8 text-xs"
-              aria-pressed={executionFilters.size === EXECUTION_FILTER_OPTIONS.length}
-              onClick={() => setExecutionFilters((current) => (
-                current.size === EXECUTION_FILTER_OPTIONS.length
-                  ? new Set()
-                  : new Set(EXECUTION_FILTER_OPTIONS.map(({ value }) => value))
-              ))}
-            >
-              Todas
-            </Button>
-            {EXECUTION_FILTER_OPTIONS.map(({ value, label }) => (
-              <Button
-                key={value}
-                variant={executionFilters.has(value) ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 text-xs"
-                aria-pressed={executionFilters.has(value)}
-                onClick={() => setExecutionFilters((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(value)) next.delete(value);
-                  else next.add(value);
-                  return next;
-                })}
-              >
-                {label}
-              </Button>
-            ))}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Filter className="h-3.5 w-3.5" />
+                  Status da execução
+                  <Badge variant="secondary" className="ml-1 text-[10px]">
+                    {executionFilters.size} selecionados
+                  </Badge>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72" align="start">
+                <div className="space-y-1.5">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-accent">
+                    <Checkbox
+                      checked={executionFilters.size === EXECUTION_FILTER_OPTIONS.length}
+                      onCheckedChange={(checked) => setExecutionFilters(
+                        checked
+                          ? new Set(EXECUTION_FILTER_OPTIONS.map(({ value }) => value))
+                          : new Set(),
+                      )}
+                    />
+                    <span className="text-sm font-medium">Todos os status</span>
+                  </label>
+                  <div className="border-t pt-1.5">
+                    {EXECUTION_FILTER_OPTIONS.map(({ value, label }) => (
+                      <label key={value} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-accent">
+                        <Checkbox
+                          checked={executionFilters.has(value)}
+                          onCheckedChange={(checked) => setExecutionFilters((current) => {
+                            const next = new Set(current);
+                            if (checked) next.add(value);
+                            else next.delete(value);
+                            return next;
+                          })}
+                        />
+                        <span className="text-sm">{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <span className="mx-1 h-6 w-px bg-border" />
 

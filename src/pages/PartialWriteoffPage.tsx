@@ -209,6 +209,20 @@ export default function PartialWriteoffPage() {
     if (hasGcDocument) return false;
     return !selected.items.some(item => Number(item.withdrawn_quantity) > 0);
   }, [selected]);
+  async function handleRetryAuvoTask(batchId: string) {
+    if (retryingTaskId) return;
+    setRetryingTaskId(batchId);
+    try {
+      await retryBatchAuvoTask(batchId);
+      toast.success('Tarefa criada no Auvo.');
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setRetryingTaskId(null);
+    }
+  }
+
 
   async function handleDeleteOperation(operation: PartialWriteoffOperation) {
     if (deletingId) return;

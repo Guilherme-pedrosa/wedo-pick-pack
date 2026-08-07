@@ -337,23 +337,7 @@ export default function AgendaOSPanel() {
         || (separationFilter === 'separated' && !!separation && !separation.technician_name)
         || (separationFilter === 'linked' && !!separation?.technician_name);
       const executionStatus = normalizeFilterText(task ? taskStatus(task) : '');
-      const matchesExecution = executionFilter === 'all'
-        || (executionFilter === 'em_andamento' && (
-          executionStatus.includes('andamento')
-          || executionStatus.includes('deslocamento')
-          || executionStatus.includes('check-in')
-        ))
-        || (executionFilter === 'pausada' && executionStatus.includes('paus'))
-        || (executionFilter === 'finalizada' && (
-          executionStatus.includes('finalizada')
-          || executionStatus.includes('check-out')
-        ))
-        || (executionFilter === 'sem_exec' && (
-          !task
-          || !executionStatus
-          || executionStatus.includes('aberta')
-          || executionStatus.includes('agendada')
-        ));
+      const matchesExecution = matchesExecutionFilters(executionFilters, executionStatus, !!task);
       const repairLocation = normalizeFilterText(
         getOsAttributeValue(os, GC_REPAIR_LOCATION_ATTRIBUTE_ID),
       );

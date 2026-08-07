@@ -98,9 +98,9 @@ const EXECUTION_FILTER_OPTIONS: ReadonlyArray<{ value: ExecutionKey; label: stri
   { value: 'excluida', label: 'Excluídas' },
 ];
 
-/** Multi-seleção: conjunto vazio = todas. Um status casa se pertencer a qualquer filtro marcado. */
+/** Multi-seleção: o status casa se pertencer a qualquer opção marcada. */
 function matchesExecutionFilters(filters: Set<ExecutionKey>, status: string, hasTask: boolean) {
-  if (filters.size === 0) return true;
+  if (filters.size === 0) return false;
   const checks: Record<ExecutionKey, boolean> = {
     em_andamento: status.includes('andamento') || status.includes('deslocamento') || status.includes('check-in'),
     pausada: status.includes('paus'),

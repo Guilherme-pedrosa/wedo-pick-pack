@@ -283,11 +283,16 @@ function selectedLine(snapshot: any, quantity: number): any {
   return cloned;
 }
 
-function budgetAttributeValue(budget: Record<string, any>, attributeId: string): string {
+function budgetAttributeValue(budget: Record<string, any>, attributeId: string, nameHint?: string): string {
   for (const entry of budget.atributos || []) {
     const attribute = entry?.atributo || entry;
-    if (String(attribute?.atributo_id || attribute?.id || '') === attributeId) {
-      return String(attribute?.conteudo ?? '').trim();
+    const id = String(attribute?.atributo_id || attribute?.id || '');
+    const name = String(attribute?.nome || attribute?.atributo || '').toLowerCase();
+    const matchesId = id === attributeId;
+    const matchesName = !!nameHint && name.includes(nameHint);
+    if (matchesId || matchesName) {
+      const value = String(attribute?.conteudo ?? '').trim();
+      if (value) return value;
     }
   }
   return '';
@@ -295,17 +300,21 @@ function budgetAttributeValue(budget: Record<string, any>, attributeId: string):
 
 /**
  * Os IDs dos campos do orçamento são diferentes dos IDs exigidos na OS.
- * Mantém o mesmo mapeamento usado pelo fluxo funcional de geração do Rastreador.
+ * Mantém o mesmo mapeamento usado pelo fluxo funcional de geração do Rastreador
+ * (generate-os): 73341 -> 73343/73344, 73350 -> 68658, 67350 -> 73897.
+ * Nenhum conteúdo pode ir vazio: o GestãoClick trata vazio como "não enviado".
  */
-function auxiliaryOsAttributes(operation: PartialWriteoffOperation) {
-  const budget = operation.budget_snapshot || {};
-  const sourceTaskId = budgetAttributeValue(budget, '73341');
+function auxiliaryOsAttributes(operation: PartialWriteoffOperation, budgetOverride?: Record<string, any>) {
+  const budget = budgetOverride || operation.budget_snapshot || {};
+  const sourceTaskId = budgetAttributeValue(budget, '73341', 'tarefa os');
+  const localReparo = budgetAttributeValue(budget, '73350', 'local do reparo');
+  const horas = budgetAttributeValue(budget, '67350', 'horas');
   return [
     { atributo: { atributo_id: '81831', conteudo: String(operation.budget_code || '-') } },
     { atributo: { atributo_id: '73343', conteudo: sourceTaskId || '-' } },
     { atributo: { atributo_id: '73344', conteudo: sourceTaskId || '-' } },
-    { atributo: { atributo_id: '68658', conteudo: budgetAttributeValue(budget, '73350') || 'CLIENTE' } },
-    { atributo: { atributo_id: '73897', conteudo: budgetAttributeValue(budget, '67350') || '0' } },
+    { atributo: { atributo_id: '68658', conteudo: localReparo || 'CLIENTE' } },
+    { atributo: { atributo_id: '73897', conteudo: horas || '0' } },
   ];
 }
 
@@ -315,8 +324,10 @@ function auxiliaryPayload(
   waitingStatusId: string,
   marker: string,
   gcUserId?: string,
+  budgetOverride?: Record<string, any>,
 ) {
-  const budget = operation.budget_snapshot || {};
+  const budget = budgetOverride || operation.budget_snapshot || {};
+
   const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
   const sourceLabel = operationSourceKind(operation) === 'venda' ? 'da venda' : 'do orcamento';
   const note = `[${marker}] BAIXA PARCIAL ${sourceLabel} #${operation.budget_code}. Documento auxiliar: sem financeiro, comissao, servicos ou Auvo.`;
@@ -337,7 +348,7 @@ function auxiliaryPayload(
         ...common,
         servicos: [],
         equipamentos: [],
-        atributos: auxiliaryOsAttributes(operation),
+        atributos: auxiliaryOsAttributes(operation, budget),
       }
     : { ...common, tipo: 'produto' };
 }
@@ -530,7 +541,16 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const settings = await getSettings();
   const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
   if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
-  const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id);
+  // Igual ao Rastreador: busca o orçamento COMPLETO no GC (o snapshot local pode
+  // estar sem `atributos`), para preencher TAREFA OS/EXECUÇÃO, LOCAL e HORAS.
+  let freshBudget: Record<string, any> | undefined;
+  try {
+    freshBudget = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
+  } catch {
+    freshBudget = undefined;
+  }
+  const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id, freshBudget);
+
   const path = operation.document_type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
 
   let document: any = null;

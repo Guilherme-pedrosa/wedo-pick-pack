@@ -66,7 +66,7 @@ const menuGroups: MenuGroup[] = [
       { title: "Checkout", icon: Package, href: "/checkout" },
       { title: "Baixa Parcial", icon: PackageMinus, href: "/baixa-parcial" },
       { title: "Separações", icon: PackageCheck, href: "/separations" },
-      { title: "Agendamento e Separação", icon: Calendar, href: "/separations?tab=agenda" },
+      { title: "Agendamento e Separação", icon: Calendar, href: "/agendamento" },
       { title: "Devoluções", icon: Undo2, href: "/devolucoes" },
     ],
   },

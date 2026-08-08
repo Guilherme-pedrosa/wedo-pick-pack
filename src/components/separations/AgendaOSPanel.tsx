@@ -182,6 +182,15 @@ function auvoTaskUrl(taskId: string): string {
   return `https://app2.auvo.com.br/relatorioTarefas/DetalheTarefa/${taskId}`;
 }
 
+function executionDateClass(taskDate: string | null | undefined): string {
+  if (!taskDate) return '';
+  const day = String(taskDate).slice(0, 10);
+  const today = todayISO();
+  if (day < today) return 'font-semibold text-amber-600';
+  if (day === today) return 'font-semibold text-emerald-500';
+  return 'font-semibold text-green-700';
+}
+
 
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();

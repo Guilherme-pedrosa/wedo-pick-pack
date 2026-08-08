@@ -845,6 +845,7 @@ export default function InventoryAnalysisPage() {
         client_count: r.client_count,
         event_count_90d: r.event_count_90d,
         event_count_180d: r.event_count_180d,
+        last_date: r.last_date,
         source_count_90d: r.source_count_90d,
         source_count_180d: r.source_count_180d,
         non_zero_months_90d: nonZeroMonths90,

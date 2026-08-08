@@ -14,7 +14,7 @@ async function test() {
   // I will call it with taskIndex 0 to see what task it is.
   
   const { data, error } = await supabase.functions.invoke('inventory-consumption-sync', {
-    body: { cursor: { taskIndex: 0, page: 1, stats: { os_seen: 0, vendas_seen: 0, os_debited: 0, vendas_debited: 0, pecas_created: 0, skipped: 0, errors: 0 } } }
+    body: { cursor: { taskIndex: 13, page: 1, stats: { os_seen: 0, vendas_seen: 0, os_debited: 0, vendas_debited: 0, pecas_created: 0, skipped: 0, errors: 0 } } }
   });
 
   if (error) {

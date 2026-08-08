@@ -1712,9 +1712,14 @@ export default function InventoryAnalysisPage() {
                   </Button>
                 )}
                 {purchaseItems.length > 0 && (
-                  <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
-                    <Download className="h-3 w-3" /> Exportar Lista
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
+                      <Download className="h-3 w-3" /> Exportar Lista
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleExportXLSX} className="gap-1">
+                      <Download className="h-3 w-3" /> Excel
+                    </Button>
+                  </>
                 )}
               </div>
             </div>

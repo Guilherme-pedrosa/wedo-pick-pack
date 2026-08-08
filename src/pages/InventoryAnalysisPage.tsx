@@ -1309,7 +1309,7 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', `Vendido ${salesWindowDays}d (Vendas+OS)`, 'Qtd Vendas', 'Qtd OS', 'PC em Aberto', 'Orçamentos (Qtd)', 'Orçamentos (Detalhe)', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
@@ -1327,6 +1327,12 @@ export default function InventoryAnalysisPage() {
       i.source_count_90d,
       i.source_count_180d,
       i.days_since_last ?? '',
+      formatNumberBR(i.qty_60d, 2),
+      formatNumberBR(i.qty_venda, 2),
+      formatNumberBR(i.qty_os, 2),
+      i.pc_qty,
+      formatNumberBR(i.orc_qty, 2),
+      i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
       formatNumberBR(i.total_qty, 0),
       formatNumberBR(i.total_value, 2),
       formatNumberBR(i.historical_monthly_avg, 2),
@@ -1352,7 +1358,7 @@ export default function InventoryAnalysisPage() {
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
 
-    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', 'Motivos', 'Alertas', 'PCs'];
+    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', `Vendido ${salesWindowDays}d (Vendas+OS)`, 'Qtd Vendas', 'Qtd OS', 'Orçamentos (Detalhe)', 'Motivos', 'Alertas', 'PCs'];
     const rows = purchaseItems.map((i) => [
       i.risk_score,
       i.abc_class,
@@ -1375,6 +1381,10 @@ export default function InventoryAnalysisPage() {
       i.max_stock,
       i.qty_a_comprar,
       i.qty_liquida,
+      formatNumberBR(i.qty_60d, 2),
+      formatNumberBR(i.qty_venda, 2),
+      formatNumberBR(i.qty_os, 2),
+      i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
       i.motivos_sugestao.join(' | '),
       i.alertas.join(' | '),
       i.pc_refs.map((r) => `PC${r.codigo}(${r.qtd})`).join(' · '),

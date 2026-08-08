@@ -196,7 +196,7 @@ async function processDocument(
   supabase: any,
   stats: any,
 ) {
-  const docId = String(doc.id);
+  const docId = String(doc.id); console.log(`Processing ${docType} ${docId} (Situation: ${situacaoId})`);
 
   // Documentos auxiliares da baixa parcial movimentam o estoque no GC, mas o
   // consumo definitivo pertence ao documento-mãe. Ignorá-los aqui evita
@@ -208,7 +208,7 @@ async function processDocument(
     .eq('auxiliary_document_id', docId)
     .limit(1)
     .maybeSingle();
-  if (partialBatch) {
+  if (partialBatch) { console.log(`Skipping ${docType} ${docId}: auxiliary document of partial write-off batch ${partialBatch.id}`);
     stats.skipped++;
     return;
   }
@@ -220,7 +220,7 @@ async function processDocument(
     .eq('doc_id', docId)
     .maybeSingle();
 
-  if (existing?.debited) {
+  if (existing?.debited) { console.log(`Skipping ${docType} ${docId}: already debited`);
     stats.skipped++;
     await supabase
       .from('doc_stock_effect')

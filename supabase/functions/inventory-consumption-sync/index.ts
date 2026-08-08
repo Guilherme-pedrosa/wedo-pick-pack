@@ -154,9 +154,12 @@ function buildProgress(taskIndex: number, totalTasks: number, page: number, tota
   };
 }
 
+const GC_API_USER_ID = '1320473';
+const GC_API_USER_NAME = 'Usuário API GC (guilherme.pedrosa@outlook.com)';
+
 async function logCompletion(req: Request, supabase: any, stats: any, startStr: string, endStr: string, lookbackDays: number) {
   let operatorId = 'system';
-  let operatorName = 'System Sync';
+  let operatorName = `Sincronização automática · ${GC_API_USER_NAME}`;
   const authHeader = req.headers.get('authorization');
   if (authHeader) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -176,8 +179,14 @@ async function logCompletion(req: Request, supabase: any, stats: any, startStr: 
     user_name: operatorName,
     module: 'inventory',
     action: 'Sincronização de consumo concluída',
-    details: { ...stats, period: `${startStr} → ${endStr}`, lookback_days: lookbackDays },
+    details: {
+      ...stats,
+      period: `${startStr} → ${endStr}`,
+      lookback_days: lookbackDays,
+      gc_usuario_id: GC_API_USER_ID,
+    },
   });
+
 }
 
 async function processDocument(

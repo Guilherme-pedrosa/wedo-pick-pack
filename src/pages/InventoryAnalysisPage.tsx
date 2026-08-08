@@ -1358,7 +1358,7 @@ export default function InventoryAnalysisPage() {
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
 
-    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', `Vendido ${salesWindowDays}d (Vendas+OS)`, 'Qtd Vendas', 'Qtd OS', 'Orçamentos (Detalhe)', 'Motivos', 'Alertas', 'PCs'];
+    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', `Vend. ${salesWindowDays}d (Total)`, 'Qtd Vendas', 'Qtd OS', 'Orçamentos (Detalhe)', 'Motivos', 'Alertas', 'PCs'];
     const rows = purchaseItems.map((i) => [
       i.risk_score,
       i.abc_class,

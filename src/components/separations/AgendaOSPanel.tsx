@@ -182,6 +182,15 @@ function auvoTaskUrl(taskId: string): string {
   return `https://app2.auvo.com.br/relatorioTarefas/DetalheTarefa/${taskId}`;
 }
 
+function executionDateClass(taskDate: string | null | undefined): string {
+  if (!taskDate) return '';
+  const day = String(taskDate).slice(0, 10);
+  const today = todayISO();
+  if (day < today) return 'font-semibold text-amber-600';
+  if (day === today) return 'font-semibold text-emerald-500';
+  return 'font-semibold text-green-700';
+}
+
 
 export default function AgendaOSPanel() {
   const queryClient = useQueryClient();
@@ -1192,7 +1201,7 @@ function AgendaRowContent({
               )}
               <span><strong className="text-foreground">Tarefa:</strong> {row.taskIds.length ? row.taskIds.join(' / ') : '73344 ausente'}</span>
               {(row.task?.technician_name || row.task?.task_date) && (
-                <span><strong className="text-foreground">Execução:</strong> {row.task?.task_date ? `${formatDate(row.task.task_date)} ${formatTime(row.task.task_date)}` : 'Sem agenda'}</span>
+                <span><strong className="text-foreground">Execução:</strong> {row.task?.task_date ? <span className={executionDateClass(row.task.task_date)}>{`${formatDate(row.task.task_date)} ${formatTime(row.task.task_date)}`}</span> : 'Sem agenda'}</span>
               )}
               <span><strong className="text-foreground">Data OS:</strong> {formatDate(row.os.data_entrada || row.os.data)}</span>
               <span><strong className="text-foreground">Status Auvo:</strong> {row.task ? taskStatus(row.task) : '—'}</span>

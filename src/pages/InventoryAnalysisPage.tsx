@@ -1622,7 +1622,7 @@ export default function InventoryAnalysisPage() {
                 {purchaseItems.length > 0 ? (
                   <>
                     <p className="text-sm font-medium">
-                      🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição
+                      🚨 <strong>{purchaseItems.length}</strong> produto(s) precisam de reposição (QUAIS AS PEÇAS NÃO ESTAVAM NO ROL, QUE AGORA ESTÃO!!)
                       {pcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {pcMap.size} produtos com PC em andamento</span>}
                       {orcMap.size > 0 && <span className="text-muted-foreground font-normal"> · {orcMap.size} produtos em orçamentos</span>}
                     </p>

@@ -506,7 +506,7 @@ function SeparationCard({
       const { data: { user } } = await supabase.auth.getUser();
       let gcUsuarioId: string | undefined;
       if (user) {
-        const { data: prof } = await supabase.from('profiles').select('gc_usuario_id').eq('id', user.id).single();
+        const { data: prof } = await supabase.from('profiles').select('gc_usuario_id').eq('id', user.id).maybeSingle();
         gcUsuarioId = prof?.gc_usuario_id || undefined;
       }
 

@@ -228,7 +228,7 @@ export default function BoxDetailDialog({
       const { data: { user } } = await supabase.auth.getUser();
       let operatorName = user?.email || "";
       if (user) {
-        const { data: prof } = await supabase.from("profiles").select("name").eq("id", user.id).single();
+        const { data: prof } = await supabase.from("profiles").select("name").eq("id", user.id).maybeSingle();
         if (prof?.name) operatorName = prof.name;
       }
       const { data, error } = await supabase

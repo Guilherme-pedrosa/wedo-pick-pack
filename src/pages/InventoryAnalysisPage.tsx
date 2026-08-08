@@ -1309,7 +1309,7 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', `Vendido ${salesWindowDays}d (Vendas+OS)`, 'Qtd Vendas', 'Qtd OS', 'PC em Aberto', 'Orçamentos (Qtd)', 'Orçamentos (Detalhe)', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', `Vend. ${salesWindowDays}d (Total)`, 'Qtd Vendas', 'Qtd OS', 'PC em Aberto', 'Orçamentos (Qtd)', 'Orçamentos (Detalhe)', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',

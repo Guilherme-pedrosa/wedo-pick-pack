@@ -1397,6 +1397,78 @@ export default function InventoryAnalysisPage() {
     );
   };
 
+  // Export XLSX (Excel real) — inclui vendas do período
+  const handleExportXLSX = () => {
+    const win = salesWindowDays;
+    const data = filteredItems.map((i) => ({
+      'Produto ID': i.produto_id,
+      'Código': i.codigo_interno || '',
+      'Nome': i.nome,
+      'Grupo': i.grupo || 'Sem grupo',
+      'ABC Financeiro': i.abc_class,
+      'Classe Giro': i.classe_giro,
+      'Status Estoque': i.status_estoque,
+      'XYZ': i.xyz_class,
+      'Padrão Demanda': i.demand_pattern,
+      'Custo Unit. (R$)': i.valor_custo ?? null,
+      [`Vendido ${win}d (Vendas+OS)`]: Number(i.qty_60d || 0),
+      [`Qtd Vendas ${win}d`]: Number(i.qty_venda || 0),
+      [`Qtd OS ${win}d`]: Number(i.qty_os || 0),
+      'Dias desde últ. consumo': i.days_since_last ?? null,
+      'Eventos': i.event_count,
+      'Eventos 90d': i.event_count_90d,
+      'Eventos 180d': i.event_count_180d,
+      'PC em Aberto': i.pc_qty,
+      'Orçamentos (Qtd)': Number(i.orc_qty || 0),
+      'Orçamentos (Detalhe)': i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
+      'Consumo Total': Number(i.total_qty || 0),
+      'Valor Total (R$)': Number(i.total_value || 0),
+      'Méd Mensal Hist.': Number(i.historical_monthly_avg || 0),
+      'Previsão Mensal': Number(i.forecast_monthly || 0),
+      'Estoque Atual': i.estoque_atual ?? null,
+      'Saldo Projetado': i.projected_available ?? null,
+      'Lead Time': i.lead_time_days,
+      'Estoque Segurança': i.safety_stock,
+      'Mín. Operacional': i.operational_minimum,
+      'Ponto Ressup.': i.reorder_point,
+      'Estoque Máx.': i.max_stock,
+      'A Comprar': i.qty_a_comprar,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Analise');
+
+    if (purchaseItems.length > 0) {
+      const compras = purchaseItems.map((i) => ({
+        'Risco': i.risk_score,
+        'Classe ABC': i.abc_class,
+        'Produto ID': i.produto_id,
+        'Código': i.codigo_interno || '',
+        'Nome': i.nome,
+        'Grupo': i.grupo || 'Sem grupo',
+        'Custo Unit. (R$)': i.valor_custo ?? null,
+        'Estoque Atual': i.estoque_atual ?? null,
+        [`Vendido ${win}d (Vendas+OS)`]: Number(i.qty_60d || 0),
+        [`Qtd Vendas ${win}d`]: Number(i.qty_venda || 0),
+        [`Qtd OS ${win}d`]: Number(i.qty_os || 0),
+        'PC em Aberto': i.pc_qty,
+        'Orçamento Ponderado': Number(i.orc_qty || 0),
+        'Orçamentos (Detalhe)': i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
+        'Saldo Projetado': i.projected_available ?? null,
+        'Lead Time': i.lead_time_days,
+        'Ponto Ressup.': i.reorder_point,
+        'Qtd Sugerida': i.qty_a_comprar,
+        'Motivos': i.motivos_sugestao.join(' | '),
+        'Alertas': i.alertas.join(' | '),
+        'PCs': i.pc_refs.map((r) => `PC${r.codigo}(${r.qtd})`).join(' · '),
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(compras), 'Comprar');
+    }
+
+    XLSX.writeFile(wb, `analise-estoque-${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`Excel exportado com vendas dos últimos ${win} dias`);
+  };
+
+
   const abcBadge = (cls: 'A' | 'B' | 'C') => {
     const variants: Record<string, string> = {
       A: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',

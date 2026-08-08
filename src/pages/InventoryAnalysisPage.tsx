@@ -17,7 +17,6 @@ import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, Command
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import * as XLSX from 'xlsx';
 
 // --- Types ---
 interface SourceRef {
@@ -386,8 +385,10 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
     const in60 = occMs >= cut60;
     if (existing) {
       existing.total_qty += qty;
-      if (sourceType === 'venda') existing.qty_venda += qty; else existing.qty_os += qty;
-      if (in60) existing.qty_60d += qty;
+      if (in60) {
+        existing.qty_60d += qty;
+        if (sourceType === 'venda') existing.qty_venda += qty; else existing.qty_os += qty;
+      }
       existing.total_value += val;
       existing.event_count += 1;
       if (in90) existing.event_count_90d += 1;
@@ -415,8 +416,8 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
       map.set(key, {
         produto_id: r.produto_id,
         total_qty: qty,
-        qty_venda: sourceType === 'venda' ? qty : 0,
-        qty_os: sourceType === 'venda' ? 0 : qty,
+        qty_venda: in60 && sourceType === 'venda' ? qty : 0,
+        qty_os: in60 && sourceType !== 'venda' ? qty : 0,
         qty_60d: in60 ? qty : 0,
         total_value: val,
         event_count: 1,
@@ -1310,7 +1311,7 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', `Vend. ${salesWindowDays}d (Total)`, 'Qtd Vendas', 'Qtd OS', 'PC em Aberto', 'Orçamentos (Qtd)', 'Orçamentos (Detalhe)', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
+    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', `Vendido nos últimos ${salesWindowDays} dias (Vendas + OS)`, `Vendas nos últimos ${salesWindowDays} dias`, `OS nos últimos ${salesWindowDays} dias`, 'PC em Aberto', 'Orçamentos (Qtd)', 'Orçamentos (Detalhe)', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
     const rows = filteredItems.map((i) => [
       i.produto_id,
       i.codigo_interno || '',
@@ -1359,7 +1360,7 @@ export default function InventoryAnalysisPage() {
   const handleExportShoppingList = () => {
     if (purchaseItems.length === 0) return;
 
-    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', `Vend. ${salesWindowDays}d (Total)`, 'Qtd Vendas', 'Qtd OS', 'Orçamentos (Detalhe)', 'Motivos', 'Alertas', 'PCs'];
+    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', `Vendido nos últimos ${salesWindowDays} dias (Vendas + OS)`, `Vendas nos últimos ${salesWindowDays} dias`, `OS nos últimos ${salesWindowDays} dias`, 'Orçamentos (Detalhe)', 'Motivos', 'Alertas', 'PCs'];
     const rows = purchaseItems.map((i) => [
       i.risk_score,
       i.abc_class,
@@ -1396,78 +1397,6 @@ export default function InventoryAnalysisPage() {
       buildCsvPtBr(headers, rows),
     );
   };
-
-  // Export XLSX (Excel real) — inclui vendas do período
-  const handleExportXLSX = () => {
-    const win = salesWindowDays;
-    const data = filteredItems.map((i) => ({
-      'Produto ID': i.produto_id,
-      'Código': i.codigo_interno || '',
-      'Nome': i.nome,
-      'Grupo': i.grupo || 'Sem grupo',
-      'ABC Financeiro': i.abc_class,
-      'Classe Giro': i.classe_giro,
-      'Status Estoque': i.status_estoque,
-      'XYZ': i.xyz_class,
-      'Padrão Demanda': i.demand_pattern,
-      'Custo Unit. (R$)': i.valor_custo ?? null,
-      [`Vendido ${win}d (Vendas+OS)`]: Number(i.qty_60d || 0),
-      [`Qtd Vendas ${win}d`]: Number(i.qty_venda || 0),
-      [`Qtd OS ${win}d`]: Number(i.qty_os || 0),
-      'Dias desde últ. consumo': i.days_since_last ?? null,
-      'Eventos': i.event_count,
-      'Eventos 90d': i.event_count_90d,
-      'Eventos 180d': i.event_count_180d,
-      'PC em Aberto': i.pc_qty,
-      'Orçamentos (Qtd)': Number(i.orc_qty || 0),
-      'Orçamentos (Detalhe)': i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
-      'Consumo Total': Number(i.total_qty || 0),
-      'Valor Total (R$)': Number(i.total_value || 0),
-      'Méd Mensal Hist.': Number(i.historical_monthly_avg || 0),
-      'Previsão Mensal': Number(i.forecast_monthly || 0),
-      'Estoque Atual': i.estoque_atual ?? null,
-      'Saldo Projetado': i.projected_available ?? null,
-      'Lead Time': i.lead_time_days,
-      'Estoque Segurança': i.safety_stock,
-      'Mín. Operacional': i.operational_minimum,
-      'Ponto Ressup.': i.reorder_point,
-      'Estoque Máx.': i.max_stock,
-      'A Comprar': i.qty_a_comprar,
-    }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Analise');
-
-    if (purchaseItems.length > 0) {
-      const compras = purchaseItems.map((i) => ({
-        'Risco': i.risk_score,
-        'Classe ABC': i.abc_class,
-        'Produto ID': i.produto_id,
-        'Código': i.codigo_interno || '',
-        'Nome': i.nome,
-        'Grupo': i.grupo || 'Sem grupo',
-        'Custo Unit. (R$)': i.valor_custo ?? null,
-        'Estoque Atual': i.estoque_atual ?? null,
-        [`Vendido ${win}d (Vendas+OS)`]: Number(i.qty_60d || 0),
-        [`Qtd Vendas ${win}d`]: Number(i.qty_venda || 0),
-        [`Qtd OS ${win}d`]: Number(i.qty_os || 0),
-        'PC em Aberto': i.pc_qty,
-        'Orçamento Ponderado': Number(i.orc_qty || 0),
-        'Orçamentos (Detalhe)': i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
-        'Saldo Projetado': i.projected_available ?? null,
-        'Lead Time': i.lead_time_days,
-        'Ponto Ressup.': i.reorder_point,
-        'Qtd Sugerida': i.qty_a_comprar,
-        'Motivos': i.motivos_sugestao.join(' | '),
-        'Alertas': i.alertas.join(' | '),
-        'PCs': i.pc_refs.map((r) => `PC${r.codigo}(${r.qtd})`).join(' · '),
-      }));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(compras), 'Comprar');
-    }
-
-    XLSX.writeFile(wb, `analise-estoque-${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(`Excel exportado com vendas dos últimos ${win} dias`);
-  };
-
 
   const abcBadge = (cls: 'A' | 'B' | 'C') => {
     const variants: Record<string, string> = {
@@ -1566,9 +1495,6 @@ export default function InventoryAnalysisPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-1">
             <Download className="h-3 w-3" /> CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportXLSX} className="gap-1">
-            <Download className="h-3 w-3" /> Excel
           </Button>
         </div>
       </div>
@@ -1715,9 +1641,6 @@ export default function InventoryAnalysisPage() {
                   <>
                     <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
                       <Download className="h-3 w-3" /> Exportar Lista
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleExportXLSX} className="gap-1">
-                      <Download className="h-3 w-3" /> Excel
                     </Button>
                   </>
                 )}

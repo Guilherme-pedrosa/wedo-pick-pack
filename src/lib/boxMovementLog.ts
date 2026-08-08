@@ -43,7 +43,7 @@ export async function logBoxMovement(params: LogMovementParams) {
       .from("profiles")
       .select("name")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
     if (prof) operatorName = prof.name;
 
     await supabase.from("box_movement_logs").insert({

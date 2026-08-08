@@ -22,7 +22,7 @@ async function getUserInfo(): Promise<{ id: string; name: string } | null> {
     .from("profiles")
     .select("name")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
   if (prof) name = prof.name;
 
   cachedUserInfo = { id: user.id, name };

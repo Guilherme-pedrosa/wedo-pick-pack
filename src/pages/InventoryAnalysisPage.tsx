@@ -387,9 +387,9 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
     const in60 = occMs >= cut60;
     if (existing) {
       existing.total_qty += qty;
+      if (sourceType === 'venda') existing.qty_venda += qty; else existing.qty_os += qty;
       if (in60) {
         existing.qty_60d += qty;
-        if (sourceType === 'venda') existing.qty_venda += qty; else existing.qty_os += qty;
       }
       existing.total_value += val;
       existing.event_count += 1;
@@ -418,8 +418,8 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
       map.set(key, {
         produto_id: r.produto_id,
         total_qty: qty,
-        qty_venda: in60 && sourceType === 'venda' ? qty : 0,
-        qty_os: in60 && sourceType !== 'venda' ? qty : 0,
+        qty_venda: sourceType === 'venda' ? qty : 0,
+        qty_os: sourceType !== 'venda' ? qty : 0,
         qty_60d: in60 ? qty : 0,
         total_value: val,
         event_count: 1,
@@ -1711,8 +1711,8 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. {salesWindowDays}d</TableHead>
-                      <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas</TableHead>
-                      <TableHead className="text-right px-2 py-1.5 text-xs">OS</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas (Total)</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs">OS (Total)</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-amber-600">Orçamento</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Saldo Proj.</TableHead>
@@ -1768,13 +1768,13 @@ export default function InventoryAnalysisPage() {
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
-                          {item.qty_venda > 0 ? (
-                            <span className="text-emerald-600 font-medium text-xs" title="Quantidade vendida (documentos de Venda)">{formatNumberBR(item.qty_venda, item.qty_venda % 1 === 0 ? 0 : 1)}un</span>
+                          {item.qty_venda > 0 || item.qty_os > 0 ? (
+                            <span className="text-emerald-600 font-medium text-xs" title="Total histórico (Vendas)">{formatNumberBR(item.total_qty - item.qty_os, (item.total_qty - item.qty_os) % 1 === 0 ? 0 : 1)}un</span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
                           {item.qty_os > 0 ? (
-                            <span className="text-muted-foreground text-xs" title="Quantidade baixada em OS">{formatNumberBR(item.qty_os, item.qty_os % 1 === 0 ? 0 : 1)}un</span>
+                            <span className="text-muted-foreground text-xs" title="Total histórico (OS)">{formatNumberBR(item.qty_os, item.qty_os % 1 === 0 ? 0 : 1)}un</span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">

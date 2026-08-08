@@ -40,7 +40,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const config = configs[0];
-    const lookbackDays = config.lookback_days || 180;
+    const lookbackDays = 9999; // Acumulado de todos os tempos
     const vendasSituacaoIds: string[] = config.vendas_stockout_situacao_ids || [];
     const osSituacaoIds: string[] = config.os_stockout_situacao_ids || [];
 

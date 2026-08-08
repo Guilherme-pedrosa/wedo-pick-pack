@@ -349,19 +349,15 @@ async function fetchAllRows(
 }
 
 async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number = 60): Promise<ConsumptionRow[]> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - lookbackDays);
-  const cutoffStr = cutoff.toISOString();
-
   const now = Date.now();
   const cut60 = now - salesWindowDays * 86400000;
   const cut90 = now - 90 * 86400000;
   const cut180 = now - 180 * 86400000;
 
+  // Para "todos os tempos", removemos o filtro de data lookback na busca inicial
   const rows = await fetchAllRows(
     'inventory_consumption_events',
-    'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
-    { gte: ['occurred_at', cutoffStr] },
+    'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome'
   );
 
   // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).

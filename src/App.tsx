@@ -112,6 +112,7 @@ function AuthenticatedApp() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/baixa-parcial" element={<PartialWriteoffPage />} />
         <Route path="/separations" element={<SeparationsPage />} />
+        <Route path="/agendamento" element={<SeparationsPage defaultTab="agenda" />} />
         
         <Route path="/devolucoes" element={<ReturnLogsPage />} />
         <Route path="/compras" element={<ComprasPage />} />

@@ -24,7 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AgendaOSPanel from '@/components/separations/AgendaOSPanel';
 import { useSearchParams } from 'react-router-dom';
 
-export default function SeparationsPage() {
+export default function SeparationsPage({ defaultTab }: { defaultTab?: 'agenda' | 'separations' }) {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ checked: 0, total: 0 });
@@ -36,7 +36,7 @@ export default function SeparationsPage() {
 
   // Agenda / Auvo States
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') === 'agenda' ? 'agenda' : 'separations';
+  const activeTab = searchParams.get('tab') === 'agenda' || defaultTab === 'agenda' ? 'agenda' : 'separations';
   const setActiveTab = (tab: string) => {
     setSearchParams(tab === 'agenda' ? { tab: 'agenda' } : {}, { replace: true });
   };

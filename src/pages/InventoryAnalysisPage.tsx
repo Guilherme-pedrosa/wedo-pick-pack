@@ -1311,68 +1311,77 @@ export default function InventoryAnalysisPage() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = ['Produto ID', 'Código', 'Nome', 'Grupo', 'ABC Financeiro', 'Classe Giro', 'Status Estoque', 'XYZ', 'Padrão Demanda', 'Custo Unit. (R$)', 'Eventos', 'Eventos 90d', 'Eventos 180d', 'Fontes 90d', 'Fontes 180d', 'Dias desde últ. consumo', `Vendido nos últimos ${salesWindowDays} dias (Vendas + OS)`, `Vendas nos últimos ${salesWindowDays} dias`, `OS nos últimos ${salesWindowDays} dias`, 'PC em Aberto', 'Orçamentos (Qtd)', 'Orçamentos (Detalhe)', 'Consumo Total', 'Valor Total (R$)', 'Méd Mensal Hist.', 'Previsão Mensal', 'Méd/Dia', 'Estoque Atual', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'A Comprar'];
-    const rows = filteredItems.map((i) => [
-      i.produto_id,
-      i.codigo_interno || '',
-      i.nome,
-      i.grupo || 'Sem grupo',
+    // Determine which items to export based on the current tab
+    let itemsToExport = filteredItems;
+    let fileName = `analise-estoque-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    if (activeTab === 'compras') {
+      itemsToExport = purchaseItems;
+      fileName = `lista-compras-${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (activeTab === 'orcsemgiro') {
+      itemsToExport = budgetNoGiroItems;
+      fileName = `orcamento-sem-giro-${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (activeTab === 'recorrenteok') {
+      itemsToExport = recurringOkItems;
+      fileName = `estoque-ok-${new Date().toISOString().split('T')[0]}.csv`;
+    }
+
+    const headers = [
+      'ABC Financeiro',
+      'XYZ',
+      'Crítico',
+      'Produto ID',
+      'Código',
+      'Nome',
+      'Fornecedor',
+      'Grupo',
+      'Classe Giro',
+      'Status Estoque',
+      'Padrão Demanda',
+      'Custo Unit. (R$)',
+      'Estoque Atual',
+      `Vend. ${salesWindowDays}d (Total)`,
+      'Qtd Vendas',
+      'Qtd OS',
+      'PC em Aberto',
+      'Orçamentos (Qtd)',
+      'Saldo Proj.',
+      'Lead Time',
+      'Est. Segurança',
+      'Mín. Operacional',
+      'ROP',
+      'Estoque Máx.',
+      'A Comprar',
+      'Qtd Líquida',
+      'Dias desde últ. consumo',
+      'Consumo Total',
+      'Valor Total (R$)',
+      'Méd Mensal Hist.',
+      'Previsão Mensal',
+      'Méd/Dia',
+      'Orçamentos (Detalhe)',
+      'Motivos Sugestão',
+      'Alertas',
+      'Pedidos Compra (Detalhe)'
+    ];
+
+    const rows = itemsToExport.map((i) => [
       i.abc_class,
-      i.classe_giro,
-      i.status_estoque,
       i.xyz_class,
-      i.demand_pattern,
-      i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
-      i.event_count,
-      i.event_count_90d,
-      i.event_count_180d,
-      i.source_count_90d,
-      i.source_count_180d,
-      i.days_since_last ?? '',
-      formatNumberBR(i.qty_60d, 2),
-      formatNumberBR(i.qty_venda, 2),
-      formatNumberBR(i.qty_os, 2),
-      i.pc_qty,
-      formatNumberBR(i.orc_qty, 2),
-      i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
-      formatNumberBR(i.total_qty, 0),
-      formatNumberBR(i.total_value, 2),
-      formatNumberBR(i.historical_monthly_avg, 2),
-      formatNumberBR(i.forecast_monthly, 2),
-      formatNumberBR(i.avg_daily, 2),
-      i.estoque_atual ?? '',
-      i.projected_available !== null ? formatNumberBR(i.projected_available, 1) : '',
-      formatNumberBR(i.lead_time_days, 0),
-      i.safety_stock,
-      i.operational_minimum,
-      i.reorder_point,
-      i.max_stock,
-      i.qty_a_comprar,
-    ]);
-
-    downloadCsv(
-      `analise-estoque-${new Date().toISOString().split('T')[0]}.csv`,
-      buildCsvPtBr(headers, rows),
-    );
-  };
-
-  // Export shopping list CSV
-  const handleExportShoppingList = () => {
-    if (purchaseItems.length === 0) return;
-
-    const headers = ['Risco', 'Classe ABC', 'XYZ', 'Padrão Demanda', 'Crítico', 'Produto ID', 'Código', 'Nome', 'Grupo', 'Custo Unit. (R$)', 'Estoque Atual', 'PC em Aberto', 'Orçamento Ponderado', 'Saldo Projetado', 'Lead Time', 'Estoque Segurança', 'Mín. Operacional', 'Ponto Ressup.', 'Estoque Máx.', 'Qtd Sugerida', 'Qtd Líquida', `Vendido nos últimos ${salesWindowDays} dias (Vendas + OS)`, `Vendas nos últimos ${salesWindowDays} dias`, `OS nos últimos ${salesWindowDays} dias`, 'Orçamentos (Detalhe)', 'Motivos', 'Alertas', 'PCs'];
-    const rows = purchaseItems.map((i) => [
-      i.risk_score,
-      i.abc_class,
-      i.xyz_class,
-      i.demand_pattern,
       i.is_critical ? 'Sim' : 'Não',
       i.produto_id,
       i.codigo_interno || '',
       i.nome,
+      i.fornecedor_nome || 'Sem fornecedor',
       i.grupo || 'Sem grupo',
+      i.classe_giro,
+      i.status_estoque,
+      i.demand_pattern,
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.estoque_atual ?? '',
+      formatNumberBR(i.qty_60d, 2),
+      formatNumberBR(i.qty_venda, 2),
+      formatNumberBR(i.qty_os, 2),
       i.pc_qty,
       formatNumberBR(i.orc_qty, 2),
       i.projected_available !== null ? formatNumberBR(i.projected_available, 1) : '',
@@ -1383,19 +1392,19 @@ export default function InventoryAnalysisPage() {
       i.max_stock,
       i.qty_a_comprar,
       i.qty_liquida,
-      formatNumberBR(i.qty_60d, 2),
-      formatNumberBR(i.qty_venda, 2),
-      formatNumberBR(i.qty_os, 2),
+      i.days_since_last ?? '',
+      formatNumberBR(i.total_qty, 0),
+      formatNumberBR(i.total_value, 2),
+      formatNumberBR(i.historical_monthly_avg, 2),
+      formatNumberBR(i.forecast_monthly, 2),
+      formatNumberBR(i.avg_daily, 2),
       i.orc_refs.map((r) => `ORC ${r.codigo}: ${formatNumberBR(r.qtd, 2)}un (${r.cliente})`).join(' | '),
       i.motivos_sugestao.join(' | '),
       i.alertas.join(' | '),
-      i.pc_refs.map((r) => `PC${r.codigo}(${r.qtd})`).join(' · '),
+      i.pc_refs.map((r) => `PC ${r.codigo}(${r.qtd}un) - ${r.situacao}`).join(' | ')
     ]);
 
-    downloadCsv(
-      `lista-compras-${new Date().toISOString().split('T')[0]}.csv`,
-      buildCsvPtBr(headers, rows),
-    );
+    downloadCsv(fileName, buildCsvPtBr(headers, rows));
   };
 
   const abcBadge = (cls: 'A' | 'B' | 'C') => {
@@ -1639,7 +1648,7 @@ export default function InventoryAnalysisPage() {
                 )}
                 {purchaseItems.length > 0 && (
                   <>
-                    <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
+                    <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-1">
                       <Download className="h-3 w-3" /> Exportar Lista
                     </Button>
                   </>

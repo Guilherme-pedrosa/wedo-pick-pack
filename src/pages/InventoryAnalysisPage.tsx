@@ -1648,7 +1648,7 @@ export default function InventoryAnalysisPage() {
                 )}
                 {purchaseItems.length > 0 && (
                   <>
-                    <Button variant="outline" size="sm" onClick={handleExportShoppingList} className="gap-1">
+                    <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-1">
                       <Download className="h-3 w-3" /> Exportar Lista
                     </Button>
                   </>

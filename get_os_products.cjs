@@ -16,7 +16,7 @@ async function test() {
   }
   
   if (data.data && data.data.produtos) {
-    console.log('OS 386612144 Products:');
+    console.log('OS 386612144 Raw Data:', JSON.stringify(data.data, null, 2));
     data.data.produtos.forEach(p => {
       console.log(`- [${p.codigo}] ${p.nome_produto} (ID: ${p.produto_id})`);
     });

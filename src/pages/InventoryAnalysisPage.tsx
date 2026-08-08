@@ -119,6 +119,8 @@ interface AnalysisItem {
   non_zero_months_90d: number;
   non_zero_months_180d: number;
   days_since_last: number | null;
+  last_date: string | null;
+  last_event_date: string | null;
 
   historical_monthly_avg: number;
   recent_monthly_avg: number;
@@ -486,7 +488,7 @@ async function fetchConfig() {
     .select('lookback_days, sales_window_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
     .order('created_at', { ascending: false })
     .limit(1);
-  return (data as any[])?.[0] || { lookback_days: 180, sales_window_days: 60, abc_thresholds: { A: 0.8, B: 0.95 }, purchase_crossref_situacao_ids: [] };
+  return (data as any[])?.[0] || { lookback_days: 270, sales_window_days: 60, abc_thresholds: { A: 0.8, B: 0.95 }, purchase_crossref_situacao_ids: [] };
 }
 
 async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
@@ -845,6 +847,8 @@ export default function InventoryAnalysisPage() {
         client_count: r.client_count,
         event_count_90d: r.event_count_90d,
         event_count_180d: r.event_count_180d,
+        last_date: r.last_date,
+        last_event_date: r.last_date,
         source_count_90d: r.source_count_90d,
         source_count_180d: r.source_count_180d,
         non_zero_months_90d: nonZeroMonths90,
@@ -1739,6 +1743,11 @@ export default function InventoryAnalysisPage() {
                             {item.codigo_interno && `${item.codigo_interno} · `}
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
+                          {item.last_date && (
+                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                              Última saída: {new Date(item.last_date).toLocaleDateString('pt-BR')}
+                            </p>
+                          )}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-[10px] text-muted-foreground capitalize">{item.demand_pattern.replace('_', ' ')}</TableCell>
                         <TableCell className="px-2 py-1 text-right text-xs">
@@ -1959,8 +1968,8 @@ export default function InventoryAnalysisPage() {
                       <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_90d}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_180d}</TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">
-                        {item.days_since_last !== null ? `${item.days_since_last}d` : '—'}
+                      <TableCell className="text-right text-[10px] text-muted-foreground whitespace-nowrap">
+                        {item.last_event_date ? new Date(item.last_event_date).toLocaleDateString('pt-BR') : '—'}
                       </TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>
                       <TableCell className="text-right">

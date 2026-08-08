@@ -31,7 +31,7 @@ interface PolicyConfig {
 }
 
 const DEFAULT_CONFIG: Omit<PolicyConfig, 'id'> = {
-  lookback_days: 180,
+  lookback_days: 270,
   sales_window_days: 60,
   abc_thresholds: { A: 0.80, B: 0.95 },
   vendas_stockout_situacao_ids: ['7063585'],

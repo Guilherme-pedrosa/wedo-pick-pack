@@ -73,14 +73,7 @@ interface LocalTechnician {
   name: string;
 }
 
-interface AgendaOsRow {
-  os: GCOrdemServico;
-  taskIds: string[];
-  task: AuvoAgendaTask | null;
-  separation: SeparationRecord | null;
-  bucket: AgendaBucket;
-  items: SeparationItemSnapshot[];
-}
+import { type AgendaOsRow } from '@/api/agendaControl';
 
 type AgendaFilter = 'all' | AgendaBucket | 'orphan';
 type SeparationFilter = 'all' | 'pending' | 'separated' | 'linked';

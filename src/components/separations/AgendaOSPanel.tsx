@@ -291,10 +291,22 @@ export default function AgendaOSPanel() {
     const tasks = taskIds.map((id) => allTasksById.get(id)).filter((task): task is AuvoAgendaTask => !!task);
     const task = tasks.find((candidate) => datePart(candidate.task_date) === agendaDate) || tasks[0] || null;
     const separation = separationByOrderId.get(os.id) || null;
-    const storedItems = Array.isArray(separation?.items) ? separation.items : [];
+    const storedItems = Array.isArray(separation?.items) ? (separation.items as SeparationItemSnapshot[]) : [];
+    
+    // Get purchase info from OS products if present
+    const snapshot = snapshotOrderProducts(os.produtos);
+    const itemsWithPurchase: SeparationItemSnapshot[] = snapshot.map(item => {
+      const osProd = os.produtos.find(p => String(p.produto.produto_id) === item.product_id);
+      const arrival = (osProd?.produto as any)?.previsao_chegada;
+      return {
+        ...item,
+        ordens_compra: arrival ? [{ id: 'OS', codigo: 'OS', qtd: 0, nome_fornecedor: '', situacao: '', previsao_chegada: arrival }] : []
+      };
+    });
+
     const items = storedItems.length > 0
       ? storedItems
-      : (detailItemsByOsId[os.id] || snapshotOrderProducts(os.produtos).map(item => ({ ...item, ordens_compra: [] })));
+      : (detailItemsByOsId[os.id] || itemsWithPurchase);
     return {
       os,
       taskIds,

@@ -1187,9 +1187,13 @@ function AgendaRowContent({
 
             <div className="grid gap-x-5 gap-y-1 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
               <span><strong className="text-foreground">Téc. OS:</strong> {row.os.nome_tecnico || '—'}</span>
-              <span><strong className="text-foreground">Téc. execução:</strong> {row.task?.technician_name || 'Sem técnico'}</span>
+              {(row.task?.technician_name || row.task?.task_date) && (
+                <span><strong className="text-foreground">Téc. execução:</strong> {row.task?.technician_name || 'Sem técnico'}</span>
+              )}
               <span><strong className="text-foreground">Tarefa:</strong> {row.taskIds.length ? row.taskIds.join(' / ') : '73344 ausente'}</span>
-              <span><strong className="text-foreground">Execução:</strong> {row.task ? `${formatDate(row.task.task_date)} ${formatTime(row.task.task_date)}` : 'Sem agenda'}</span>
+              {(row.task?.technician_name || row.task?.task_date) && (
+                <span><strong className="text-foreground">Execução:</strong> {row.task?.task_date ? `${formatDate(row.task.task_date)} ${formatTime(row.task.task_date)}` : 'Sem agenda'}</span>
+              )}
               <span><strong className="text-foreground">Data OS:</strong> {formatDate(row.os.data_entrada || row.os.data)}</span>
               <span><strong className="text-foreground">Status Auvo:</strong> {row.task ? taskStatus(row.task) : '—'}</span>
               <span><strong className="text-foreground">Valor:</strong> {formatMoney(row.os.valor_total)}</span>

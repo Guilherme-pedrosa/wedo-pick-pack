@@ -1,4 +1,15 @@
 import type { GCOrdemServico } from '@/api/types';
+import type { AuvoAgendaTask } from '@/api/auvoAgenda';
+import type { SeparationRecord, SeparationItemSnapshot } from '@/api/separations';
+
+export interface AgendaOsRow {
+  os: GCOrdemServico;
+  taskIds: string[];
+  task: AuvoAgendaTask | null;
+  separation: SeparationRecord | null;
+  bucket: AgendaBucket;
+  items: SeparationItemSnapshot[];
+}
 
 export const GC_EXECUTION_TASK_ATTRIBUTE_ID = '73344';
 export const GC_REPAIR_LOCATION_ATTRIBUTE_ID = '68658';

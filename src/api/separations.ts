@@ -10,6 +10,15 @@ export interface SeparationItemSnapshot {
   unit: string;
   expected_quantity: number;
   confirmed_quantity: number;
+  ordens_compra?: Array<{
+    id: string;
+    codigo: string;
+    qtd: number;
+    nome_fornecedor: string;
+    situacao: string;
+    previsao_chegada?: string;
+    data_emissao?: string;
+  }>;
 }
 
 export interface SeparationRecord {

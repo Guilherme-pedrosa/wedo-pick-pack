@@ -1,0 +1,1 @@
+UPDATE public.inventory_policy_config SET lookback_days = 270 WHERE id = (SELECT id FROM public.inventory_policy_config ORDER BY created_at DESC LIMIT 1) RETURNING id, lookback_days;

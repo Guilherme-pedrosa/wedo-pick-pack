@@ -294,7 +294,7 @@ export default function AgendaOSPanel() {
     const storedItems = Array.isArray(separation?.items) ? separation.items : [];
     const items = storedItems.length > 0
       ? storedItems
-      : (detailItemsByOsId[os.id] || snapshotOrderProducts(os.produtos));
+      : (detailItemsByOsId[os.id] || snapshotOrderProducts(os.produtos).map(item => ({ ...item, ordens_compra: [] })));
     return {
       os,
       taskIds,

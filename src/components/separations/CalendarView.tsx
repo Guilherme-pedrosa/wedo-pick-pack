@@ -39,10 +39,15 @@ export default function CalendarView({
         const arrivalDates = row.items
           .flatMap(item => item.ordens_compra || [])
           .map(order => order.previsao_chegada)
-          .filter((d): d is string => !!d && d !== '—');
+          .filter((d): d is string => !!d && d !== '—' && d.trim() !== '');
         
         if (arrivalDates.length > 0) {
-          arrivalDate = arrivalDates.sort().reverse()[0]; // Pega a mais futura
+          // Sort handling both ISO and dd/mm/yyyy if present
+          arrivalDate = arrivalDates.sort((a, b) => {
+            const da = a.includes('/') ? a.split('/').reverse().join('-') : a;
+            const db = b.includes('/') ? b.split('/').reverse().join('-') : b;
+            return db.localeCompare(da);
+          })[0];
         }
       }
 

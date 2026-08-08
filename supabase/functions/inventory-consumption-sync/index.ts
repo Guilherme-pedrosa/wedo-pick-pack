@@ -248,10 +248,28 @@ async function processDocument(
   if (items.length === 0) return;
 
   const now = new Date().toISOString();
-  // OS uses data_saida or data_entrada; Vendas uses data
-  const occurredAt = docType === 'os'
-    ? (doc.data_saida || doc.data_entrada || doc.data || now)
-    : (doc.data || now);
+  // We want the date when the stock ACTUALLY moved.
+  // Priority: 
+  // 1. [WeDo Checkout] date from observations (most accurate)
+  // 2. data_saida (official GC exit date)
+  // 3. modificado_em (if in stockout situation, usually reflects the status change)
+  // 4. data (creation date)
+  
+  let occurredAt = now;
+  if (docType === 'os') {
+    const obs = doc.observacoes || '';
+    const checkoutMatch = obs.match(/\[WeDo Checkout\] Separação .* em (\d{2}\/\d{2}\/\d{4})/);
+    if (checkoutMatch) {
+      const [_, dateStr] = checkoutMatch;
+      const [d, m, y] = dateStr.split('/');
+      occurredAt = new Date(`${y}-${m}-${d}T12:00:00Z`).toISOString();
+    } else {
+      occurredAt = doc.data_saida || doc.modificado_em || doc.data_entrada || doc.data || now;
+    }
+  } else {
+    occurredAt = doc.data || doc.modificado_em || now;
+  }
+
   const clienteNome = doc.nome_cliente || doc.cliente?.nome || null;
 
   const events = items.map(item => ({

@@ -1966,8 +1966,8 @@ export default function InventoryAnalysisPage() {
                       <TableCell className="text-right text-xs font-medium">{item.event_count}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_90d}</TableCell>
                       <TableCell className="text-right text-xs text-muted-foreground">{item.source_count_180d}</TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">
-                        {item.days_since_last !== null ? `${item.days_since_last}d` : '—'}
+                      <TableCell className="text-right text-[10px] text-muted-foreground whitespace-nowrap">
+                        {item.last_date ? new Date(item.last_date).toLocaleDateString('pt-BR') : '—'}
                       </TableCell>
                       <TableCell className="text-right text-xs">{item.total_value.toFixed(2)}</TableCell>
                       <TableCell className="text-right">

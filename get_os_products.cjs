@@ -16,9 +16,10 @@ async function test() {
   }
   
   if (data.data && data.data.produtos) {
-    console.log('OS 386612144 Raw Data:', JSON.stringify(data.data, null, 2));
-    data.data.produtos.forEach(p => {
-      console.log(`- [${p.codigo}] ${p.nome_produto} (ID: ${p.produto_id})`);
+    console.log('OS 386612144 Products Detail:');
+    data.data.produtos.forEach((item, index) => {
+      const p = item.produto || item;
+      console.log(`${index}: [${p.codigo}] ${p.nome_produto} (ID: ${p.produto_id})`);
     });
   } else {
     console.log('No products found in OS response.');

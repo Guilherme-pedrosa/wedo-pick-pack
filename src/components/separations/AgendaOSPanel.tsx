@@ -1,10 +1,7 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import FullCalendar from '@fullcalendar/react';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import interactionPlugin from '@fullcalendar/interaction';
+import CalendarView from './CalendarView';
 import {
   Calendar,
   CheckCircle2,
@@ -885,53 +882,25 @@ export default function AgendaOSPanel() {
       ) : (
         <div className="space-y-3">
           {viewMode === 'calendar' ? (
-            <Card className="p-4">
-              <FullCalendar
-                plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-                initialView="dayGridMonth"
-                headerToolbar={{
-                  left: 'prev,next today',
-                  center: 'title',
-                  right: 'dayGridMonth,timeGridWeek,timeGridDay',
-                }}
-                locale="pt-br"
-                height="auto"
-                events={filteredRows.filter(r => r.task?.task_date).map(row => ({
-                  id: row.os.id,
-                  title: `OS #${row.os.codigo} - ${row.os.nome_cliente.split(' ')[0]}`,
-                  start: row.task?.task_date || '',
-                  backgroundColor: row.bucket === 'scheduled-date' ? '#3B82F6' : '#94A3B8',
-                  borderColor: row.bucket === 'scheduled-date' ? '#2563EB' : '#64748B',
-                  extendedProps: { row }
-                }))}
-                eventClick={(info) => {
-                  setSelectedCalendarEvent(info.event.extendedProps.row);
-                }}
-              />
-              
-              {selectedCalendarEvent && (
-                <Dialog open={!!selectedCalendarEvent} onOpenChange={(open) => !open && setSelectedCalendarEvent(null)}>
-                  <DialogContent className="max-w-4xl">
-                    <DialogHeader>
-                      <DialogTitle>Detalhes da OS #{selectedCalendarEvent.os.codigo}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <AgendaRowContent 
-                        row={selectedCalendarEvent}
-                        expanded={true}
-                        onToggleItems={() => toggleItems(selectedCalendarEvent)}
-                        onSchedule={() => openSchedule(selectedCalendarEvent)}
-                        onLink={() => openAssignment(selectedCalendarEvent)}
-                        isLoadingItems={loadingItemsId === selectedCalendarEvent.os.id}
-                        detailItems={detailItemsByOsId[selectedCalendarEvent.os.id]}
-                        isResolvingExecutionTasks={isResolvingExecutionTasks}
-                        referencedTaskIds={referencedTaskIds}
-                      />
-                    </div>
-                  </DialogContent>
-                </Dialog>
+            <CalendarView 
+              rows={filteredRows}
+              selectedEvent={selectedCalendarEvent}
+              onSelectEvent={setSelectedCalendarEvent}
+              onCloseDetail={() => setSelectedCalendarEvent(null)}
+              renderDetail={(row) => (
+                <AgendaRowContent 
+                  row={row}
+                  expanded={true}
+                  onToggleItems={() => toggleItems(row)}
+                  onSchedule={() => openSchedule(row)}
+                  onLink={() => openAssignment(row)}
+                  isLoadingItems={loadingItemsId === row.os.id}
+                  detailItems={detailItemsByOsId[row.os.id]}
+                  isResolvingExecutionTasks={isResolvingExecutionTasks}
+                  referencedTaskIds={referencedTaskIds}
+                />
               )}
-            </Card>
+            />
           ) : (
             <>
               {filteredRows.map((row) => (

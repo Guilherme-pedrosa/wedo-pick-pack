@@ -1567,6 +1567,9 @@ export default function InventoryAnalysisPage() {
           <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-1">
             <Download className="h-3 w-3" /> CSV
           </Button>
+          <Button variant="outline" size="sm" onClick={handleExportXLSX} className="gap-1">
+            <Download className="h-3 w-3" /> Excel
+          </Button>
         </div>
       </div>
 

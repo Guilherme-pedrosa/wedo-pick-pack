@@ -119,6 +119,7 @@ interface AnalysisItem {
   non_zero_months_90d: number;
   non_zero_months_180d: number;
   days_since_last: number | null;
+  last_date: string | null;
 
   historical_monthly_avg: number;
   recent_monthly_avg: number;

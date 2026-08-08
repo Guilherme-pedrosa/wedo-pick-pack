@@ -364,6 +364,11 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
     { gte: ['occurred_at', cutoffStr] },
   );
 
+  const now = Date.now();
+  const cut60 = now - salesWindowDays * 86400000;
+  const cut90 = now - 90 * 86400000;
+  const cut180 = now - 180 * 86400000;
+
   // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
   type Internal = ConsumptionRow & {
     _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef>;

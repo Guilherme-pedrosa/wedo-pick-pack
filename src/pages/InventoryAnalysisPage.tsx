@@ -1741,6 +1741,11 @@ export default function InventoryAnalysisPage() {
                             {item.codigo_interno && `${item.codigo_interno} · `}
                             {item.fornecedor_nome || 'Sem fornecedor'}
                           </p>
+                          {item.last_date && (
+                            <p className="text-[9px] text-muted-foreground mt-0.5">
+                              Última saída: {new Date(item.last_date).toLocaleDateString('pt-BR')}
+                            </p>
+                          )}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-[10px] text-muted-foreground capitalize">{item.demand_pattern.replace('_', ' ')}</TableCell>
                         <TableCell className="px-2 py-1 text-right text-xs">

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
@@ -498,6 +499,7 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 }
 
 export default function InventoryAnalysisPage() {
+  const navigate = useNavigate();
   const [initialFilters] = useState(readPersistedAnalysisFilters);
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
   const [movMap, setMovMap] = useState<Map<string, boolean>>(new Map());
@@ -1731,10 +1733,15 @@ export default function InventoryAnalysisPage() {
                         <TableCell className="px-2 py-1">{abcBadge(item.abc_class)}</TableCell>
                         <TableCell className="px-2 py-1 text-xs font-medium text-muted-foreground">{item.xyz_class}</TableCell>
                         <TableCell className="px-2 py-1">
-                          <p className="text-sm font-medium truncate max-w-[260px] flex items-center gap-1">
-                            {item.is_critical && <span title="Peça crítica">🔧</span>}
-                            {item.nome}
-                          </p>
+                          <button 
+                            onClick={() => navigate(`/produtos/${item.produto_id}`)}
+                            className="text-left hover:underline group"
+                          >
+                            <p className="text-sm font-medium truncate max-w-[260px] flex items-center gap-1 group-hover:text-primary transition-colors">
+                              {item.is_critical && <span title="Peça crítica">🔧</span>}
+                              {item.nome}
+                            </p>
+                          </button>
                           <p className="text-[10px] text-muted-foreground">
                             {item.codigo_interno && `${item.codigo_interno} · `}
                             {item.fornecedor_nome || 'Sem fornecedor'}

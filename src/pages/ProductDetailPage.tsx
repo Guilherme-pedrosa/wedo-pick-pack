@@ -7,7 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowLeft, ShoppingCart, Calendar, User, ClipboardList } from 'lucide-react';
+import { Loader2, ArrowLeft, ShoppingCart, ClipboardList } from 'lucide-react';
+
+const formatNumber = (val: any) => {
+  const num = parseFloat(String(val));
+  return isNaN(num) ? '0' : num.toString();
+};
 
 export default function ProductDetailPage() {
   const { productId } = useParams<{ productId: string }>();
@@ -157,7 +162,7 @@ export default function ProductDetailPage() {
                       {new Date(sale.occurred_at).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell className="text-xs">{sale.cliente_nome || 'Consumidor Final'}</TableCell>
-                    <TableCell className="text-right font-semibold">{sale.qty} un</TableCell>
+                    <TableCell className="text-right font-semibold">{formatNumber(sale.qty)} un</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
                       {sale.valor_custo ? `R$ ${parseFloat(sale.valor_custo).toFixed(2)}` : '—'}
                     </TableCell>

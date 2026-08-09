@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
@@ -498,6 +499,7 @@ async function fetchSupplierLeadTimes(): Promise<SupplierLeadTime[]> {
 }
 
 export default function InventoryAnalysisPage() {
+  const navigate = useNavigate();
   const [initialFilters] = useState(readPersistedAnalysisFilters);
   const [stockMap, setStockMap] = useState<Map<string, number>>(new Map());
   const [movMap, setMovMap] = useState<Map<string, boolean>>(new Map());

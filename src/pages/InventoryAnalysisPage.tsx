@@ -1771,8 +1771,8 @@ export default function InventoryAnalysisPage() {
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
-                          {item.qty_venda > 0 || item.qty_os > 0 ? (
-                            <span className="text-emerald-600 font-medium text-xs" title="Total histórico (Vendas)">{formatNumberBR(item.total_qty - item.qty_os, (item.total_qty - item.qty_os) % 1 === 0 ? 0 : 1)}un</span>
+                          {item.total_qty > 0 ? (
+                            <span className="text-emerald-600 font-medium text-xs" title={`Histórico total (Vendas + OS, todos os tempos) — Vendas: ${formatNumberBR(item.qty_venda, 2)} | OS: ${formatNumberBR(item.qty_os, 2)}`}>{formatNumberBR(item.total_qty, item.total_qty % 1 === 0 ? 0 : 1)}un</span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">

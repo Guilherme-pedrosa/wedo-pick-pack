@@ -1382,7 +1382,7 @@ export default function InventoryAnalysisPage() {
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.estoque_atual ?? '',
       formatNumberBR(i.qty_60d, 2),
-      formatNumberBR(i.qty_venda, 2),
+      formatNumberBR(i.total_qty, 2),
       formatNumberBR(i.qty_os, 2),
       i.pc_qty,
       formatNumberBR(i.orc_qty, 2),

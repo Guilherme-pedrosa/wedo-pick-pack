@@ -164,7 +164,7 @@ export default function ProductDetailPage() {
                     <TableCell className="text-xs">{sale.cliente_nome || 'Consumidor Final'}</TableCell>
                     <TableCell className="text-right font-semibold">{formatNumber(sale.qty)} un</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
-                      {sale.valor_custo ? `R$ ${parseFloat(sale.valor_custo).toFixed(2)}` : '—'}
+                      {sale.valor_custo ? `R$ ${parseFloat(String(sale.valor_custo)).toFixed(2)}` : '—'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -196,7 +196,7 @@ export default function ProductDetailPage() {
                       {new Date(os.occurred_at).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell className="text-xs">{os.cliente_nome || '—'}</TableCell>
-                    <TableCell className="text-right font-semibold text-blue-600">{os.qty} un</TableCell>
+                    <TableCell className="text-right font-semibold text-blue-600">{formatNumber(os.qty)} un</TableCell>
                     <TableCell className="text-xs font-mono">{os.source_id}</TableCell>
                   </TableRow>
                 ))}

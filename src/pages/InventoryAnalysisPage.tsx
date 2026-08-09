@@ -1709,7 +1709,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. {salesWindowDays}d</TableHead>
-                      <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas (Total)</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600" title="Histórico total de saídas (Vendas + OS), sem limite de período">Vendas (Total)</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">OS (Total)</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-amber-600">Orçamento</TableHead>

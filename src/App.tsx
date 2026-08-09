@@ -33,6 +33,7 @@ import ProductExplorerConfigPage from "./pages/ProductExplorerConfigPage";
 import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import SeparationsPage from "./pages/SeparationsPage";
+import ProductDetailPage from "./pages/ProductDetailPage";
 
 import ReturnLogsPage from "./pages/ReturnLogsPage";
 import LoginPage from "./pages/LoginPage";
@@ -131,6 +132,7 @@ function AuthenticatedApp() {
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
         <Route path="/produtos/explorar" element={<ProductExplorerPage />} />
         <Route path="/produtos/explorar/config" element={<ProductExplorerConfigPage />} />
+        <Route path="/produtos/:productId" element={<ProductDetailPage />} />
         <Route path="/estoque-ia" element={<EstoqueIAPage />} />
         <Route path="/estoque-ia/:threadId" element={<EstoqueIAPage />} />
         <Route path="/config" element={<ConfigPage />} />

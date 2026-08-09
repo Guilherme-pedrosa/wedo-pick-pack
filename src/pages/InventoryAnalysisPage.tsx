@@ -1382,7 +1382,7 @@ export default function InventoryAnalysisPage() {
       i.valor_custo !== null ? formatNumberBR(i.valor_custo, 2) : '',
       i.estoque_atual ?? '',
       formatNumberBR(i.qty_60d, 2),
-      formatNumberBR(i.qty_venda, 2),
+      formatNumberBR(i.total_qty, 2),
       formatNumberBR(i.qty_os, 2),
       i.pc_qty,
       formatNumberBR(i.orc_qty, 2),
@@ -1709,7 +1709,7 @@ export default function InventoryAnalysisPage() {
                       <TableHead className="text-right px-2 py-1.5 text-xs">Custo Unit.</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">Estoque</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-violet-600">Vend. {salesWindowDays}d</TableHead>
-                      <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600">Vendas (Total)</TableHead>
+                      <TableHead className="text-right px-2 py-1.5 text-xs text-emerald-600" title="Histórico total de saídas (Vendas + OS), sem limite de período">Vendas (Total)</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs">OS (Total)</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-blue-600">PC Aberto</TableHead>
                       <TableHead className="text-right px-2 py-1.5 text-xs text-amber-600">Orçamento</TableHead>
@@ -1771,8 +1771,8 @@ export default function InventoryAnalysisPage() {
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">
-                          {item.qty_venda > 0 || item.qty_os > 0 ? (
-                            <span className="text-emerald-600 font-medium text-xs" title="Total histórico (Vendas)">{formatNumberBR(item.total_qty - item.qty_os, (item.total_qty - item.qty_os) % 1 === 0 ? 0 : 1)}un</span>
+                          {item.total_qty > 0 ? (
+                            <span className="text-emerald-600 font-medium text-xs" title={`Histórico total (Vendas + OS, todos os tempos) — Vendas: ${formatNumberBR(item.qty_venda, 2)} | OS: ${formatNumberBR(item.qty_os, 2)}`}>{formatNumberBR(item.total_qty, item.total_qty % 1 === 0 ? 0 : 1)}un</span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </TableCell>
                         <TableCell className="px-2 py-1 text-right">

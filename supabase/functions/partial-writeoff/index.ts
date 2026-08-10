@@ -364,7 +364,7 @@ async function createPartialAuvoTask(
     equipText ? `Equipamento: ${equipText}` : '',
     `Documento auxiliar: ${operation.document_type === 'os' ? 'OS' : 'Venda'} #${batch.auxiliary_document_code || batch.auxiliary_document_id}`,
     '',
-    '📦 PEÇAS DESTA ENTREGA:',
+    'PEÇAS DESTA ENTREGA:',
     ...selected.map(({ item, quantity }) => {
       const line: any = item.line_snapshot || {};
       const unit = numberValue(line.valor_venda ?? line.valor_unitario ?? line.valor);

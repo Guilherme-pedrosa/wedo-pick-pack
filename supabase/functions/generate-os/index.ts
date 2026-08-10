@@ -697,19 +697,18 @@ Deno.serve(async (req: Request) => {
     // STEP 2: Build orientation (product/service list)
     // ============================================
     const brl = (value: unknown): string => {
-      const n = Number(String(value ?? '').replace(/\./g, '').replace(',', '.'));
-      if (!Number.isFinite(n) || n <= 0) return '';
+      const n = parseMoney(value);
+      if (n <= 0) return '';
       return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
     const priceSuffix = (line: any, qty: unknown): string => {
-      const unit = brl(line?.valor_venda ?? line?.valor_unitario ?? line?.valor);
-      const total = brl(line?.valor_total) || (() => {
-        const u = Number(String(line?.valor_venda ?? line?.valor_unitario ?? line?.valor ?? '').replace(/\./g, '').replace(',', '.'));
-        const q = Number(String(qty ?? 1).replace(',', '.'));
-        return Number.isFinite(u) && Number.isFinite(q) ? brl(u * q) : '';
-      })();
+      const unitVal = parseMoney(line?.valor_venda ?? line?.valor_unitario ?? line?.valor);
+      const unit = brl(unitVal);
+      const q = parseMoney(qty || 1);
+      const totalVal = parseMoney(line?.valor_total) || (unitVal * q);
+      const total = brl(totalVal);
       if (!unit && !total) return '';
-      if (unit && total && unit !== total) return ` — Valor: ${unit} un. (Total: ${total})`;
+      if (unit && total && Math.abs(unitVal - totalVal) > 0.01) return ` — Valor: ${unit} un. (Total: ${total})`;
       return ` — Valor: ${unit || total}`;
     };
 

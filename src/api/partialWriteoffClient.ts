@@ -7,6 +7,7 @@ import type {
 type DocumentType = 'os' | 'venda';
 type BudgetKind = PartialBudgetSearchResult['budget_kind'];
 const EXISTING_SALE_FINAL_STATUS_ID = '8955109';
+const PARTIAL_WRITEOFF_BUDGET_STATUS_ID = '9348312';
 type AuthContext = {
   id: string;
   email: string;
@@ -426,6 +427,68 @@ async function updateDocumentStatus(type: DocumentType, id: string, statusId: st
   return confirmed;
 }
 
+export function budgetStatusUpdatePayload(budget: Record<string, unknown>, statusId: string): Record<string, unknown> {
+  const keys = [
+    'cliente_id', 'data', 'valor_total', 'valor_frete', 'condicao_pagamento',
+    'produtos', 'servicos', 'equipamentos', 'atributos', 'pagamentos',
+    'vendedor_id', 'tecnico_id', 'centro_custo_id', 'usuario_id',
+    'observacoes', 'observacoes_interna', 'desconto_valor', 'desconto_tipo',
+    'tipo_desconto', 'desconto_porcentagem',
+  ];
+  const payload: Record<string, unknown> = { situacao_id: statusId };
+  for (const key of keys) {
+    if (budget?.[key] !== undefined && budget?.[key] !== null) payload[key] = budget[key];
+  }
+  if (!payload.data) payload.data = new Date().toISOString().slice(0, 10);
+  if (!Array.isArray(payload.produtos)) payload.produtos = [];
+  if (!Array.isArray(payload.servicos)) payload.servicos = [];
+  return payload;
+}
+
+/** Atualiza somente fontes de orcamento; baixas iniciadas por venda ficam intactas. */
+async function syncOriginalBudgetPartialStatus(
+  operation: PartialWriteoffOperation,
+  batchId: string,
+  _auth: AuthContext,
+): Promise<boolean> {
+  if (operationSourceKind(operation) === 'venda') return true;
+  const budgetId = operationSourceId(operation);
+  if (!budgetId) return false;
+
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const kind = operationSourceKind(operation) || 'servico';
+      const latest = await fetchSource(budgetId, kind);
+      if (normalizeId(latest.situacao_id) === PARTIAL_WRITEOFF_BUDGET_STATUS_ID) return true;
+
+      await gcRequest(
+        `/api/orcamentos/${encodeURIComponent(budgetId)}`,
+        'PUT',
+        budgetStatusUpdatePayload(latest, PARTIAL_WRITEOFF_BUDGET_STATUS_ID),
+      );
+      const confirmed = await fetchSource(budgetId, kind);
+      if (normalizeId(confirmed.situacao_id) !== PARTIAL_WRITEOFF_BUDGET_STATUS_ID) {
+        throw new Error('BUDGET_STATUS_NOT_APPLIED');
+      }
+      console.info('[partial-writeoff] situacao do orcamento atualizada apos documento auxiliar:', {
+        batch_id: batchId,
+        budget_id: budgetId,
+        budget_code: operation.budget_code,
+        situacao_id: PARTIAL_WRITEOFF_BUDGET_STATUS_ID,
+      });
+      return true;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+    }
+  }
+
+  const message = compact(lastError) || 'Falha desconhecida ao atualizar a situacao do orcamento';
+  console.error('[partial-writeoff] documento auxiliar criado, mas situacao do orcamento nao atualizada:', message);
+  return false;
+}
+
 function quantityMap(lines: any[]): Map<string, number> {
   const map = new Map<string, number>();
   for (const line of lines || []) {
@@ -524,7 +587,10 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
     .eq('id', batchId)
     .single();
   if (batchError) throw batchError;
-  if (batch.status === 'awaiting_checkout') return getOperationGraph(operationId);
+  if (batch.status === 'awaiting_checkout') {
+    await syncOriginalBudgetPartialStatus(operation, batchId, auth);
+    return getOperationGraph(operationId);
+  }
   if (existingReservation && batch.status === 'creating') {
     let recovered: any | null = null;
     try {
@@ -540,6 +606,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
       p_gc_response: recovered,
     });
     if (attachRecoveredError) throw attachRecoveredError;
+    await syncOriginalBudgetPartialStatus(operation, batchId, auth);
     return getOperationGraph(operationId);
   }
   if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
@@ -610,6 +677,8 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
     throw attachError;
   }
 
+  await syncOriginalBudgetPartialStatus(operation, batchId, auth);
+
   // Tarefa Auvo da entrega parcial: roda no servidor (credenciais Auvo são secretas).
   // Falha aqui NÃO invalida o lote — fica registrado o aviso para nova tentativa.
   try {
@@ -641,6 +710,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   if (batch.status === 'confirmed') return getOperationGraph(batch.operation_id);
   if (batch.status !== 'awaiting_checkout') throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
   const operation = await getOperationGraph(batch.operation_id);
+  await syncOriginalBudgetPartialStatus(operation, batchId, auth);
   if (operationSourceKind(operation) === 'venda') {
     const sale = await fetchSource(operationSourceId(operation), 'venda');
     if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');

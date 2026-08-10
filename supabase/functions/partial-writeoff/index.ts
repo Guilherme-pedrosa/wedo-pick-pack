@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const GC_API_URL = 'https://api.gestaoclick.com';
+const PARTIAL_WRITEOFF_BUDGET_STATUS_ID = Deno.env.get('PARTIAL_WRITEOFF_BUDGET_STATUS_ID') || '9348312';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -591,6 +592,93 @@ async function updateDocumentStatus(type: DocumentType, id: string, statusId: st
   return confirmed;
 }
 
+function budgetStatusUpdatePayload(budget: any, statusId: string): Record<string, any> {
+  const keys = [
+    'cliente_id', 'data', 'valor_total', 'valor_frete', 'condicao_pagamento',
+    'produtos', 'servicos', 'equipamentos', 'atributos', 'pagamentos',
+    'vendedor_id', 'tecnico_id', 'centro_custo_id', 'usuario_id',
+    'observacoes', 'observacoes_interna', 'desconto_valor', 'desconto_tipo',
+    'tipo_desconto', 'desconto_porcentagem',
+  ];
+  const payload: Record<string, any> = { situacao_id: statusId };
+  for (const key of keys) {
+    if (budget?.[key] !== undefined && budget?.[key] !== null) payload[key] = budget[key];
+  }
+  if (!payload.data) payload.data = new Date().toISOString().slice(0, 10);
+  if (!Array.isArray(payload.produtos)) payload.produtos = [];
+  if (!Array.isArray(payload.servicos)) payload.servicos = [];
+  return payload;
+}
+
+async function recordBudgetStatusEvent(
+  operation: any,
+  batchId: string,
+  auth: AuthContext,
+  eventType: 'budget_partial_status_updated' | 'budget_partial_status_update_failed',
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await service.from('partial_writeoff_events').insert({
+    operation_id: operation.id,
+    batch_id: batchId,
+    event_type: eventType,
+    payload,
+    actor_id: auth.id,
+    actor_name: auth.name,
+  });
+  if (error) console.warn('[partial-writeoff] falha ao registrar evento de situacao do orcamento:', compact(error));
+}
+
+/**
+ * Depois de o documento auxiliar existir e estar vinculado ao lote, move o
+ * orcamento original para BAIXA PARCIAL REALIZADA. O PUT reenvia as linhas e
+ * os campos financeiros para o GestaoClick nao zerar o documento.
+ */
+async function syncOriginalBudgetPartialStatus(
+  operation: any,
+  batchId: string,
+  auth: AuthContext,
+): Promise<boolean> {
+  const budgetId = normalizeId(operation?.budget_id);
+  if (!budgetId) return false;
+
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const latest = await fetchBudget(budgetId);
+      if (normalizeId(latest.situacao_id) === PARTIAL_WRITEOFF_BUDGET_STATUS_ID) return true;
+
+      await gcRequest(
+        `/api/orcamentos/${encodeURIComponent(budgetId)}`,
+        'PUT',
+        budgetStatusUpdatePayload(latest, PARTIAL_WRITEOFF_BUDGET_STATUS_ID),
+      );
+      const confirmed = await fetchBudget(budgetId);
+      if (normalizeId(confirmed.situacao_id) !== PARTIAL_WRITEOFF_BUDGET_STATUS_ID) {
+        throw new Error('BUDGET_STATUS_NOT_APPLIED');
+      }
+      await recordBudgetStatusEvent(operation, batchId, auth, 'budget_partial_status_updated', {
+        budget_id: budgetId,
+        budget_code: operation.budget_code,
+        situacao_id: PARTIAL_WRITEOFF_BUDGET_STATUS_ID,
+      });
+      return true;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+    }
+  }
+
+  const message = compact(lastError) || 'Falha desconhecida ao atualizar a situacao do orcamento';
+  console.error('[partial-writeoff] documento auxiliar criado, mas situacao do orcamento nao atualizada:', message);
+  await recordBudgetStatusEvent(operation, batchId, auth, 'budget_partial_status_update_failed', {
+    budget_id: budgetId,
+    budget_code: operation.budget_code,
+    situacao_id: PARTIAL_WRITEOFF_BUDGET_STATUS_ID,
+    error: message,
+  });
+  return false;
+}
+
 function quantityMap(lines: any[]): Map<string, number> {
   const map = new Map<string, number>();
   for (const line of lines || []) {
@@ -670,7 +758,10 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     .eq('id', batchId)
     .single();
   if (batchError) throw batchError;
-  if (batch.status === 'awaiting_checkout') return getOperationGraph(operationId);
+  if (batch.status === 'awaiting_checkout') {
+    await syncOriginalBudgetPartialStatus(operation, batchId, auth);
+    return getOperationGraph(operationId);
+  }
   if (existingReservation && batch.status === 'creating') {
     // A chamada anterior pode ter criado o documento no GestãoClick e perdido
     // apenas a resposta. Recuperamos pelo marcador antes de permitir qualquer
@@ -689,6 +780,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
       p_gc_response: recovered,
     });
     if (attachRecoveredError) throw attachRecoveredError;
+    await syncOriginalBudgetPartialStatus(operation, batchId, auth);
     return getOperationGraph(operationId);
   }
   if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
@@ -745,6 +837,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     }
     throw attachError;
   }
+  await syncOriginalBudgetPartialStatus(operation, batchId, auth);
   // Tarefa Auvo da entrega parcial (mesma receita da geração de OS).
   // Falha aqui NÃO invalida a baixa: o lote fica registrado com o aviso.
   const batchWithDocument = {
@@ -805,6 +898,8 @@ async function handleConfirmBatch(body: any, auth: AuthContext) {
   if (batchError || !batch) throw new Error('BATCH_NOT_FOUND');
   if (batch.status === 'confirmed') return getOperationGraph(batch.operation_id);
   if (batch.status !== 'awaiting_checkout') throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
+  const operation = await getOperationGraph(batch.operation_id);
+  await syncOriginalBudgetPartialStatus(operation, batchId, auth);
 
   const { data: batchItems, error: itemsError } = await service
     .from('partial_writeoff_batch_items')

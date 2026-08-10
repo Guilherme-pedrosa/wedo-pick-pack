@@ -701,6 +701,11 @@ Deno.serve(async (req: Request) => {
       if (n <= 0) return '';
       return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     };
+    const qtyLabel = (value: unknown): string => {
+      const q = parseMoney(value);
+      if (!Number.isFinite(q) || q <= 0) return '1';
+      return q.toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+    };
     const priceSuffix = (line: any, qty: unknown): string => {
       const unitVal = parseMoney(line?.valor_venda ?? line?.valor_unitario ?? line?.valor);
       const unit = brl(unitVal);
@@ -714,20 +719,20 @@ Deno.serve(async (req: Request) => {
 
     const prodLines: string[] = [];
     if (orcamento.produtos?.length) {
-      prodLines.push('📦 PRODUTOS:');
+      prodLines.push('PRODUTOS:');
       for (const p of orcamento.produtos) {
         const prod = p.produto || p;
         const qty = prod.quantidade || prod.qtd_necessaria || 1;
-        prodLines.push(`  • ${prod.nome_produto} — Qtd: ${qty}${priceSuffix(prod, qty)}`);
+        prodLines.push(`  • ${prod.nome_produto} — Qtd: ${qtyLabel(qty)}${priceSuffix(prod, qty)}`);
       }
     }
     if (orcamento.servicos?.length) {
       prodLines.push('');
-      prodLines.push('🔧 SERVIÇOS:');
+      prodLines.push('SERVIÇOS:');
       for (const s of orcamento.servicos) {
         const svc = s.servico || s;
         const qty = svc.quantidade || 1;
-        prodLines.push(`  • ${svc.nome_servico || svc.nome || 'Serviço'} — Qtd: ${qty}${priceSuffix(svc, qty)}`);
+        prodLines.push(`  • ${svc.nome_servico || svc.nome || 'Serviço'} — Qtd: ${qtyLabel(qty)}${priceSuffix(svc, qty)}`);
       }
     }
 

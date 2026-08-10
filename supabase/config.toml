@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.partial-writeoff]
 verify_jwt = false
+
+[functions.partial-writeoff-balances]
+verify_jwt = false

@@ -762,7 +762,7 @@ export default function PartialWriteoffPage() {
                           )}>
                             <td className="px-3 py-2">
                               <p className={cn("font-medium", isFullyWithdrawn ? "text-green-800" : "text-red-800")}>{item.product_name}</p>
-                              <p className="text-xs text-muted-foreground">{item.product_code || item.product_id}</p>
+                              <p className="text-xs text-muted-foreground">{productCodeFor(item) || (internalCodesQuery.isLoading ? '…' : '')}</p>
                             </td>
                             <td className="px-3 py-2 text-right">{fmtQty(item.original_quantity)}</td>
                             <td className={cn("px-3 py-2 text-right font-medium", isFullyWithdrawn ? "text-green-700 font-bold" : "text-red-700")}>{fmtQty(item.withdrawn_quantity)}</td>

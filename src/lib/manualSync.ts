@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 /**
  * Triggers a full inventory consumption sync.
  * This is useful for debugging missing consumption data.
- * @param lookbackDays Optional number of days to sync (overrides config)
+ * @param lookbackDays Optional number of days for a fast incremental sync.
+ * The daily job still reconciles the complete configured window.
  */
 export async function triggerManualSync(lookbackDays?: number) {
   const toastId = toast.loading('Iniciando sincronização completa de consumo...');
@@ -18,7 +19,7 @@ export async function triggerManualSync(lookbackDays?: number) {
         body: { 
           action: 'sync_page', 
           cursor,
-          lookback_days: lookbackDays // If the function supports it (it currently reads from config, but good for future)
+          lookback_days: lookbackDays,
         },
       });
 

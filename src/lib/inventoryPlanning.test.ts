@@ -8,7 +8,7 @@ describe('needsReactiveInventoryRestock', () => {
     eventCount: 1,
     stockQty: 0,
     reorderPoint: 4,
-    daysSinceLastConsumption: 63,
+    daysSinceLastConsumption: 33,
   };
 
   it('pede reposição para a bandeja GN 1/1 65 mm zerada após saída recente', () => {

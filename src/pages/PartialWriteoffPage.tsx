@@ -194,6 +194,22 @@ export default function PartialWriteoffPage() {
     staleTime: 15000,
   });
 
+  const missingCodeIds = useMemo(
+    () => (selected?.items || []).filter(item => !String(item.product_code || '').trim()).map(item => item.product_id),
+    [selected?.id, selected?.version, selected?.items],
+  );
+
+  const internalCodesQuery = useQuery({
+    queryKey: ['partial-writeoff-product-codes', selected?.id, missingCodeIds.join(',')],
+    queryFn: () => getProductInternalCodes(missingCodeIds),
+    enabled: missingCodeIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const productCodeFor = (item: { product_id: string; product_code: string }) =>
+    String(item.product_code || '').trim() || internalCodesQuery.data?.[item.product_id] || '';
+
+
 
   const requestedItems = useMemo(() => {
     if (!selected) return [];

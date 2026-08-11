@@ -288,9 +288,9 @@ export default function InventoryPolicyPage() {
           {/* VENDAS */}
           <TabsContent value="vendas" className="space-y-4 mt-4">
             <div>
-              <h3 className="text-sm font-medium mb-2">Fallback de situações de Venda</h3>
+              <h3 className="text-sm font-medium mb-2">Situações de Venda consideradas como saída</h3>
               <p className="text-xs text-muted-foreground mb-3">
-                A sincronização usa primeiro o campo de baixa real do GC. Estas situações só são usadas quando um payload antigo não trouxer esse campo.
+                Toda situação marcada aqui entra no histórico de consumo, mesmo que o GC retorne o campo de baixa como zero. Saídas positivas informadas pelo GC também entram automaticamente.
               </p>
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
                 {vendaStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -313,9 +313,9 @@ export default function InventoryPolicyPage() {
           {/* OS */}
           <TabsContent value="os" className="space-y-4 mt-4">
             <div>
-              <h3 className="text-sm font-medium mb-2">Fallback de situações de OS</h3>
+              <h3 className="text-sm font-medium mb-2">Situações de OS consideradas como saída</h3>
               <p className="text-xs text-muted-foreground mb-3">
-                A sincronização usa primeiro o campo de baixa real do GC. Estas situações só são usadas quando um payload antigo não trouxer esse campo.
+                Toda situação marcada aqui entra no histórico de consumo, mesmo que o GC retorne o campo de baixa como zero. Saídas positivas informadas pelo GC também entram automaticamente.
               </p>
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
                 {osStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}

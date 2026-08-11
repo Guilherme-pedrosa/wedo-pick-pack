@@ -31,6 +31,15 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const action = body.action || 'sync_page'; // 'start' | 'sync_page' | 'finish'
 
+    if (action === 'status') {
+      return jsonResp({
+        ok: true,
+        version: 'configured-policy-authoritative-v1',
+        totalTasks: 2,
+        policyPrecedence: 'configured_situation_or_gc_positive_stock_effect',
+      });
+    }
+
     // 1. Load active config
     const { data: configs, error: cfgErr } = await supabase
       .from('inventory_policy_config')

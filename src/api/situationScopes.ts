@@ -91,6 +91,10 @@ type SituationLike = {
   id: string | number;
 };
 
+type DocumentWithSituation = {
+  situacao_id?: string | number | null;
+};
+
 const SCOPE_ID_SETS: Record<SituationScope, ReadonlySet<string>> = {
   orcamento: new Set(SITUATION_IDS_BY_SCOPE.orcamento),
   os: new Set(SITUATION_IDS_BY_SCOPE.os),
@@ -161,4 +165,21 @@ export function retainAvailableSituationIds<T extends SituationLike>(
   const available = new Set((situations || []).map((situation) => String(situation.id)));
   return [...new Set((ids || []).map(String))]
     .filter((id) => available.has(id));
+}
+
+/**
+ * Enforces the selected situations locally because GestãoClick can ignore
+ * situacao_id and return records from every situation in list endpoints.
+ */
+export function filterDocumentsBySituationIds<T extends DocumentWithSituation>(
+  documents: T[] | null | undefined,
+  ids: string[] | null | undefined,
+): T[] {
+  const allowed = new Set((ids || []).map((id) => String(id).trim()).filter(Boolean));
+  const normalized = Array.isArray(documents) ? documents : [];
+  if (allowed.size === 0) return normalized;
+
+  return normalized.filter((document) =>
+    allowed.has(String(document.situacao_id ?? '').trim()),
+  );
 }

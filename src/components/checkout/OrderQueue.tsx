@@ -15,6 +15,7 @@ import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle, ChevronDown, Filter, PackageMinus } from 'lucide-react';
 import { toast } from 'sonner';
+import { filterDocumentsBySituationIds } from '@/api/situationScopes';
 
 type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
 
@@ -67,7 +68,7 @@ export default function OrderQueue() {
   );
 
   const statusQuery = useQuery({
-    queryKey: ['statuses', activeType],
+    queryKey: ['statuses', 'v3', activeType],
     queryFn: () => activeType === 'os' ? getStatusOS() : getStatusVendas(),
     staleTime: 5 * 60 * 1000, // statuses rarely change — cache 5 min
     refetchOnWindowFocus: false,
@@ -100,8 +101,13 @@ export default function OrderQueue() {
   const orders = ordersQuery.data?.data || [];
   const meta = ordersQuery.data?.meta;
 
-  // No more client-side config filtering needed — it's done server-side now
-  const filteredByConfig = orders;
+  // GestãoClick occasionally ignores situacao_id in list requests. The local
+  // check is authoritative so configured/manual filters never leak other rows.
+  const effectiveStatusIds = filterStatusId ? [filterStatusId] : configStatuses;
+  const filteredByConfig = useMemo(
+    () => filterDocumentsBySituationIds(orders, effectiveStatusIds),
+    [orders, effectiveStatusIds.join(',')],
+  );
 
   // Stock filter
   const filteredByStock = stockFilter

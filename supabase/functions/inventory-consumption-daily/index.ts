@@ -1,5 +1,5 @@
 // Orchestrator: runs the full inventory-consumption-sync loop server-side.
-// Triggered daily at 06:00 by pg_cron. Self-chains if it approaches the
+// Triggered daily at 06:00 America/Sao_Paulo by pg_cron. Self-chains if it approaches the
 // edge function wall-clock limit so very long syncs still finish.
 
 const corsHeaders = {

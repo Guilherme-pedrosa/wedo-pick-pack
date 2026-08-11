@@ -270,7 +270,7 @@ export default function InventoryPolicyPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Política de Estoque</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure quais situações representam saída efetiva de estoque
+            O estoque efetivamente baixado no GestãoClick é a fonte principal da análise
           </p>
         </div>
       </div>
@@ -288,9 +288,9 @@ export default function InventoryPolicyPage() {
           {/* VENDAS */}
           <TabsContent value="vendas" className="space-y-4 mt-4">
             <div>
-              <h3 className="text-sm font-medium mb-2">Situações de Venda que dão baixa no estoque</h3>
+              <h3 className="text-sm font-medium mb-2">Fallback de situações de Venda</h3>
               <p className="text-xs text-muted-foreground mb-3">
-                Documentos nessas situações contam como saída efetiva (consumo)
+                A sincronização usa primeiro o campo de baixa real do GC. Estas situações só são usadas quando um payload antigo não trouxer esse campo.
               </p>
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
                 {vendaStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -313,9 +313,9 @@ export default function InventoryPolicyPage() {
           {/* OS */}
           <TabsContent value="os" className="space-y-4 mt-4">
             <div>
-              <h3 className="text-sm font-medium mb-2">Situações de OS que dão baixa no estoque</h3>
+              <h3 className="text-sm font-medium mb-2">Fallback de situações de OS</h3>
               <p className="text-xs text-muted-foreground mb-3">
-                Documentos nessas situações contam como saída efetiva (consumo)
+                A sincronização usa primeiro o campo de baixa real do GC. Estas situações só são usadas quando um payload antigo não trouxer esse campo.
               </p>
               <div className="space-y-2 max-h-[300px] overflow-y-auto">
                 {osStatuses.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -560,8 +560,8 @@ export default function InventoryPolicyPage() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Extrai dados de saída efetiva (Vendas e OS) dos últimos {config.lookback_days} dias.
-            O processo é idempotente — rodar múltiplas vezes não duplica dados.
+            Reconcilia dados de saída efetiva (Vendas e OS) dos últimos {Math.max(config.lookback_days, 12 * 31)} dias pelo campo de estoque do GC.
+            O processo é idempotente, inclui situações novas e retira do cache documentos estornados/cancelados.
           </p>
         </div>
 
@@ -595,6 +595,7 @@ export default function InventoryPolicyPage() {
                     {log.user_name && <span> · {log.user_name}</span>}
                     <div>
                       OSs: {d.os_seen ?? 0} ({d.os_debited ?? 0} novas) · Vendas: {d.vendas_seen ?? 0} ({d.vendas_debited ?? 0} novas) · Peças: {d.pecas_created ?? 0}
+                      {(d.reversed ?? 0) > 0 && <span> · Estornados retirados: {d.reversed}</span>}
                       {d.errors > 0 && <span className="text-destructive"> · Erros: {d.errors}</span>}
                     </div>
                     {d.period && <div>Período: {d.period}</div>}
@@ -607,7 +608,7 @@ export default function InventoryPolicyPage() {
 
         <Button onClick={handleSync} disabled={syncing} variant="outline" className="gap-2">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {syncing ? 'Sincronizando...' : `Sincronizar consumo (${config.lookback_days}d)`}
+          {syncing ? 'Sincronizando...' : `Sincronizar consumo (${Math.max(config.lookback_days, 12 * 31)}d)`}
         </Button>
 
 
@@ -649,6 +650,7 @@ export default function InventoryPolicyPage() {
                     OSs: {syncResult.stats.os_seen || 0} ({syncResult.stats.os_debited || 0} novas) · 
                     Vendas: {syncResult.stats.vendas_seen || 0} ({syncResult.stats.vendas_debited || 0} novas) · 
                     Peças registradas: {syncResult.stats.pecas_created || 0}
+                    {(syncResult.stats.reversed || 0) > 0 && ` · Estornados retirados: ${syncResult.stats.reversed}`}
                     {syncResult.stats.errors > 0 && ` · Erros: ${syncResult.stats.errors}`}
                   </p>
                   {syncResult.period && (

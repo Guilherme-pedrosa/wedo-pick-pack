@@ -5,6 +5,8 @@ const corsHeaders = {
 
 const GC_API_URL = 'https://api.gestaoclick.com';
 const RATE_LIMIT_MS = 350;
+const GC_API_USER_ID = '1320473';
+const MIN_RECONCILIATION_DAYS = 12 * 31;
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -40,13 +42,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const config = configs[0];
-    const lookbackDays = 9999; // Acumulado de todos os tempos
+    // A análise usa uma janela anual. Respeitamos um lookback maior
+    // configurado, sem varrer todo o histórico do GC a cada execução.
+    const lookbackDays = Math.max(
+      Number(config.lookback_days) || MIN_RECONCILIATION_DAYS,
+      MIN_RECONCILIATION_DAYS,
+    );
     const vendasSituacaoIds: string[] = config.vendas_stockout_situacao_ids || [];
     const osSituacaoIds: string[] = config.os_stockout_situacao_ids || [];
-
-    if (vendasSituacaoIds.length === 0 && osSituacaoIds.length === 0) {
-      return jsonResp({ error: 'Nenhuma situação selecionada para baixa. Configure a política primeiro.' }, 400);
-    }
 
     const endDate = new Date();
     const startDate = new Date();
@@ -54,10 +57,14 @@ Deno.serve(async (req: Request) => {
     const startStr = formatDate(startDate);
     const endStr = formatDate(endDate);
 
-    // Build the full task list: each (docType, situacaoId) pair
-    const tasks: Array<{ docType: 'venda' | 'os'; situacaoId: string }> = [];
-    for (const id of vendasSituacaoIds) tasks.push({ docType: 'venda', situacaoId: id });
-    for (const id of osSituacaoIds) tasks.push({ docType: 'os', situacaoId: id });
+    // O efeito real no estoque (situacao_estoque=1) é autoritativo. Buscar
+    // apenas situações configuradas deixava vendas legítimas de fora quando
+    // uma situação nova era criada no GC. A configuração continua sendo
+    // fallback para payloads antigos que não tragam situacao_estoque.
+    const tasks: Array<{ docType: 'venda' | 'os'; fallbackSituacaoIds: string[] }> = [
+      { docType: 'venda', fallbackSituacaoIds: vendasSituacaoIds.map(String) },
+      { docType: 'os', fallbackSituacaoIds: osSituacaoIds.map(String) },
+    ];
 
     // Resume state from request body
     const cursor = body.cursor || { taskIndex: 0, page: 1, stats: { os_seen: 0, vendas_seen: 0, os_debited: 0, vendas_debited: 0, pecas_created: 0, skipped: 0, errors: 0 } };
@@ -75,10 +82,10 @@ Deno.serve(async (req: Request) => {
     const endpoint = task.docType === 'venda' ? '/api/vendas' : '/api/ordens_servicos';
 
     const params = new URLSearchParams({
-      situacao_id: task.situacaoId,
       data_inicio: startStr,
       data_fim: endStr,
       pagina: String(page),
+      usuario_id: GC_API_USER_ID,
     });
 
     let totalPages = 1;
@@ -96,7 +103,7 @@ Deno.serve(async (req: Request) => {
         if (task.docType === 'os') stats.os_seen++;
         else stats.vendas_seen++;
         try {
-          await processDocument(task.docType, doc, task.situacaoId, supabase, stats);
+          await processDocument(task.docType, doc, task.fallbackSituacaoIds, supabase, stats);
         } catch (e) {
           console.error(`Error processing ${task.docType} ${doc.id}:`, e);
           stats.errors++;
@@ -154,7 +161,6 @@ function buildProgress(taskIndex: number, totalTasks: number, page: number, tota
   };
 }
 
-const GC_API_USER_ID = '1320473';
 const GC_API_USER_NAME = 'Usuário API GC (guilherme.pedrosa@outlook.com)';
 
 async function logCompletion(req: Request, supabase: any, stats: any, startStr: string, endStr: string, lookbackDays: number) {
@@ -192,11 +198,13 @@ async function logCompletion(req: Request, supabase: any, stats: any, startStr: 
 async function processDocument(
   docType: 'venda' | 'os',
   doc: any,
-  situacaoId: string,
+  fallbackSituacaoIds: string[],
   supabase: any,
   stats: any,
 ) {
-  const docId = String(doc.id); console.log(`Processing ${docType} ${docId} (Situation: ${situacaoId})`);
+  const docId = String(doc.id);
+  const situacaoId = String(doc.situacao_id || '');
+  console.log(`Processing ${docType} ${docId} (Situation: ${situacaoId})`);
 
   // Documentos auxiliares da baixa parcial movimentam o estoque no GC, mas o
   // consumo definitivo pertence ao documento-mãe. Ignorá-los aqui evita
@@ -219,6 +227,35 @@ async function processDocument(
     .eq('doc_type', docType)
     .eq('doc_id', docId)
     .maybeSingle();
+
+  const explicitStockEffect = parseGcBoolean(doc.situacao_estoque);
+  const shouldCountConsumption = explicitStockEffect ?? fallbackSituacaoIds.includes(situacaoId);
+
+  if (!shouldCountConsumption) {
+    // O cache de consumo é derivado. Quando o próprio GC informa que o
+    // documento não tem mais efeito no estoque (cancelamento/estorno),
+    // removemos apenas esse cache; o documento original não é alterado.
+    if (explicitStockEffect === false && existing?.debited) {
+      const { data: removed, error: removeErr } = await supabase
+        .from('inventory_consumption_events')
+        .delete()
+        .eq('source_type', docType)
+        .eq('source_id', docId)
+        .select('id');
+      if (removeErr) throw removeErr;
+
+      await supabase
+        .from('doc_stock_effect')
+        .update({ debited: false, last_seen_at: new Date().toISOString() })
+        .eq('id', existing.id);
+
+      stats.reversed = (stats.reversed || 0) + 1;
+      stats.events_removed = (stats.events_removed || 0) + (removed?.length || 0);
+    } else {
+      stats.skipped++;
+    }
+    return;
+  }
 
   if (existing?.debited) { console.log(`Skipping ${docType} ${docId}: already debited`);
     stats.skipped++;
@@ -312,6 +349,17 @@ async function processDocument(
 
   if (docType === 'os') stats.os_debited++;
   else stats.vendas_debited++;
+}
+
+function parseGcBoolean(value: unknown): boolean | null {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'sim', 'yes'].includes(normalized)) return true;
+  if (['0', 'false', 'nao', 'não', 'no'].includes(normalized)) return false;
+  return null;
 }
 
 async function gcRequest(path: string, access: string, secret: string): Promise<any> {

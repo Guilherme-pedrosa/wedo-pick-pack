@@ -19,7 +19,9 @@ import {
   preparePartialBatch,
   searchPartialBudgets,
 } from '@/api/partialWriteoff';
+import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+
 
 import { getProductStock } from '@/api/gestaoclick';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,7 +40,9 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  Download,
   XCircle,
+
 
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -307,6 +311,53 @@ export default function PartialWriteoffPage() {
     ]);
   }
 
+  const handleExportExcel = () => {
+    if (!selected) return;
+
+    const headers = [
+      'Produto',
+      'Código',
+      'Solicitado',
+      'Já retirado',
+      'Reservado nesta OS',
+      'Pendente',
+      'Saldo físico GC',
+      'Comprometido global',
+      'Disponível real'
+    ];
+
+    const rows = selected.items.map(item => {
+      const stock = stockQuery.data?.[item.id];
+      const availability = getPartialStockAvailability(item, stock);
+      return [
+        item.product_name,
+        item.product_code || item.product_id,
+        item.original_quantity,
+        item.withdrawn_quantity,
+        item.reserved_quantity,
+        item.pending_purchase_quantity,
+        stock ?? 0,
+        item.global_reserved_quantity,
+        availability.availableStock
+      ];
+    });
+
+    const separator = ';';
+    const csvContent = [
+      headers,
+      ...rows
+    ].map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(separator)).join('\r\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `baixa-parcial-${selected.budget_code}-${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   async function handleManualRefresh() {
     if (manualRefreshing) return;
     setManualRefreshing(true);
@@ -322,6 +373,7 @@ export default function PartialWriteoffPage() {
       setManualRefreshing(false);
     }
   }
+
 
 
   async function handleSearch() {
@@ -613,6 +665,15 @@ export default function PartialWriteoffPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportExcel}
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      Exportar
+                    </Button>
                     <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
                     {canCancelSelected && (
                       <Button
@@ -627,6 +688,7 @@ export default function PartialWriteoffPage() {
                       </Button>
                     )}
                   </div>
+
                 </div>
 
               </CardHeader>
@@ -674,15 +736,21 @@ export default function PartialWriteoffPage() {
                         const overcommitted = stock !== undefined && availability.overcommitted;
                         const max = availability.maxReservable;
                         const disabled = max <= 0 || !['awaiting_separation', 'partial_separation', 'awaiting_balance'].includes(selected.status);
+                        const isFullyWithdrawn = Number(item.withdrawn_quantity) >= Number(item.original_quantity);
+
                         return (
-                          <tr key={item.id} className={`border-t ${overcommitted ? 'bg-red-50' : ''}`}>
+                          <tr key={item.id} className={cn(
+                            "border-t transition-colors",
+                            overcommitted ? "bg-red-50" : isFullyWithdrawn ? "bg-green-50/50" : ""
+                          )}>
                             <td className="px-3 py-2">
-                              <p className="font-medium">{item.product_name}</p>
+                              <p className={cn("font-medium", isFullyWithdrawn && "text-green-800")}>{item.product_name}</p>
                               <p className="text-xs text-muted-foreground">{item.product_code || item.product_id}</p>
                             </td>
                             <td className="px-3 py-2 text-right">{fmtQty(item.original_quantity)}</td>
-                            <td className="px-3 py-2 text-right font-medium text-green-700">{fmtQty(item.withdrawn_quantity)}</td>
+                            <td className={cn("px-3 py-2 text-right font-medium", isFullyWithdrawn ? "text-green-700 font-bold" : "text-green-700")}>{fmtQty(item.withdrawn_quantity)}</td>
                             <td className="px-3 py-2 text-right text-amber-700">{fmtQty(item.reserved_quantity)}</td>
+
                             <td className="px-3 py-2 text-right font-semibold">{fmtQty(item.pending_purchase_quantity)}</td>
                             <td className="px-3 py-2 text-right">{stockQuery.isLoading ? '…' : fmtQty(stock)}</td>
                             <td className={`px-3 py-2 text-right ${Number(item.global_reserved_quantity) > 0 ? 'font-medium text-amber-700' : ''}`}>

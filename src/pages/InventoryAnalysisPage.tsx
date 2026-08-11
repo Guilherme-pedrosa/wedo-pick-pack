@@ -5,7 +5,15 @@ import { triggerManualSync } from '@/lib/manualSync';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
-import { GCOrcamento } from '@/api/types';
+import { getActivePartialDemand } from '@/api/partialWriteoff';
+import {
+  aggregateInventoryBudgetDemand,
+  hasNextBudgetPage,
+  INVENTORY_BUDGET_TYPES,
+  type InventoryBudgetDemandEntry,
+  type InventoryBudgetDemandRef,
+  type TypedInventoryBudget,
+} from '@/lib/inventoryBudgetDemand';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +57,29 @@ interface ConsumptionRow {
   monthly_qty: Record<string, number>;
 }
 
+function emptyConsumptionRow(produtoId: string): ConsumptionRow {
+  return {
+    produto_id: produtoId,
+    total_qty: 0,
+    qty_venda: 0,
+    qty_os: 0,
+    qty_60d: 0,
+    total_value: 0,
+    event_count: 0,
+    source_count: 0,
+    client_count: 0,
+    event_count_90d: 0,
+    event_count_180d: 0,
+    source_count_90d: 0,
+    source_count_180d: 0,
+    first_date: '',
+    last_date: '',
+    consumption_value: 0,
+    source_refs: [],
+    monthly_qty: {},
+  };
+}
+
 interface ProductInfo {
   produto_id: string;
   nome: string;
@@ -79,16 +110,8 @@ interface PCEntry {
   refs: PCRef[];
 }
 
-interface OrcRef {
-  codigo: string;
-  qtd: number;
-  cliente: string;
-}
-
-interface OrcEntry {
-  qtd: number;
-  refs: OrcRef[];
-}
+type OrcRef = InventoryBudgetDemandRef;
+type OrcEntry = InventoryBudgetDemandEntry;
 
 type ABCClass = 'A' | 'B' | 'C';
 type XYZClass = 'X' | 'Y' | 'Z';
@@ -535,7 +558,11 @@ export default function InventoryAnalysisPage() {
   });
   const leadTimesQuery = useQuery({ queryKey: ['supplier-lead-times'], queryFn: fetchSupplierLeadTimes });
   
-  const productIds = useMemo(() => (consumptionQuery.data || []).map(r => r.produto_id), [consumptionQuery.data]);
+  const productIds = useMemo(() => {
+    const ids = new Set((consumptionQuery.data || []).map(r => r.produto_id));
+    for (const productId of orcMap.keys()) ids.add(productId);
+    return [...ids];
+  }, [consumptionQuery.data, orcMap]);
   const namesQuery = useQuery({
     queryKey: ['inv-names', productIds.join(',')],
     queryFn: () => fetchProductNames(productIds),
@@ -565,7 +592,16 @@ export default function InventoryAnalysisPage() {
   // Todos os cruzamentos (estoque, PC, orçamento, consumo) por produto_id.
   // ===========================================================================
   const analysisItems: AnalysisItem[] = useMemo(() => {
-    const rows = consumptionQuery.data || [];
+    const rowsByProduct = new Map<string, ConsumptionRow>(
+      (consumptionQuery.data || []).map(row => [row.produto_id, row]),
+    );
+    // O orçamento sem histórico precisa existir na aba "Orçamento sem Giro".
+    // Ele recebe métricas de consumo zeradas e nunca entra automaticamente em
+    // "Comprar Agora" apenas por estar orçado.
+    for (const productId of orcMap.keys()) {
+      if (!rowsByProduct.has(productId)) rowsByProduct.set(productId, emptyConsumptionRow(productId));
+    }
+    const rows = [...rowsByProduct.values()];
     const names = namesQuery.data || new Map();
     if (rows.length === 0) return [];
 
@@ -587,7 +623,8 @@ export default function InventoryAnalysisPage() {
       const abcClass: ABCClass = pct <= thresholds.A ? 'A' : pct <= thresholds.B ? 'B' : 'C';
 
       const info = names.get(r.produto_id);
-      const nome = info?.nome || `Produto ${r.produto_id}`;
+      const orcEntry = orcMap.get(r.produto_id);
+      const nome = info?.nome || orcEntry?.nomeProduto || `Produto ${r.produto_id}`;
       const unitCost = info?.valor_custo ?? (r.total_qty > 0 ? r.total_value / r.total_qty : 0);
       const isCritical = inferCriticality(nome);
 
@@ -673,7 +710,6 @@ export default function InventoryAnalysisPage() {
       const operationalMinimum = getOperationalMinimum(unitCost, isRecurring, isCritical);
 
       // --- Sinal de orçamento pendente (situações escolhidas) ---
-      const orcEntry = orcMap.get(r.produto_id);
       const orcQty = orcEntry?.qtd || 0;
       const orcRefs = orcEntry?.refs || [];
       // sistema não diferencia aprovado/pendente → usa fator pendente (configurável)
@@ -829,7 +865,7 @@ export default function InventoryAnalysisPage() {
       return {
         produto_id: r.produto_id,
         nome,
-        codigo_interno: info?.codigo_interno || null,
+        codigo_interno: info?.codigo_interno || orcEntry?.codigoProduto || null,
         fornecedor_id: fornecedorId,
         fornecedor_nome: fornecedorNome,
         grupo: info?.grupo || null,
@@ -965,14 +1001,25 @@ export default function InventoryAnalysisPage() {
 
   // KPIs
   const kpis = useMemo(() => {
-    const items = analysisItems;
+    // Curva ABC é baseada em consumo; orçamento sem giro aparece na aba própria
+    // e não pode inflar artificialmente a Classe C.
+    const items = analysisItems.filter(item => item.event_count > 0);
     const aCount = items.filter(i => i.abc_class === 'A').length;
     const bCount = items.filter(i => i.abc_class === 'B').length;
     const cCount = items.filter(i => i.abc_class === 'C').length;
     const criticalCount = items.filter(i => i.stock_known && i.projected_available !== null && i.projected_available <= i.reorder_point).length;
     const totalConsumo = items.reduce((s, i) => s + i.total_qty, 0);
     const totalValor = items.reduce((s, i) => s + i.total_value, 0);
-    return { aCount, bCount, cCount, criticalCount, totalConsumo, totalValor, totalProdutos: items.length };
+    return {
+      aCount,
+      bCount,
+      cCount,
+      criticalCount,
+      totalConsumo,
+      totalValor,
+      totalProdutos: items.length,
+      totalAnalisados: analysisItems.length,
+    };
   }, [analysisItems]);
 
   // Lista de compras: o motor de planejamento já decidiu qty_a_comprar por todas as
@@ -1099,65 +1146,66 @@ export default function InventoryAnalysisPage() {
         statusIds = [aguardando.id];
       }
 
-      // Date range: mesma janela de VENDAS RECENTES (dias do preenchimento), não o lookback.
-      // Orçamento parado além dessa janela não conta como demanda pendente.
-      const now = new Date();
-      const start = new Date(now.getTime() - salesWindowDays * 24 * 60 * 60 * 1000);
-
-      const allOrcs: GCOrcamento[] = [];
+      const allOrcs: TypedInventoryBudget[] = [];
+      const seenBudgetIds = new Set<string>();
       for (const sid of statusIds) {
-        let page = 1;
-        while (true) {
-          const res = await listOrcamentos(sid, page);
-          allOrcs.push(...res.data);
-          if (page >= res.meta.total_paginas) break;
-          page++;
-          await new Promise(r => setTimeout(r, 400));
+        for (const type of INVENTORY_BUDGET_TYPES) {
+          let page = 1;
+          while (true) {
+            const res = await listOrcamentos(sid, page, undefined, type);
+            // O GC já ignorou filtros em respostas antigas; confirme a situação
+            // localmente antes de alimentar a necessidade de compra.
+            const rows = (res.data || []).filter(o => String(o.situacao_id) === String(sid));
+            for (const budget of rows) {
+              const budgetId = String(budget.id || '').trim();
+              if (!budgetId || seenBudgetIds.has(budgetId)) continue;
+              seenBudgetIds.add(budgetId);
+              allOrcs.push({ budget, type });
+            }
+
+            // Resposta vazia do GC pode vir sem meta. Nesse caso, finalize o
+            // tipo/situação em vez de ficar chamando páginas indefinidamente.
+            if (!hasNextBudgetPage(page, res.data || [], res.meta)) break;
+            page++;
+            await new Promise(r => setTimeout(r, 250));
+          }
         }
       }
 
-      // Client-side date filter (API may not support date_inicio/date_fim reliably)
-      const pending = allOrcs.filter(o => {
+      const partialDemand = await getActivePartialDemand();
+
+      // A situação configurada pelo usuário é a autoridade. Um orçamento ainda
+      // pendente não deixa de reservar demanda só porque foi criado há mais de
+      // 60 dias.
+      const pending = allOrcs.filter(({ budget: o }) => {
         // Filter converted
         const fin = String(o.situacao_financeiro ?? '').toLowerCase();
         const est = String(o.situacao_estoque ?? '').toLowerCase();
-        if (['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est)) return false;
-        // Filter by date
-        try {
-          const [y, m, d] = o.data.split('-').map(Number);
-          const orcDate = new Date(y, m - 1, d);
-          return orcDate >= start;
-        } catch { return false; }
+        const converted = ['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est);
+        if (converted && !partialDemand.activeBudgetIds.has(String(o.id))) return false;
+        return true;
       });
 
-      // Aggregate product demand
-      const newOrcMap = new Map<string, OrcEntry>();
-      for (const orc of pending) {
-        for (const p of orc.produtos || []) {
-          const pid = String(p.produto?.produto_id || '').trim();
-          if (!pid) continue;
-          const qty = parseFloat(String(p.produto?.quantidade || '0')) || 0;
-          if (qty <= 0) continue;
+      // Orçamento de serviço também pode conter produtos/peças. Linhas de
+      // serviço puras não viram estoque; suas peças, sim.
+      const newOrcMap = aggregateInventoryBudgetDemand(
+        pending,
+        partialDemand.pendingByBudgetAndProduct,
+      );
 
-          if (!newOrcMap.has(pid)) newOrcMap.set(pid, { qtd: 0, refs: [] });
-          const entry = newOrcMap.get(pid)!;
-          entry.qtd += qty;
-          entry.refs.push({
-            codigo: orc.codigo,
-            qtd: qty,
-            cliente: orc.nome_cliente,
-          });
-        }
-      }
+      const productBudgets = pending.filter(o => o.type === 'produto').length;
+      const serviceBudgets = pending.filter(o => o.type === 'servico').length;
 
       setOrcMap(newOrcMap);
-      toast.success(`${pending.length} orçamentos (${salesWindowDays}d, ${statusIds.length} situação(ões)) · ${newOrcMap.size} produtos`);
+      toast.success(
+        `${pending.length} orçamentos: ${productBudgets} de produto + ${serviceBudgets} de serviço · ${newOrcMap.size} peças/produtos`,
+      );
     } catch (err) {
       toast.error('Erro ao buscar orçamentos: ' + (err instanceof Error ? err.message : 'Erro'));
     } finally {
       setLoadingOrcs(false);
     }
-  }, [salesWindowDays, budgetSituacaoIds]);
+  }, [budgetSituacaoIds]);
 
   // Bulk fetch stock for ALL products via paginated edge function
   const handleFetchStock = useCallback(async () => {
@@ -1213,11 +1261,7 @@ export default function InventoryAnalysisPage() {
       setLoadingStock(false);
     }
 
-    // Also fetch PCs if not loaded yet
-    if (pcMap.size === 0) {
-      handleFetchPCs();
-    }
-  }, [pcMap, handleFetchPCs]);
+  }, []);
 
   // Atualiza a análise inteira na ordem correta: primeiro reconcilia as saídas
   // efetivas no GC e só então lê o saldo atual. Os dados já renderizados ficam
@@ -1225,19 +1269,22 @@ export default function InventoryAnalysisPage() {
   const handleRefreshAnalysis = useCallback(async () => {
     setSyncingConsumption(true);
     try {
-      const stockRefresh = handleFetchStock();
       await triggerManualSync(Math.max(salesWindowDays, 90));
       await Promise.all([
-        stockRefresh,
+        handleFetchStock(),
         consumptionQuery.refetch(),
         trendQuery.refetch(),
       ]);
+      // PCs e orçamentos são sequenciais para não disputar a cota do GC entre
+      // si nem com a reconciliação de vendas/OS e a leitura de estoque.
+      await handleFetchPCs();
+      await handleFetchOrcamentos();
     } catch (err) {
       console.error('Inventory analysis refresh failed:', err);
     } finally {
       setSyncingConsumption(false);
     }
-  }, [salesWindowDays, consumptionQuery, trendQuery, handleFetchStock]);
+  }, [salesWindowDays, consumptionQuery, trendQuery, handleFetchStock, handleFetchPCs, handleFetchOrcamentos]);
 
   // Sync lead times
   const handleSyncLeadTimes = async () => {
@@ -1462,7 +1509,8 @@ export default function InventoryAnalysisPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Análise de Estoque & Suprimentos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Histórico completo · planejamento dos últimos {effectiveLookback} dias · {kpis.totalProdutos} SKUs com saída registrada · {Math.round(kpis.totalConsumo)} un. consumidas · ABC clássico (valor de consumo)
+            Histórico completo · planejamento dos últimos {effectiveLookback} dias · {kpis.totalProdutos} SKUs com saída registrada
+            {orcMap.size > 0 ? ` · ${orcMap.size} SKUs em orçamento` : ''} · {Math.round(kpis.totalConsumo)} un. consumidas · ABC clássico (valor de consumo)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1604,7 +1652,7 @@ export default function InventoryAnalysisPage() {
                   </>
                 ) : (
                   <p className="text-sm font-medium text-muted-foreground">
-                    {analysisItems.length} produtos analisados
+                    {kpis.totalAnalisados} produtos analisados
                   </p>
                 )}
               </div>
@@ -1675,7 +1723,7 @@ export default function InventoryAnalysisPage() {
               </h3>
               <p className="text-sm text-muted-foreground mt-2">
                 Nenhum produto correspondente ao filtro atual entrou na lista de compras.
-                {' '}{analysisItems.length} SKUs com histórico foram analisados; isso não altera nem reclassifica os grupos do GestãoClick.
+                {' '}{kpis.totalProdutos} SKUs com histórico e {budgetNoGiroItems.length} itens apenas em orçamento foram analisados; isso não altera nem reclassifica os grupos do GestãoClick.
               </p>
             </Card>
           ) : (

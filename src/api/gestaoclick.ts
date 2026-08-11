@@ -1331,3 +1331,19 @@ export async function enrichOrderProducts(
     };
   });
 }
+
+/** Fetch GC internal product codes (codigo_interno) for a list of product ids, respecting rate limits. */
+export async function getProductInternalCodes(produtoIds: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(produtoIds.filter(Boolean).map(String))];
+  const map: Record<string, string> = {};
+  for (let i = 0; i < unique.length; i += 3) {
+    const batch = unique.slice(i, i + 3);
+    const results = await Promise.all(batch.map(async (id) => {
+      const detail = await getProductDetail(id);
+      return [id, String(detail?.codigo_interno || '').trim()] as const;
+    }));
+    for (const [id, code] of results) if (code) map[id] = code;
+    if (i + 3 < unique.length) await new Promise(r => setTimeout(r, 1100));
+  }
+  return map;
+}

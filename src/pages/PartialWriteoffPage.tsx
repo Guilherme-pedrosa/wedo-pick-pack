@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 
-import { getProductStock } from '@/api/gestaoclick';
+import { getProductStock, getProductInternalCodes } from '@/api/gestaoclick';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -194,6 +194,22 @@ export default function PartialWriteoffPage() {
     staleTime: 15000,
   });
 
+  const missingCodeIds = useMemo(
+    () => (selected?.items || []).filter(item => !String(item.product_code || '').trim()).map(item => item.product_id),
+    [selected?.id, selected?.version, selected?.items],
+  );
+
+  const internalCodesQuery = useQuery({
+    queryKey: ['partial-writeoff-product-codes', selected?.id, missingCodeIds.join(',')],
+    queryFn: () => getProductInternalCodes(missingCodeIds),
+    enabled: missingCodeIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const productCodeFor = (item: { product_id: string; product_code: string }) =>
+    String(item.product_code || '').trim() || internalCodesQuery.data?.[item.product_id] || '';
+
+
 
   const requestedItems = useMemo(() => {
     if (!selected) return [];
@@ -331,7 +347,7 @@ export default function PartialWriteoffPage() {
       const availability = getPartialStockAvailability(item, stock);
       return [
         item.product_name,
-        item.product_code || item.product_id,
+        productCodeFor(item),
         item.original_quantity,
         item.withdrawn_quantity,
         item.reserved_quantity,
@@ -746,7 +762,7 @@ export default function PartialWriteoffPage() {
                           )}>
                             <td className="px-3 py-2">
                               <p className={cn("font-medium", isFullyWithdrawn ? "text-green-800" : "text-red-800")}>{item.product_name}</p>
-                              <p className="text-xs text-muted-foreground">{item.product_code || item.product_id}</p>
+                              <p className="text-xs text-muted-foreground">{productCodeFor(item) || (internalCodesQuery.isLoading ? '…' : '')}</p>
                             </td>
                             <td className="px-3 py-2 text-right">{fmtQty(item.original_quantity)}</td>
                             <td className={cn("px-3 py-2 text-right font-medium", isFullyWithdrawn ? "text-green-700 font-bold" : "text-red-700")}>{fmtQty(item.withdrawn_quantity)}</td>

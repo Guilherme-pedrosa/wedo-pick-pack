@@ -42,12 +42,17 @@ Deno.serve(async (req: Request) => {
     }
 
     const config = configs[0];
-    // A análise usa uma janela anual. Respeitamos um lookback maior
-    // configurado, sem varrer todo o histórico do GC a cada execução.
-    const lookbackDays = Math.max(
+    // A rotina diária reconcilia a janela anual completa. A atualização manual
+    // da tela pode pedir uma janela menor para trazer movimentos recentes com
+    // rapidez; a reconciliação diária continua corrigindo alterações antigas.
+    const configuredLookbackDays = Math.max(
       Number(config.lookback_days) || MIN_RECONCILIATION_DAYS,
       MIN_RECONCILIATION_DAYS,
     );
+    const requestedLookbackDays = Number(body.lookback_days);
+    const lookbackDays = Number.isFinite(requestedLookbackDays) && requestedLookbackDays > 0
+      ? Math.min(Math.ceil(requestedLookbackDays), configuredLookbackDays)
+      : configuredLookbackDays;
     const vendasSituacaoIds: string[] = config.vendas_stockout_situacao_ids || [];
     const osSituacaoIds: string[] = config.os_stockout_situacao_ids || [];
 
@@ -85,6 +90,7 @@ Deno.serve(async (req: Request) => {
       data_inicio: startStr,
       data_fim: endStr,
       pagina: String(page),
+      limite: '100',
       usuario_id: GC_API_USER_ID,
     });
 

@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { needsReactiveInventoryRestock } from '@/lib/inventoryPlanning';
+import { triggerManualSync } from '@/lib/manualSync';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
-import { getOS, getVenda } from '@/api/gestaoclick';
 import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -296,20 +296,18 @@ const readPersistedAnalysisFilters = () => {
 };
 
 const matchesAnalysisFilters = (item: AnalysisItem, searchTerm: string, grupoFilter: string) => {
-  if (grupoFilter !== ALL_GROUPS_VALUE && (item.grupo || 'Sem grupo') !== grupoFilter) {
-    return false;
-  }
-
   const query = searchTerm.trim().toLowerCase();
-  if (!query) {
-    return true;
+  if (query) {
+    // A busca textual é global. Assim um produto continua localizável mesmo
+    // quando ficou salvo um filtro de grupo diferente no navegador.
+    return (
+      item.nome.toLowerCase().includes(query) ||
+      item.codigo_interno?.toLowerCase().includes(query) ||
+      item.produto_id.toLowerCase().includes(query)
+    );
   }
 
-  return (
-    item.nome.toLowerCase().includes(query) ||
-    item.codigo_interno?.toLowerCase().includes(query) ||
-    item.produto_id.toLowerCase().includes(query)
-  );
+  return grupoFilter === ALL_GROUPS_VALUE || (item.grupo || 'Sem grupo') === grupoFilter;
 };
 
 const normalizeGroupName = (value: string | null | undefined) =>
@@ -350,9 +348,8 @@ async function fetchAllRows(
   return allRows;
 }
 
-async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number = 60): Promise<ConsumptionRow[]> {
+async function fetchConsumptionAgg(salesWindowDays: number = 60): Promise<ConsumptionRow[]> {
   const now = Date.now();
-  const cutLookback = new Date(now - lookbackDays * 86400000).toISOString();
   const cut60 = now - salesWindowDays * 86400000;
   const cut90 = now - 90 * 86400000;
   const cut180 = now - 180 * 86400000;
@@ -360,7 +357,6 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
   const rows = await fetchAllRows(
     'inventory_consumption_events',
     'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
-    { gte: ['occurred_at', cutLookback] },
   );
 
   // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
@@ -451,12 +447,10 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
   return filtered.sort((a, b) => b.consumption_value - a.consumption_value);
 }
 
-async function fetchTrendData(lookbackDays: number): Promise<any[]> {
-  const cutLookback = new Date(Date.now() - lookbackDays * 86400000).toISOString();
+async function fetchTrendData(): Promise<any[]> {
   return fetchAllRows(
     'inventory_consumption_events',
     'produto_id, qty, occurred_at',
-    { gte: ['occurred_at', cutLookback] },
   );
 }
 
@@ -510,6 +504,7 @@ export default function InventoryAnalysisPage() {
   const [pcMap, setPcMap] = useState<Map<string, PCEntry>>(new Map());
   const [orcMap, setOrcMap] = useState<Map<string, OrcEntry>>(new Map());
   const [loadingStock, setLoadingStock] = useState(false);
+  const [syncingConsumption, setSyncingConsumption] = useState(false);
   const [loadingPCs, setLoadingPCs] = useState(false);
   const [loadingOrcs, setLoadingOrcs] = useState(false);
   const [stockProgress, setStockProgress] = useState({ done: 0, total: 0 });
@@ -517,7 +512,6 @@ export default function InventoryAnalysisPage() {
   const [grupoFilter, setGrupoFilter] = useState<string>(initialFilters.grupoFilter);
   const [activeTab, setActiveTab] = useState<AnalysisTab>(DEFAULT_ANALYSIS_TAB);
   const [syncingLT, setSyncingLT] = useState(false);
-  const [docCodigoMap, setDocCodigoMap] = useState<Map<string, string>>(new Map());
 
   const configQuery = useQuery({ queryKey: ['inv-config'], queryFn: fetchConfig });
   const thresholds = configQuery.data?.abc_thresholds || { A: 0.8, B: 0.95 };
@@ -531,13 +525,13 @@ export default function InventoryAnalysisPage() {
   const effectiveLookback = Math.max(lookbackDays, POLICY.analysisMonths * 31);
 
   const consumptionQuery = useQuery({
-    queryKey: ['inv-consumption', effectiveLookback, salesWindowDays],
-    queryFn: () => fetchConsumptionAgg(effectiveLookback, salesWindowDays),
+    queryKey: ['inv-consumption', 'all-history', salesWindowDays],
+    queryFn: () => fetchConsumptionAgg(salesWindowDays),
     enabled: !!configQuery.data,
   });
   const trendQuery = useQuery({
-    queryKey: ['inv-trend', effectiveLookback],
-    queryFn: () => fetchTrendData(effectiveLookback),
+    queryKey: ['inv-trend', 'all-history'],
+    queryFn: fetchTrendData,
   });
   const leadTimesQuery = useQuery({ queryKey: ['supplier-lead-times'], queryFn: fetchSupplierLeadTimes });
   
@@ -937,56 +931,6 @@ export default function InventoryAnalysisPage() {
     }
   }, [searchTerm, grupoFilter]);
 
-  // Resolve internal doc IDs (source_id) → visible codigo (4-digit OS / Venda).
-  // Fetches via gc-proxy with limited concurrency and caches in docCodigoMap.
-  useEffect(() => {
-    if (analysisItems.length === 0) return;
-    const pending: Array<{ id: string; type: string }> = [];
-    const seen = new Set<string>();
-    for (const it of analysisItems) {
-      for (const r of it.source_refs) {
-        if (!r.source_id) continue;
-        if (r.source_type !== 'os' && r.source_type !== 'venda') continue;
-        const key = `${r.source_type}:${r.source_id}`;
-        if (seen.has(key) || docCodigoMap.has(key)) continue;
-        seen.add(key);
-        pending.push({ id: r.source_id, type: r.source_type });
-      }
-    }
-    if (pending.length === 0) return;
-
-    let cancelled = false;
-    (async () => {
-      const CONCURRENCY = 4;
-      const updates = new Map<string, string>();
-      let cursor = 0;
-      const workers = Array.from({ length: CONCURRENCY }, async () => {
-        while (!cancelled && cursor < pending.length) {
-          const item = pending[cursor++];
-          try {
-            const doc = item.type === 'os'
-              ? await getOS(item.id)
-              : await getVenda(item.id);
-            if (doc?.codigo) {
-              updates.set(`${item.type}:${item.id}`, String(doc.codigo));
-            }
-          } catch {
-            // ignore individual failures
-          }
-        }
-      });
-      await Promise.all(workers);
-      if (cancelled || updates.size === 0) return;
-      setDocCodigoMap(prev => {
-        const next = new Map(prev);
-        updates.forEach((v, k) => next.set(k, v));
-        return next;
-      });
-    })();
-
-    return () => { cancelled = true; };
-  }, [analysisItems, docCodigoMap]);
-
   useEffect(() => {
     if (grupoFilter === ALL_GROUPS_VALUE || grupoFilter === 'Sem grupo' || uniqueGrupos.length === 0) {
       return;
@@ -1275,6 +1219,26 @@ export default function InventoryAnalysisPage() {
     }
   }, [pcMap, handleFetchPCs]);
 
+  // Atualiza a análise inteira na ordem correta: primeiro reconcilia as saídas
+  // efetivas no GC e só então lê o saldo atual. Os dados já renderizados ficam
+  // na tela durante todo o processo; apenas os caches são substituídos ao final.
+  const handleRefreshAnalysis = useCallback(async () => {
+    setSyncingConsumption(true);
+    try {
+      const stockRefresh = handleFetchStock();
+      await triggerManualSync(Math.max(salesWindowDays, 90));
+      await Promise.all([
+        stockRefresh,
+        consumptionQuery.refetch(),
+        trendQuery.refetch(),
+      ]);
+    } catch (err) {
+      console.error('Inventory analysis refresh failed:', err);
+    } finally {
+      setSyncingConsumption(false);
+    }
+  }, [salesWindowDays, consumptionQuery, trendQuery, handleFetchStock]);
+
   // Sync lead times
   const handleSyncLeadTimes = async () => {
     setSyncingLT(true);
@@ -1498,13 +1462,17 @@ export default function InventoryAnalysisPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Análise de Estoque & Suprimentos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Últimos {effectiveLookback} dias · {kpis.totalProdutos} SKUs com saída registrada · {Math.round(kpis.totalConsumo)} un. consumidas · ABC clássico (valor de consumo)
+            Histórico completo · planejamento dos últimos {effectiveLookback} dias · {kpis.totalProdutos} SKUs com saída registrada · {Math.round(kpis.totalConsumo)} un. consumidas · ABC clássico (valor de consumo)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={handleFetchStock} disabled={loadingStock} className="gap-1">
-            {loadingStock ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-            {loadingStock ? `Estoque ${stockProgress.done}/${stockProgress.total}` : 'Atualizar Estoques'}
+          <Button variant="outline" size="sm" onClick={handleRefreshAnalysis} disabled={syncingConsumption || loadingStock} className="gap-1">
+            {syncingConsumption || loadingStock ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            {syncingConsumption
+              ? 'Sincronizando vendas e OS...'
+              : loadingStock
+                ? `Estoque ${stockProgress.done}/${stockProgress.total}`
+                : 'Atualizar análise'}
           </Button>
           <Button variant="outline" size="sm" onClick={handleSyncLeadTimes} disabled={syncingLT} className="gap-1">
             {syncingLT ? <Loader2 className="h-3 w-3 animate-spin" /> : <Clock className="h-3 w-3" />}
@@ -1674,9 +1642,13 @@ export default function InventoryAnalysisPage() {
                 O sistema vai comparar com o consumo histórico e sugerir as quantidades ideais por classe ABC.
               </p>
               <div className="flex flex-col items-center gap-2 mt-4">
-                <Button onClick={handleFetchStock} disabled={loadingStock} className="gap-2">
-                  {loadingStock ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  {loadingStock ? `Buscando estoque ${stockProgress.done}/${stockProgress.total}...` : 'Buscar Estoques e Gerar Lista'}
+                <Button onClick={handleRefreshAnalysis} disabled={syncingConsumption || loadingStock} className="gap-2">
+                  {syncingConsumption || loadingStock ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {syncingConsumption
+                    ? 'Sincronizando vendas e OS...'
+                    : loadingStock
+                      ? `Buscando estoque ${stockProgress.done}/${stockProgress.total}...`
+                      : 'Atualizar dados e gerar lista'}
                 </Button>
                 {loadingStock && (
                   <div className="w-64 bg-muted rounded-full h-2 overflow-hidden">
@@ -1696,9 +1668,14 @@ export default function InventoryAnalysisPage() {
           ) : purchaseItems.length === 0 ? (
             <Card className="p-8 text-center">
               <Package className="h-12 w-12 mx-auto text-primary mb-3" />
-              <h3 className="font-semibold text-lg">✅ Estoque Saudável</h3>
+              <h3 className="font-semibold text-lg">
+                {grupoFilter === ALL_GROUPS_VALUE && !searchTerm.trim()
+                  ? '✅ Nenhuma reposição calculada'
+                  : 'Nenhuma reposição neste filtro'}
+              </h3>
               <p className="text-sm text-muted-foreground mt-2">
-                Todos os {stockMap.size} produtos analisados estão acima do ponto de reposição. Nenhuma compra necessária no momento.
+                Nenhum produto correspondente ao filtro atual entrou na lista de compras.
+                {' '}{analysisItems.length} SKUs com histórico foram analisados; isso não altera nem reclassifica os grupos do GestãoClick.
               </p>
             </Card>
           ) : (
@@ -1751,6 +1728,9 @@ export default function InventoryAnalysisPage() {
                           <p className="text-[10px] text-muted-foreground">
                             {item.codigo_interno && `${item.codigo_interno} · `}
                             {item.fornecedor_nome || 'Sem fornecedor'}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground">
+                            Grupo: {item.grupo || 'Sem grupo'}
                           </p>
                           {item.last_date && (
                             <p className="text-[9px] text-muted-foreground mt-0.5">
@@ -2012,7 +1992,8 @@ export default function InventoryAnalysisPage() {
               <div className="mt-3 space-y-1.5 text-xs">
                 <div className="flex justify-between"><span className="text-muted-foreground">Valor total:</span><span className="font-medium">R$ {kpis.totalValor.toFixed(0)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Consumo total:</span><span className="font-medium">{Math.round(kpis.totalConsumo)} un.</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Período:</span><span className="font-medium">{effectiveLookback} dias</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Histórico:</span><span className="font-medium">completo</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Planejamento:</span><span className="font-medium">{effectiveLookback} dias</span></div>
               </div>
             </Card>
           </div>

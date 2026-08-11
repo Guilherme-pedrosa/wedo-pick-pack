@@ -5,6 +5,7 @@ const corsHeaders = {
 
 const GC_API_URL = 'https://api.gestaoclick.com';
 const RATE_LIMIT_MS = 350;
+const GC_API_USER_ID = '1320473';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -30,7 +31,9 @@ Deno.serve(async (req: Request) => {
 
     const params = new URLSearchParams({
       pagina: String(page),
+      limite: '100',
       order: 'ASC',
+      usuario_id: GC_API_USER_ID,
     });
 
     const url = `${GC_API_URL}/api/produtos?${params}`;

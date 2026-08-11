@@ -737,18 +737,20 @@ export default function PartialWriteoffPage() {
                         const max = availability.maxReservable;
                         const disabled = max <= 0 || !['awaiting_separation', 'partial_separation', 'awaiting_balance'].includes(selected.status);
                         const isFullyWithdrawn = Number(item.withdrawn_quantity) >= Number(item.original_quantity);
+                        const notWithdrawn = !isFullyWithdrawn;
 
                         return (
                           <tr key={item.id} className={cn(
                             "border-t transition-colors",
-                            overcommitted ? "bg-red-50" : isFullyWithdrawn ? "bg-green-50/50" : ""
+                            overcommitted ? "bg-red-50" : isFullyWithdrawn ? "bg-green-50/50" : "bg-red-50/50"
                           )}>
                             <td className="px-3 py-2">
-                              <p className={cn("font-medium", isFullyWithdrawn && "text-green-800")}>{item.product_name}</p>
+                              <p className={cn("font-medium", isFullyWithdrawn ? "text-green-800" : "text-red-800")}>{item.product_name}</p>
                               <p className="text-xs text-muted-foreground">{item.product_code || item.product_id}</p>
                             </td>
                             <td className="px-3 py-2 text-right">{fmtQty(item.original_quantity)}</td>
-                            <td className={cn("px-3 py-2 text-right font-medium", isFullyWithdrawn ? "text-green-700 font-bold" : "text-green-700")}>{fmtQty(item.withdrawn_quantity)}</td>
+                            <td className={cn("px-3 py-2 text-right font-medium", isFullyWithdrawn ? "text-green-700 font-bold" : "text-red-700")}>{fmtQty(item.withdrawn_quantity)}</td>
+
                             <td className="px-3 py-2 text-right text-amber-700">{fmtQty(item.reserved_quantity)}</td>
 
                             <td className="px-3 py-2 text-right font-semibold">{fmtQty(item.pending_purchase_quantity)}</td>

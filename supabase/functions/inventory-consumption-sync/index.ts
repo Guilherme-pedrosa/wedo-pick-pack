@@ -9,6 +9,7 @@ const GC_API_USER_ID = '1320473';
 const MIN_RECONCILIATION_DAYS = 12 * 31;
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { shouldCountInventoryConsumption } from '../_shared/inventory-consumption-policy.ts';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -62,10 +63,10 @@ Deno.serve(async (req: Request) => {
     const startStr = formatDate(startDate);
     const endStr = formatDate(endDate);
 
-    // O efeito real no estoque (situacao_estoque=1) é autoritativo. Buscar
-    // apenas situações configuradas deixava vendas legítimas de fora quando
-    // uma situação nova era criada no GC. A configuração continua sendo
-    // fallback para payloads antigos que não tragam situacao_estoque.
+    // O efeito real positivo no estoque (situacao_estoque=1) inclui documentos
+    // automaticamente. As situações selecionadas na Política de Estoque também
+    // são autoritativas: elas representam saídas definidas pelo usuário mesmo
+    // quando o GC retorna situacao_estoque=0 (ex.: VENDA FUTURA já despachada).
     const tasks: Array<{ docType: 'venda' | 'os'; fallbackSituacaoIds: string[] }> = [
       { docType: 'venda', fallbackSituacaoIds: vendasSituacaoIds.map(String) },
       { docType: 'os', fallbackSituacaoIds: osSituacaoIds.map(String) },
@@ -246,10 +247,13 @@ async function processDocumentPage(
       continue;
     }
 
-    const explicitStockEffect = parseGcBoolean(doc.situacao_estoque);
-    const shouldCountConsumption = explicitStockEffect ?? fallbackSituacaoIds.includes(situacaoId);
+    const shouldCountConsumption = shouldCountInventoryConsumption(
+      doc.situacao_estoque,
+      situacaoId,
+      fallbackSituacaoIds,
+    );
     if (!shouldCountConsumption) {
-      if (explicitStockEffect === false && existing?.debited) {
+      if (existing?.debited) {
         reverseDocIds.push(docId);
         reverseEffectIds.push(existing.id);
       } else {
@@ -366,17 +370,6 @@ function getDocumentOccurredAt(docType: 'venda' | 'os', doc: any, fallback: stri
   }
 
   return doc.modificado_em || doc.data || fallback;
-}
-
-function parseGcBoolean(value: unknown): boolean | null {
-  if (value === true || value === 1) return true;
-  if (value === false || value === 0) return false;
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-
-  const normalized = String(value).trim().toLowerCase();
-  if (['1', 'true', 'sim', 'yes'].includes(normalized)) return true;
-  if (['0', 'false', 'nao', 'não', 'no'].includes(normalized)) return false;
-  return null;
 }
 
 async function gcRequest(path: string, access: string, secret: string): Promise<any> {

@@ -16,6 +16,7 @@ const corsHeaders = {
 
 const GC_API_URL = 'https://api.gestaoclick.com';
 const GC_RATE_LIMIT_MS = 350;
+const GC_API_USER_ID = '1320473';
 
 // ============================================================================
 // POLÍTICA DE REPOSIÇÃO (espelha src/pages/InventoryAnalysisPage.tsx)
@@ -110,7 +111,12 @@ function jsonResp(data: unknown, status = 200) {
 // ----------------------------------------------------------------------------
 async function gcFetch(path: string, gcAccess: string, gcSecret: string): Promise<any> {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(`${GC_API_URL}${path}`, {
+    const targetUrl = new URL(path, GC_API_URL);
+    if (!targetUrl.searchParams.has('usuario_id')) {
+      targetUrl.searchParams.set('usuario_id', GC_API_USER_ID);
+    }
+
+    const res = await fetch(targetUrl, {
       headers: {
         'access-token': gcAccess,
         'secret-access-token': gcSecret,
@@ -188,47 +194,57 @@ async function fetchOpenPurchases(situacaoIds: string[], gcAccess: string, gcSec
 
 async function fetchPendingBudgets(
   situacaoIds: string[],
-  lookbackDays: number,
   gcAccess: string,
   gcSecret: string,
 ): Promise<Map<string, OrcEntry>> {
   const map = new Map<string, OrcEntry>();
-  const now = new Date();
-  const start = new Date(now.getTime() - lookbackDays * 86400000);
+  const seenBudgetIds = new Set<string>();
   for (const sid of situacaoIds) {
-    let page = 1;
-    let totalPages = 1;
-    do {
-      await sleep(GC_RATE_LIMIT_MS);
-      const data = await gcFetch(`/api/orcamentos?pagina=${page}&situacao_id=${sid}`, gcAccess, gcSecret);
-      const rows = data?.data || [];
-      totalPages = data?.meta?.total_paginas || 1;
-      for (const row of rows) {
-        const orc = row?.Orcamento ?? row?.orcamento ?? row;
-        // ignora convertidos (financeiro/estoque)
-        const fin = String(orc?.situacao_financeiro ?? '').toLowerCase();
-        const est = String(orc?.situacao_estoque ?? '').toLowerCase();
-        if (['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est)) continue;
-        // filtro de data client-side
-        try {
-          const [y, m, d] = String(orc?.data ?? '').split('-').map(Number);
-          if (y && m && d) {
-            const orcDate = new Date(y, m - 1, d);
-            if (orcDate < start) continue;
+    for (const type of ['produto', 'servico'] as const) {
+      let page = 1;
+      while (true) {
+        await sleep(GC_RATE_LIMIT_MS);
+        const data = await gcFetch(
+          `/api/orcamentos?limite=100&pagina=${page}&situacao_id=${sid}&tipo=${type}`,
+          gcAccess,
+          gcSecret,
+        );
+        const rows = data?.data || [];
+        for (const row of rows) {
+          const orc = row?.Orcamento ?? row?.orcamento ?? row;
+          if (String(orc?.situacao_id ?? '') !== String(sid)) continue;
+          const budgetId = String(orc?.id ?? '').trim();
+          if (!budgetId || seenBudgetIds.has(budgetId)) continue;
+          seenBudgetIds.add(budgetId);
+
+          // ignora convertidos (financeiro/estoque)
+          const fin = String(orc?.situacao_financeiro ?? '').toLowerCase();
+          const est = String(orc?.situacao_estoque ?? '').toLowerCase();
+          if (['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est)) continue;
+          for (const p of orc?.produtos || []) {
+            const produto = p?.produto ?? p;
+            const pid = String(produto?.produto_id ?? '').trim();
+            if (!pid) continue;
+            const qty = parseDecimal(produto?.quantidade);
+            if (qty <= 0) continue;
+            if (!map.has(pid)) map.set(pid, { qtd: 0 });
+            map.get(pid)!.qtd += qty;
           }
-        } catch { /* ignore */ }
-        for (const p of orc?.produtos || []) {
-          const produto = p?.produto ?? p;
-          const pid = String(produto?.produto_id ?? '').trim();
-          if (!pid) continue;
-          const qty = parseDecimal(produto?.quantidade);
-          if (qty <= 0) continue;
-          if (!map.has(pid)) map.set(pid, { qtd: 0 });
-          map.get(pid)!.qtd += qty;
+        }
+
+        // Orçamentos usam `proxima_pagina`; `total_paginas` pode ser nulo.
+        // Sem esta leitura a sincronização de tipo=servico parava na página 1.
+        const explicitNextPage = Number(data?.meta?.proxima_pagina);
+        const totalPages = Number(data?.meta?.total_paginas);
+        if (Number.isFinite(explicitNextPage) && explicitNextPage > page) {
+          page = explicitNextPage;
+        } else if (Number.isFinite(totalPages) && totalPages > page) {
+          page += 1;
+        } else {
+          break;
         }
       }
-      page++;
-    } while (page <= totalPages);
+    }
   }
   return map;
 }
@@ -395,7 +411,7 @@ Deno.serve(async (req: Request) => {
     // ----- dados GC (estoque, PCs, orçamentos) -----
     const stockMap = await fetchAllStock(gcAccess, gcSecret);
     const pcMap = purchaseSituacaoIds.length ? await fetchOpenPurchases(purchaseSituacaoIds, gcAccess, gcSecret) : new Map<string, PCEntry>();
-    const orcMap = budgetSituacaoIds.length ? await fetchPendingBudgets(budgetSituacaoIds, lookbackDays, gcAccess, gcSecret) : new Map<string, OrcEntry>();
+    const orcMap = budgetSituacaoIds.length ? await fetchPendingBudgets(budgetSituacaoIds, gcAccess, gcSecret) : new Map<string, OrcEntry>();
 
     // ----- motor -----
     const now = new Date();

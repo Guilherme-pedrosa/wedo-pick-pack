@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { needsReactiveInventoryRestock } from '@/lib/inventoryPlanning';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { listOrdensCompra, listOrcamentos, getStatusOrcamentos } from '@/api/compras';
@@ -351,14 +352,15 @@ async function fetchAllRows(
 
 async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number = 60): Promise<ConsumptionRow[]> {
   const now = Date.now();
+  const cutLookback = new Date(now - lookbackDays * 86400000).toISOString();
   const cut60 = now - salesWindowDays * 86400000;
   const cut90 = now - 90 * 86400000;
   const cut180 = now - 180 * 86400000;
 
-  // Para "todos os tempos", removemos o filtro de data lookback na busca inicial
   const rows = await fetchAllRows(
     'inventory_consumption_events',
-    'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome'
+    'produto_id, qty, valor_custo, occurred_at, source_id, source_type, cliente_nome',
+    { gte: ['occurred_at', cutLookback] },
   );
 
   // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
@@ -449,10 +451,12 @@ async function fetchConsumptionAgg(lookbackDays: number, salesWindowDays: number
   return filtered.sort((a, b) => b.consumption_value - a.consumption_value);
 }
 
-async function fetchTrendData(): Promise<any[]> {
+async function fetchTrendData(lookbackDays: number): Promise<any[]> {
+  const cutLookback = new Date(Date.now() - lookbackDays * 86400000).toISOString();
   return fetchAllRows(
     'inventory_consumption_events',
     'produto_id, qty, occurred_at',
+    { gte: ['occurred_at', cutLookback] },
   );
 }
 
@@ -531,7 +535,10 @@ export default function InventoryAnalysisPage() {
     queryFn: () => fetchConsumptionAgg(effectiveLookback, salesWindowDays),
     enabled: !!configQuery.data,
   });
-  const trendQuery = useQuery({ queryKey: ['inv-trend'], queryFn: fetchTrendData });
+  const trendQuery = useQuery({
+    queryKey: ['inv-trend', effectiveLookback],
+    queryFn: () => fetchTrendData(effectiveLookback),
+  });
   const leadTimesQuery = useQuery({ queryKey: ['supplier-lead-times'], queryFn: fetchSupplierLeadTimes });
   
   const productIds = useMemo(() => (consumptionQuery.data || []).map(r => r.produto_id), [consumptionQuery.data]);
@@ -726,18 +733,17 @@ export default function InventoryAnalysisPage() {
 
       // --- Reposição REATIVA ---
       // Item controlado por estoque no GC (movimenta_estoque = 1) que caiu a zero / abaixo
-      // do ponto de ressuprimento: precisa repor o que saiu, mesmo sem recorrência de
-      // múltiplos clientes. PORÉM só é reativo se a peça REALMENTE girou recentemente
-      // OU se zerou de fato. Um equipamento parado há meses (sem consumo recente) e com
-      // estoque > 0 NÃO deve ser sugerido só porque o ROP calculado sobre uma venda antiga
-      // ficou acima do estoque atual.
+      // do ponto de ressuprimento só entra na reposição reativa se a saída foi recente.
+      // Saldo zerado, sozinho, não prova demanda e não deve ressuscitar SKU antigo.
       const isInventoryItem = movMap.get(r.produto_id) === true;
-      const inventoryNeedsRestock =
-        isInventoryItem &&
-        stockKnown &&
-        r.event_count >= 1 &&
-        estoqueBase <= reorderPoint &&
-        (hasRecentConsumption || estoqueBase <= 0);
+      const inventoryNeedsRestock = needsReactiveInventoryRestock({
+        isInventoryItem,
+        stockKnown,
+        eventCount: r.event_count,
+        stockQty: estoqueBase,
+        reorderPoint,
+        daysSinceLastConsumption,
+      });
 
 
       const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual || inventoryNeedsRestock;
@@ -1492,7 +1498,7 @@ export default function InventoryAnalysisPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Análise de Estoque & Suprimentos</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Últimos {lookbackDays} dias · {kpis.totalProdutos} SKUs com saída registrada · {Math.round(kpis.totalConsumo)} un. consumidas · ABC clássico (valor de consumo)
+            Últimos {effectiveLookback} dias · {kpis.totalProdutos} SKUs com saída registrada · {Math.round(kpis.totalConsumo)} un. consumidas · ABC clássico (valor de consumo)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -2006,7 +2012,7 @@ export default function InventoryAnalysisPage() {
               <div className="mt-3 space-y-1.5 text-xs">
                 <div className="flex justify-between"><span className="text-muted-foreground">Valor total:</span><span className="font-medium">R$ {kpis.totalValor.toFixed(0)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Consumo total:</span><span className="font-medium">{Math.round(kpis.totalConsumo)} un.</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Período:</span><span className="font-medium">{lookbackDays} dias</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Período:</span><span className="font-medium">{effectiveLookback} dias</span></div>
               </div>
             </Card>
           </div>

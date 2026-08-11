@@ -105,15 +105,14 @@ Deno.serve(async (req: Request) => {
       totalPages = meta.total_paginas || 1;
       totalRegistros = meta.total_registros || 0;
 
-      for (const doc of docs) {
-        if (task.docType === 'os') stats.os_seen++;
-        else stats.vendas_seen++;
-        try {
-          await processDocument(task.docType, doc, task.fallbackSituacaoIds, supabase, stats);
-        } catch (e) {
-          console.error(`Error processing ${task.docType} ${doc.id}:`, e);
-          stats.errors++;
-        }
+      if (task.docType === 'os') stats.os_seen += docs.length;
+      else stats.vendas_seen += docs.length;
+
+      try {
+        await processDocumentPage(task.docType, docs, task.fallbackSituacaoIds, supabase, stats);
+      } catch (e) {
+        console.error(`Error processing ${task.docType} page ${page}:`, e);
+        throw e;
       }
     } catch (e) {
       console.error(`Error fetching ${endpoint} page ${page}:`, e);
@@ -127,6 +126,7 @@ Deno.serve(async (req: Request) => {
           retry: true,
         });
       }
+      throw e;
     }
 
     // Determine next cursor
@@ -201,160 +201,171 @@ async function logCompletion(req: Request, supabase: any, stats: any, startStr: 
 
 }
 
-async function processDocument(
+async function processDocumentPage(
   docType: 'venda' | 'os',
-  doc: any,
+  docs: any[],
   fallbackSituacaoIds: string[],
   supabase: any,
   stats: any,
 ) {
-  const docId = String(doc.id);
-  const situacaoId = String(doc.situacao_id || '');
-  console.log(`Processing ${docType} ${docId} (Situation: ${situacaoId})`);
-
-  // Documentos auxiliares da baixa parcial movimentam o estoque no GC, mas o
-  // consumo definitivo pertence ao documento-mãe. Ignorá-los aqui evita
-  // duplicar histórico, curva de consumo e sugestão de compra.
-  const { data: partialBatch } = await supabase
-    .from('partial_writeoff_batches')
-    .select('id')
-    .eq('auxiliary_document_type', docType)
-    .eq('auxiliary_document_id', docId)
-    .limit(1)
-    .maybeSingle();
-  if (partialBatch) { console.log(`Skipping ${docType} ${docId}: auxiliary document of partial write-off batch ${partialBatch.id}`);
-    stats.skipped++;
-    return;
-  }
-
-  const { data: existing } = await supabase
-    .from('doc_stock_effect')
-    .select('id, debited')
-    .eq('doc_type', docType)
-    .eq('doc_id', docId)
-    .maybeSingle();
-
-  const explicitStockEffect = parseGcBoolean(doc.situacao_estoque);
-  const shouldCountConsumption = explicitStockEffect ?? fallbackSituacaoIds.includes(situacaoId);
-
-  if (!shouldCountConsumption) {
-    // O cache de consumo é derivado. Quando o próprio GC informa que o
-    // documento não tem mais efeito no estoque (cancelamento/estorno),
-    // removemos apenas esse cache; o documento original não é alterado.
-    if (explicitStockEffect === false && existing?.debited) {
-      const { data: removed, error: removeErr } = await supabase
-        .from('inventory_consumption_events')
-        .delete()
-        .eq('source_type', docType)
-        .eq('source_id', docId)
-        .select('id');
-      if (removeErr) throw removeErr;
-
-      await supabase
-        .from('doc_stock_effect')
-        .update({ debited: false, last_seen_at: new Date().toISOString() })
-        .eq('id', existing.id);
-
-      stats.reversed = (stats.reversed || 0) + 1;
-      stats.events_removed = (stats.events_removed || 0) + (removed?.length || 0);
-    } else {
-      stats.skipped++;
-    }
-    return;
-  }
-
-  if (existing?.debited) { console.log(`Skipping ${docType} ${docId}: already debited`);
-    stats.skipped++;
-    await supabase
-      .from('doc_stock_effect')
-      .update({ last_seen_at: new Date().toISOString() })
-      .eq('id', existing.id);
-    return;
-  }
-
-  const produtos = doc.produtos || [];
-  const items: Array<{ produto_id: string; variacao_id: string | null; qty: number; raw: any }> = [];
-
-  for (const p of produtos) {
-    const prod = p.produto || p;
-    const qty = parseFloat(String(prod.quantidade || 0));
-    if (qty > 0) {
-      items.push({
-        produto_id: String(prod.produto_id),
-        variacao_id: prod.variacao_id ? String(prod.variacao_id) : null,
-        qty,
-        raw: prod,
-      });
-    }
-  }
-
-  if (items.length === 0) return;
+  if (docs.length === 0) return;
 
   const now = new Date().toISOString();
-  // We want the date when the stock ACTUALLY moved.
-  // Priority: 
-  // 1. [WeDo Checkout] date from observations (most accurate)
-  // 2. data_saida (official GC exit date)
-  // 3. modificado_em (if in stockout situation, usually reflects the status change)
-  // 4. data (creation date)
-  
-  let occurredAt = now;
-  if (docType === 'os') {
-    const obs = doc.observacoes || '';
-    const checkoutMatch = obs.match(/\[WeDo Checkout\] Separação .* em (\d{2}\/\d{2}\/\d{4})/);
-    if (checkoutMatch) {
-      const [_, dateStr] = checkoutMatch;
-      const [d, m, y] = dateStr.split('/');
-      occurredAt = new Date(`${y}-${m}-${d}T12:00:00Z`).toISOString();
-    } else {
-      occurredAt = doc.data_saida || doc.modificado_em || doc.data_entrada || doc.data || now;
-    }
-  } else {
-    occurredAt = doc.data || doc.modificado_em || now;
-  }
-
-  const clienteNome = doc.nome_cliente || doc.cliente?.nome || null;
-
-  const events = items.map(item => ({
-    occurred_at: occurredAt,
-    source_type: docType,
-    source_id: docId,
-    situacao_id: situacaoId,
-    produto_id: item.produto_id,
-    variacao_id: item.variacao_id,
-    qty: item.qty,
-    valor_custo: item.raw.valor_custo ? parseFloat(String(item.raw.valor_custo)) : null,
-    raw: item.raw,
-    cliente_nome: clienteNome,
-  }));
-
-  const { error: insertErr } = await supabase.from('inventory_consumption_events').insert(events);
-  if (insertErr) {
-    console.error(`Failed to insert events for ${docType}/${docId}:`, insertErr);
-    throw insertErr;
-  }
-
-  stats.pecas_created += items.length;
-
-  if (existing) {
-    await supabase
+  const docIds = docs.map((doc) => String(doc.id)).filter(Boolean);
+  const [{ data: partialRows, error: partialErr }, { data: effectRows, error: effectErr }] = await Promise.all([
+    supabase
+      .from('partial_writeoff_batches')
+      .select('id, auxiliary_document_id')
+      .eq('auxiliary_document_type', docType)
+      .in('auxiliary_document_id', docIds),
+    supabase
       .from('doc_stock_effect')
-      .update({ debited: true, debited_at: now, debit_situacao_id: situacaoId, last_seen_at: now })
-      .eq('id', existing.id);
-  } else {
-    await supabase.from('doc_stock_effect').insert({
+      .select('id, doc_id, debited, first_seen_at')
+      .eq('doc_type', docType)
+      .in('doc_id', docIds),
+  ]);
+  if (partialErr) throw partialErr;
+  if (effectErr) throw effectErr;
+
+  const partialIds = new Set((partialRows || []).map((row: any) => String(row.auxiliary_document_id)));
+  const effects = new Map((effectRows || []).map((row: any) => [String(row.doc_id), row]));
+  const events: any[] = [];
+  const effectsToUpsert: any[] = [];
+  const debitDocIds: string[] = [];
+  const reverseDocIds: string[] = [];
+  const reverseEffectIds: string[] = [];
+  const touchEffectIds: string[] = [];
+
+  for (const doc of docs) {
+    const docId = String(doc.id);
+    const situacaoId = String(doc.situacao_id || '');
+    const existing: any = effects.get(docId);
+
+    if (partialIds.has(docId)) {
+      stats.skipped++;
+      continue;
+    }
+
+    const explicitStockEffect = parseGcBoolean(doc.situacao_estoque);
+    const shouldCountConsumption = explicitStockEffect ?? fallbackSituacaoIds.includes(situacaoId);
+    if (!shouldCountConsumption) {
+      if (explicitStockEffect === false && existing?.debited) {
+        reverseDocIds.push(docId);
+        reverseEffectIds.push(existing.id);
+      } else {
+        stats.skipped++;
+      }
+      continue;
+    }
+
+    if (existing?.debited) {
+      stats.skipped++;
+      touchEffectIds.push(existing.id);
+      continue;
+    }
+
+    const items = (doc.produtos || [])
+      .map((row: any) => row.produto || row)
+      .map((prod: any) => ({
+        produto_id: String(prod.produto_id || ''),
+        variacao_id: prod.variacao_id ? String(prod.variacao_id) : null,
+        qty: parseFloat(String(prod.quantidade || 0)),
+        raw: prod,
+      }))
+      .filter((item: any) => item.produto_id && item.qty > 0);
+    if (items.length === 0) continue;
+
+    const occurredAt = getDocumentOccurredAt(docType, doc, now);
+    const clienteNome = doc.nome_cliente || doc.cliente?.nome || null;
+    for (const item of items) {
+      events.push({
+        occurred_at: occurredAt,
+        source_type: docType,
+        source_id: docId,
+        situacao_id: situacaoId,
+        produto_id: item.produto_id,
+        variacao_id: item.variacao_id,
+        qty: item.qty,
+        valor_custo: item.raw.valor_custo ? parseFloat(String(item.raw.valor_custo)) : null,
+        raw: item.raw,
+        cliente_nome: clienteNome,
+      });
+    }
+
+    debitDocIds.push(docId);
+    effectsToUpsert.push({
       doc_type: docType,
       doc_id: docId,
       debited: true,
       debited_at: now,
       debit_situacao_id: situacaoId,
-      first_seen_at: now,
+      first_seen_at: existing?.first_seen_at || now,
       last_seen_at: now,
     });
+    stats.pecas_created += items.length;
+    if (docType === 'os') stats.os_debited++;
+    else stats.vendas_debited++;
   }
 
-  if (docType === 'os') stats.os_debited++;
-  else stats.vendas_debited++;
+  if (reverseDocIds.length > 0) {
+    const { data: removed, error: removeErr } = await supabase
+      .from('inventory_consumption_events')
+      .delete()
+      .eq('source_type', docType)
+      .in('source_id', reverseDocIds)
+      .select('id');
+    if (removeErr) throw removeErr;
+    const { error: reverseErr } = await supabase
+      .from('doc_stock_effect')
+      .update({ debited: false, last_seen_at: now })
+      .in('id', reverseEffectIds);
+    if (reverseErr) throw reverseErr;
+    stats.reversed = (stats.reversed || 0) + reverseDocIds.length;
+    stats.events_removed = (stats.events_removed || 0) + (removed?.length || 0);
+  }
+
+  if (touchEffectIds.length > 0) {
+    const { error: touchErr } = await supabase
+      .from('doc_stock_effect')
+      .update({ last_seen_at: now })
+      .in('id', touchEffectIds);
+    if (touchErr) throw touchErr;
+  }
+
+  if (debitDocIds.length > 0) {
+    const { error: cleanupErr } = await supabase
+      .from('inventory_consumption_events')
+      .delete()
+      .eq('source_type', docType)
+      .in('source_id', debitDocIds);
+    if (cleanupErr) throw cleanupErr;
+
+    for (let i = 0; i < events.length; i += 500) {
+      const { error: insertErr } = await supabase
+        .from('inventory_consumption_events')
+        .insert(events.slice(i, i + 500));
+      if (insertErr) throw insertErr;
+    }
+
+    const { error: effectUpsertErr } = await supabase
+      .from('doc_stock_effect')
+      .upsert(effectsToUpsert, { onConflict: 'doc_type,doc_id' });
+    if (effectUpsertErr) throw effectUpsertErr;
+  }
+}
+
+function getDocumentOccurredAt(docType: 'venda' | 'os', doc: any, fallback: string): string {
+  if (docType === 'os') {
+    const obs = doc.observacoes || '';
+    const checkoutMatch = obs.match(/\[WeDo Checkout\] Separação .* em (\d{2}\/\d{2}\/\d{4})/);
+    if (checkoutMatch) {
+      const [d, m, y] = checkoutMatch[1].split('/');
+      return new Date(`${y}-${m}-${d}T12:00:00Z`).toISOString();
+    }
+    return doc.data_saida || doc.modificado_em || doc.data_entrada || doc.data || fallback;
+  }
+
+  return doc.modificado_em || doc.data || fallback;
 }
 
 function parseGcBoolean(value: unknown): boolean | null {

@@ -1,0 +1,1 @@
+ALTER VIEW public.partial_writeoff_item_balances SET (security_invoker = on);

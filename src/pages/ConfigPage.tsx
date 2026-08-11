@@ -92,8 +92,8 @@ export default function ConfigPage() {
     config.defaultVendaConclusionStatus,
   ]);
 
-  const osStatuses = useQuery({ queryKey: ['statuses', 'os'], queryFn: getStatusOS });
-  const vendaStatuses = useQuery({ queryKey: ['statuses', 'venda'], queryFn: getStatusVendas });
+  const osStatuses = useQuery({ queryKey: ['statuses', 'v3', 'os'], queryFn: getStatusOS });
+  const vendaStatuses = useQuery({ queryKey: ['statuses', 'v3', 'venda'], queryFn: getStatusVendas });
 
   const mock = isUsingMock();
 

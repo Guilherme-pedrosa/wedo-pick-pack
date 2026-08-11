@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  filterDocumentsBySituationIds,
   retainAvailableSituationIds,
   scopeSituationCatalog,
   scopeSituationIds,
@@ -50,5 +51,19 @@ describe('situationScopes', () => {
       ['7063579', '7063587'],
       [{ id: '7063579' }],
     )).toEqual(['7063579']);
+  });
+
+  it('strictly filters documents when the upstream list ignores situacao_id', () => {
+    const documents = [
+      { id: 'sale-1', situacao_id: '9303817' },
+      { id: 'sale-2', situacao_id: 7063583 },
+      { id: 'sale-3', situacao_id: '7063584' },
+    ];
+
+    expect(filterDocumentsBySituationIds(documents, ['9303817', '7063583'])).toEqual([
+      { id: 'sale-1', situacao_id: '9303817' },
+      { id: 'sale-2', situacao_id: 7063583 },
+    ]);
+    expect(filterDocumentsBySituationIds(documents, [])).toEqual(documents);
   });
 });

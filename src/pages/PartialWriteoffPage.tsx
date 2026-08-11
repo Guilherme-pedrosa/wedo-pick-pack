@@ -347,7 +347,7 @@ export default function PartialWriteoffPage() {
       const availability = getPartialStockAvailability(item, stock);
       return [
         item.product_name,
-        item.product_code || item.product_id,
+        productCodeFor(item),
         item.original_quantity,
         item.withdrawn_quantity,
         item.reserved_quantity,

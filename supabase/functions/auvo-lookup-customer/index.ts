@@ -38,8 +38,9 @@ function mapCustomer(raw: any): AuvoCustomer {
 }
 
 async function fetchCustomersPage(token: string, page: number, pageSize: number, paramFilter?: Record<string, unknown>) {
+  // Auvo hangs when /customers is called without paramFilter — always send one.
   const params = new URLSearchParams();
-  if (paramFilter) params.set('paramFilter', JSON.stringify(paramFilter));
+  params.set('paramFilter', JSON.stringify(paramFilter ?? { active: true }));
   params.set('page', String(page));
   params.set('pageSize', String(pageSize));
   params.set('order', 'asc');

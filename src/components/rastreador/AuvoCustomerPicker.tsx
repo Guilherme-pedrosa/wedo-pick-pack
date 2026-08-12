@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, Search } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, ChevronDown, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface AuvoCustomerSelection {
@@ -27,6 +26,13 @@ interface Option {
   origin: 'history' | 'cnpj';
 }
 
+function extractCode(text: string): string {
+  const trimmed = String(text || '').trim();
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/(\d+)\s*$/);
+  return match ? match[1] : '';
+}
+
 export function AuvoCustomerPicker({
   gcClienteId,
   cnpjDigits,
@@ -39,9 +45,9 @@ export function AuvoCustomerPicker({
   const [resolving, setResolving] = useState(true);
   const [options, setOptions] = useState<Option[]>([]);
   const [source, setSource] = useState<'history' | 'cnpj' | 'manual'>('manual');
-  const [selectedId, setSelectedId] = useState<string>('');
-  const [manualInput, setManualInput] = useState('');
-  const [validation, setValidation] = useState<{ loading: boolean; name?: string; error?: string }>({ loading: false });
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [validation, setValidation] = useState<{ loading: boolean; name?: string; id?: string; error?: string }>({ loading: false });
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -56,7 +62,7 @@ export function AuvoCustomerPicker({
       if (error) throw new Error('Falha na consulta ao Auvo');
       if ((data as any)?.error) throw new Error((data as any).error);
       const name = String((data as any)?.name || '');
-      setValidation({ loading: false, name });
+      setValidation({ loading: false, name, id: String(customerId) });
       onChangeRef.current({ id: String(customerId), name, origin });
     } catch (e: any) {
       setValidation({ loading: false, error: e?.message || 'Erro ao consultar cliente no Auvo' });
@@ -72,7 +78,7 @@ export function AuvoCustomerPicker({
       if (loadingClient) return;
       setResolving(true);
       setValidation({ loading: false });
-      setSelectedId('');
+      setQuery('');
       onChangeRef.current(null);
 
       let resolved: Option[] = [];
@@ -121,7 +127,7 @@ export function AuvoCustomerPicker({
       setResolving(false);
 
       if (resolved.length === 1) {
-        setSelectedId(resolved[0].id);
+        setQuery(`${resolved[0].name || 'Sem nome'} — Código ${resolved[0].id}`);
         await validateCustomer(resolved[0].id, resolved[0].origin);
       }
     };
@@ -130,19 +136,27 @@ export function AuvoCustomerPicker({
     return () => { cancelled = true; };
   }, [gcClienteId, cnpjDigits, loadingClient, validateCustomer]);
 
-  const selectedOption = useMemo(() => options.find((o) => o.id === selectedId), [options, selectedId]);
+  const term = query.trim().toLowerCase();
+  const filtered = term
+    ? options.filter((o) => o.name.toLowerCase().includes(term) || o.id.includes(term.replace(/\D+/g, '')))
+    : options;
 
-  const handleManualLookup = async () => {
-    const id = manualInput.trim();
-    if (!/^\d+$/.test(id) || Number(id) <= 0) {
-      setValidation({ loading: false, error: 'Informe um código de cliente válido.' });
+  const handleLookup = async () => {
+    const id = extractCode(query);
+    if (!id || Number(id) <= 0) {
+      setValidation({ loading: false, error: 'Informe um código de cliente Auvo válido.' });
       onChangeRef.current(null);
       return;
     }
-    await validateCustomer(id, 'manual');
+    const known = options.find((o) => o.id === id);
+    await validateCustomer(id, known ? known.origin : 'manual');
   };
 
-  const showManual = options.length === 0;
+  const selectOption = (opt: Option) => {
+    setQuery(`${opt.name || 'Sem nome'} — Código ${opt.id}`);
+    setOpen(false);
+    validateCustomer(opt.id, opt.origin);
+  };
 
   return (
     <div className={`rounded-lg border p-3 space-y-2 ${hasValidSourceTask ? 'border-border bg-muted/40' : 'border-amber-500/50 bg-amber-500/5'}`}>
@@ -162,72 +176,82 @@ export function AuvoCustomerPicker({
 
       {!resolving && !loadingClient && (
         <>
-          {options.length > 0 && (
-            <>
-              <p className="text-xs text-muted-foreground">
-                {source === 'history'
-                  ? (options.length === 1
-                    ? 'Associação encontrada no histórico deste cliente.'
-                    : 'Este cliente já foi associado a mais de um cadastro Auvo. Selecione qual utilizar.')
-                  : (options.length === 1
-                    ? 'Cadastro Auvo encontrado pelo CNPJ do cliente.'
-                    : 'Mais de um cadastro Auvo com este CNPJ. Selecione qual utilizar.')}
-              </p>
-              <Select
-                value={selectedId}
-                onValueChange={(v) => {
-                  setSelectedId(v);
-                  const opt = options.find((o) => o.id === v);
-                  if (opt) validateCustomer(opt.id, opt.origin);
-                }}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Selecione o cliente Auvo" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  {options.map((o) => (
-                    <SelectItem key={o.id} value={o.id} className="text-sm">
-                      {o.name || 'Sem nome'} — Código {o.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </>
-          )}
-
-          {showManual && (
-            <>
-              <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
+            {options.length > 0
+              ? (source === 'history'
+                ? (options.length === 1
+                  ? 'Associação encontrada no histórico deste cliente. Você pode alterar o código manualmente.'
+                  : 'Este cliente já foi associado a mais de um cadastro Auvo. Selecione na lista ou digite outro código.')
+                : (options.length === 1
+                  ? 'Cadastro Auvo encontrado pelo CNPJ do cliente. Você pode alterar o código manualmente.'
+                  : 'Mais de um cadastro Auvo com este CNPJ. Selecione na lista ou digite outro código.'))
+              : (<>
                 <strong>Nenhuma associação encontrada.</strong>{' '}
                 {cnpjFormatted
                   ? `Não encontramos histórico para este cliente nem cadastro Auvo com o CNPJ ${cnpjFormatted}.`
                   : 'Não encontramos histórico para este cliente e o CNPJ não está disponível no cadastro do Gestão Click.'}{' '}
                 Informe o código do cliente Auvo.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Código do cliente (Auvo)"
-                  value={manualInput}
-                  onChange={(e) => { setManualInput(e.target.value); setValidation({ loading: false }); onChangeRef.current(null); }}
-                  className="h-8 text-sm flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs px-3"
-                  disabled={!manualInput.trim() || validation.loading}
-                  onClick={handleManualLookup}
-                >
-                  {validation.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                  <span className="ml-1">Verificar</span>
-                </Button>
-              </div>
-            </>
-          )}
+              </>)}
+          </p>
 
-          {validation.loading && options.length > 0 && (
+          <div className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  value={query}
+                  placeholder="Nome ou código do cliente (Auvo)"
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setOpen(options.length > 0);
+                    setValidation({ loading: false });
+                    onChangeRef.current(null);
+                  }}
+                  onFocus={() => setOpen(options.length > 0)}
+                  onBlur={() => setTimeout(() => setOpen(false), 150)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); setOpen(false); handleLookup(); } }}
+                  className="h-8 text-sm pr-8"
+                />
+                {options.length > 0 && (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    onMouseDown={(e) => { e.preventDefault(); setOpen((v) => !v); }}
+                    aria-label="Mostrar associações"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs px-3"
+                disabled={!query.trim() || validation.loading}
+                onClick={handleLookup}
+              >
+                {validation.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                <span className="ml-1">Verificar</span>
+              </Button>
+            </div>
+
+            {open && filtered.length > 0 && (
+              <div className="absolute z-50 mt-1 w-full max-h-52 overflow-auto rounded-md border bg-popover shadow-md">
+                {filtered.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-accent"
+                    onMouseDown={(e) => { e.preventDefault(); selectOption(o); }}
+                  >
+                    {o.name || 'Sem nome'} — Código {o.id}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {validation.loading && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
               Validando cliente no Auvo...
@@ -238,7 +262,7 @@ export function AuvoCustomerPicker({
             <div className="flex items-center gap-2 rounded border border-green-500/50 bg-green-500/5 p-2">
               <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
               <span className="text-xs font-medium text-green-700">
-                {validation.name} — Código {selectedOption?.id || manualInput.trim()}
+                {validation.name} — Código {validation.id}
               </span>
             </div>
           )}

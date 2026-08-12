@@ -506,6 +506,8 @@ export default function RastreadorPage() {
       if (usedAuvoCustomerId && gcClienteId) {
         try {
           const gcCodigo = gcClienteInfo?.codigo || (await findClienteCodigo(gcClienteId)) || null;
+          const nowIso = new Date().toISOString();
+          const operatorName = (profile as any)?.name || user?.email || '';
           const { data: existing } = await (supabase.from('auvo_customer_links') as any)
             .select('id, usage_count, gc_cliente_codigo')
             .eq('gc_cliente_id', gcClienteId)
@@ -516,9 +518,13 @@ export default function RastreadorPage() {
             await (supabase.from('auvo_customer_links') as any)
               .update({
                 usage_count: Number(existing.usage_count || 0) + 1,
-                last_used_at: new Date().toISOString(),
+                last_used_at: nowIso,
                 auvo_customer_name: auvoSelection?.name || undefined,
                 gc_cliente_codigo: gcCodigo || existing.gc_cliente_codigo || null,
+                last_orcamento_id: String(entry.orcamento.id || ''),
+                last_orcamento_codigo: String(entry.orcamento.codigo || ''),
+                last_used_by: user?.id || null,
+                last_used_by_name: operatorName,
               })
               .eq('id', existing.id)
               .select();
@@ -530,8 +536,19 @@ export default function RastreadorPage() {
               cnpj_normalizado: gcClienteInfo?.cnpjDigits || null,
               auvo_customer_id: usedAuvoCustomerId,
               auvo_customer_name: auvoSelection?.name || '',
+              orcamento_id: String(entry.orcamento.id || ''),
+              orcamento_codigo: String(entry.orcamento.codigo || ''),
+              created_by: user?.id || null,
+              created_by_name: operatorName,
+              created_at: nowIso,
+              last_orcamento_id: String(entry.orcamento.id || ''),
+              last_orcamento_codigo: String(entry.orcamento.codigo || ''),
+              last_used_by: user?.id || null,
+              last_used_by_name: operatorName,
+              last_used_at: nowIso,
             }).select();
           }
+
         } catch (e) {
           console.warn('[rastreador] falha ao registrar associação Auvo', e);
         }

@@ -21,7 +21,6 @@ Deno.serve(async (req: Request) => {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
   const syncUrl = `${supabaseUrl}/functions/v1/inventory-consumption-sync`;
-  const selfUrl = `${supabaseUrl}/functions/v1/inventory-consumption-daily`;
 
   const callSync = async (cursor: unknown) => {
     const res = await fetch(syncUrl, {
@@ -89,4 +88,14 @@ function jsonResp(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+function cursorKey(cursor: unknown): string {
+  try {
+    const c = cursor as { taskIndex?: unknown; page?: unknown } | null;
+    if (c && typeof c === 'object') return `${c.taskIndex}:${c.page}`;
+    return JSON.stringify(cursor);
+  } catch {
+    return 'na';
+  }
 }

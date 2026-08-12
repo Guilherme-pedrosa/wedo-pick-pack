@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.45.0';
+import { withGcApiUser } from '../_shared/gc-api-user.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,7 +44,7 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 async function gcGet(path: string) {
-  const url = `${GC_API_URL}${path}`;
+  const url = withGcApiUser(path, GC_API_URL);
   const res = await fetch(url, {
     headers: {
       'access-token': Deno.env.get('GC_ACCESS_TOKEN') ?? '',

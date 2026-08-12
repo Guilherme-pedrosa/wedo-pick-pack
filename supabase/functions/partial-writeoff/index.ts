@@ -1,4 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
+import {
+  GC_API_USER_ID,
+  withGcApiUser,
+  withGcApiUserPayload,
+} from '../_shared/gc-api-user.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,7 +58,7 @@ async function gcRequest(path: string, method = 'GET', body?: unknown): Promise<
   const secretToken = Deno.env.get('GC_SECRET_TOKEN');
   if (!accessToken || !secretToken) throw new Error('GC_CREDENTIALS_NOT_CONFIGURED');
 
-  const response = await fetch(`${GC_API_URL}${path}`, {
+  const response = await fetch(withGcApiUser(path, GC_API_URL), {
     method,
     headers: {
       'access-token': accessToken,
@@ -61,7 +66,9 @@ async function gcRequest(path: string, method = 'GET', body?: unknown): Promise<
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: body && method !== 'GET' ? JSON.stringify(body) : undefined,
+    body: method === 'POST' || method === 'PUT'
+      ? JSON.stringify(withGcApiUserPayload(body))
+      : undefined,
   });
   const text = await response.text();
   let parsed: any;
@@ -82,7 +89,7 @@ async function authenticate(req: Request): Promise<AuthContext> {
 
   const { data: profile } = await service
     .from('profiles')
-    .select('name, auvo_user_id, gc_usuario_id, default_os_conclusion_status, default_venda_conclusion_status')
+    .select('name, auvo_user_id, default_os_conclusion_status, default_venda_conclusion_status')
     .eq('id', data.user.id)
     .maybeSingle();
 
@@ -487,7 +494,7 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
   return atributos;
 }
 
-async function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity: number }>, waitingStatusId: string, marker: string, gcUserId?: string) {
+async function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity: number }>, waitingStatusId: string, marker: string) {
   const budget = operation.budget_snapshot || {};
   const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
   const note = `[${marker}] BAIXA PARCIAL do orçamento #${operation.budget_code}. Documento auxiliar: sem financeiro, comissão nem serviços.`;
@@ -501,7 +508,7 @@ async function auxiliaryPayload(operation: any, selected: Array<{ item: any; qua
     valor_frete: '0.00',
     condicao_pagamento: 'a_vista',
     centro_custo_id: budget.centro_custo_id || '501357',
-    usuario_id: gcUserId || '1320473',
+    usuario_id: GC_API_USER_ID,
     observacoes: note,
     observacoes_interna: marker,
   };
@@ -578,6 +585,7 @@ function statusUpdatePayload(document: any, statusId: string, type: DocumentType
   if (type === 'venda') payload.tipo = document?.tipo || 'produto';
   if (!payload.data) payload.data = new Date().toISOString().slice(0, 10);
   if (!Array.isArray(payload.produtos)) payload.produtos = [];
+  payload.usuario_id = GC_API_USER_ID;
   return payload;
 }
 
@@ -607,6 +615,7 @@ function budgetStatusUpdatePayload(budget: any, statusId: string): Record<string
   if (!payload.data) payload.data = new Date().toISOString().slice(0, 10);
   if (!Array.isArray(payload.produtos)) payload.produtos = [];
   if (!Array.isArray(payload.servicos)) payload.servicos = [];
+  payload.usuario_id = GC_API_USER_ID;
   return payload;
 }
 
@@ -788,7 +797,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
   const settings = await getSettings();
   const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
   if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
-  const payload = await auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id);
+  const payload = await auxiliaryPayload(operation, selected, waitingStatus, batch.marker);
   const path = operation.document_type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
 
   let document: any = null;
@@ -1029,7 +1038,7 @@ async function handleConsolidate(body: any, auth: AuthContext) {
       body: JSON.stringify({
         orcamento: operation.budget_snapshot,
         auvo_user_id: auth.profile.auvo_user_id,
-        gc_usuario_id: auth.profile.gc_usuario_id || undefined,
+        gc_usuario_id: GC_API_USER_ID,
         auvo_customer_id: body.auvo_customer_id || undefined,
         manual_equipamento: body.manual_equipamento || undefined,
         partial_auxiliaries: partialAuxiliaries,

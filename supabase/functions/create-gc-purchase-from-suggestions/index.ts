@@ -5,6 +5,11 @@
 // envia ids selecionados pelo comprador). Salva o vínculo suggestion -> compra.
 // ============================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import {
+  GC_API_USER_ID,
+  withGcApiUser,
+  withGcApiUserPayload,
+} from '../_shared/gc-api-user.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,6 +81,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload: any = {
+      usuario_id: GC_API_USER_ID,
       fornecedor_id: fornecedorId,
       data_emissao: hoje,
       observacoes_interna: 'Compra gerada automaticamente pelo Pick Pack com base na análise de estoque.',
@@ -93,7 +99,7 @@ Deno.serve(async (req: Request) => {
     if (situacaoId) payload.situacao_id = situacaoId;
 
     try {
-      const res = await fetch(`${GC_API_URL}/api/compras`, {
+      const res = await fetch(withGcApiUser('/api/compras', GC_API_URL), {
         method: 'POST',
         headers: {
           'access-token': gcAccess,
@@ -101,7 +107,7 @@ Deno.serve(async (req: Request) => {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(withGcApiUserPayload(payload)),
       });
       const text = await res.text();
       let parsed: any;

@@ -1153,6 +1153,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         doc_kind: docKind,
         auvo_task_id: auvoTaskId,
+        auvo_customer_id: resolvedCustomerId ? String(resolvedCustomerId) : undefined,
         os_id: osId,
         os_codigo: osCodigo,
         warnings: warnings.length > 0 ? warnings : undefined,

@@ -1583,11 +1583,7 @@ export default function RastreadorPage() {
                 <p className="text-sm font-semibold">Orçamento #{confirmEntry.orcamento.codigo}</p>
                 <p className="text-xs text-muted-foreground">
                   Cliente Gestão Click: {gcClienteInfo?.nome || confirmEntry.orcamento.nome_cliente}
-                  {gcClienteQuery.isLoading
-                    ? ' — Código GC: …'
-                    : gcClienteInfo?.codigo
-                      ? ` — Código GC: ${gcClienteInfo.codigo}`
-                      : ''}
+                  {gcClienteInfo?.codigo ? ` — Código GC: ${gcClienteInfo.codigo}` : ''}
                 </p>
                 {gcClienteInfo?.cnpj && (
                   <p className="text-xs text-muted-foreground">CNPJ: {gcClienteInfo.cnpj}</p>

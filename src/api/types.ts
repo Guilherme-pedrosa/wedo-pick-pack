@@ -124,7 +124,6 @@ export interface GCOrcamentoProduto {
   quantidade: string | number;
   valor_custo?: string;
   movimenta_estoque?: string;
-  estoque_id?: string;
 }
 
 export interface GCOrcamento {

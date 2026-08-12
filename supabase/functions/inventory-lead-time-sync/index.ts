@@ -16,7 +16,6 @@ const BATCH_THRESHOLD = 5;
 const MAX_LEAD_DAYS = 365;
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { withGcApiUser } from '../_shared/gc-api-user.ts';
 
 interface RawSample {
   compra_codigo: string;
@@ -292,7 +291,7 @@ function computeMedian(sortedAsc: number[]): number {
 }
 
 async function gcRequest(path: string, access: string, secret: string): Promise<any> {
-  const url = withGcApiUser(path, GC_API_URL);
+  const url = `${GC_API_URL}${path}`;
   const res = await fetch(url, {
     headers: {
       'access-token': access,

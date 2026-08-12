@@ -10,7 +10,6 @@ const MIN_RECONCILIATION_DAYS = 12 * 31;
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { shouldCountInventoryConsumption } from '../_shared/inventory-consumption-policy.ts';
-import { activePartialWriteoffSourceIds } from '../_shared/partial-writeoff-consumption.ts';
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -223,22 +222,12 @@ async function processDocumentPage(
 
   const now = new Date().toISOString();
   const docIds = docs.map((doc) => String(doc.id)).filter(Boolean);
-  const partialSourceKeys = docIds.map((docId) => `${docType}:${docId}`);
-  const [
-    { data: partialRows, error: partialErr },
-    { data: partialOperationRows, error: partialOperationErr },
-    { data: effectRows, error: effectErr },
-  ] = await Promise.all([
+  const [{ data: partialRows, error: partialErr }, { data: effectRows, error: effectErr }] = await Promise.all([
     supabase
       .from('partial_writeoff_batches')
       .select('id, auxiliary_document_id')
       .eq('auxiliary_document_type', docType)
       .in('auxiliary_document_id', docIds),
-    supabase
-      .from('partial_writeoff_operations')
-      .select('budget_id, status')
-      .in('budget_id', partialSourceKeys)
-      .not('status', 'in', '("completed","cancelled")'),
     supabase
       .from('doc_stock_effect')
       .select('id, doc_id, debited, first_seen_at')
@@ -246,11 +235,9 @@ async function processDocumentPage(
       .in('doc_id', docIds),
   ]);
   if (partialErr) throw partialErr;
-  if (partialOperationErr) throw partialOperationErr;
   if (effectErr) throw effectErr;
 
   const partialIds = new Set((partialRows || []).map((row: any) => String(row.auxiliary_document_id)));
-  const partialSourceIds = activePartialWriteoffSourceIds(partialOperationRows || [], docType);
   const effects = new Map((effectRows || []).map((row: any) => [String(row.doc_id), row]));
   const events: any[] = [];
   const effectsToUpsert: any[] = [];
@@ -266,20 +253,6 @@ async function processDocumentPage(
 
     if (partialIds.has(docId)) {
       stats.skipped++;
-      continue;
-    }
-
-    // A venda/OS original de uma baixa parcial ativa nao pode entrar inteira:
-    // durante essa fase somente as quantidades confirmadas no Pick & Pack sao
-    // materializadas. Ao concluir/cancelar a operacao, a origem volta ao fluxo
-    // normal e passa a refletir sua situacao atual no GestaoClick.
-    if (partialSourceIds.has(docId)) {
-      stats.skipped++;
-      stats.partial_sources_suppressed = (stats.partial_sources_suppressed || 0) + 1;
-      // Limpa mesmo quando o espelho de efeito estiver ausente/inconsistente:
-      // eventos antigos nao podem sobreviver e duplicar os batches confirmados.
-      reverseDocIds.push(docId);
-      if (existing?.id) reverseEffectIds.push(existing.id);
       continue;
     }
 
@@ -355,13 +328,11 @@ async function processDocumentPage(
       .in('source_id', reverseDocIds)
       .select('id');
     if (removeErr) throw removeErr;
-    if (reverseEffectIds.length > 0) {
-      const { error: reverseErr } = await supabase
-        .from('doc_stock_effect')
-        .update({ debited: false, last_seen_at: now })
-        .in('id', reverseEffectIds);
-      if (reverseErr) throw reverseErr;
-    }
+    const { error: reverseErr } = await supabase
+      .from('doc_stock_effect')
+      .update({ debited: false, last_seen_at: now })
+      .in('id', reverseEffectIds);
+    if (reverseErr) throw reverseErr;
     stats.reversed = (stats.reversed || 0) + reverseDocIds.length;
     stats.events_removed = (stats.events_removed || 0) + (removed?.length || 0);
   }

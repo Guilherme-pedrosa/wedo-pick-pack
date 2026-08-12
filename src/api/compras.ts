@@ -276,14 +276,7 @@ export async function getStatusOrcamentos(): Promise<GCSituacao[]> {
 }
 
 // --- LIST ORCAMENTOS ---
-export type GCOrcamentoTipo = 'produto' | 'servico';
-
-export async function listOrcamentos(
-  situacaoId?: string,
-  pagina = 1,
-  nomeCliente?: string,
-  tipo?: GCOrcamentoTipo,
-): Promise<{ data: GCOrcamento[]; meta: GCMeta }> {
+export async function listOrcamentos(situacaoId?: string, pagina = 1, nomeCliente?: string): Promise<{ data: GCOrcamento[]; meta: GCMeta }> {
   if (isUsingMock()) {
     await mockDelay();
     let data = [...MOCK_ORCAMENTOS];
@@ -294,16 +287,10 @@ export async function listOrcamentos(
     }
     return { data, meta: { pagina_atual: 1, total_paginas: 1, total_registros: data.length } };
   }
-  const params = new URLSearchParams({
-    pagina: String(pagina),
-    // Menos páginas = menos chamadas e menor consumo da cota do GC.
-    limite: '100',
-  });
-  if (situacaoId) params.set('situacao_id', situacaoId);
-  if (nomeCliente) params.set('nome', nomeCliente);
-  if (tipo) params.set('tipo', tipo);
-
-  return apiRequest<{ data: GCOrcamento[]; meta: GCMeta }>(`/api/orcamentos?${params.toString()}`);
+  let path = `/api/orcamentos?pagina=${pagina}`;
+  if (situacaoId) path += `&situacao_id=${situacaoId}`;
+  if (nomeCliente) path += `&nome=${encodeURIComponent(nomeCliente)}`;
+  return apiRequest<{ data: GCOrcamento[]; meta: GCMeta }>(path);
 }
 
 // --- PRODUTO DETALHE ---

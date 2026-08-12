@@ -1,12 +1,5 @@
 export const RECENT_REACTIVE_RESTOCK_DAYS = 90;
 
-export {
-  calculateDemandForecast,
-  calculateNetPurchaseQty,
-  isOneOffDemand,
-  type InventoryDemandPattern,
-} from '../../supabase/functions/_shared/inventory-planning';
-
 interface ReactiveRestockInput {
   isInventoryItem: boolean;
   stockKnown: boolean;

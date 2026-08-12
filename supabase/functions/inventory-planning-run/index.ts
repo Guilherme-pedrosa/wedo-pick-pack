@@ -6,11 +6,6 @@
 // Chave de análise EXCLUSIVAMENTE por produto_id (nunca item_key/variacao_id).
 // ============================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import {
-  calculateDemandForecast,
-  calculateNetPurchaseQty,
-  isOneOffDemand,
-} from '../_shared/inventory-planning.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,7 +16,6 @@ const corsHeaders = {
 
 const GC_API_URL = 'https://api.gestaoclick.com';
 const GC_RATE_LIMIT_MS = 350;
-const GC_API_USER_ID = '1320473';
 
 // ============================================================================
 // POLÍTICA DE REPOSIÇÃO (espelha src/pages/InventoryAnalysisPage.tsx)
@@ -116,12 +110,7 @@ function jsonResp(data: unknown, status = 200) {
 // ----------------------------------------------------------------------------
 async function gcFetch(path: string, gcAccess: string, gcSecret: string): Promise<any> {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const targetUrl = new URL(path, GC_API_URL);
-    if (!targetUrl.searchParams.has('usuario_id')) {
-      targetUrl.searchParams.set('usuario_id', GC_API_USER_ID);
-    }
-
-    const res = await fetch(targetUrl, {
+    const res = await fetch(`${GC_API_URL}${path}`, {
       headers: {
         'access-token': gcAccess,
         'secret-access-token': gcSecret,
@@ -199,57 +188,47 @@ async function fetchOpenPurchases(situacaoIds: string[], gcAccess: string, gcSec
 
 async function fetchPendingBudgets(
   situacaoIds: string[],
+  lookbackDays: number,
   gcAccess: string,
   gcSecret: string,
 ): Promise<Map<string, OrcEntry>> {
   const map = new Map<string, OrcEntry>();
-  const seenBudgetIds = new Set<string>();
+  const now = new Date();
+  const start = new Date(now.getTime() - lookbackDays * 86400000);
   for (const sid of situacaoIds) {
-    for (const type of ['produto', 'servico'] as const) {
-      let page = 1;
-      while (true) {
-        await sleep(GC_RATE_LIMIT_MS);
-        const data = await gcFetch(
-          `/api/orcamentos?limite=100&pagina=${page}&situacao_id=${sid}&tipo=${type}`,
-          gcAccess,
-          gcSecret,
-        );
-        const rows = data?.data || [];
-        for (const row of rows) {
-          const orc = row?.Orcamento ?? row?.orcamento ?? row;
-          if (String(orc?.situacao_id ?? '') !== String(sid)) continue;
-          const budgetId = String(orc?.id ?? '').trim();
-          if (!budgetId || seenBudgetIds.has(budgetId)) continue;
-          seenBudgetIds.add(budgetId);
-
-          // ignora convertidos (financeiro/estoque)
-          const fin = String(orc?.situacao_financeiro ?? '').toLowerCase();
-          const est = String(orc?.situacao_estoque ?? '').toLowerCase();
-          if (['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est)) continue;
-          for (const p of orc?.produtos || []) {
-            const produto = p?.produto ?? p;
-            const pid = String(produto?.produto_id ?? '').trim();
-            if (!pid) continue;
-            const qty = parseDecimal(produto?.quantidade);
-            if (qty <= 0) continue;
-            if (!map.has(pid)) map.set(pid, { qtd: 0 });
-            map.get(pid)!.qtd += qty;
+    let page = 1;
+    let totalPages = 1;
+    do {
+      await sleep(GC_RATE_LIMIT_MS);
+      const data = await gcFetch(`/api/orcamentos?pagina=${page}&situacao_id=${sid}`, gcAccess, gcSecret);
+      const rows = data?.data || [];
+      totalPages = data?.meta?.total_paginas || 1;
+      for (const row of rows) {
+        const orc = row?.Orcamento ?? row?.orcamento ?? row;
+        // ignora convertidos (financeiro/estoque)
+        const fin = String(orc?.situacao_financeiro ?? '').toLowerCase();
+        const est = String(orc?.situacao_estoque ?? '').toLowerCase();
+        if (['1', 'true', 'sim', 'yes'].includes(fin) || ['1', 'true', 'sim', 'yes'].includes(est)) continue;
+        // filtro de data client-side
+        try {
+          const [y, m, d] = String(orc?.data ?? '').split('-').map(Number);
+          if (y && m && d) {
+            const orcDate = new Date(y, m - 1, d);
+            if (orcDate < start) continue;
           }
-        }
-
-        // Orçamentos usam `proxima_pagina`; `total_paginas` pode ser nulo.
-        // Sem esta leitura a sincronização de tipo=servico parava na página 1.
-        const explicitNextPage = Number(data?.meta?.proxima_pagina);
-        const totalPages = Number(data?.meta?.total_paginas);
-        if (Number.isFinite(explicitNextPage) && explicitNextPage > page) {
-          page = explicitNextPage;
-        } else if (Number.isFinite(totalPages) && totalPages > page) {
-          page += 1;
-        } else {
-          break;
+        } catch { /* ignore */ }
+        for (const p of orc?.produtos || []) {
+          const produto = p?.produto ?? p;
+          const pid = String(produto?.produto_id ?? '').trim();
+          if (!pid) continue;
+          const qty = parseDecimal(produto?.quantidade);
+          if (qty <= 0) continue;
+          if (!map.has(pid)) map.set(pid, { qtd: 0 });
+          map.get(pid)!.qtd += qty;
         }
       }
-    }
+      page++;
+    } while (page <= totalPages);
   }
   return map;
 }
@@ -280,13 +259,12 @@ Deno.serve(async (req: Request) => {
     // ----- config -----
     const { data: cfgRows } = await supabase
       .from('inventory_policy_config')
-      .select('lookback_days, sales_window_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
+      .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
       .order('created_at', { ascending: false })
       .limit(1);
     const cfg = (cfgRows?.[0] as any) || {};
     const thresholds = cfg.abc_thresholds || { A: 0.8, B: 0.95 };
     const lookbackDays = cfg.lookback_days || 180;
-    const salesWindowDays = cfg.sales_window_days || 60;
     const purchaseSituacaoIds: string[] = cfg.purchase_crossref_situacao_ids || [];
     const budgetSituacaoIds: string[] = cfg.budget_crossref_situacao_ids || [];
     const effectiveLookback = Math.max(lookbackDays, POLICY.analysisMonths * 31);
@@ -303,22 +281,13 @@ Deno.serve(async (req: Request) => {
       event_count: number;
       source_count: number;
       client_count: number;
-      recent_window_qty: number;
-      recent_source_count: number;
-      event_count_180d: number;
-      source_count_180d: number;
       first_date: string;
       last_date: string;
       monthly_qty: Record<string, number>;
       _sources: Set<string>;
       _clients: Set<string>;
-      _recent_sources: Set<string>;
-      _sources_180d: Set<string>;
     }
     const consMap = new Map<string, ConsRow>();
-    const aggregationNow = Date.now();
-    const recentCutoff = aggregationNow - salesWindowDays * 86400000;
-    const cutoff180 = aggregationNow - 180 * 86400000;
     {
       const PAGE = 1000;
       let from = 0;
@@ -339,9 +308,6 @@ Deno.serve(async (req: Request) => {
           const cliente = r.cliente_nome || '';
           const clientKey = (cliente || sourceId).toLowerCase().trim();
           const monthKey = (r.occurred_at || '').slice(0, 7);
-          const occurredMs = r.occurred_at ? new Date(r.occurred_at).getTime() : 0;
-          const inRecentWindow = occurredMs >= recentCutoff;
-          const in180d = occurredMs >= cutoff180;
           const ex = consMap.get(key);
           if (ex) {
             ex.total_qty += qty;
@@ -349,18 +315,8 @@ Deno.serve(async (req: Request) => {
             ex.event_count += 1;
             ex._sources.add(sourceId);
             ex._clients.add(clientKey);
-            if (inRecentWindow) {
-              ex.recent_window_qty += qty;
-              ex._recent_sources.add(sourceId);
-            }
-            if (in180d) {
-              ex.event_count_180d += 1;
-              ex._sources_180d.add(sourceId);
-            }
             ex.source_count = ex._sources.size;
             ex.client_count = ex._clients.size;
-            ex.recent_source_count = ex._recent_sources.size;
-            ex.source_count_180d = ex._sources_180d.size;
             if (r.occurred_at < ex.first_date) ex.first_date = r.occurred_at;
             if (r.occurred_at > ex.last_date) ex.last_date = r.occurred_at;
             ex.monthly_qty[monthKey] = (ex.monthly_qty[monthKey] || 0) + qty;
@@ -372,17 +328,11 @@ Deno.serve(async (req: Request) => {
               event_count: 1,
               source_count: 1,
               client_count: 1,
-              recent_window_qty: inRecentWindow ? qty : 0,
-              recent_source_count: inRecentWindow ? 1 : 0,
-              event_count_180d: in180d ? 1 : 0,
-              source_count_180d: in180d ? 1 : 0,
               first_date: r.occurred_at,
               last_date: r.occurred_at,
               monthly_qty: { [monthKey]: qty },
               _sources: new Set([sourceId]),
               _clients: new Set([clientKey]),
-              _recent_sources: inRecentWindow ? new Set([sourceId]) : new Set<string>(),
-              _sources_180d: in180d ? new Set([sourceId]) : new Set<string>(),
             });
           }
         }
@@ -445,7 +395,7 @@ Deno.serve(async (req: Request) => {
     // ----- dados GC (estoque, PCs, orçamentos) -----
     const stockMap = await fetchAllStock(gcAccess, gcSecret);
     const pcMap = purchaseSituacaoIds.length ? await fetchOpenPurchases(purchaseSituacaoIds, gcAccess, gcSecret) : new Map<string, PCEntry>();
-    const orcMap = budgetSituacaoIds.length ? await fetchPendingBudgets(budgetSituacaoIds, gcAccess, gcSecret) : new Map<string, OrcEntry>();
+    const orcMap = budgetSituacaoIds.length ? await fetchPendingBudgets(budgetSituacaoIds, lookbackDays, gcAccess, gcSecret) : new Map<string, OrcEntry>();
 
     // ----- motor -----
     const now = new Date();
@@ -494,27 +444,18 @@ Deno.serve(async (req: Request) => {
       else if (adi <= 1.32 && cv2 > 0.49) demandPattern = 'erratica';
       else demandPattern = 'lumpy';
 
-      const nonZeroMonths180 = monthlySeries.slice(0, 6).filter((v) => v > 0).length;
-      const oneOffDemand = isOneOffDemand({
-        sourceCount: r.source_count_180d,
-        eventCount: r.event_count_180d,
-        nonZeroMonths: nonZeroMonths180,
-      });
-      const isRecurring = !oneOffDemand && (
+      const isRecurring =
         r.source_count >= POLICY.minRecurringSources ||
         r.event_count >= POLICY.minRecurringSources ||
         r.total_qty >= POLICY.minRecurringQty ||
-        nonZeroMonths >= 2
-      );
+        nonZeroMonths >= 2;
 
-      const forecastMonthly = calculateDemandForecast({
-        demandPattern,
-        historicalMonthlyAvg,
-        recentWeightedAvg,
-        recentWindowQty: r.recent_window_qty,
-        recentWindowDays: salesWindowDays,
-        recentSourceCount: r.recent_source_count,
-      });
+      const baseForecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg);
+      let forecastMonthly: number;
+      if (demandPattern === 'intermitente') forecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg * 0.7);
+      else if (demandPattern === 'lumpy') forecastMonthly = historicalMonthlyAvg;
+      else if (demandPattern === 'sem_demanda') forecastMonthly = 0;
+      else forecastMonthly = baseForecastMonthly;
 
       const fornecedorId = override?.preferred_supplier_id || info?.fornecedor_id || null;
       const supplierLT = fornecedorId ? ltMap.get(fornecedorId) : null;
@@ -559,13 +500,9 @@ Deno.serve(async (req: Request) => {
       let maxStock = Math.ceil(avgDailyDemand * (leadTimeDays + coverageDays) + safetyStock);
       maxStock = Math.max(maxStock, operationalMinimum);
       if (override?.max_qty_override != null) maxStock = Number(override.max_qty_override);
-      const expensiveOneOff =
-        unitCost > POLICY.lowCostThresholds.moderate &&
-        oneOffDemand &&
-        !isCritical &&
-        budgetDemandQty <= 0 &&
-        override?.max_qty_override == null &&
-        override?.min_qty_override == null;
+      if (unitCost > POLICY.lowCostThresholds.moderate && demandPattern === 'lumpy' && !isCritical && budgetDemandQty <= 0 && override?.max_qty_override == null) {
+        maxStock = 0;
+      }
 
       const projForCompare = projectedAvailable ?? estoqueBase;
       const shouldReorder =
@@ -573,24 +510,22 @@ Deno.serve(async (req: Request) => {
         budgetDemandQty > estoqueBase ||
         (estoqueBase <= 0 && operationalMinimum > 0);
 
-      const targetQty = Math.max(maxStock, budgetDemandQty);
-      let qtyToBuy = shouldReorder
-        ? calculateNetPurchaseQty({
-            targetQty,
-            stockQty: estoqueBase,
-            openPurchaseQty: effectivePcQty,
-          })
-        : 0;
+      let qtyToBuy = shouldReorder ? maxStock - projForCompare : 0;
+      qtyToBuy = Math.max(0, Math.ceil(qtyToBuy));
+      if (budgetDemandQty > 0) {
+        qtyToBuy = Math.max(qtyToBuy, Math.ceil(budgetDemandQty - estoqueBase - effectivePcQty));
+        qtyToBuy = Math.max(0, qtyToBuy);
+      }
 
       // bloqueios anti-ruído
       const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
       const daysSinceLast = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
       const staleDemand = daysSinceLast > POLICY.staleDemandDays;
-      if (expensiveOneOff) qtyToBuy = 0;
+      const oneOffDemand = r.source_count <= 1 && r.event_count <= 1 && nonZeroMonths <= 1;
       if (staleDemand && oneOffDemand && budgetDemandQty <= 0 && !isCritical) qtyToBuy = 0;
       if (oneOffDemand && budgetDemandQty <= 0 && !isCritical && !isRecurring && operationalMinimum === 0) qtyToBuy = 0;
 
-      const qtyLiquida = qtyToBuy;
+      const qtyLiquida = Math.max(0, qtyToBuy - effectivePcQty);
       if (qtyLiquida <= 0) continue; // só persiste sugestões com necessidade líquida
 
       // motivos / alertas

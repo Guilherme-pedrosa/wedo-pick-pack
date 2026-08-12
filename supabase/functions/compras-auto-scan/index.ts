@@ -6,7 +6,6 @@ const corsHeaders = {
 };
 
 const GC_API_URL = 'https://api.gestaoclick.com';
-const GC_API_USER_ID = '1320473';
 
 // Config from user's screenshot — budget statuses to scan
 const BUDGET_STATUS_NAMES = [
@@ -71,12 +70,7 @@ function isConvertedBudgetFlag(value: unknown): boolean {
 }
 
 async function gcFetch(path: string, accessToken: string, secretToken: string): Promise<any> {
-  const targetUrl = new URL(path, GC_API_URL);
-  if (!targetUrl.searchParams.has('usuario_id')) {
-    targetUrl.searchParams.set('usuario_id', GC_API_USER_ID);
-  }
-
-  const res = await fetch(targetUrl, {
+  const res = await fetch(`${GC_API_URL}${path}`, {
     headers: {
       'access-token': accessToken,
       'secret-access-token': secretToken,
@@ -93,25 +87,14 @@ async function gcFetch(path: string, accessToken: string, secretToken: string): 
 async function fetchAllPages(basePath: string, at: string, st: string, delayMs = 400): Promise<any[]> {
   const all: any[] = [];
   let page = 1;
-  while (true) {
+  let totalPages = 1;
+  while (page <= totalPages) {
     const sep = basePath.includes('?') ? '&' : '?';
     const res = await gcFetch(`${basePath}${sep}limite=100&pagina=${page}`, at, st);
-    const rows = res?.data || [];
-    all.push(...rows);
-
-    // Na listagem de orçamentos o GC normalmente informa `proxima_pagina` e
-    // pode devolver `total_paginas: null`. Usar apenas total_paginas truncava
-    // a sincronização na primeira página, principalmente em tipo=servico.
-    const explicitNextPage = Number(res?.meta?.proxima_pagina);
-    const totalPages = Number(res?.meta?.total_paginas);
-    if (Number.isFinite(explicitNextPage) && explicitNextPage > page) {
-      page = explicitNextPage;
-    } else if (Number.isFinite(totalPages) && totalPages > page) {
-      page += 1;
-    } else {
-      break;
-    }
-    await new Promise(r => setTimeout(r, delayMs));
+    totalPages = res?.meta?.total_paginas || 1;
+    all.push(...(res?.data || []));
+    page++;
+    if (page <= totalPages) await new Promise(r => setTimeout(r, delayMs));
   }
   return all;
 }
@@ -165,25 +148,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { data: policyRows } = await admin
-      .from('inventory_policy_config')
-      .select('budget_crossref_situacao_ids, purchase_crossref_situacao_ids')
-      .order('created_at', { ascending: false })
-      .limit(1);
-    const policy = policyRows?.[0] || {};
-
-    // Step 1: a Política de Estoque é a autoridade. Nomes fixos ficam apenas
-    // como fallback para instalações antigas sem configuração persistida.
+    // Step 1: Resolve budget status IDs by name
     const statusOrcRes = await gcFetch('/api/situacoes_orcamentos', AT, ST);
     const allBudgetStatuses: { id: string; nome: string }[] = statusOrcRes?.data || [];
-    const configuredBudgetStatusIds = Array.isArray(policy.budget_crossref_situacao_ids)
-      ? policy.budget_crossref_situacao_ids.map(String).filter(Boolean)
-      : [];
-    const budgetStatusIds = configuredBudgetStatusIds.length > 0
-      ? configuredBudgetStatusIds
-      : allBudgetStatuses
-        .filter(s => BUDGET_STATUS_NAMES.some(n => normalizeForMatch(n) === normalizeForMatch(s.nome)))
-        .map(s => s.id);
+    const budgetStatusIds = allBudgetStatuses
+      .filter(s => BUDGET_STATUS_NAMES.some(n => normalizeForMatch(n) === normalizeForMatch(s.nome)))
+      .map(s => s.id);
     console.log(`[COMPRAS-AUTO] Budget statuses matched: ${budgetStatusIds.length}`);
 
     if (budgetStatusIds.length === 0) {
@@ -193,35 +163,20 @@ Deno.serve(async (req: Request) => {
     // Step 2: Resolve purchase order status IDs
     const statusCompraRes = await gcFetch('/api/situacoes_compras', AT, ST);
     const allPurchaseStatuses: { id: string; nome: string }[] = statusCompraRes?.data || [];
-    const configuredPurchaseStatusIds = Array.isArray(policy.purchase_crossref_situacao_ids)
-      ? policy.purchase_crossref_situacao_ids.map(String).filter(Boolean)
-      : [];
-    const purchaseStatusIds = configuredPurchaseStatusIds.length > 0
-      ? configuredPurchaseStatusIds
-      : allPurchaseStatuses
-        .filter(s => PURCHASE_CROSSREF_NAMES.some(n => normalizeForMatch(n) === normalizeForMatch(s.nome)))
-        .map(s => s.id);
+    const purchaseStatusIds = allPurchaseStatuses
+      .filter(s => PURCHASE_CROSSREF_NAMES.some(n => normalizeForMatch(n) === normalizeForMatch(s.nome)))
+      .map(s => s.id);
     console.log(`[COMPRAS-AUTO] Purchase statuses matched: ${purchaseStatusIds.length}`);
 
-    // Step 3: o GC separa orçamento por tipo. Sem `tipo=servico`, a maior
-    // parte dos orçamentos técnicos não é percorrida.
+    // Step 3: Fetch all approved budgets
     const budgetStatusSet = new Set(budgetStatusIds);
-    const allBudgetsById = new Map<string, any>();
-    const budgetTypeCounts = { produto: 0, servico: 0 };
+    const allBudgets: any[] = [];
     for (const sid of budgetStatusIds) {
-      for (const type of ['produto', 'servico'] as const) {
-        const raw = await fetchAllPages(`/api/orcamentos?situacao_id=${sid}&tipo=${type}`, AT, ST);
-        const filtered = raw.filter((o: any) => budgetStatusSet.has(String(o.situacao_id)));
-        for (const budget of filtered) {
-          const budgetId = normalizeId(budget?.id);
-          if (!budgetId || allBudgetsById.has(budgetId)) continue;
-          allBudgetsById.set(budgetId, budget);
-          budgetTypeCounts[type]++;
-        }
-      }
+      const raw = await fetchAllPages(`/api/orcamentos?situacao_id=${sid}`, AT, ST);
+      const filtered = raw.filter((o: any) => budgetStatusSet.has(String(o.situacao_id)));
+      allBudgets.push(...filtered);
     }
-    const allBudgets = [...allBudgetsById.values()];
-    console.log(`[COMPRAS-AUTO] Fetched ${allBudgets.length} budgets (${budgetTypeCounts.produto} produto + ${budgetTypeCounts.servico} servico)`);
+    console.log(`[COMPRAS-AUTO] Fetched ${allBudgets.length} budgets`);
 
     // Step 4: Build OS index (budget→OS links + reserved demand)
     const osIndex: Record<string, { os_codigo: string; os_id: string; nome_situacao: string }> = {};
@@ -511,13 +466,10 @@ Deno.serve(async (req: Request) => {
       orcamentos_convertidos_count: convertedCount,
       itens_list: itensList,
       config_used: {
-        budget_statuses: allBudgetStatuses.filter(s => budgetStatusIds.includes(String(s.id))).map(s => s.nome),
-        purchase_statuses: allPurchaseStatuses.filter(s => purchaseStatusIds.includes(String(s.id))).map(s => s.nome),
+        budget_statuses: BUDGET_STATUS_NAMES,
+        purchase_statuses: PURCHASE_CROSSREF_NAMES,
         budget_status_ids: budgetStatusIds,
         purchase_status_ids: purchaseStatusIds,
-        budget_types: ['produto', 'servico'],
-        budget_type_counts: budgetTypeCounts,
-        gc_usuario_id: GC_API_USER_ID,
       },
       status: 'success',
       duration_ms: durationMs,
@@ -533,8 +485,6 @@ Deno.serve(async (req: Request) => {
       total_itens_comprar: itensList.length,
       total_itens_ok: itensOk.length,
       total_cobertos: itensCobertos.length,
-      orcamentos_produto: budgetTypeCounts.produto,
-      orcamentos_servico: budgetTypeCounts.servico,
       estimativa_total: estimativaTotal,
       duration_ms: durationMs,
     }), {

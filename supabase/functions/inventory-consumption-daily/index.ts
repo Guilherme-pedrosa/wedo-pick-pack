@@ -21,6 +21,7 @@ Deno.serve(async (req: Request) => {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
   const syncUrl = `${supabaseUrl}/functions/v1/inventory-consumption-sync`;
+  const selfUrl = `${supabaseUrl}/functions/v1/inventory-consumption-daily`;
 
   const callSync = async (cursor: unknown) => {
     const res = await fetch(syncUrl, {
@@ -44,16 +45,6 @@ Deno.serve(async (req: Request) => {
     while (true) {
       const data = await callSync(cursor);
 
-      const errText = typeof data?.error === 'string' ? data.error : '';
-      const isRateLimited = data?.retry === true
-        || data?.rate_limited === true
-        || /RATE_LIMIT|429/i.test(errText);
-
-      if (isRateLimited) {
-        console.warn('inventory-consumption-daily: rate limited, stopping invocation');
-        return jsonResp({ done: false, rate_limited: true, cursor: data?.cursor ?? cursor });
-      }
-
       if (data?.error) {
         console.error('inventory-consumption-daily: sync error', data.error);
         return jsonResp({ error: data.error }, 200);
@@ -64,17 +55,23 @@ Deno.serve(async (req: Request) => {
         return jsonResp({ done: true, stats: data.stats });
       }
 
-      const prevKey = cursorKey(cursor);
-      const nextCursor = data?.cursor ?? null;
-      if (!nextCursor || cursorKey(nextCursor) === prevKey) {
-        console.warn('inventory-consumption-daily: cursor did not advance, stopping');
-        return jsonResp({ done: false, stalled: true, cursor: nextCursor ?? cursor });
-      }
-      cursor = nextCursor;
+      cursor = data?.cursor ?? cursor;
 
+      // If we're running out of time, re-invoke ourselves (fire-and-forget)
+      // to continue the loop with the current cursor.
       if (Date.now() - startedAt > TIME_BUDGET_MS) {
-        console.log('inventory-consumption-daily: time budget reached, stopping');
-        return jsonResp({ done: false, timed_out: true, cursor });
+        console.log('inventory-consumption-daily: time budget reached, chaining');
+        fetch(selfUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceKey}`,
+            'apikey': anonKey,
+          },
+          body: JSON.stringify({ cursor }),
+        }).catch((e) => console.error('chain invoke failed', e));
+
+        return jsonResp({ done: false, chained: true });
       }
     }
   } catch (err) {
@@ -88,14 +85,4 @@ function jsonResp(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
-}
-
-function cursorKey(cursor: unknown): string {
-  try {
-    const c = cursor as { taskIndex?: unknown; page?: unknown } | null;
-    if (c && typeof c === 'object') return `${c.taskIndex}:${c.page}`;
-    return JSON.stringify(cursor);
-  } catch {
-    return 'na';
-  }
 }

@@ -1,5 +1,3 @@
-import { withGcApiUser, withGcApiUserPayload } from '../_shared/gc-api-user.ts';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -134,10 +132,10 @@ async function gcRequest(path: string, method: string, body?: unknown) {
       'Accept': 'application/json',
     },
   };
-  if (method === 'POST' || method === 'PUT') {
-    opts.body = JSON.stringify(withGcApiUserPayload(body));
+  if (body && (method === 'POST' || method === 'PUT')) {
+    opts.body = JSON.stringify(body);
   }
-  const res = await fetch(withGcApiUser(path, GC_API_URL), opts);
+  const res = await fetch(`${GC_API_URL}${path}`, opts);
   const text = await res.text();
   let json: any;
   try { json = JSON.parse(text); } catch { json = { raw: text }; }
@@ -524,6 +522,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const {
       auvo_user_id,     // number - idUserFrom in Auvo
+      gc_usuario_id,    // optional - GC user ID for attribution
       auvo_customer_id, // optional - Auvo customer ID (when no source task to clone from)
       manual_equipamento, // optional - manual equipment text when not in orçamento
       partial_auxiliaries, // optional - entregas parciais já feitas (baixa parcial)

@@ -2231,10 +2231,6 @@ export type Database = {
         }
         Returns: string
       }
-      partial_writeoff_refresh_inventory_consumption: {
-        Args: { p_batch_id: string }
-        Returns: number
-      }
       partial_writeoff_release_batch: {
         Args: { p_batch_id: string; p_error_message: string }
         Returns: undefined

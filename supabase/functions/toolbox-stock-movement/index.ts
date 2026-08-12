@@ -1,9 +1,3 @@
-import {
-  GC_API_USER_ID,
-  withGcApiUser,
-  withGcApiUserPayload,
-} from '../_shared/gc-api-user.ts';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -199,7 +193,7 @@ async function handleLegacyEntradaBySale(
   technicianName: string,
   gcHeaders: Record<string, string>
 ) {
-  const getRes = await fetch(withGcApiUser(`/api/vendas/${vendaGcId}`, GC_API_URL), {
+  const getRes = await fetch(`${GC_API_URL}/api/vendas/${vendaGcId}`, {
     method: 'GET',
     headers: gcHeaders,
   });
@@ -220,15 +214,14 @@ async function handleLegacyEntradaBySale(
   const obsNote = `\n[WeDo Maleta - DEVOLUÇÃO] Técnico: ${technicianName} | Maleta: ${toolboxName} | ${now}`;
 
   const putPayload: Record<string, any> = {
-    usuario_id: GC_API_USER_ID,
     situacao_id: SITUACAO_DEVOLUCAO,
     observacoes: (vendaData.observacoes || '') + obsNote,
   };
 
-  const putRes = await fetch(withGcApiUser(`/api/vendas/${vendaGcId}`, GC_API_URL), {
+  const putRes = await fetch(`${GC_API_URL}/api/vendas/${vendaGcId}`, {
     method: 'PUT',
     headers: gcHeaders,
-    body: JSON.stringify(withGcApiUserPayload(putPayload)),
+    body: JSON.stringify(putPayload),
   });
 
   const putBody = await readJson(putRes);
@@ -317,7 +310,7 @@ async function rollbackAppliedAdjustments(applied: AppliedAdjustment[], gcHeader
 
 async function fetchProductById(produtoId: string, gcHeaders: Record<string, string>): Promise<{ product: any | null; error?: string }> {
   try {
-    const res = await fetch(withGcApiUser(`/api/produtos/${produtoId}`, GC_API_URL), {
+    const res = await fetch(`${GC_API_URL}/api/produtos/${produtoId}`, {
       method: 'GET',
       headers: gcHeaders,
     });
@@ -348,10 +341,10 @@ async function updateProductStock(product: any, newStock: number, gcHeaders: Rec
     return { success: false, error: `Produto ${product?.id} sem campos obrigatórios para edição (nome/codigo_interno).` };
   }
 
-  const res = await fetch(withGcApiUser(`/api/produtos/${product.id}`, GC_API_URL), {
+  const res = await fetch(`${GC_API_URL}/api/produtos/${product.id}`, {
     method: 'PUT',
     headers: gcHeaders,
-    body: JSON.stringify(withGcApiUserPayload(payload)),
+    body: JSON.stringify(payload),
   });
 
   const body = await readJson(res);

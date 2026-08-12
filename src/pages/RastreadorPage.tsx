@@ -505,8 +505,9 @@ export default function RastreadorPage() {
       const gcClienteId = String((entry.orcamento as any).cliente_id || '');
       if (usedAuvoCustomerId && gcClienteId) {
         try {
+          const gcCodigo = gcClienteInfo?.codigo || (await findClienteCodigo(gcClienteId)) || null;
           const { data: existing } = await (supabase.from('auvo_customer_links') as any)
-            .select('id, usage_count')
+            .select('id, usage_count, gc_cliente_codigo')
             .eq('gc_cliente_id', gcClienteId)
             .eq('auvo_customer_id', usedAuvoCustomerId)
             .maybeSingle();
@@ -517,13 +518,14 @@ export default function RastreadorPage() {
                 usage_count: Number(existing.usage_count || 0) + 1,
                 last_used_at: new Date().toISOString(),
                 auvo_customer_name: auvoSelection?.name || undefined,
+                gc_cliente_codigo: gcCodigo || existing.gc_cliente_codigo || null,
               })
               .eq('id', existing.id)
               .select();
           } else {
             await (supabase.from('auvo_customer_links') as any).insert({
               gc_cliente_id: gcClienteId,
-              gc_cliente_codigo: gcClienteInfo?.codigo || null,
+              gc_cliente_codigo: gcCodigo,
               gc_cliente_nome: gcClienteInfo?.nome || entry.orcamento.nome_cliente || '',
               cnpj_normalizado: gcClienteInfo?.cnpjDigits || null,
               auvo_customer_id: usedAuvoCustomerId,
@@ -533,6 +535,7 @@ export default function RastreadorPage() {
         } catch (e) {
           console.warn('[rastreador] falha ao registrar associação Auvo', e);
         }
+
       }
 
 

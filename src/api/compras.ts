@@ -160,7 +160,7 @@ function resolveProductGroup(detail: GCProdutoDetalhe | null | undefined): strin
 
 export async function buildOSIndex(
   onProgress?: (step: string, checked: number, total: number) => void,
-  forceRebuild = false,
+  forceRebuild = true,
 ): Promise<{ index: OSIndex; totalVinculos: number; builtAt: number; reservedDemand: OSReservedDemand }> {
   // Return cache if still valid
   if (!forceRebuild && osIndexCache && (Date.now() - osIndexCache.builtAt < OS_INDEX_TTL)) {
@@ -252,6 +252,7 @@ export function getOSIndexStatus(): { totalVinculos: number; builtAt: number; is
 export function clearOSIndexCache() {
   osIndexCache = null;
 }
+
 
 function normalizeId(value: string | number | null | undefined): string {
   if (value == null) return '';

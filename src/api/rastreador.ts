@@ -111,13 +111,16 @@ async function fetchGeneratedOSFallback(orcamentos: GCOrcamento[]): Promise<Map<
       const osId = normalizeId(row.os_id);
       if (!osId) return null;
       const os = await getOS(osId);
+      // Se a OS não existir mais ou não puder ser acessada, ignora o vínculo
+      if (!os || !os.id) return null;
       return [orcamentoId, {
         os_codigo: String(os.codigo || row.os_codigo || ''),
         os_id: String(os.id || osId),
         nome_situacao: String(os.nome_situacao || ''),
         nome_cliente: String(os.nome_cliente || row.nome_cliente || ''),
       }] as const;
-    } catch {
+    } catch (e) {
+      console.warn(`[RASTREADOR] OS ${row.os_codigo} vinculada ao orçamento ${orcamentoId} não pôde ser carregada (possivelmente apagada):`, e);
       return null;
     }
   }));

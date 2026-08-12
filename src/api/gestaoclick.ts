@@ -1352,6 +1352,7 @@ export interface GCClienteDetail {
   id: string;
   codigo: string;
   nome: string;
+  razaoSocial: string;
   cnpj: string;
   cnpjDigits: string;
 }

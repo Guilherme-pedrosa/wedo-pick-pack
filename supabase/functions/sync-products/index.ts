@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { withGcApiUser } from '../_shared/gc-api-user.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,7 +50,7 @@ async function gcFetch(
   accessToken: string,
   secretToken: string,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${GC_API_URL}${path}`, {
+  const res = await fetch(withGcApiUser(path, GC_API_URL), {
     headers: {
       'access-token': accessToken,
       'secret-access-token': secretToken,

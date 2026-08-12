@@ -2,6 +2,7 @@ import { convertToModelMessages, streamText, tool, stepCountIs, type UIMessage }
 import { z } from "npm:zod@3";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { createLovableAiGatewayProvider } from "../_shared/ai-gateway.ts";
+import { withGcApiUser, withGcApiUserPayload } from "../_shared/gc-api-user.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,7 +43,7 @@ async function fetchGcDetail(
   secret: string,
 ): Promise<GcDetail | null> {
   try {
-    const res = await fetch(`${GC_API_URL}/api/produtos/${produtoId}`, {
+    const res = await fetch(withGcApiUser(`/api/produtos/${produtoId}`, GC_API_URL), {
       headers: {
         "access-token": access,
         "secret-access-token": secret,
@@ -117,7 +118,7 @@ function normalizeStr(s: unknown): string {
 
 async function gcGet(path: string, access: string, secret: string): Promise<any | null> {
   try {
-    const res = await fetch(`${GC_API_URL}${path}`, {
+    const res = await fetch(withGcApiUser(path, GC_API_URL), {
       headers: {
         "access-token": access,
         "secret-access-token": secret,
@@ -139,7 +140,7 @@ async function gcSend(
   access: string,
   secret: string,
 ): Promise<{ ok: boolean; json: any }> {
-  const res = await fetch(`${GC_API_URL}${path}`, {
+  const res = await fetch(withGcApiUser(path, GC_API_URL), {
     method,
     headers: {
       "access-token": access,
@@ -147,7 +148,7 @@ async function gcSend(
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: method !== "DELETE" ? JSON.stringify(withGcApiUserPayload(body)) : undefined,
   });
   let json: any = null;
   try {
@@ -871,7 +872,7 @@ Deno.serve(async (req: Request) => {
 
     async function gcGetRaw(path: string): Promise<{ ok: boolean; status: number; json: any }> {
       try {
-        const res = await fetch(`${GC_API_URL}${path}`, {
+        const res = await fetch(withGcApiUser(path, GC_API_URL), {
           headers: {
             "access-token": GC_ACCESS!,
             "secret-access-token": GC_SECRET!,

@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { withGcApiUser } from '../_shared/gc-api-user.ts';
 
 const GC_API_URL = 'https://api.gestaoclick.com';
 
@@ -21,7 +22,7 @@ async function gcGetOrder(
 ): Promise<{ nome_situacao: string; situacao_id: string } | null> {
   const path = orderType === 'os' ? `/api/ordens_servicos/${orderId}` : `/api/vendas/${orderId}`;
   try {
-    const res = await fetch(`${GC_API_URL}${path}`, {
+    const res = await fetch(withGcApiUser(path, GC_API_URL), {
       headers: {
         'access-token': accessToken,
         'secret-access-token': secretToken,

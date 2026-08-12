@@ -196,6 +196,7 @@ export default function AgendaOSPanel() {
   );
   const [repairLocationFilter, setRepairLocationFilter] = useState<RepairLocationFilter>('all');
   const [separationFilter, setSeparationFilter] = useState<SeparationFilter>('all');
+  const [showOnlyArrivals, setShowOnlyArrivals] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [detailItemsByOsId, setDetailItemsByOsId] = useState<Record<string, SeparationItemSnapshot[]>>({});
@@ -352,7 +353,15 @@ export default function AgendaOSPanel() {
   const filteredRows = useMemo(() => {
     const term = normalizeName(search);
     return rows.filter((row) => {
-      const { os, task, separation, bucket } = row;
+      const { os, task, separation, bucket, items } = row;
+
+      // Check if it has a valid arrival date (Purchase Forecast)
+      const hasArrival = items.some(item => 
+        item.ordens_compra?.some(order => !!order.previsao_chegada && order.previsao_chegada !== '—')
+      );
+
+      if (showOnlyArrivals && !hasArrival) return false;
+
       const matchesSearch = !term
         || normalizeName(os.nome_cliente).includes(term)
         || normalizeName(os.nome_tecnico || '').includes(term)
@@ -406,6 +415,7 @@ export default function AgendaOSPanel() {
     search,
     separationFilter,
     technicianFilter,
+    showOnlyArrivals,
   ]);
 
   const filteredOrphans = useMemo(() => {
@@ -730,6 +740,17 @@ export default function AgendaOSPanel() {
               <option value="separated">Separada, sem vínculo</option>
               <option value="linked">Peças vinculadas</option>
             </select>
+          </FilterField>
+          <FilterField label="Previsão de Peças" icon={PackageSearch}>
+            <div className="flex items-center h-10 px-3 border rounded-md bg-background">
+              <label className="flex items-center gap-2 text-sm cursor-pointer w-full">
+                <Checkbox 
+                  checked={showOnlyArrivals} 
+                  onCheckedChange={(checked) => setShowOnlyArrivals(!!checked)} 
+                />
+                Apenas com previsão
+              </label>
+            </div>
           </FilterField>
           <FilterField label="Buscar" icon={Search}>
             <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="OS, cliente, tarefa…" />
@@ -1127,12 +1148,17 @@ function AgendaRowContent({
   const linked = !!row.separation?.technician_name;
   const awaitingTask = isResolvingExecutionTasks && row.taskIds.length > 0 && !row.task;
   
+  const hasArrival = row.items.some(item => 
+    item.ordens_compra?.some(order => !!order.previsao_chegada && order.previsao_chegada !== '—')
+  );
+
   return (
-    <Card className={cn('overflow-hidden border-l-4', 
+    <Card className={cn('overflow-hidden border-l-4 transition-all', 
       row.bucket === 'scheduled-date' && 'border-l-blue-500', 
       row.bucket === 'available' && 'border-l-amber-500', 
       row.bucket === 'other-date' && 'border-l-slate-400', 
-      row.bucket === 'no-task' && 'border-l-red-400'
+      row.bucket === 'no-task' && 'border-l-red-400',
+      hasArrival && 'ring-2 ring-purple-500 ring-offset-2 border-l-purple-600 shadow-md shadow-purple-100/50'
     )}>
       <div className="p-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -1159,6 +1185,11 @@ function AgendaRowContent({
               {linked && (
                 <Badge variant="outline" className="border-violet-200 bg-violet-50 text-violet-700">
                   <CheckCircle2 className="mr-1 h-3 w-3" /> Peças com {row.separation?.technician_name}
+                </Badge>
+               )}
+              {hasArrival && (
+                <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 animate-pulse">
+                  <Clock className="mr-1 h-3 w-3" /> Previsão de peças
                 </Badge>
               )}
             </div>

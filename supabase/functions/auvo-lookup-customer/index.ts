@@ -44,17 +44,31 @@ async function fetchCustomersPage(token: string, page: number, pageSize: number,
   params.set('pageSize', String(pageSize));
   params.set('order', 'asc');
 
-  const res = await fetch(`${AUVO_API_URL}/customers/?${params.toString()}`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-  });
+  const started = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  let res: Response;
+  try {
+    res = await fetch(`${AUVO_API_URL}/customers/?${params.toString()}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    console.error('[auvo-lookup-customer] page fetch failed', page, String(e));
+    return { ok: false as const, entities: [] as any[], hasMore: false, status: 0 };
+  }
+  clearTimeout(timer);
+
   const text = await res.text();
   let data: any;
   try { data = JSON.parse(text); } catch { data = null; }
-  if (!res.ok) return { ok: false as const, entities: [] as any[], hasMore: false };
+  console.log(`[auvo-lookup-customer] page=${page} size=${pageSize} status=${res.status} ms=${Date.now() - started}`);
+  if (!res.ok) return { ok: false as const, entities: [] as any[], hasMore: false, status: res.status };
   const entities: any[] = data?.result?.entityList ?? data?.result?.entities ?? data?.result ?? [];
   const list = Array.isArray(entities) ? entities : [];
-  return { ok: true as const, entities: list, hasMore: list.length >= pageSize };
+  return { ok: true as const, entities: list, hasMore: list.length >= pageSize, status: res.status };
 }
 
 // Module-level directory cache (warm instances answer instantly)

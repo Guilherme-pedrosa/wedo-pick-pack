@@ -134,7 +134,7 @@ Deno.serve(async (req: Request) => {
     if (action === 'diag') {
       const size = Number(body?.pageSize || 100);
       const started = Date.now();
-      const page = await fetchCustomersPage(token, 1, size);
+      const page = await fetchCustomersPage(token, 1, size, body?.filter || undefined);
       return new Response(
         JSON.stringify({
           ms: Date.now() - started,

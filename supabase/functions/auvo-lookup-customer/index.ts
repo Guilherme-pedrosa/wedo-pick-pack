@@ -131,6 +131,21 @@ Deno.serve(async (req: Request) => {
 
     const token = await auvoLogin();
 
+    if (action === 'diag') {
+      const size = Number(body?.pageSize || 100);
+      const started = Date.now();
+      const page = await fetchCustomersPage(token, 1, size);
+      return new Response(
+        JSON.stringify({
+          ms: Date.now() - started,
+          status: page.status,
+          count: page.entities.length,
+          sample: page.entities.slice(0, 2),
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     if (action === 'search-by-cnpj') {
       const cnpj = onlyDigits(body?.cnpj);
       if (!cnpj) {

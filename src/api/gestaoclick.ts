@@ -1357,6 +1357,58 @@ export interface GCClienteDetail {
   cnpjDigits: string;
 }
 
+/**
+ * A API do Gestão Click não devolve o código sequencial do cadastro do cliente,
+ * mas aceita filtrar por ele (`/api/clientes?codigo=N`). Como os códigos são
+ * atribuídos em ordem de cadastro (ids crescentes), resolvemos o código por
+ * busca binária sobre o intervalo de códigos, comparando o id retornado.
+ */
+const clienteCodigoCache = new Map<string, string>();
+
+export async function findClienteCodigo(clienteId: string, maxCodigo = 5000): Promise<string> {
+  const target = Number(String(clienteId || '').trim());
+  if (!Number.isFinite(target) || target <= 0 || isUsingMock()) return '';
+  const cacheKey = String(target);
+  const cached = clienteCodigoCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const probe = async (codigo: number): Promise<any | null> => {
+    try {
+      const res = await apiRequest<{ data: any[] }>(`/api/clientes?codigo=${codigo}`);
+      const rows = Array.isArray(res?.data) ? res.data : [];
+      return rows[0] || null;
+    } catch {
+      return null;
+    }
+  };
+
+  let lo = 1;
+  let hi = maxCodigo;
+  let found = '';
+  let requests = 0;
+
+  while (lo <= hi && requests < 40) {
+    const mid = Math.floor((lo + hi) / 2);
+    let cursor = mid;
+    let rec: any = null;
+    // códigos podem ter lacunas (cadastros excluídos): avança até achar um válido
+    while (cursor <= hi && !rec && requests < 40) {
+      rec = await probe(cursor);
+      requests++;
+      if (!rec) cursor++;
+    }
+    if (!rec) { hi = mid - 1; continue; }
+
+    const id = Number(rec.id);
+    if (id === target) { found = String(cursor); break; }
+    if (id < target) lo = cursor + 1;
+    else hi = mid - 1;
+  }
+
+  clienteCodigoCache.set(cacheKey, found);
+  return found;
+}
+
 /** Fetch a GestãoClick client record (code, name, CNPJ) by id. */
 export async function getClienteDetail(clienteId: string): Promise<GCClienteDetail | null> {
   const id = String(clienteId || '').trim();
@@ -1366,11 +1418,11 @@ export async function getClienteDetail(clienteId: string): Promise<GCClienteDeta
     const c = res?.data;
     if (!c) return null;
     const cnpj = String(c.cnpj || c.cpf || c.cpf_cnpj || '').trim();
+    let codigo = String(c.codigo ?? c.codigo_interno ?? '').trim();
+    if (!codigo) codigo = await findClienteCodigo(id);
     return {
       id: String(c.id ?? id),
-      // O GC não expõe o código sequencial do cadastro (ex.: #284) na API.
-      // Só usamos o campo se ele realmente existir — nunca o ID interno como fallback.
-      codigo: String(c.codigo ?? c.codigo_interno ?? '').trim(),
+      codigo,
       nome: String(c.nome ?? c.razao_social ?? ''),
       razaoSocial: String(c.razao_social ?? c.nome ?? ''),
       cnpj,
@@ -1380,3 +1432,4 @@ export async function getClienteDetail(clienteId: string): Promise<GCClienteDeta
     return null;
   }
 }
+

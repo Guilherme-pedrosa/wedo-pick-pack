@@ -1347,3 +1347,32 @@ export async function getProductInternalCodes(produtoIds: string[]): Promise<Rec
   }
   return map;
 }
+
+export interface GCClienteDetail {
+  id: string;
+  codigo: string;
+  nome: string;
+  cnpj: string;
+  cnpjDigits: string;
+}
+
+/** Fetch a GestãoClick client record (code, name, CNPJ) by id. */
+export async function getClienteDetail(clienteId: string): Promise<GCClienteDetail | null> {
+  const id = String(clienteId || '').trim();
+  if (!id || isUsingMock()) return null;
+  try {
+    const res = await apiRequest<{ data: any }>(`/api/clientes/${id}`);
+    const c = res?.data;
+    if (!c) return null;
+    const cnpj = String(c.cnpj || c.cpf || c.cpf_cnpj || '').trim();
+    return {
+      id: String(c.id ?? id),
+      codigo: String(c.codigo ?? c.codigo_interno ?? c.id ?? id),
+      nome: String(c.nome ?? c.razao_social ?? ''),
+      cnpj,
+      cnpjDigits: cnpj.replace(/\D+/g, ''),
+    };
+  } catch {
+    return null;
+  }
+}

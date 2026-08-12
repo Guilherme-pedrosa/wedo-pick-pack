@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      auvo_customer_links: {
+        Row: {
+          auvo_customer_id: string
+          auvo_customer_name: string
+          cnpj_normalizado: string | null
+          created_at: string
+          gc_cliente_codigo: string | null
+          gc_cliente_id: string
+          gc_cliente_nome: string
+          id: string
+          last_used_at: string
+          updated_at: string
+          usage_count: number
+        }
+        Insert: {
+          auvo_customer_id: string
+          auvo_customer_name: string
+          cnpj_normalizado?: string | null
+          created_at?: string
+          gc_cliente_codigo?: string | null
+          gc_cliente_id: string
+          gc_cliente_nome: string
+          id?: string
+          last_used_at?: string
+          updated_at?: string
+          usage_count?: number
+        }
+        Update: {
+          auvo_customer_id?: string
+          auvo_customer_name?: string
+          cnpj_normalizado?: string | null
+          created_at?: string
+          gc_cliente_codigo?: string | null
+          gc_cliente_id?: string
+          gc_cliente_nome?: string
+          id?: string
+          last_used_at?: string
+          updated_at?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
       box_checkin_items: {
         Row: {
           box_id: string

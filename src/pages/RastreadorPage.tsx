@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
-import { getStatusOS } from '@/api/gestaoclick';
+import { getStatusOS, getClienteDetail } from '@/api/gestaoclick';
+import { AuvoCustomerPicker, AuvoCustomerSelection } from '@/components/rastreador/AuvoCustomerPicker';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo, OSReservedInfo } from '@/api/rastreador';
 import { OrcamentoConvertidoWarning } from '@/api/types';
 import { GCOrcamento } from '@/api/types';
@@ -356,8 +357,15 @@ export default function RastreadorPage() {
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
-  const [auvoCustomerIdInput, setAuvoCustomerIdInput] = useState('');
-  const [auvoCustomerLookup, setAuvoCustomerLookup] = useState<{ loading: boolean; name?: string; error?: string }>({ loading: false });
+  const [auvoSelection, setAuvoSelection] = useState<AuvoCustomerSelection | null>(null);
+  const confirmClienteId = confirmEntry ? String((confirmEntry.orcamento as any).cliente_id || '') : '';
+  const gcClienteQuery = useQuery({
+    queryKey: ['gc-cliente', confirmClienteId],
+    queryFn: () => getClienteDetail(confirmClienteId),
+    enabled: !!confirmClienteId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const gcClienteInfo = gcClienteQuery.data || null;
   const [manualEquipamento, setManualEquipamento] = useState('');
   const [generatedOrcIds, setGeneratedOrcIds] = useState<Set<string>>(new Set());
   const [generationResult, setGenerationResult] = useState<{
@@ -390,19 +398,13 @@ export default function RastreadorPage() {
         return;
       }
 
-      // Cliente é sempre obrigatório: ou vem de uma tarefa OS válida, ou vem de ID informado e verificado
+      // Cliente é sempre obrigatório: ou vem de uma tarefa OS válida, ou vem do cliente Auvo validado
       const sourceTaskId = getSourceTaskOsId(entry.orcamento);
       const hasValidSourceTask = parsePositiveInt(sourceTaskId) !== null;
-      const typedCustomerId = parsePositiveInt(auvoCustomerIdInput);
+      const selectedCustomerId = parsePositiveInt(auvoSelection?.id || '');
 
-      if (!hasValidSourceTask && !typedCustomerId) {
-        toast.error('Informe um código de cliente Auvo válido antes de gerar a OS.');
-        setGeneratingOS(false);
-        return;
-      }
-
-      if (!hasValidSourceTask && !auvoCustomerLookup.name) {
-        toast.error('Clique em "Verificar" para validar o cliente Auvo antes de confirmar.');
+      if (!hasValidSourceTask && !selectedCustomerId) {
+        toast.error('Selecione e valide o cliente Auvo antes de gerar a OS.');
         setGeneratingOS(false);
         return;
       }
@@ -416,9 +418,9 @@ export default function RastreadorPage() {
         gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
       };
 
-      // Sempre manda fallback de cliente se digitado; backend usa só se necessário
-      if (typedCustomerId) {
-        bodyPayload.auvo_customer_id = typedCustomerId;
+      // Sempre manda fallback de cliente se selecionado; backend usa só se necessário
+      if (selectedCustomerId) {
+        bodyPayload.auvo_customer_id = selectedCustomerId;
       }
 
       // If equipment was manually provided, include it
@@ -497,6 +499,42 @@ export default function RastreadorPage() {
         osCodigo: data.os_codigo,
       });
       setGeneratedOrcIds(prev => new Set(prev).add(entry.orcamento.id));
+
+      // Registrar/atualizar histórico de associação GC ↔ Auvo (somente após sucesso)
+      const usedAuvoCustomerId = String(data?.auvo_customer_id || auvoSelection?.id || '');
+      const gcClienteId = String((entry.orcamento as any).cliente_id || '');
+      if (usedAuvoCustomerId && gcClienteId) {
+        try {
+          const { data: existing } = await (supabase.from('auvo_customer_links') as any)
+            .select('id, usage_count')
+            .eq('gc_cliente_id', gcClienteId)
+            .eq('auvo_customer_id', usedAuvoCustomerId)
+            .maybeSingle();
+
+          if (existing?.id) {
+            await (supabase.from('auvo_customer_links') as any)
+              .update({
+                usage_count: Number(existing.usage_count || 0) + 1,
+                last_used_at: new Date().toISOString(),
+                auvo_customer_name: auvoSelection?.name || undefined,
+              })
+              .eq('id', existing.id)
+              .select();
+          } else {
+            await (supabase.from('auvo_customer_links') as any).insert({
+              gc_cliente_id: gcClienteId,
+              gc_cliente_codigo: gcClienteInfo?.codigo || null,
+              gc_cliente_nome: gcClienteInfo?.nome || entry.orcamento.nome_cliente || '',
+              cnpj_normalizado: gcClienteInfo?.cnpjDigits || null,
+              auvo_customer_id: usedAuvoCustomerId,
+              auvo_customer_name: auvoSelection?.name || '',
+            }).select();
+          }
+        } catch (e) {
+          console.warn('[rastreador] falha ao registrar associação Auvo', e);
+        }
+      }
+
 
       // Log successful generation
       await (supabase.from("os_generation_logs") as any).insert({
@@ -790,7 +828,7 @@ export default function RastreadorPage() {
                 variant="outline"
                 size="sm"
                 className={`h-6 text-[10px] px-2 gap-1 ${hasConflict ? 'border-amber-500 text-amber-600 hover:bg-amber-50' : 'border-green-500 text-green-600 hover:bg-green-50'}`}
-                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoCustomerIdInput(''); setAuvoCustomerLookup({ loading: false }); }}
+                onClick={(e) => { e.stopPropagation(); setConfirmEntry(entry); setGenerationResult(null); setAuvoSelection(null); }}
                 disabled={isGenerating}
               >
                 {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
@@ -1543,7 +1581,17 @@ export default function RastreadorPage() {
             <div className="space-y-3">
               <div className="rounded-lg border border-border p-3 space-y-1.5">
                 <p className="text-sm font-semibold">Orçamento #{confirmEntry.orcamento.codigo}</p>
-                <p className="text-xs text-muted-foreground">{confirmEntry.orcamento.nome_cliente}</p>
+                <p className="text-xs text-muted-foreground">
+                  Cliente Gestão Click: {gcClienteInfo?.nome || confirmEntry.orcamento.nome_cliente}
+                  {gcClienteQuery.isLoading
+                    ? ' — Código GC: …'
+                    : gcClienteInfo?.codigo
+                      ? ` — Código GC: ${gcClienteInfo.codigo}`
+                      : ''}
+                </p>
+                {gcClienteInfo?.cnpj && (
+                  <p className="text-xs text-muted-foreground">CNPJ: {gcClienteInfo.cnpj}</p>
+                )}
                 {getEquipamento(confirmEntry.orcamento) && (
                   <p className="text-xs text-muted-foreground">🔧 {getEquipamento(confirmEntry.orcamento)}</p>
                 )}
@@ -1573,79 +1621,17 @@ export default function RastreadorPage() {
                 </div>
               )}
 
-              {/* Cliente Auvo: sempre permitir fallback manual + validação */}
-              {(() => {
-                const sourceTaskId = getSourceTaskOsId(confirmEntry.orcamento);
-                const hasValidSourceTask = parsePositiveInt(sourceTaskId) !== null;
-
-                const handleLookup = async () => {
-                  const customerId = parsePositiveInt(auvoCustomerIdInput);
-                  if (!customerId) {
-                    setAuvoCustomerLookup({ loading: false, error: 'Informe um código de cliente válido.' });
-                    return;
-                  }
-
-                  setAuvoCustomerLookup({ loading: true });
-                  try {
-                    const { data, error } = await supabase.functions.invoke('auvo-lookup-customer', {
-                      body: { customer_id: customerId },
-                    });
-                    if (error) throw new Error('Falha na consulta');
-                    if (data?.error) throw new Error(data.error);
-                    setAuvoCustomerLookup({ loading: false, name: data.name });
-                  } catch (e: any) {
-                    setAuvoCustomerLookup({ loading: false, error: e.message || 'Erro ao consultar' });
-                  }
-                };
-
-                return (
-                  <div className={`rounded-lg border p-3 space-y-2 ${hasValidSourceTask ? 'border-border bg-muted/40' : 'border-amber-500/50 bg-amber-500/5'}`}>
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className={`h-4 w-4 ${hasValidSourceTask ? 'text-muted-foreground' : 'text-amber-600'}`} />
-                      <span className={`text-xs font-semibold ${hasValidSourceTask ? 'text-foreground' : 'text-amber-700'}`}>
-                        {hasValidSourceTask ? `Tarefa OS de origem detectada (#${sourceTaskId})` : 'Cliente obrigatório'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {hasValidSourceTask
-                        ? 'Se a tarefa de origem não tiver cliente no Auvo, informe um código abaixo como fallback.'
-                        : 'Este orçamento não tem tarefa OS válida para clonar cliente. Informe e valide o cliente no Auvo para continuar.'}
-                    </p>
-                    <div className="flex gap-2">
-                      <Input
-                        type="number"
-                        placeholder="Código do cliente (Auvo)"
-                        value={auvoCustomerIdInput}
-                        onChange={(e) => { setAuvoCustomerIdInput(e.target.value); setAuvoCustomerLookup({ loading: false }); }}
-                        className="h-8 text-sm flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 text-xs px-3"
-                        disabled={!parsePositiveInt(auvoCustomerIdInput) || auvoCustomerLookup.loading}
-                        onClick={handleLookup}
-                      >
-                        {auvoCustomerLookup.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                        <span className="ml-1">Verificar</span>
-                      </Button>
-                    </div>
-                    {auvoCustomerLookup.name && (
-                      <div className="flex items-center gap-2 rounded border border-green-500/50 bg-green-500/5 p-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                        <span className="text-xs font-medium text-green-700">{auvoCustomerLookup.name}</span>
-                      </div>
-                    )}
-                    {auvoCustomerLookup.error && (
-                      <div className="flex items-center gap-2 rounded border border-destructive/50 bg-destructive/5 p-2">
-                        <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
-                        <span className="text-xs text-destructive">{auvoCustomerLookup.error}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              {/* Cliente Auvo: histórico -> CNPJ -> manual, sempre com validação na API */}
+              <AuvoCustomerPicker
+                key={confirmEntry.orcamento.id}
+                gcClienteId={confirmClienteId}
+                cnpjDigits={gcClienteInfo?.cnpjDigits || ''}
+                cnpjFormatted={gcClienteInfo?.cnpj || ''}
+                loadingClient={gcClienteQuery.isLoading}
+                hasValidSourceTask={parsePositiveInt(getSourceTaskOsId(confirmEntry.orcamento)) !== null}
+                sourceTaskId={getSourceTaskOsId(confirmEntry.orcamento)}
+                onChange={setAuvoSelection}
+              />
 
               {/* Show equipment input when no equipment detected */}
               {(() => {
@@ -1723,8 +1709,8 @@ export default function RastreadorPage() {
                     if (!confirmEntry) return true;
                     const sourceTaskId = getSourceTaskOsId(confirmEntry.orcamento);
                     const hasValidSourceTask = parsePositiveInt(sourceTaskId) !== null;
-                    const hasValidatedManualCustomer = !!parsePositiveInt(auvoCustomerIdInput) && !!auvoCustomerLookup.name;
-                    const hasCustomer = hasValidSourceTask || hasValidatedManualCustomer;
+                    const hasValidatedCustomer = !!parsePositiveInt(auvoSelection?.id || '');
+                    const hasCustomer = hasValidSourceTask || hasValidatedCustomer;
                     return !hasCustomer;
                   })()}
                   className="gap-2"

@@ -57,6 +57,29 @@ async function fetchCustomersPage(token: string, page: number, pageSize: number,
   return { ok: true as const, entities: list, hasMore: list.length >= pageSize };
 }
 
+// Module-level directory cache (warm instances answer instantly)
+let directoryCache: { at: number; customers: AuvoCustomer[] } | null = null;
+const DIRECTORY_TTL_MS = 10 * 60 * 1000;
+
+async function loadDirectory(token: string): Promise<AuvoCustomer[]> {
+  if (directoryCache && Date.now() - directoryCache.at < DIRECTORY_TTL_MS) {
+    return directoryCache.customers;
+  }
+  const all: AuvoCustomer[] = [];
+  const pageSize = 500;
+  for (let page = 1; page <= 12; page++) {
+    const { ok, entities, hasMore } = await fetchCustomersPage(token, page, pageSize);
+    if (!ok) break;
+    for (const raw of entities) {
+      const c = mapCustomer(raw);
+      if (c.id) all.push(c);
+    }
+    if (!hasMore) break;
+  }
+  directoryCache = { at: Date.now(), customers: all };
+  return all;
+}
+
 async function searchByCnpj(token: string, cnpj: string): Promise<AuvoCustomer[]> {
   const target = onlyDigits(cnpj);
   if (!target) return [];
@@ -64,29 +87,20 @@ async function searchByCnpj(token: string, cnpj: string): Promise<AuvoCustomer[]
   const found = new Map<string, AuvoCustomer>();
 
   // 1) Try Auvo's own filter first (fast path)
-  for (const filter of [{ cpfCnpj: target }, { cpfCnpj: cnpj }]) {
-    try {
-      const { entities } = await fetchCustomersPage(token, 1, 100, filter);
-      for (const raw of entities) {
-        const c = mapCustomer(raw);
-        if (c.id && c.cnpj === target) found.set(c.id, c);
-      }
-    } catch (_) { /* ignore and fall back */ }
-    if (found.size > 0) break;
-  }
+  try {
+    const { entities } = await fetchCustomersPage(token, 1, 100, { cpfCnpj: target });
+    for (const raw of entities) {
+      const c = mapCustomer(raw);
+      if (c.id && c.cnpj === target) found.set(c.id, c);
+    }
+  } catch (_) { /* ignore and fall back */ }
 
   if (found.size > 0) return [...found.values()];
 
-  // 2) Fallback: scan pages and compare normalized CNPJ client-side
-  const pageSize = 500;
-  for (let page = 1; page <= 20; page++) {
-    const { ok, entities, hasMore } = await fetchCustomersPage(token, page, pageSize);
-    if (!ok) break;
-    for (const raw of entities) {
-      const c = mapCustomer(raw);
-      if (c.id && c.cnpj && c.cnpj === target) found.set(c.id, c);
-    }
-    if (!hasMore) break;
+  // 2) Fallback: scan the (cached) customer directory and compare normalized CNPJ
+  const directory = await loadDirectory(token);
+  for (const c of directory) {
+    if (c.cnpj && c.cnpj === target) found.set(c.id, c);
   }
 
   return [...found.values()];

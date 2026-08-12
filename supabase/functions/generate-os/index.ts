@@ -654,7 +654,7 @@ Deno.serve(async (req: Request) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
     const checkRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/os_generation_logs?orcamento_id=eq.${encodeURIComponent(orcamento.id)}&success=eq.true&select=id,os_codigo,auvo_task_id,operator_name,created_at&order=created_at.desc&limit=1`,
+      `${SUPABASE_URL}/rest/v1/os_generation_logs?orcamento_id=eq.${encodeURIComponent(orcamento.id)}&success=eq.true&select=id,os_id,os_codigo,auvo_task_id,operator_name,created_at&order=created_at.desc&limit=1`,
       {
         headers: {
           'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -666,14 +666,48 @@ Deno.serve(async (req: Request) => {
 
     if (Array.isArray(existingLogs) && existingLogs.length > 0) {
       const prev = existingLogs[0];
-      const msg = `OS já gerada para este orçamento! OS #${prev.os_codigo || '?'} / Auvo #${prev.auvo_task_id || '?'} por ${prev.operator_name || 'operador'} em ${new Date(prev.created_at).toLocaleString('pt-BR')}`;
-      console.warn(`[generate-os] BLOCKED duplicate: ${msg}`);
-      return new Response(
-        JSON.stringify({ error: msg, duplicate: true, existing: prev }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+
+      // O documento anterior pode ter sido APAGADO no GestãoClick.
+      // Só bloqueia como duplicata se ele ainda existir no ERP.
+      let stillExists = true;
+      if (prev.os_id) {
+        stillExists = false;
+        for (const path of [`/api/os/${prev.os_id}`, `/api/vendas/${prev.os_id}`]) {
+          try {
+            const doc = await gcRequest(path, 'GET');
+            const found = doc?.data ?? doc?.item ?? null;
+            if (found && (found.id || found.codigo)) { stillExists = true; break; }
+          } catch (_e) { /* não encontrado / sem permissão => segue */ }
+        }
+      }
+
+      if (stillExists) {
+        const msg = `OS já gerada para este orçamento! OS #${prev.os_codigo || '?'} / Auvo #${prev.auvo_task_id || '?'} por ${prev.operator_name || 'operador'} em ${new Date(prev.created_at).toLocaleString('pt-BR')}`;
+        console.warn(`[generate-os] BLOCKED duplicate: ${msg}`);
+        return new Response(
+          JSON.stringify({ error: msg, duplicate: true, existing: prev }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.warn(`[generate-os] Documento anterior (OS #${prev.os_codigo}) não existe mais no GC — liberando nova geração`);
+      // Marca o log antigo como inválido para não bloquear novamente
+      await fetch(`${SUPABASE_URL}/rest/v1/os_generation_logs?id=eq.${prev.id}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          success: false,
+          error_message: 'Documento apagado no GestãoClick (validado na geração)',
+        }),
+      }).catch(() => {});
     }
     console.log('[generate-os] No previous generation found, proceeding...');
+
 
     // ============================================
     // STEP 1: Login to Auvo

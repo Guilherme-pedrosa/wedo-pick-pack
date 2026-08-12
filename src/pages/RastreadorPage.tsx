@@ -1592,6 +1592,9 @@ export default function RastreadorPage() {
                 {gcClienteInfo?.cnpj && (
                   <p className="text-xs text-muted-foreground">CNPJ: {gcClienteInfo.cnpj}</p>
                 )}
+                {gcClienteInfo?.razaoSocial && gcClienteInfo.razaoSocial !== gcClienteInfo.nome && (
+                  <p className="text-xs text-muted-foreground">Descrição: {gcClienteInfo.razaoSocial}</p>
+                )}
                 {getEquipamento(confirmEntry.orcamento) && (
                   <p className="text-xs text-muted-foreground">🔧 {getEquipamento(confirmEntry.orcamento)}</p>
                 )}

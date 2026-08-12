@@ -6,6 +6,11 @@
 // Chave de análise EXCLUSIVAMENTE por produto_id (nunca item_key/variacao_id).
 // ============================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import {
+  calculateDemandForecast,
+  calculateNetPurchaseQty,
+  isOneOffDemand,
+} from '../_shared/inventory-planning.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -275,12 +280,13 @@ Deno.serve(async (req: Request) => {
     // ----- config -----
     const { data: cfgRows } = await supabase
       .from('inventory_policy_config')
-      .select('lookback_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
+      .select('lookback_days, sales_window_days, abc_thresholds, purchase_crossref_situacao_ids, budget_crossref_situacao_ids')
       .order('created_at', { ascending: false })
       .limit(1);
     const cfg = (cfgRows?.[0] as any) || {};
     const thresholds = cfg.abc_thresholds || { A: 0.8, B: 0.95 };
     const lookbackDays = cfg.lookback_days || 180;
+    const salesWindowDays = cfg.sales_window_days || 60;
     const purchaseSituacaoIds: string[] = cfg.purchase_crossref_situacao_ids || [];
     const budgetSituacaoIds: string[] = cfg.budget_crossref_situacao_ids || [];
     const effectiveLookback = Math.max(lookbackDays, POLICY.analysisMonths * 31);
@@ -297,13 +303,22 @@ Deno.serve(async (req: Request) => {
       event_count: number;
       source_count: number;
       client_count: number;
+      recent_window_qty: number;
+      recent_source_count: number;
+      event_count_180d: number;
+      source_count_180d: number;
       first_date: string;
       last_date: string;
       monthly_qty: Record<string, number>;
       _sources: Set<string>;
       _clients: Set<string>;
+      _recent_sources: Set<string>;
+      _sources_180d: Set<string>;
     }
     const consMap = new Map<string, ConsRow>();
+    const aggregationNow = Date.now();
+    const recentCutoff = aggregationNow - salesWindowDays * 86400000;
+    const cutoff180 = aggregationNow - 180 * 86400000;
     {
       const PAGE = 1000;
       let from = 0;
@@ -324,6 +339,9 @@ Deno.serve(async (req: Request) => {
           const cliente = r.cliente_nome || '';
           const clientKey = (cliente || sourceId).toLowerCase().trim();
           const monthKey = (r.occurred_at || '').slice(0, 7);
+          const occurredMs = r.occurred_at ? new Date(r.occurred_at).getTime() : 0;
+          const inRecentWindow = occurredMs >= recentCutoff;
+          const in180d = occurredMs >= cutoff180;
           const ex = consMap.get(key);
           if (ex) {
             ex.total_qty += qty;
@@ -331,8 +349,18 @@ Deno.serve(async (req: Request) => {
             ex.event_count += 1;
             ex._sources.add(sourceId);
             ex._clients.add(clientKey);
+            if (inRecentWindow) {
+              ex.recent_window_qty += qty;
+              ex._recent_sources.add(sourceId);
+            }
+            if (in180d) {
+              ex.event_count_180d += 1;
+              ex._sources_180d.add(sourceId);
+            }
             ex.source_count = ex._sources.size;
             ex.client_count = ex._clients.size;
+            ex.recent_source_count = ex._recent_sources.size;
+            ex.source_count_180d = ex._sources_180d.size;
             if (r.occurred_at < ex.first_date) ex.first_date = r.occurred_at;
             if (r.occurred_at > ex.last_date) ex.last_date = r.occurred_at;
             ex.monthly_qty[monthKey] = (ex.monthly_qty[monthKey] || 0) + qty;
@@ -344,11 +372,17 @@ Deno.serve(async (req: Request) => {
               event_count: 1,
               source_count: 1,
               client_count: 1,
+              recent_window_qty: inRecentWindow ? qty : 0,
+              recent_source_count: inRecentWindow ? 1 : 0,
+              event_count_180d: in180d ? 1 : 0,
+              source_count_180d: in180d ? 1 : 0,
               first_date: r.occurred_at,
               last_date: r.occurred_at,
               monthly_qty: { [monthKey]: qty },
               _sources: new Set([sourceId]),
               _clients: new Set([clientKey]),
+              _recent_sources: inRecentWindow ? new Set([sourceId]) : new Set<string>(),
+              _sources_180d: in180d ? new Set([sourceId]) : new Set<string>(),
             });
           }
         }
@@ -460,18 +494,27 @@ Deno.serve(async (req: Request) => {
       else if (adi <= 1.32 && cv2 > 0.49) demandPattern = 'erratica';
       else demandPattern = 'lumpy';
 
-      const isRecurring =
+      const nonZeroMonths180 = monthlySeries.slice(0, 6).filter((v) => v > 0).length;
+      const oneOffDemand = isOneOffDemand({
+        sourceCount: r.source_count_180d,
+        eventCount: r.event_count_180d,
+        nonZeroMonths: nonZeroMonths180,
+      });
+      const isRecurring = !oneOffDemand && (
         r.source_count >= POLICY.minRecurringSources ||
         r.event_count >= POLICY.minRecurringSources ||
         r.total_qty >= POLICY.minRecurringQty ||
-        nonZeroMonths >= 2;
+        nonZeroMonths >= 2
+      );
 
-      const baseForecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg);
-      let forecastMonthly: number;
-      if (demandPattern === 'intermitente') forecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg * 0.7);
-      else if (demandPattern === 'lumpy') forecastMonthly = historicalMonthlyAvg;
-      else if (demandPattern === 'sem_demanda') forecastMonthly = 0;
-      else forecastMonthly = baseForecastMonthly;
+      const forecastMonthly = calculateDemandForecast({
+        demandPattern,
+        historicalMonthlyAvg,
+        recentWeightedAvg,
+        recentWindowQty: r.recent_window_qty,
+        recentWindowDays: salesWindowDays,
+        recentSourceCount: r.recent_source_count,
+      });
 
       const fornecedorId = override?.preferred_supplier_id || info?.fornecedor_id || null;
       const supplierLT = fornecedorId ? ltMap.get(fornecedorId) : null;
@@ -516,9 +559,13 @@ Deno.serve(async (req: Request) => {
       let maxStock = Math.ceil(avgDailyDemand * (leadTimeDays + coverageDays) + safetyStock);
       maxStock = Math.max(maxStock, operationalMinimum);
       if (override?.max_qty_override != null) maxStock = Number(override.max_qty_override);
-      if (unitCost > POLICY.lowCostThresholds.moderate && demandPattern === 'lumpy' && !isCritical && budgetDemandQty <= 0 && override?.max_qty_override == null) {
-        maxStock = 0;
-      }
+      const expensiveOneOff =
+        unitCost > POLICY.lowCostThresholds.moderate &&
+        oneOffDemand &&
+        !isCritical &&
+        budgetDemandQty <= 0 &&
+        override?.max_qty_override == null &&
+        override?.min_qty_override == null;
 
       const projForCompare = projectedAvailable ?? estoqueBase;
       const shouldReorder =
@@ -526,22 +573,24 @@ Deno.serve(async (req: Request) => {
         budgetDemandQty > estoqueBase ||
         (estoqueBase <= 0 && operationalMinimum > 0);
 
-      let qtyToBuy = shouldReorder ? maxStock - projForCompare : 0;
-      qtyToBuy = Math.max(0, Math.ceil(qtyToBuy));
-      if (budgetDemandQty > 0) {
-        qtyToBuy = Math.max(qtyToBuy, Math.ceil(budgetDemandQty - estoqueBase - effectivePcQty));
-        qtyToBuy = Math.max(0, qtyToBuy);
-      }
+      const targetQty = Math.max(maxStock, budgetDemandQty);
+      let qtyToBuy = shouldReorder
+        ? calculateNetPurchaseQty({
+            targetQty,
+            stockQty: estoqueBase,
+            openPurchaseQty: effectivePcQty,
+          })
+        : 0;
 
       // bloqueios anti-ruído
       const lastMs = r.last_date ? new Date(r.last_date).getTime() : 0;
       const daysSinceLast = lastMs ? (now.getTime() - lastMs) / 86400000 : Infinity;
       const staleDemand = daysSinceLast > POLICY.staleDemandDays;
-      const oneOffDemand = r.source_count <= 1 && r.event_count <= 1 && nonZeroMonths <= 1;
+      if (expensiveOneOff) qtyToBuy = 0;
       if (staleDemand && oneOffDemand && budgetDemandQty <= 0 && !isCritical) qtyToBuy = 0;
       if (oneOffDemand && budgetDemandQty <= 0 && !isCritical && !isRecurring && operationalMinimum === 0) qtyToBuy = 0;
 
-      const qtyLiquida = Math.max(0, qtyToBuy - effectivePcQty);
+      const qtyLiquida = qtyToBuy;
       if (qtyLiquida <= 0) continue; // só persiste sugestões com necessidade líquida
 
       // motivos / alertas

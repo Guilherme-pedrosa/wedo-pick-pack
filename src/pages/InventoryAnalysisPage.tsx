@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { needsReactiveInventoryRestock } from '@/lib/inventoryPlanning';
+import {
+  calculateDemandForecast,
+  calculateNetPurchaseQty,
+  isOneOffDemand,
+  needsReactiveInventoryRestock,
+} from '@/lib/inventoryPlanning';
 import { triggerManualSync } from '@/lib/manualSync';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -46,6 +51,7 @@ interface ConsumptionRow {
   event_count: number;
   source_count: number;
   client_count: number;
+  source_count_window: number;
   event_count_90d: number;
   event_count_180d: number;
   source_count_90d: number;
@@ -68,6 +74,7 @@ function emptyConsumptionRow(produtoId: string): ConsumptionRow {
     event_count: 0,
     source_count: 0,
     client_count: 0,
+    source_count_window: 0,
     event_count_90d: 0,
     event_count_180d: 0,
     source_count_90d: 0,
@@ -385,7 +392,7 @@ async function fetchConsumptionAgg(salesWindowDays: number = 60): Promise<Consum
   // Chave de agregação EXCLUSIVAMENTE por produto_id (sem variacao_id / item_key).
   type Internal = ConsumptionRow & {
     _sources: Set<string>; _clients: Set<string>; _sourceRefs: Map<string, SourceRef>;
-    _sources90: Set<string>; _sources180: Set<string>;
+    _sourcesWindow: Set<string>; _sources90: Set<string>; _sources180: Set<string>;
   };
   const map = new Map<string, Internal>();
   for (const r of rows) {
@@ -408,6 +415,7 @@ async function fetchConsumptionAgg(salesWindowDays: number = 60): Promise<Consum
       if (sourceType === 'venda') existing.qty_venda += qty; else existing.qty_os += qty;
       if (in60) {
         existing.qty_60d += qty;
+        existing._sourcesWindow.add(sourceId);
       }
       existing.total_value += val;
       existing.event_count += 1;
@@ -419,6 +427,7 @@ async function fetchConsumptionAgg(salesWindowDays: number = 60): Promise<Consum
       if (in180) existing._sources180.add(sourceId);
       existing.source_count = existing._sources.size;
       existing.client_count = existing._clients.size;
+      existing.source_count_window = existing._sourcesWindow.size;
       existing.source_count_90d = existing._sources90.size;
       existing.source_count_180d = existing._sources180.size;
       if (r.occurred_at < existing.first_date) existing.first_date = r.occurred_at;
@@ -443,6 +452,7 @@ async function fetchConsumptionAgg(salesWindowDays: number = 60): Promise<Consum
         event_count: 1,
         source_count: 1,
         client_count: 1,
+        source_count_window: in60 ? 1 : 0,
         event_count_90d: in90 ? 1 : 0,
         event_count_180d: in180 ? 1 : 0,
         source_count_90d: in90 ? 1 : 0,
@@ -454,6 +464,7 @@ async function fetchConsumptionAgg(salesWindowDays: number = 60): Promise<Consum
         monthly_qty: { [monthKey]: qty },
         _sources: new Set([sourceId]),
         _clients: new Set([clientKey]),
+        _sourcesWindow: in60 ? new Set([sourceId]) : new Set<string>(),
         _sources90: in90 ? new Set([sourceId]) : new Set<string>(),
         _sources180: in180 ? new Set([sourceId]) : new Set<string>(),
         _sourceRefs: refMap,
@@ -671,19 +682,27 @@ export default function InventoryAnalysisPage() {
       else demandPattern = 'lumpy';
 
       // --- Recorrência ---
-      const isRecurring =
+      const oneOffDemand = isOneOffDemand({
+        sourceCount: r.source_count_180d,
+        eventCount: r.event_count_180d,
+        nonZeroMonths: nonZeroMonths180,
+      });
+      const isRecurring = !oneOffDemand && (
         r.source_count >= POLICY.minRecurringSources ||
         r.event_count >= POLICY.minRecurringSources ||
         r.total_qty >= POLICY.minRecurringQty ||
-        nonZeroMonths >= 2;
+        nonZeroMonths >= 2
+      );
 
       // --- Previsão de demanda mensal por padrão ---
-      const baseForecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg);
-      let forecastMonthly: number;
-      if (demandPattern === 'intermitente') forecastMonthly = Math.max(historicalMonthlyAvg, recentWeightedAvg * 0.7);
-      else if (demandPattern === 'lumpy') forecastMonthly = historicalMonthlyAvg;
-      else if (demandPattern === 'sem_demanda') forecastMonthly = 0;
-      else forecastMonthly = baseForecastMonthly; // regular / erratica
+      const forecastMonthly = calculateDemandForecast({
+        demandPattern,
+        historicalMonthlyAvg,
+        recentWeightedAvg,
+        recentWindowQty: r.qty_60d,
+        recentWindowDays: salesWindowDays,
+        recentSourceCount: r.source_count_window,
+      });
 
       // --- Lead time (por fornecedor; senão padrão), com limites ---
       const fornecedorId = info?.fornecedor_id || null;
@@ -755,11 +774,12 @@ export default function InventoryAnalysisPage() {
       const hasManual = manualStockItem || manualMinStock > 0;
 
       const hasRecentConsumption = totalQty90d > 0 || daysSinceLastConsumption <= 90;
-      const isRecurringStock =
+      const isRecurringStock = !oneOffDemand && (
         r.source_count_90d >= 2 ||
         r.source_count_180d >= 3 ||
         nonZeroMonths180 >= 2 ||
-        totalQty180d >= minShelfQty;
+        totalQty180d >= minShelfQty
+      );
 
       // --- Reposição REATIVA ---
       // Item controlado por estoque no GC (movimenta_estoque = 1) que caiu a zero / abaixo
@@ -779,7 +799,7 @@ export default function InventoryAnalysisPage() {
       const isStockEligible = (hasRecentConsumption && isRecurringStock) || hasManual || inventoryNeedsRestock;
 
       const oneEventOnly = r.event_count <= 1;
-      const expensiveOneOff = unitCost > 500 && oneEventOnly && !hasManual;
+      const expensiveOneOff = unitCost > 500 && oneOffDemand && !hasManual && budgetSignalQty <= 0;
 
       // --- Demanda de estoque (consumo real) e demanda total ---
       // Item elegível apenas por reposição reativa (zerou, sem recorrência) usa um piso
@@ -787,12 +807,18 @@ export default function InventoryAnalysisPage() {
       const reactiveOnly =
         inventoryNeedsRestock && !((hasRecentConsumption && isRecurringStock) || hasManual);
       const shelfFloor = reactiveOnly ? Math.max(operationalMinimum, 1) : minShelfQty;
-      const stockDemandQty = isStockEligible ? Math.max(maxStock, shelfFloor) : 0;
+      const stockDemandQty = isStockEligible
+        ? (reactiveOnly ? shelfFloor : Math.max(maxStock, shelfFloor))
+        : 0;
       // orçamento NÃO soma cego: usa max com a demanda de estoque, e só p/ elegíveis
       const demandaTotal = isStockEligible ? Math.max(stockDemandQty, budgetSignalQty) : 0;
 
       let suggestedQty = isStockEligible
-        ? Math.max(0, Math.ceil(demandaTotal - estoqueBase - effectivePcQty))
+        ? calculateNetPurchaseQty({
+            targetQty: demandaTotal,
+            stockQty: estoqueBase,
+            openPurchaseQty: effectivePcQty,
+          })
         : 0;
 
       // --- Lote mínimo / múltiplo de compra (se existirem no cadastro) ---
@@ -802,7 +828,6 @@ export default function InventoryAnalysisPage() {
       if (suggestedQty > 0 && orderMultiple > 0) suggestedQty = Math.ceil(suggestedQty / orderMultiple) * orderMultiple;
 
       const staleDemand = daysSinceLastConsumption > POLICY.staleDemandDays;
-      const oneOffDemand = r.source_count <= 1 && r.event_count <= 1 && nonZeroMonths <= 1;
 
       // item em orçamento pendente mas sem giro → não compra automática (aba separada)
       const budgetWithoutGiro = budgetSignalQty > 0 && !isStockEligible;
@@ -811,7 +836,10 @@ export default function InventoryAnalysisPage() {
 
       // === STATUS DE ESTOQUE ===
       let statusEstoque: StatusEstoque;
-      if (!isStockEligible) {
+      if (expensiveOneOff) {
+        qtyToBuy = 0;
+        statusEstoque = 'REVISAR_MANUALMENTE';
+      } else if (!isStockEligible) {
         qtyToBuy = 0;
         statusEstoque = (expensiveOneOff || (unitCost > 500 && oneEventOnly))
           ? 'REVISAR_MANUALMENTE'
@@ -943,7 +971,7 @@ export default function InventoryAnalysisPage() {
         source_refs: r.source_refs || [],
       };
     });
-  }, [consumptionQuery.data, namesQuery.data, stockMap, movMap, pcMap, orcMap, thresholds, supplierLTMap]);
+  }, [consumptionQuery.data, namesQuery.data, stockMap, movMap, pcMap, orcMap, thresholds, supplierLTMap, salesWindowDays]);
 
   // Unique groups for filter
   const uniqueGrupos = useMemo(() => {

@@ -58,7 +58,8 @@ export default function CalendarView({
         title: `OS #${row.os.codigo} - ${row.os.nome_cliente.split(' ')[0]}`,
         start,
         backgroundColor: arrivalDate ? '#9333ea' : (row.bucket === 'scheduled-date' ? '#3B82F6' : '#94A3B8'),
-        borderColor: arrivalDate ? '#7e22ce' : (row.bucket === 'scheduled-date' ? '#2563EB' : '#64748B'),
+        borderColor: arrivalDate ? '#9333ea' : (row.bucket === 'scheduled-date' ? '#2563EB' : '#64748B'),
+        classNames: arrivalDate ? ['ring-2 ring-purple-300 ring-offset-1'] : [],
         extendedProps: { row, isArrival: !!arrivalDate }
       };
     }).filter(e => e.start !== '');

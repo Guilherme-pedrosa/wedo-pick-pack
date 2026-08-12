@@ -1370,6 +1370,7 @@ export async function getClienteDetail(clienteId: string): Promise<GCClienteDeta
       id: String(c.id ?? id),
       codigo: String(c.codigo ?? c.codigo_interno ?? c.id ?? id),
       nome: String(c.nome ?? c.razao_social ?? ''),
+      razaoSocial: String(c.razao_social ?? c.nome ?? ''),
       cnpj,
       cnpjDigits: cnpj.replace(/\D+/g, ''),
     };

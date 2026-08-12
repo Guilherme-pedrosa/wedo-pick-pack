@@ -20,11 +20,19 @@ export type Database = {
           auvo_customer_name: string
           cnpj_normalizado: string | null
           created_at: string
+          created_by: string | null
+          created_by_name: string | null
           gc_cliente_codigo: string | null
           gc_cliente_id: string
           gc_cliente_nome: string
           id: string
+          last_orcamento_codigo: string | null
+          last_orcamento_id: string | null
           last_used_at: string
+          last_used_by: string | null
+          last_used_by_name: string | null
+          orcamento_codigo: string | null
+          orcamento_id: string | null
           updated_at: string
           usage_count: number
         }
@@ -33,11 +41,19 @@ export type Database = {
           auvo_customer_name: string
           cnpj_normalizado?: string | null
           created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
           gc_cliente_codigo?: string | null
           gc_cliente_id: string
           gc_cliente_nome: string
           id?: string
+          last_orcamento_codigo?: string | null
+          last_orcamento_id?: string | null
           last_used_at?: string
+          last_used_by?: string | null
+          last_used_by_name?: string | null
+          orcamento_codigo?: string | null
+          orcamento_id?: string | null
           updated_at?: string
           usage_count?: number
         }
@@ -46,11 +62,19 @@ export type Database = {
           auvo_customer_name?: string
           cnpj_normalizado?: string | null
           created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
           gc_cliente_codigo?: string | null
           gc_cliente_id?: string
           gc_cliente_nome?: string
           id?: string
+          last_orcamento_codigo?: string | null
+          last_orcamento_id?: string | null
           last_used_at?: string
+          last_used_by?: string | null
+          last_used_by_name?: string | null
+          orcamento_codigo?: string | null
+          orcamento_id?: string | null
           updated_at?: string
           usage_count?: number
         }

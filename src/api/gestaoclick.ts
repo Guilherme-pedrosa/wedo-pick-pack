@@ -1368,7 +1368,9 @@ export async function getClienteDetail(clienteId: string): Promise<GCClienteDeta
     const cnpj = String(c.cnpj || c.cpf || c.cpf_cnpj || '').trim();
     return {
       id: String(c.id ?? id),
-      codigo: String(c.codigo ?? c.codigo_interno ?? c.id ?? id),
+      // O GC não expõe o código sequencial do cadastro (ex.: #284) na API.
+      // Só usamos o campo se ele realmente existir — nunca o ID interno como fallback.
+      codigo: String(c.codigo ?? c.codigo_interno ?? '').trim(),
       nome: String(c.nome ?? c.razao_social ?? ''),
       razaoSocial: String(c.razao_social ?? c.nome ?? ''),
       cnpj,

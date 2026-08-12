@@ -1,59 +1,57 @@
-# Associação inteligente de cliente GC ↔ Auvo em "Gerar OS + Tarefa Auvo"
+# Associação inteligente Cliente Gestão Click ↔ Auvo
 
-Objetivo: eliminar a digitação manual do código Auvo, aprendendo a associação a partir do código do cliente do GestãoClick e usando o CNPJ apenas para descoberta inicial.
+Objetivo: eliminar a digitação manual do código do cliente Auvo na janela "Gerar OS + Tarefa Auvo", usando histórico de associações e busca por CNPJ, mantendo sempre a validação na API do Auvo antes de gerar.
 
-## 1. Histórico de associações (banco)
+## Situação atual (verificada)
 
-Nova tabela `auvo_customer_links`:
+- A janela em `src/pages/RastreadorPage.tsx` exige digitar o código Auvo e valida via a função `auvo-lookup-customer` (busca por `customer_id`).
+- Não existe nenhuma tabela de clientes no banco: a consulta ao schema não retornou tabela de cliente nem coluna com CNPJ. Hoje o app só guarda `client_id` + `client_name` em tabelas operacionais.
+- CNPJ e código do cadastro do cliente precisam vir do Gestão Click em tempo real, via o proxy existente.
 
-- `gc_cliente_id` (chave principal da associação), `gc_cliente_codigo`, `gc_cliente_nome`, `gc_cnpj` (normalizado, só dígitos)
-- `auvo_customer_id`, `auvo_customer_name`
-- `usage_count`, `last_used_at`, `created_at`
-- Único por (`gc_cliente_id`, `auvo_customer_id`) — múltiplas associações para o mesmo cliente GC convivem; nada é apagado ao surgir uma nova.
-- RLS: leitura/escrita para usuários autenticados; grants para `authenticated` e `service_role`.
+## O que será feito
 
-Gravação apenas após sucesso da geração (OS no GC + tarefa no Auvo): insere ou incrementa `usage_count` e atualiza `last_used_at`.
+### 1. Histórico de associações (nova tabela)
 
-## 2. Busca de clientes Auvo por CNPJ
+Tabela `auvo_customer_links` com: id do cliente no GC, nome GC, código GC, CNPJ normalizado, id do cliente Auvo, nome Auvo, data da última utilização e contador de usos. Chave única por (cliente GC + cliente Auvo), para que várias associações do mesmo cliente GC convivam — nada é sobrescrito.
 
-Nova ação na Edge Function `auvo-lookup-customer` (mantendo a ação atual de validação por código):
+### 2. Dados do cliente na janela
 
-- `action: "search-by-cnpj"` → varre `/customers` no Auvo, compara CNPJ normalizado (sem pontos, barras, hífens, espaços) e retorna `[{ id, name, cnpj }]`.
-- A validação por código continua igual e permanece obrigatória antes de gerar.
+Ao abrir a janela, buscar no Gestão Click o cadastro do cliente do orçamento e exibir:
+`Cliente Gestão Click: [Nome] — Código GC: [código]`, além do CNPJ formatado.
 
-## 3. Dados do cliente GC no diálogo
+### 3. Novo componente de seleção do cliente Auvo
 
-Ao abrir "Gerar OS + Tarefa Auvo", buscar o cadastro do cliente no GC (`/api/clientes/{cliente_id}` via proxy) para obter código e CNPJ, e exibir:
+Substituir o campo "digite o código" por um seletor inteligente que resolve nesta ordem:
 
 ```text
-Cliente Gestão Click: WD COMERCIO E IMPORTACAO LTDA — Código GC: 1254
-CNPJ: 12.345.678/0001-90
+1. Histórico do cliente GC
+   1 associação   -> preenche automaticamente
+   2+ associações -> lista suspensa (mais recente primeiro, depois mais usada)
+   0 associações  -> passo 2
+2. Busca no Auvo pelo CNPJ (normalizado: sem pontos, barras, hífens, espaços)
+   1 resultado    -> preenche automaticamente
+   2+ resultados  -> lista suspensa
+   0 resultados   -> passo 3
+3. Fallback manual: campo de código/pesquisa, com aviso
+   "Nenhuma associação encontrada para o CNPJ XX.XXX.XXX/XXXX-XX."
 ```
 
-## 4. Campo "Cliente Auvo" inteligente
+Todas as opções mostram **Nome + Código**, nunca só o código. Em qualquer caminho, o cliente escolhido é validado na API do Auvo antes de liberar a confirmação.
 
-Substitui o input numérico por um componente com resolução automática, na ordem:
+### 4. Busca por CNPJ no Auvo
 
-1. **Histórico** para o `gc_cliente_id`:
-   - 1 associação → preenche automaticamente e valida na API Auvo.
-   - 2+ associações → dropdown ordenado por uso mais recente, depois por mais usada.
-   - Associação que não existir mais no Auvo é marcada como inválida e o fluxo segue para a próxima etapa.
-2. **CNPJ** (quando não há histórico válido): busca no Auvo.
-   - 1 resultado → preenche automaticamente.
-   - 2+ resultados → dropdown.
-3. **Manual**: mensagem "Nenhuma associação encontrada…" com o CNPJ pesquisado e o campo de código + botão Verificar (comportamento atual).
+Adicionar a ação `search-by-cnpj` na função `auvo-lookup-customer`, que lista clientes do Auvo e compara o CNPJ normalizado, retornando todos os cadastros correspondentes.
 
-Em todos os casos a exibição é `Nome do cliente — #Código`, e o botão Confirmar só habilita após validação positiva na API do Auvo.
+### 5. Gravação do histórico
 
-## 5. Geração e gravação
-
-- O payload enviado a `generate-os` continua o mesmo (`auvo_customer_id`); a função passa a retornar o `auvo_customer_id` efetivamente usado.
-- Após resposta de sucesso, o front grava/atualiza a associação no histórico.
-- Nenhuma mudança na lógica de criação de OS/tarefa — sem regressão no fluxo existente.
+Somente após a OS no GC **e** a tarefa no Auvo serem criadas com sucesso, gravar/atualizar a associação (incrementando o contador de usos e a data). Falha em qualquer etapa não grava nada.
 
 ## Detalhes técnicos
 
-- `src/pages/RastreadorPage.tsx`: extrai o bloco do cliente Auvo para um novo componente `src/components/rastreador/AuvoCustomerPicker.tsx` (resolução automática, dropdown, validação) para não inflar a página.
-- `src/api/auvoCustomerLinks.ts`: consultas ao histórico e `recordLink()` pós-sucesso.
-- Normalização de CNPJ compartilhada entre front e Edge Function.
-- Quando o orçamento já tem tarefa OS de origem válida (clonagem de cliente), o comportamento atual é mantido; o picker fica como fallback já pré-resolvido.
+- Banco: migração criando `public.auvo_customer_links` com GRANTs para `authenticated`/`service_role`, RLS habilitado e políticas de leitura/escrita para usuários autenticados (padrão operacional já usado no projeto).
+- Dados do cliente GC: `GET /api/clientes/{id}` através da função `gc-proxy`, com helper novo em `src/api/gestaoclick.ts` e cache via React Query.
+- Novo componente `src/components/rastreador/AuvoCustomerPicker.tsx` encapsulando resolução, dropdown, fallback manual e validação.
+- `supabase/functions/auvo-lookup-customer/index.ts`: nova ação `search-by-cnpj` com paginação e normalização de CNPJ.
+- `src/pages/RastreadorPage.tsx`: exibe código GC/CNPJ, usa o novo picker e grava a associação após retorno de sucesso da geração.
+- `supabase/functions/generate-os/index.ts`: garantir que o retorno inclua o id do cliente Auvo usado, para registro do histórico.
+- Fluxo atual de geração de OS/tarefa permanece inalterado quando já existe tarefa de origem vinculada.

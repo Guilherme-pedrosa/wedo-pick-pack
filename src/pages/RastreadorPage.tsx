@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getStatusOrcamentos, getStatusCompras } from '@/api/compras';
-import { getStatusOS, getClienteDetail } from '@/api/gestaoclick';
+import { getStatusOS, getClienteDetail, findClienteCodigo } from '@/api/gestaoclick';
 import { AuvoCustomerPicker, AuvoCustomerSelection } from '@/components/rastreador/AuvoCustomerPicker';
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo, OSReservedInfo } from '@/api/rastreador';
 import { OrcamentoConvertidoWarning } from '@/api/types';

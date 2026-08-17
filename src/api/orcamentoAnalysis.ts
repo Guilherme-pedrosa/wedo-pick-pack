@@ -850,7 +850,7 @@ export function buildParecer(a: OrcamentoAnalysis): Parecer {
     `impostos de ${formatBRL(a.imposto)} (${formatPct(a.impostoPctEfetivo, a.nota10 ? 2 : 0)}${a.nota10 ? ' — Nota 10' : ''})` +
     (a.custoFixo > 0 ? `, custo fixo de ${formatBRL(a.custoFixo)}` : '') +
     (a.garantia > 0 ? `, provisão de garantia de ${formatBRL(a.garantia)}` : '') +
-    `. Resultado de ${formatBRL(a.lucro)} (${formatPct(m)} sobre a venda).`;
+    `. Resultado de ${formatBRL(a.lucro)} (${formatPct(m)} de margem sobre a venda).`;
 
   const recomendacoes: string[] = [];
 

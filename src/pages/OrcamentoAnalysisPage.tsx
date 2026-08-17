@@ -305,7 +305,7 @@ export default function OrcamentoAnalysisPage() {
             <p className="font-medium text-foreground">Nenhum orçamento analisado</p>
             <p className="max-w-md text-sm text-muted-foreground">
               Informe o número do orçamento (o mesmo código exibido no GestãoClick) para gerar o parecer
-              financeiro com receita, custos, impostos, lucro e margem líquida.
+              financeiro com receita, custos, impostos, lucro e margem líquida (Lucro ÷ Venda).
             </p>
           </CardContent>
         </Card>

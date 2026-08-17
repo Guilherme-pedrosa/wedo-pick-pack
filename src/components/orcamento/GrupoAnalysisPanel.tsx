@@ -248,8 +248,8 @@ export default function GrupoAnalysisPanel({ config }: { config: AnalysisConfig 
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
             <Search className="h-6 w-6" />
-            Busque pelo cliente, selecione os orçamentos dos últimos {dias} dias e avalie o desconto total possível
-            quando o atendimento é feito na mesma viagem.
+            Busque pelo cliente, selecione os orçamentos dos últimos {dias} dias e avalie o lucro e margem
+            (Lucro ÷ Venda) quando o atendimento é feito na mesma viagem.
           </CardContent>
         </Card>
       )}

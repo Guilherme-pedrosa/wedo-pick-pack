@@ -1,0 +1,2 @@
+update partial_writeoff_batches set status='awaiting_checkout', error_message=null where id='117883c4-3b2b-4617-b180-c88cf8c36234';
+update partial_writeoff_operations set status='partial_separation', reconciliation_reason=null where id='9d98b2f2-eeb5-4196-afec-1cae3772d221';

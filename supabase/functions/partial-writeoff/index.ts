@@ -859,9 +859,11 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     } catch (linkError) {
       console.warn('[partial-writeoff] tarefa criada mas não vinculada ao GC:', compact(linkError));
     }
-    await service.from('partial_writeoff_batches')
+    const { error: batchUpdateError } = await service.from('partial_writeoff_batches')
       .update({ auvo_task_id: taskId, auvo_task_error: null })
       .eq('id', batchId);
+    if (batchUpdateError) console.error('[partial-writeoff] erro ao gravar task_id no banco:', batchUpdateError);
+    
     await service.from('partial_writeoff_events').insert({
       operation_id: operationId,
       batch_id: batchId,

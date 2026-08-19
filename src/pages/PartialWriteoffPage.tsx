@@ -19,6 +19,7 @@ import {
   preparePartialBatch,
   searchPartialBudgets,
 } from '@/api/partialWriteoff';
+import { checkDocumentExists } from '@/api/gcDocumentValidation';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -305,6 +306,18 @@ export default function PartialWriteoffPage() {
       const changed = result.filter(item => item.state === 'status_changed').length;
       if (missing || cancelled) {
         toast.error(`Auditoria: ${missing} documento(s) excluído(s) e ${cancelled} cancelado(s) no GestãoClick. Cancele os lotes para liberar as reservas.`, { duration: 10000 });
+        
+        // Auto-cleanup for missing documents
+        for (const audit of result) {
+          if (audit.state === 'missing' && audit.batchStatus !== 'cancelled') {
+            const exists = await checkDocumentExists(audit.type, audit.documentId || '');
+            if (!exists) {
+              console.log(`Auto-cancelling batch ${audit.batchId} as document ${audit.documentId} truly missing`);
+              await cancelPartialBatch(audit.batchId, 'Documento não encontrado no GestãoClick durante auditoria');
+            }
+          }
+        }
+        await refresh();
       } else if (changed) {
         toast.warning(`Auditoria: ${changed} documento(s) com situação diferente da esperada.`);
       } else {
@@ -450,6 +463,10 @@ export default function PartialWriteoffPage() {
       const ambiguous = /failed to send|network|fetch|timeout|BATCH_CREATION_IN_PROGRESS/i.test(message);
       if (!ambiguous) batchRequestKey.current = null;
       if (message.includes('INSUFFICIENT_COMMITTED_STOCK')) await refresh();
+      
+      // Se deu erro de BATCH_CREATION_IN_PROGRESS ou similar, talvez o documento já exista
+      // mas o sistema se perdeu. Vamos forçar um refresh.
+      if (ambiguous) await refresh();
       toast.error(message.includes('BATCH_CREATION_IN_PROGRESS')
         ? 'O lote ainda está sendo criado. Aguarde alguns segundos e tente novamente.'
         : friendlyError(error), { duration: 8000 });

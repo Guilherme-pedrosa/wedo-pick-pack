@@ -1055,17 +1055,40 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
       const cancelId = normalizeId(settings[`${type}_cancel_status_id`]);
       const waitingId = normalizeId(settings[`${type}_waiting_status_id`]);
       const stockId = normalizeId(settings[`${type}_stock_status_id`]);
-      const expected = [waitingId, stockId].filter(Boolean);
+      const expected = [waitingId, stockId, TECHNICIAN_WITHDRAWAL_STATUS_ID].filter(Boolean);
 
       const enriched = { ...base, situacaoId, situacaoNome, documentCode: String(document.codigo || base.documentCode || '') };
+      const debited = situacaoId === stockId || situacaoId === TECHNICIAN_WITHDRAWAL_STATUS_ID;
 
       if (cancelId && situacaoId === cancelId) {
         results.push({ ...enriched, state: 'cancelled', message: `Documento cancelado no GestãoClick ("${situacaoNome}").` });
+      } else if (debited && base.batchStatus === 'awaiting_checkout') {
+        // Estoque já saiu no ERP (checkout/handoff feito por fora): confirma o lote
+        // localmente para a reserva virar retirada e parar de bloquear saldo.
+        let message = `Estoque já baixado no GestãoClick ("${situacaoNome}"). Lote confirmado automaticamente.`;
+        try {
+          const claim = await cloud.rpc('partial_writeoff_claim_confirmation', { p_batch_id: batch.id });
+          if (claim.error) throw claim.error;
+          if (claim.data !== 'confirmed') {
+            const finish = await cloud.rpc('partial_writeoff_finish_confirmation', {
+              p_batch_id: batch.id,
+              p_success: true,
+              p_error_message: null,
+              p_actor_id: null,
+              p_actor_name: 'Auditoria automática',
+            });
+            if (finish.error) throw finish.error;
+          }
+        } catch (syncError) {
+          message = `Estoque já baixado no GestãoClick ("${situacaoNome}"), mas a confirmação local falhou: ${compact(syncError)}`;
+        }
+        results.push({ ...enriched, state: 'ok', message });
       } else if (expected.length && !expected.includes(situacaoId)) {
         results.push({ ...enriched, state: 'status_changed', message: `Situação mudou no GestãoClick: "${situacaoNome}".` });
       } else {
         results.push({ ...enriched, state: 'ok', message: `Documento existe e está em "${situacaoNome}".` });
       }
+
     } catch (auditError) {
       const message = auditError instanceof Error ? auditError.message : String(auditError);
       if (/\(404\)|not found|nao encontrad|não encontrad/i.test(message)) {

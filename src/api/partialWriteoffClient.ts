@@ -745,6 +745,22 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
 
   const settings = await getSettings();
   const stockStatus = settings[`${type}_stock_status_id`];
+  const currentStatus = normalizeId(currentDocument?.situacao_id);
+  // O documento pode ter sido baixado por fora (ex.: handoff "Retirada pelo técnico").
+  // Nesse caso o estoque já saiu no GestãoClick e reenviar o PUT só geraria erro.
+  const alreadyDebited = !!currentStatus
+    && (currentStatus === normalizeId(stockStatus) || currentStatus === TECHNICIAN_WITHDRAWAL_STATUS_ID);
+  if (alreadyDebited) {
+    const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
+      p_batch_id: batchId,
+      p_success: true,
+      p_error_message: null,
+      p_actor_id: auth.id,
+      p_actor_name: auth.name,
+    });
+    if (finishError) throw finishError;
+    return getOperationGraph(batch.operation_id);
+  }
   try {
     await updateDocumentStatus(type, String(batch.auxiliary_document_id), stockStatus);
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
@@ -760,7 +776,8 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     let applied = false;
     try {
       const latest = (await gcRequest(path))?.data;
-      applied = normalizeId(latest?.situacao_id) === stockStatus;
+      const latestStatus = normalizeId(latest?.situacao_id);
+      applied = latestStatus === normalizeId(stockStatus) || latestStatus === TECHNICIAN_WITHDRAWAL_STATUS_ID;
     } catch { /* keep false */ }
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
       p_batch_id: batchId,
@@ -771,6 +788,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     });
     if (finishError || !applied) throw new Error(applied ? compact(finishError) || message : message);
   }
+
   return getOperationGraph(batch.operation_id);
 }
 

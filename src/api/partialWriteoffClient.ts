@@ -8,6 +8,9 @@ type DocumentType = 'os' | 'venda';
 type BudgetKind = PartialBudgetSearchResult['budget_kind'];
 const EXISTING_SALE_FINAL_STATUS_ID = '8955109';
 const PARTIAL_WRITEOFF_BUDGET_STATUS_ID = '9348312';
+/** Situação de retirada pelo técnico: o GestãoClick já debitou o estoque nesse ponto. */
+const TECHNICIAN_WITHDRAWAL_STATUS_ID = '7684665';
+
 type AuthContext = {
   id: string;
   email: string;
@@ -742,6 +745,22 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
 
   const settings = await getSettings();
   const stockStatus = settings[`${type}_stock_status_id`];
+  const currentStatus = normalizeId(currentDocument?.situacao_id);
+  // O documento pode ter sido baixado por fora (ex.: handoff "Retirada pelo técnico").
+  // Nesse caso o estoque já saiu no GestãoClick e reenviar o PUT só geraria erro.
+  const alreadyDebited = !!currentStatus
+    && (currentStatus === normalizeId(stockStatus) || currentStatus === TECHNICIAN_WITHDRAWAL_STATUS_ID);
+  if (alreadyDebited) {
+    const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
+      p_batch_id: batchId,
+      p_success: true,
+      p_error_message: null,
+      p_actor_id: auth.id,
+      p_actor_name: auth.name,
+    });
+    if (finishError) throw finishError;
+    return getOperationGraph(batch.operation_id);
+  }
   try {
     await updateDocumentStatus(type, String(batch.auxiliary_document_id), stockStatus);
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
@@ -757,7 +776,8 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     let applied = false;
     try {
       const latest = (await gcRequest(path))?.data;
-      applied = normalizeId(latest?.situacao_id) === stockStatus;
+      const latestStatus = normalizeId(latest?.situacao_id);
+      applied = latestStatus === normalizeId(stockStatus) || latestStatus === TECHNICIAN_WITHDRAWAL_STATUS_ID;
     } catch { /* keep false */ }
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
       p_batch_id: batchId,
@@ -768,6 +788,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     });
     if (finishError || !applied) throw new Error(applied ? compact(finishError) || message : message);
   }
+
   return getOperationGraph(batch.operation_id);
 }
 
@@ -1034,17 +1055,40 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
       const cancelId = normalizeId(settings[`${type}_cancel_status_id`]);
       const waitingId = normalizeId(settings[`${type}_waiting_status_id`]);
       const stockId = normalizeId(settings[`${type}_stock_status_id`]);
-      const expected = [waitingId, stockId].filter(Boolean);
+      const expected = [waitingId, stockId, TECHNICIAN_WITHDRAWAL_STATUS_ID].filter(Boolean);
 
       const enriched = { ...base, situacaoId, situacaoNome, documentCode: String(document.codigo || base.documentCode || '') };
+      const debited = situacaoId === stockId || situacaoId === TECHNICIAN_WITHDRAWAL_STATUS_ID;
 
       if (cancelId && situacaoId === cancelId) {
         results.push({ ...enriched, state: 'cancelled', message: `Documento cancelado no GestãoClick ("${situacaoNome}").` });
+      } else if (debited && base.batchStatus === 'awaiting_checkout') {
+        // Estoque já saiu no ERP (checkout/handoff feito por fora): confirma o lote
+        // localmente para a reserva virar retirada e parar de bloquear saldo.
+        let message = `Estoque já baixado no GestãoClick ("${situacaoNome}"). Lote confirmado automaticamente.`;
+        try {
+          const claim = await cloud.rpc('partial_writeoff_claim_confirmation', { p_batch_id: batch.id });
+          if (claim.error) throw claim.error;
+          if (claim.data !== 'confirmed') {
+            const finish = await cloud.rpc('partial_writeoff_finish_confirmation', {
+              p_batch_id: batch.id,
+              p_success: true,
+              p_error_message: null,
+              p_actor_id: null,
+              p_actor_name: 'Auditoria automática',
+            });
+            if (finish.error) throw finish.error;
+          }
+        } catch (syncError) {
+          message = `Estoque já baixado no GestãoClick ("${situacaoNome}"), mas a confirmação local falhou: ${compact(syncError)}`;
+        }
+        results.push({ ...enriched, state: 'ok', message });
       } else if (expected.length && !expected.includes(situacaoId)) {
         results.push({ ...enriched, state: 'status_changed', message: `Situação mudou no GestãoClick: "${situacaoNome}".` });
       } else {
         results.push({ ...enriched, state: 'ok', message: `Documento existe e está em "${situacaoNome}".` });
       }
+
     } catch (auditError) {
       const message = auditError instanceof Error ? auditError.message : String(auditError);
       if (/\(404\)|not found|nao encontrad|não encontrad/i.test(message)) {

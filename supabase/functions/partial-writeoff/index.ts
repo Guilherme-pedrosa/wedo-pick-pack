@@ -417,13 +417,7 @@ async function attachAuvoTaskToAuxiliary(
   if (!latest) return;
 
   // Preserva TODOS os atributos obrigatórios já gravados e só sobrescreve os dois alvos.
-  const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-  for (const entry of latest.atributos || []) {
-    const attr = entry?.atributo || entry;
-    const id = String(attr?.atributo_id || attr?.id || '');
-    if (!id) continue;
-    atributos.push({ atributo: { atributo_id: id, conteudo: String(attr?.conteudo ?? '') } });
-  }
+  const atributos = normalizeDocumentAtributos(latest, type);
   const upsert = (id: string | null, conteudo: string) => {
     if (!id) return;
     const key = String(id);
@@ -478,7 +472,7 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
     // Preenchido de verdade logo após a criação da tarefa Auvo desta entrega.
     push(findAttr('73344', 'tarefa', 'execu'), tarefaOs || '-');
     push(findAttr('68658', 'local', 'reparo'), localReparo || 'CLIENTE');
-    push(findAttr('73897', 'horas', 'tecnic'), horas || '0');
+    push(findAttr('73897', 'horas', 'tecnic'), horas || '1');
   } else {
     push(findAttr('', 'numero', 'orcamento'), numeroOrcamento);
     push(findAttr('', 'tarefa', 'entrega'), '-');
@@ -564,10 +558,41 @@ async function markBatchReconciliation(
   });
 }
 
+/**
+ * Normaliza os atributos vindos do GET (que trazem id interno + descrição) para o
+ * formato aceito no PUT e garante os obrigatórios de OS. Sem isso o GC devolve
+ * 400 "atributos obrigatórios não enviados" (ex.: HORAS TÉCNICAS #73897).
+ */
+function normalizeDocumentAtributos(document: any, type: DocumentType): Array<{ atributo: { atributo_id: string; conteudo: string } }> {
+  const list: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+  const upsert = (atributo_id: string, conteudo: string) => {
+    if (!atributo_id) return;
+    const idx = list.findIndex((a) => a.atributo.atributo_id === atributo_id);
+    if (idx >= 0) list[idx] = { atributo: { atributo_id, conteudo } };
+    else list.push({ atributo: { atributo_id, conteudo } });
+  };
+  for (const entry of document?.atributos || []) {
+    const attr = entry?.atributo || entry;
+    const id = String(attr?.atributo_id || '').trim();
+    if (!id) continue;
+    upsert(id, String(attr?.conteudo ?? '').trim());
+  }
+  if (type === 'os') {
+    const has = (id: string) => list.some((a) => a.atributo.atributo_id === id && a.atributo.conteudo !== '');
+    const budgetFromNote = String(document?.observacoes || '').match(/orçamento #(\d+)/i)?.[1] || '';
+    if (!has('81831') && budgetFromNote) upsert('81831', budgetFromNote);
+    if (!has('73343')) upsert('73343', '-');
+    if (!has('73344')) upsert('73344', '-');
+    if (!has('68658')) upsert('68658', 'CLIENTE');
+    if (!has('73897')) upsert('73897', '1');
+  }
+  return list;
+}
+
 function statusUpdatePayload(document: any, statusId: string, type: DocumentType): Record<string, any> {
   const keys = [
     'cliente_id', 'data', 'data_entrada', 'data_saida', 'valor_total', 'valor_frete',
-    'condicao_pagamento', 'produtos', 'servicos', 'equipamentos', 'atributos',
+    'condicao_pagamento', 'produtos', 'servicos', 'equipamentos',
     'pagamentos', 'vendedor_id', 'tecnico_id', 'centro_custo_id', 'usuario_id',
     'observacoes', 'observacoes_interna', 'desconto_valor', 'desconto_tipo', 'tipo_desconto',
   ];
@@ -575,11 +600,14 @@ function statusUpdatePayload(document: any, statusId: string, type: DocumentType
   for (const key of keys) {
     if (document?.[key] !== undefined && document?.[key] !== null) payload[key] = document[key];
   }
+  const atributos = normalizeDocumentAtributos(document, type);
+  if (atributos.length) payload.atributos = atributos;
   if (type === 'venda') payload.tipo = document?.tipo || 'produto';
   if (!payload.data) payload.data = new Date().toISOString().slice(0, 10);
   if (!Array.isArray(payload.produtos)) payload.produtos = [];
   return payload;
 }
+
 
 async function updateDocumentStatus(type: DocumentType, id: string, statusId: string): Promise<any> {
   const path = type === 'os' ? `/api/ordens_servicos/${encodeURIComponent(id)}` : `/api/vendas/${encodeURIComponent(id)}`;

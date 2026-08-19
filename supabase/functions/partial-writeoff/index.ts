@@ -472,7 +472,7 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
     // Preenchido de verdade logo após a criação da tarefa Auvo desta entrega.
     push(findAttr('73344', 'tarefa', 'execu'), tarefaOs || '-');
     push(findAttr('68658', 'local', 'reparo'), localReparo || 'CLIENTE');
-    push(findAttr('73897', 'horas', 'tecnic'), horas || '0');
+    push(findAttr('73897', 'horas', 'tecnic'), horas || '1');
   } else {
     push(findAttr('', 'numero', 'orcamento'), numeroOrcamento);
     push(findAttr('', 'tarefa', 'entrega'), '-');

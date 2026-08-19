@@ -417,13 +417,7 @@ async function attachAuvoTaskToAuxiliary(
   if (!latest) return;
 
   // Preserva TODOS os atributos obrigatórios já gravados e só sobrescreve os dois alvos.
-  const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-  for (const entry of latest.atributos || []) {
-    const attr = entry?.atributo || entry;
-    const id = String(attr?.atributo_id || attr?.id || '');
-    if (!id) continue;
-    atributos.push({ atributo: { atributo_id: id, conteudo: String(attr?.conteudo ?? '') } });
-  }
+  const atributos = normalizeDocumentAtributos(latest, type);
   const upsert = (id: string | null, conteudo: string) => {
     if (!id) return;
     const key = String(id);

@@ -8,6 +8,9 @@ type DocumentType = 'os' | 'venda';
 type BudgetKind = PartialBudgetSearchResult['budget_kind'];
 const EXISTING_SALE_FINAL_STATUS_ID = '8955109';
 const PARTIAL_WRITEOFF_BUDGET_STATUS_ID = '9348312';
+/** Situação de retirada pelo técnico: o GestãoClick já debitou o estoque nesse ponto. */
+const TECHNICIAN_WITHDRAWAL_STATUS_ID = '7684665';
+
 type AuthContext = {
   id: string;
   email: string;

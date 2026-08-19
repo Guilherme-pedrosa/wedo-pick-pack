@@ -8,7 +8,6 @@ import {
   retryBatchAuvoTask,
   cancelPartialOperation,
   PartialDocumentAudit,
-  checkDocumentExists,
 
   consolidatePartialOperation,
   getPartialStockAvailability,

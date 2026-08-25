@@ -5,6 +5,8 @@ import {
   auditPartialDocuments,
   cancelPartialBatch,
   deletePartialOperation,
+  forceCancelPartialOperation,
+  forceDeletePartialOperation,
   retryBatchAuvoTask,
   cancelPartialOperation,
   PartialDocumentAudit,
@@ -260,11 +262,17 @@ export default function PartialWriteoffPage() {
 
   async function handleDeleteOperation(operation: PartialWriteoffOperation) {
     if (deletingId) return;
-    if (!window.confirm(`Excluir definitivamente a baixa parcial cancelada do #${operation.budget_code}? Esse registro sairá do histórico.`)) return;
+    if (!window.confirm(`Excluir definitivamente a baixa parcial do #${operation.budget_code}? Esse registro sai do histórico e os consumos de estoque dos documentos auxiliares são removidos. Documentos já criados no GestãoClick precisam ser tratados manualmente lá.`)) return;
     setDeletingId(operation.id);
     try {
-      await deletePartialOperation(operation.id);
-      toast.success('Baixa parcial cancelada excluída.');
+      if (operation.status === 'cancelled') {
+        await deletePartialOperation(operation.id).catch(async () => {
+          await forceDeletePartialOperation(operation.id);
+        });
+      } else {
+        await forceDeletePartialOperation(operation.id);
+      }
+      toast.success('Baixa parcial excluída.');
       if (selectedId === operation.id) setSelectedId(null);
       await refresh();
     } catch (error) {
@@ -276,11 +284,18 @@ export default function PartialWriteoffPage() {
 
   async function handleCancelOperation() {
     if (!selected || cancelling) return;
-    if (!window.confirm(`Cancelar a baixa parcial do #${selected.budget_code}? As reservas internas serão liberadas e nada foi efetivado no GestãoClick.`)) return;
+    const message = canCancelSelected
+      ? `Cancelar a baixa parcial do #${selected.budget_code}? As reservas internas serão liberadas e nada foi efetivado no GestãoClick.`
+      : `Cancelar À FORÇA a baixa parcial do #${selected.budget_code}? Já existem retiradas confirmadas e/ou documentos auxiliares no GestãoClick — eles NÃO serão cancelados lá e precisam ser tratados manualmente.`;
+    if (!window.confirm(message)) return;
 
     setCancelling(true);
     try {
-      await cancelPartialOperation(selected.id);
+      if (canCancelSelected) {
+        await cancelPartialOperation(selected.id);
+      } else {
+        await forceCancelPartialOperation(selected.id, 'Cancelamento forçado pelo operador');
+      }
       toast.success('Baixa parcial cancelada.');
       setSelectedId(null);
       await refresh();
@@ -691,11 +706,11 @@ export default function PartialWriteoffPage() {
                     <p className="mt-1 truncate text-sm">{operation.client_name}</p>
                     <p className="text-xs text-muted-foreground">{operation.document_type === 'os' ? 'Ordem de Serviço' : 'Venda'} · {fmtDate(operation.updated_at)}</p>
                   </button>
-                  {operation.status === 'cancelled' && (
+                  {operation.status !== 'completed' && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      title="Excluir esta baixa parcial cancelada"
+                      title="Excluir esta baixa parcial"
                       className="absolute right-1 top-1 h-7 w-7 text-muted-foreground hover:text-destructive"
                       disabled={deletingId === operation.id}
                       onClick={() => handleDeleteOperation(operation)}
@@ -745,7 +760,7 @@ export default function PartialWriteoffPage() {
                       Exportar
                     </Button>
                     <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
-                    {canCancelSelected && (
+                    {selected.status !== 'cancelled' && selected.status !== 'completed' && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -754,7 +769,19 @@ export default function PartialWriteoffPage() {
                         className="border-red-200 text-red-700 hover:bg-red-50"
                       >
                         {cancelling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <XCircle className="mr-2 h-4 w-4" />}
-                        Cancelar baixa parcial
+                        {canCancelSelected ? 'Cancelar baixa parcial' : 'Cancelar (forçado)'}
+                      </Button>
+                    )}
+                    {selected.status !== 'completed' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteOperation(selected)}
+                        disabled={deletingId === selected.id}
+                        className="border-red-200 text-red-700 hover:bg-red-50"
+                      >
+                        {deletingId === selected.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                        Excluir baixa
                       </Button>
                     )}
                   </div>

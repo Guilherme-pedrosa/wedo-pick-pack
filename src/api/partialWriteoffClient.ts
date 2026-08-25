@@ -563,7 +563,8 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const selectedWithStock = [];
   for (const { item, quantity } of selected) {
     const detail = unwrapProductDetail(await gcRequest(`/api/produtos/${encodeURIComponent(item.product_id)}`));
-    const hasVariation = String(item.line_snapshot?.produto?.possui_variacao ?? '').trim() === '1';
+    const lineSnapshot = item.line_snapshot as { produto?: { possui_variacao?: unknown } } | undefined;
+    const hasVariation = String(lineSnapshot?.produto?.possui_variacao ?? '').trim() === '1';
     const stock = currentStock(detail, item.variation_id, hasVariation);
     if (quantity > stock) throw new Error(`INSUFFICIENT_STOCK:${item.product_name}:${stock}`);
     selectedWithStock.push({ item, quantity, stockQuantity: stock });

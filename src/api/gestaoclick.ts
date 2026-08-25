@@ -1030,7 +1030,12 @@ export function parseProductStockResponse(
     id?: string | number;
     estoque?: string | number;
     valor_custo?: string | number;
-    variacoes?: Array<{ variacao?: { id?: string | number; variacao_id?: string | number; estoque?: string | number } }>;
+    variacoes?: Array<{
+      id?: string | number;
+      variacao_id?: string | number;
+      estoque?: string | number;
+      variacao?: { id?: string | number; variacao_id?: string | number; estoque?: string | number };
+    }>;
   } | undefined;
   if (!data) return null;
 
@@ -1040,12 +1045,13 @@ export function parseProductStockResponse(
     const requestedVariationId = String(variacaoId ?? '').trim();
     const matchingVariation = requestedVariationId
       ? variacoes.find(entry => {
-          const variation = entry.variacao;
+          const variation = entry.variacao || entry;
           return String(variation?.id ?? variation?.variacao_id ?? '') === requestedVariationId;
         })
       : undefined;
     const selectedVariation = matchingVariation ?? (variacoes.length === 1 ? variacoes[0] : undefined);
-    if (selectedVariation?.variacao?.estoque != null) estoqueRaw = selectedVariation.variacao.estoque;
+    const selectedVariationData = selectedVariation?.variacao || selectedVariation;
+    if (selectedVariationData?.estoque != null) estoqueRaw = selectedVariationData.estoque;
   }
 
   const estoque = Number(String(estoqueRaw).replace(',', '.'));

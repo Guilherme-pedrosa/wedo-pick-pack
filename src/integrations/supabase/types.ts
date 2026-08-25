@@ -2277,6 +2277,23 @@ export type Database = {
         }
         Returns: string
       }
+      partial_writeoff_force_cancel_operation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_operation_id: string
+          p_reason?: string
+        }
+        Returns: string
+      }
+      partial_writeoff_force_delete_operation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_operation_id: string
+        }
+        Returns: undefined
+      }
       partial_writeoff_mark_batch_reconciliation: {
         Args: {
           p_actor_id?: string

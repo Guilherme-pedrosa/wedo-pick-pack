@@ -283,6 +283,24 @@ export async function deletePartialOperation(operationId: string): Promise<void>
   await invoke<{ deleted: boolean }>({ action: 'delete_operation', operation_id: operationId });
 }
 
+/** Cancela à força uma baixa parcial, mesmo com retiradas confirmadas ou documentos auxiliares no GestãoClick. */
+export async function forceCancelPartialOperation(
+  operationId: string,
+  reason?: string,
+): Promise<PartialWriteoffOperation> {
+  const data = await invoke<{ operation: PartialWriteoffOperation }>({
+    action: 'force_cancel_operation',
+    operation_id: operationId,
+    reason: reason?.trim() || undefined,
+  });
+  return data.operation;
+}
+
+/** Exclui à força a baixa parcial e limpa os consumos de estoque dos documentos auxiliares. */
+export async function forceDeletePartialOperation(operationId: string): Promise<void> {
+  await invoke<{ deleted: boolean }>({ action: 'force_delete_operation', operation_id: operationId });
+}
+
 
 
 export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]> {

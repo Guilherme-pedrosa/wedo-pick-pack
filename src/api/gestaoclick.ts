@@ -1030,7 +1030,18 @@ export function parseProductStockResponse(
     id?: string | number;
     estoque?: string | number;
     valor_custo?: string | number;
-    variacoes?: Array<{ variacao?: { id?: string | number; variacao_id?: string | number; estoque?: string | number } }>;
+    variacoes?: Array<{
+      id?: string | number;
+      variacao_id?: string | number;
+      variacao_api_id?: string | number;
+      estoque?: string | number;
+      variacao?: {
+        id?: string | number;
+        variacao_id?: string | number;
+        variacao_api_id?: string | number;
+        estoque?: string | number;
+      };
+    }>;
   } | undefined;
   if (!data) return null;
 
@@ -1040,12 +1051,15 @@ export function parseProductStockResponse(
     const requestedVariationId = String(variacaoId ?? '').trim();
     const matchingVariation = requestedVariationId
       ? variacoes.find(entry => {
-          const variation = entry.variacao;
-          return String(variation?.id ?? variation?.variacao_id ?? '') === requestedVariationId;
+          const variation = entry.variacao || entry;
+          return [variation?.id, variation?.variacao_id, variation?.variacao_api_id]
+            .some(id => String(id ?? '').trim() === requestedVariationId);
         })
       : undefined;
+    if (requestedVariationId && !matchingVariation) return null;
     const selectedVariation = matchingVariation ?? (variacoes.length === 1 ? variacoes[0] : undefined);
-    if (selectedVariation?.variacao?.estoque != null) estoqueRaw = selectedVariation.variacao.estoque;
+    const selectedVariationData = selectedVariation?.variacao || selectedVariation;
+    if (selectedVariationData?.estoque != null) estoqueRaw = selectedVariationData.estoque;
   }
 
   const estoque = Number(String(estoqueRaw).replace(',', '.'));
@@ -1057,7 +1071,11 @@ export function parseProductStockResponse(
   };
 }
 
-export async function getProductStock(produtoId: string, variacaoId?: string): Promise<ProductStockInfo | null> {
+export async function getProductStock(
+  produtoId: string,
+  variacaoId?: string,
+  options?: { forceFresh?: boolean },
+): Promise<ProductStockInfo | null> {
   const MAX_ATTEMPTS = 3;
   let lastErr: unknown = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -1069,7 +1087,7 @@ export async function getProductStock(produtoId: string, variacaoId?: string): P
           valor_custo?: string | number;
           variacoes?: Array<{ variacao: { id: string | number; estoque: string | number } }>;
         };
-      }>(`/api/produtos/${produtoId}`);
+      }>(`/api/produtos/${produtoId}${options?.forceFresh ? `?cache_bust=${Date.now()}-${attempt}` : ''}`);
 
       const parsed = parseProductStockResponse(res, produtoId, variacaoId);
       if (!parsed) throw new Error('EMPTY_RESPONSE');

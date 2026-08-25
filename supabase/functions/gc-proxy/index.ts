@@ -49,6 +49,7 @@ Deno.serve(async (req: Request) => {
     const fetchOptions: RequestInit = {
       method: httpMethod,
       headers: gcHeaders,
+      cache: httpMethod === 'GET' ? 'no-store' : 'default',
     };
 
     if ((httpMethod === 'PUT' || httpMethod === 'POST') && payload) {

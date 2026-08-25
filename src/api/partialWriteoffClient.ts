@@ -209,8 +209,8 @@ function unwrapProductDetail(response: any): any {
   return response?.data?.Produto || response?.data?.produto || response?.data || {};
 }
 
-function currentStock(detail: any, variationId: string): number {
-  if (variationId && Array.isArray(detail?.variacoes)) {
+function currentStock(detail: any, variationId: string, hasVariation: boolean): number {
+  if (hasVariation && variationId && Array.isArray(detail?.variacoes)) {
     const match = detail.variacoes.find((entry: any) => {
       const variation = entry?.variacao || entry;
       return normalizeId(variation?.id || variation?.variacao_id) === variationId;
@@ -563,7 +563,9 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const selectedWithStock = [];
   for (const { item, quantity } of selected) {
     const detail = unwrapProductDetail(await gcRequest(`/api/produtos/${encodeURIComponent(item.product_id)}`));
-    const stock = currentStock(detail, item.variation_id);
+    const lineSnapshot = item.line_snapshot as { produto?: { possui_variacao?: unknown } } | undefined;
+    const hasVariation = String(lineSnapshot?.produto?.possui_variacao ?? '').trim() === '1';
+    const stock = currentStock(detail, item.variation_id, hasVariation);
     if (quantity > stock) throw new Error(`INSUFFICIENT_STOCK:${item.product_name}:${stock}`);
     selectedWithStock.push({ item, quantity, stockQuantity: stock });
   }

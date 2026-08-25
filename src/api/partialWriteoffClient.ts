@@ -1141,10 +1141,25 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
   if (action === 'consolidate') return { operation: await handleConsolidate(body, auth) } as T;
   if (action === 'cancel_operation') return { operation: await handleCancelOperation(body, auth) } as T;
   if (action === 'cancel_batch') return { operation: await handleCancelBatch(body, auth) } as T;
-  if (action === 'delete_operation') {
+  if (action === 'force_cancel_operation') {
     const operationId = String(body.operation_id || '');
     if (!operationId) throw new Error('OPERATION_ID_REQUIRED');
-    const { error } = await (cloud as any).rpc('partial_writeoff_delete_operation', {
+    const { error } = await (cloud as any).rpc('partial_writeoff_force_cancel_operation', {
+      p_operation_id: operationId,
+      p_actor_id: auth.id,
+      p_actor_name: auth.name,
+      p_reason: String(body.reason || ''),
+    });
+    if (error) throw new Error(error.message || 'OPERATION_NOT_CANCELLABLE');
+    return { operation: await getOperationGraph(operationId) } as T;
+  }
+  if (action === 'delete_operation' || action === 'force_delete_operation') {
+    const operationId = String(body.operation_id || '');
+    if (!operationId) throw new Error('OPERATION_ID_REQUIRED');
+    const rpcName = action === 'force_delete_operation'
+      ? 'partial_writeoff_force_delete_operation'
+      : 'partial_writeoff_delete_operation';
+    const { error } = await (cloud as any).rpc(rpcName, {
       p_operation_id: operationId,
       p_actor_id: auth.id,
       p_actor_name: auth.name,
@@ -1152,6 +1167,7 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
     if (error) throw new Error(error.message || 'OPERATION_NOT_DELETABLE');
     return { deleted: true } as T;
   }
+
   if (action === 'audit_documents') return { audits: await handleAuditDocuments(body) } as T;
 
 

@@ -1013,6 +1013,50 @@ export interface StockScanResult {
   belowCostWarnings: BelowCostWarning[];
 }
 
+export function parseProductStockResponse(
+  response: unknown,
+  produtoId: string,
+  variacaoId?: string,
+): ProductStockInfo | null {
+  const envelope = response as {
+    data?: {
+      Produto?: Record<string, unknown>;
+      produto?: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  };
+  const rawData = envelope?.data;
+  const data = (rawData?.Produto || rawData?.produto || rawData) as {
+    id?: string | number;
+    estoque?: string | number;
+    valor_custo?: string | number;
+    variacoes?: Array<{ variacao?: { id?: string | number; variacao_id?: string | number; estoque?: string | number } }>;
+  } | undefined;
+  if (!data) return null;
+
+  let estoqueRaw: string | number = data.estoque ?? 0;
+  const variacoes = data.variacoes ?? [];
+  if (variacoes.length > 0) {
+    const requestedVariationId = String(variacaoId ?? '').trim();
+    const matchingVariation = requestedVariationId
+      ? variacoes.find(entry => {
+          const variation = entry.variacao;
+          return String(variation?.id ?? variation?.variacao_id ?? '') === requestedVariationId;
+        })
+      : undefined;
+    const selectedVariation = matchingVariation ?? (variacoes.length === 1 ? variacoes[0] : undefined);
+    if (selectedVariation?.variacao?.estoque != null) estoqueRaw = selectedVariation.variacao.estoque;
+  }
+
+  const estoque = Number(String(estoqueRaw).replace(',', '.'));
+  const valorCusto = Number(String(data.valor_custo ?? 0).replace(',', '.'));
+  return {
+    produto_id: String(data.id ?? produtoId),
+    estoque: Number.isFinite(estoque) ? estoque : 0,
+    valor_custo: Number.isFinite(valorCusto) ? valorCusto : 0,
+  };
+}
+
 export async function getProductStock(produtoId: string, variacaoId?: string): Promise<ProductStockInfo | null> {
   const MAX_ATTEMPTS = 3;
   let lastErr: unknown = null;
@@ -1027,26 +1071,9 @@ export async function getProductStock(produtoId: string, variacaoId?: string): P
         };
       }>(`/api/produtos/${produtoId}`);
 
-      const data = res?.data;
-      if (!data) throw new Error('EMPTY_RESPONSE');
-
-      // Prefer variation stock when variacao_id is given (or when product has a single variation
-      // that holds the real stock instead of the parent — common GC quirk)
-      let estoqueRaw: string | number = data.estoque ?? 0;
-      const variacoes = data.variacoes ?? [];
-      if (variacoes.length > 0) {
-        const vid = variacaoId ? String(variacaoId) : '';
-        const byId = vid ? variacoes.find(v => String(v.variacao?.id) === vid) : undefined;
-        const single = !byId && variacoes.length === 1 ? variacoes[0] : undefined;
-        const chosen = byId ?? single;
-        if (chosen) estoqueRaw = chosen.variacao.estoque ?? estoqueRaw;
-      }
-
-      const estoque = typeof estoqueRaw === 'number' ? estoqueRaw : parseFloat(String(estoqueRaw).replace(',', '.') || '0');
-      const valorCusto = typeof data.valor_custo === 'number'
-        ? data.valor_custo
-        : parseFloat(String(data.valor_custo ?? '0').replace(',', '.') || '0');
-      return { produto_id: String(data.id ?? produtoId), estoque: isNaN(estoque) ? 0 : estoque, valor_custo: isNaN(valorCusto) ? 0 : valorCusto };
+      const parsed = parseProductStockResponse(res, produtoId, variacaoId);
+      if (!parsed) throw new Error('EMPTY_RESPONSE');
+      return parsed;
     } catch (err) {
       lastErr = err;
       const msg = err instanceof Error ? err.message : String(err);

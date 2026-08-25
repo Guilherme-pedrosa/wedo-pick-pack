@@ -181,7 +181,8 @@ export default function PartialWriteoffPage() {
       const map: Record<string, number> = {};
       for (const item of selected?.items || []) {
         const stock = await getProductStock(item.product_id, item.variation_id || undefined);
-        map[item.id] = stock?.estoque ?? 0;
+        if (!stock) throw new Error(`Não foi possível consultar o estoque de ${productCodeFor(item) || item.product_name}.`);
+        map[item.id] = stock.estoque;
       }
       return map;
     },
@@ -394,8 +395,9 @@ export default function PartialWriteoffPage() {
     try {
       await queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
       const result = await operationsQuery.refetch();
-      await queryClient.refetchQueries({ queryKey: ['partial-writeoff-stock'] });
       if (result.error) throw result.error;
+      const stockResult = await stockQuery.refetch();
+      if (stockResult.error) throw stockResult.error;
       setStockRefreshedAt(new Date().toISOString());
       toast.success('Estoque atualizado com os saldos atuais do GestãoClick.');
     } catch (error) {

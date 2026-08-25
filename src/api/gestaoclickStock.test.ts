@@ -36,4 +36,19 @@ describe('parseProductStockResponse', () => {
 
     expect(result?.estoque).toBe(4);
   });
+
+  it('não usa o saldo do produto-pai quando a variação solicitada não existe', () => {
+    const result = parseProductStockResponse({
+      data: {
+        id: '10',
+        estoque: 20,
+        variacoes: [
+          { variacao: { id: '100', estoque: 3 } },
+          { variacao: { id: '200', estoque: 9 } },
+        ],
+      },
+    }, '10', '999');
+
+    expect(result).toBeNull();
+  });
 });

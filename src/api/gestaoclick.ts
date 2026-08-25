@@ -1033,8 +1033,14 @@ export function parseProductStockResponse(
     variacoes?: Array<{
       id?: string | number;
       variacao_id?: string | number;
+      variacao_api_id?: string | number;
       estoque?: string | number;
-      variacao?: { id?: string | number; variacao_id?: string | number; estoque?: string | number };
+      variacao?: {
+        id?: string | number;
+        variacao_id?: string | number;
+        variacao_api_id?: string | number;
+        estoque?: string | number;
+      };
     }>;
   } | undefined;
   if (!data) return null;
@@ -1046,9 +1052,11 @@ export function parseProductStockResponse(
     const matchingVariation = requestedVariationId
       ? variacoes.find(entry => {
           const variation = entry.variacao || entry;
-          return String(variation?.id ?? variation?.variacao_id ?? '') === requestedVariationId;
+          return [variation?.id, variation?.variacao_id, variation?.variacao_api_id]
+            .some(id => String(id ?? '').trim() === requestedVariationId);
         })
       : undefined;
+    if (requestedVariationId && !matchingVariation) return null;
     const selectedVariation = matchingVariation ?? (variacoes.length === 1 ? variacoes[0] : undefined);
     const selectedVariationData = selectedVariation?.variacao || selectedVariation;
     if (selectedVariationData?.estoque != null) estoqueRaw = selectedVariationData.estoque;

@@ -823,7 +823,13 @@ export default function PartialWriteoffPage() {
                             <td className="px-3 py-2 text-right text-amber-700">{fmtQty(item.reserved_quantity)}</td>
 
                             <td className="px-3 py-2 text-right font-semibold">{fmtQty(item.pending_purchase_quantity)}</td>
-                            <td className="px-3 py-2 text-right">{stockQuery.isLoading ? '…' : fmtQty(stock)}</td>
+                            <td className="px-3 py-2 text-right">
+                              {stockQuery.isFetching
+                                ? <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" aria-label="Consultando saldo" />
+                                : stockQuery.isError
+                                  ? <span className="font-medium text-destructive">Erro</span>
+                                  : fmtQty(stock)}
+                            </td>
                             <td className={`px-3 py-2 text-right ${Number(item.global_reserved_quantity) > 0 ? 'font-medium text-amber-700' : ''}`}>
                               {Number(item.global_reserved_quantity) > 0 ? (
                                 <Popover>
@@ -864,7 +870,11 @@ export default function PartialWriteoffPage() {
                             </td>
 
                             <td className={`px-3 py-2 text-right font-semibold ${overcommitted ? 'text-red-700' : 'text-green-700'}`}>
-                              {stockQuery.isLoading ? '…' : fmtQty(availability.availableStock)}
+                              {stockQuery.isFetching
+                                ? '…'
+                                : stockQuery.isError
+                                  ? <span className="text-destructive">Indisponível</span>
+                                  : fmtQty(availability.availableStock)}
                             </td>
                             <td className="px-3 py-2">
                               <Input

@@ -113,6 +113,12 @@ function operationIsExistingSale(operation: PartialWriteoffOperation | null) {
   return (operation?.budget_snapshot as Record<string, unknown> | undefined)?._partial_source_kind === 'venda';
 }
 
+function stockVariationId(item: PartialWriteoffOperation['items'][number]): string | undefined {
+  const lineProduct = (item.line_snapshot as { produto?: { possui_variacao?: unknown } } | undefined)?.produto;
+  const hasVariation = String(lineProduct?.possui_variacao ?? '').trim() === '1';
+  return hasVariation ? item.variation_id || undefined : undefined;
+}
+
 export default function PartialWriteoffPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -183,7 +189,7 @@ export default function PartialWriteoffPage() {
       for (const item of selected?.items || []) {
         const stock = await getProductStock(
           item.product_id,
-          item.variation_id || undefined,
+          stockVariationId(item),
           { forceFresh: forceFreshStockRef.current },
         );
         if (!stock) throw new Error(`Não foi possível consultar o estoque de ${productCodeFor(item) || item.product_name}.`);

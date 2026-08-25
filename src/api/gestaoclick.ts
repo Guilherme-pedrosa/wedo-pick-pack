@@ -1057,7 +1057,11 @@ export function parseProductStockResponse(
   };
 }
 
-export async function getProductStock(produtoId: string, variacaoId?: string): Promise<ProductStockInfo | null> {
+export async function getProductStock(
+  produtoId: string,
+  variacaoId?: string,
+  options?: { forceFresh?: boolean },
+): Promise<ProductStockInfo | null> {
   const MAX_ATTEMPTS = 3;
   let lastErr: unknown = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -1069,7 +1073,7 @@ export async function getProductStock(produtoId: string, variacaoId?: string): P
           valor_custo?: string | number;
           variacoes?: Array<{ variacao: { id: string | number; estoque: string | number } }>;
         };
-      }>(`/api/produtos/${produtoId}`);
+      }>(`/api/produtos/${produtoId}${options?.forceFresh ? `?cache_bust=${Date.now()}-${attempt}` : ''}`);
 
       const parsed = parseProductStockResponse(res, produtoId, variacaoId);
       if (!parsed) throw new Error('EMPTY_RESPONSE');

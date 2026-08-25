@@ -24,4 +24,16 @@ describe('parseProductStockResponse', () => {
 
     expect(result?.estoque).toBe(9);
   });
+
+  it('lê a variação retornada sem envelope interno', () => {
+    const result = parseProductStockResponse({
+      data: {
+        id: '10',
+        estoque: 0,
+        variacoes: [{ id: '200', estoque: '4,0000' }],
+      },
+    }, '10', '200');
+
+    expect(result?.estoque).toBe(4);
+  });
 });

@@ -140,6 +140,7 @@ export default function PartialWriteoffPage() {
   const [manualEquipment, setManualEquipment] = useState('');
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [stockRefreshedAt, setStockRefreshedAt] = useState<string | null>(null);
+  const forceFreshStockRef = useRef(false);
   const batchRequestKey = useRef<string | null>(null);
 
   const operationsQuery = useQuery({
@@ -180,7 +181,11 @@ export default function PartialWriteoffPage() {
     queryFn: async () => {
       const map: Record<string, number> = {};
       for (const item of selected?.items || []) {
-        const stock = await getProductStock(item.product_id, item.variation_id || undefined);
+        const stock = await getProductStock(
+          item.product_id,
+          item.variation_id || undefined,
+          { forceFresh: forceFreshStockRef.current },
+        );
         if (!stock) throw new Error(`Não foi possível consultar o estoque de ${productCodeFor(item) || item.product_name}.`);
         map[item.id] = stock.estoque;
       }
@@ -393,16 +398,28 @@ export default function PartialWriteoffPage() {
     if (manualRefreshing) return;
     setManualRefreshing(true);
     try {
+      const previousStock = stockQuery.data;
+      forceFreshStockRef.current = true;
       await queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
       const result = await operationsQuery.refetch();
       if (result.error) throw result.error;
       const stockResult = await stockQuery.refetch();
       if (stockResult.error) throw stockResult.error;
+      if (!stockResult.data) throw new Error('O GestãoClick não retornou os saldos dos produtos.');
+
+      const values = Object.values(stockResult.data);
+      const changed = Object.entries(stockResult.data).filter(([itemId, value]) => previousStock?.[itemId] !== value).length;
+      const positive = values.filter(value => value > 0).length;
       setStockRefreshedAt(new Date().toISOString());
-      toast.success('Estoque atualizado com os saldos atuais do GestãoClick.');
+      if (changed > 0) {
+        toast.success(`${changed} saldo(s) alterado(s). ${positive} produto(s) com estoque positivo no GestãoClick.`);
+      } else {
+        toast.warning(`Consulta sem cache concluída, mas o GestãoClick devolveu os mesmos saldos. ${positive} de ${values.length} produto(s) têm estoque positivo.`, { duration: 10000 });
+      }
     } catch (error) {
       toast.error(friendlyError(error));
     } finally {
+      forceFreshStockRef.current = false;
       setManualRefreshing(false);
     }
   }

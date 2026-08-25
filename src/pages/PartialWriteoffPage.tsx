@@ -139,6 +139,7 @@ export default function PartialWriteoffPage() {
   const [auvoCustomerId, setAuvoCustomerId] = useState('');
   const [manualEquipment, setManualEquipment] = useState('');
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [stockRefreshedAt, setStockRefreshedAt] = useState<string | null>(null);
   const batchRequestKey = useRef<string | null>(null);
 
   const operationsQuery = useQuery({
@@ -395,7 +396,8 @@ export default function PartialWriteoffPage() {
       const result = await operationsQuery.refetch();
       await queryClient.refetchQueries({ queryKey: ['partial-writeoff-stock'] });
       if (result.error) throw result.error;
-      toast.success('Lista atualizada.');
+      setStockRefreshedAt(new Date().toISOString());
+      toast.success('Estoque atualizado com os saldos atuais do GestãoClick.');
     } catch (error) {
       toast.error(friendlyError(error));
     } finally {
@@ -701,6 +703,16 @@ export default function PartialWriteoffPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      onClick={handleManualRefresh}
+                      disabled={manualRefreshing}
+                      className="gap-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${manualRefreshing || stockQuery.isFetching ? 'animate-spin' : ''}`} />
+                      {manualRefreshing ? 'Atualizando…' : 'Atualizar estoque'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleExportExcel}
                       className="gap-2"
                     >
@@ -723,6 +735,11 @@ export default function PartialWriteoffPage() {
                   </div>
 
                 </div>
+                {stockRefreshedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Estoque consultado no GestãoClick em {fmtDate(stockRefreshedAt)}.
+                  </p>
+                )}
 
               </CardHeader>
               <CardContent className="space-y-5">

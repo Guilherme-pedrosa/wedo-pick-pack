@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, RefreshCw, ChevronDown, ChevronRight, ShoppingCart, AlertTriangle, Flame, Package } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronDown, ChevronRight, ShoppingCart, AlertTriangle, Flame, Package, Printer } from 'lucide-react';
+import EtiquetaPrintDialog, { EtiquetaDialogItem } from '@/components/compras/EtiquetaPrintDialog';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -21,6 +22,8 @@ interface SituacaoHist {
 }
 
 interface CompraItem {
+  produto_id: string;
+  variacao_id: string;
   nome_produto: string;
   quantidade: string;
   valor_total: string;
@@ -141,6 +144,8 @@ function extractRow(raw: any): CompraRow {
   const produtos: CompraItem[] = (c?.produtos || []).map((w: any) => {
     const p = w?.produto ?? w;
     return {
+      produto_id: String(p?.produto_id ?? ''),
+      variacao_id: String(p?.variacao_id ?? ''),
       nome_produto: String(p?.nome_produto ?? ''),
       quantidade: String(p?.quantidade ?? ''),
       valor_total: String(p?.valor_total ?? '0'),
@@ -172,6 +177,23 @@ export default function PurchaseTrackerPage() {
   const [lastScanAt, setLastScanAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<'all' | 'warn' | 'crit' | 'arr' | 'stuck'>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [etiquetaTarget, setEtiquetaTarget] = useState<{ orderCode: string; items: EtiquetaDialogItem[] } | null>(null);
+
+  const openEtiquetas = (orderCode: string, items: CompraItem[]) => {
+    const printable = items
+      .filter(it => it.produto_id)
+      .map(it => ({
+        produto_id: it.produto_id,
+        variacao_id: it.variacao_id,
+        nome_produto: it.nome_produto,
+        quantidade: parseFloat(String(it.quantidade).replace(',', '.')) || 0,
+      }));
+    if (!printable.length) {
+      toast.warning('Este pedido não tem peças com produto identificado para etiquetar.');
+      return;
+    }
+    setEtiquetaTarget({ orderCode, items: printable });
+  };
 
   const toggleExpand = (id: string) =>
     setExpanded(prev => {
@@ -529,12 +551,13 @@ export default function PurchaseTrackerPage() {
                 </TableHead>
                 <TableHead className="w-[140px] text-right">Atraso chegada</TableHead>
                 <TableHead className="w-[110px] text-right">Valor</TableHead>
+                <TableHead className="w-[70px] text-center">Etiquetas</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredRows.length === 0 && !scanning && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={11} className="text-center text-muted-foreground py-12">
                     {selected.length === 0
                       ? 'Selecione as situações e clique em "Atualizar" para começar.'
                       : rows.length === 0
@@ -607,10 +630,21 @@ export default function PurchaseTrackerPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(r.valor_total)}</TableCell>
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Imprimir etiquetas do pedido inteiro"
+                        onClick={e => { e.stopPropagation(); openEtiquetas(r.codigo, r.produtos); }}
+                      >
+                        <Printer className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                   {isOpen && (
                     <TableRow key={`${r.id}-details`} className="bg-muted/30 hover:bg-muted/30">
-                      <TableCell colSpan={10} className="p-0">
+                      <TableCell colSpan={11} className="p-0">
                         <div className="px-6 py-3">
                           <div className="flex items-center gap-2 text-sm font-medium mb-2">
                             <Package className="h-4 w-4 text-primary" />
@@ -625,6 +659,7 @@ export default function PurchaseTrackerPage() {
                                   <TableHead>Peça</TableHead>
                                   <TableHead className="w-[100px] text-right">Qtd</TableHead>
                                   <TableHead className="w-[140px] text-right">Valor</TableHead>
+                                  <TableHead className="w-[70px] text-center">Etiqueta</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -635,6 +670,18 @@ export default function PurchaseTrackerPage() {
                                       {parseFloat(String(it.quantidade).replace(',', '.')) || 0}
                                     </TableCell>
                                     <TableCell className="text-right text-sm tabular-nums">{fmtCurrency(it.valor_total)}</TableCell>
+                                    <TableCell className="text-center">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        title="Imprimir etiqueta desta peça"
+                                        disabled={!it.produto_id}
+                                        onClick={e => { e.stopPropagation(); openEtiquetas(r.codigo, [it]); }}
+                                      >
+                                        <Printer className="h-4 w-4" />
+                                      </Button>
+                                    </TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>
@@ -657,6 +704,13 @@ export default function PurchaseTrackerPage() {
         <p>• Linhas <span className="inline-block px-1.5 rounded bg-red-500 text-white">cintilando em vermelho</span> indicam pedidos parados há mais de <strong>30 dias</strong> — atenção urgente.</p>
         <p>• "Última alteração" é a data em que o pedido entrou na situação atual (extraído do histórico de situações do GestãoClick).</p>
       </div>
+
+      <EtiquetaPrintDialog
+        open={!!etiquetaTarget}
+        onClose={() => setEtiquetaTarget(null)}
+        orderCode={etiquetaTarget?.orderCode || ''}
+        items={etiquetaTarget?.items || []}
+      />
     </div>
   );
 }

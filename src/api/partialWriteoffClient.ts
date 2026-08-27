@@ -909,21 +909,36 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
           auvo_task_id: batch.auvo_task_id ? String(batch.auvo_task_id) : null,
           status: batch.status,
         }));
-      const result = await supabase.functions.invoke('generate-os', {
-        body: {
-          orcamento: operation.budget_snapshot,
-          auvo_user_id: auth.profile.auvo_user_id,
-          gc_usuario_id: auth.profile.gc_usuario_id || undefined,
-          auvo_customer_id: body.auvo_customer_id || undefined,
-          manual_equipamento: body.manual_equipamento || undefined,
-          partial_auxiliaries: partialAuxiliaries.length ? partialAuxiliaries : undefined,
-        },
-      });
-      generated = result.data;
-      if (result.error || generated?.error) {
-        throw new Error(generated?.error || result.error?.message || 'Falha ao gerar documento definitivo');
+
+      // Retomada: se uma tentativa anterior já criou o documento definitivo,
+      // reaproveita em vez de gerar outro documento + tarefa Auvo duplicados.
+      const reusable = await findReusableDefinitiveDocument(operation, settings);
+      if (reusable) {
+        generated = {
+          os_id: reusable.documentId,
+          os_codigo: reusable.documentCode,
+          auvo_task_id: operation.definitive_auvo_task_id || '',
+          reused: true,
+          warnings: ['Documento reaproveitado de consolidação anterior'],
+        };
+      } else {
+        const result = await supabase.functions.invoke('generate-os', {
+          body: {
+            orcamento: operation.budget_snapshot,
+            auvo_user_id: auth.profile.auvo_user_id,
+            gc_usuario_id: auth.profile.gc_usuario_id || undefined,
+            auvo_customer_id: body.auvo_customer_id || undefined,
+            manual_equipamento: body.manual_equipamento || undefined,
+            partial_auxiliaries: partialAuxiliaries.length ? partialAuxiliaries : undefined,
+          },
+        });
+        generated = result.data;
+        if (result.error || generated?.error) {
+          throw new Error(generated?.error || result.error?.message || 'Falha ao gerar documento definitivo');
+        }
       }
       generated.partial_auxiliaries = partialAuxiliaries;
+
       if (operation.document_type === 'os') {
         await updateDocumentStatus('os', String(generated.os_id), String(auth.profile.default_os_conclusion_status));
       }

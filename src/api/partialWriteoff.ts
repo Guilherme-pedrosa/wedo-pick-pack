@@ -222,7 +222,17 @@ export async function consolidatePartialOperation(
   return data.operation;
 }
 
+/** Destrava uma baixa parcial parada em "Reconciliação necessária" para permitir a retomada. */
+export async function unlockPartialReconciliation(operationId: string): Promise<PartialWriteoffOperation> {
+  const data = await invoke<{ operation: PartialWriteoffOperation }>({
+    action: 'unlock_reconciliation',
+    operation_id: operationId,
+  });
+  return data.operation;
+}
+
 /** Cancela um lote cujo documento auxiliar foi cancelado no GestãoClick, liberando as reservas. */
+
 export async function cancelPartialBatch(
   batchId: string,
   reason?: string,

@@ -27,6 +27,7 @@ import PurchaseTrackerPage from "./pages/PurchaseTrackerPage";
 import RelatorioPedidosPage from "./pages/RelatorioPedidosPage";
 import RastreadorPage from "./pages/RastreadorPage";
 import OrcamentoAnalysisPage from "./pages/OrcamentoAnalysisPage";
+import EtiquetasPage from '@/pages/EtiquetasPage';
 import ProductExplorerPage from "./pages/ProductExplorerPage";
 import EstoqueIAPage from "./pages/EstoqueIAPage";
 import ProductExplorerConfigPage from "./pages/ProductExplorerConfigPage";
@@ -130,6 +131,7 @@ function AuthenticatedApp() {
         <Route path="/rastreador" element={<RastreadorPage />} />
         <Route path="/analise-orcamento" element={<OrcamentoAnalysisPage />} />
         <Route path="/rastreador/logs" element={<OSGenerationLogsPage />} />
+        <Route path="/etiquetas" element={<EtiquetasPage />} />
         <Route path="/produtos/explorar" element={<ProductExplorerPage />} />
         <Route path="/produtos/explorar/config" element={<ProductExplorerConfigPage />} />
         <Route path="/produtos/:productId" element={<ProductDetailPage />} />

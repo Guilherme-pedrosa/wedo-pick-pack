@@ -75,100 +75,60 @@ export interface EtiquetaItem {
   barcodeValue: string;
   /** Localização física do estoque (campo extra do produto no GC). */
   localizacao?: string;
-  /**
-   * Endereço Rational, o outro campo extra do cadastro.
-   *
-   * Muita peça só tem este preenchido — as UNOX, por exemplo. A etiqueta
-   * olhava apenas a localização física e saía sem endereço nenhum, deixando
-   * o separador procurar a peça na prateleira no olho.
-   */
-  localizacaoRational?: string;
   /** Quantidade de etiquetas (páginas) deste item. */
   copies: number;
 }
 
-/**
- * Geometria copiada da etiqueta "Etiqueta Wedo 2.0" do Gestão Click, medida no
- * PDF que ele gera (MediaBox 312×142 pt, transformação 0.36 e fonte 39 → 14 pt).
- *
- * A impressora está calibrada para esse formato: gerar em outro tamanho faz o
- * avanço do rolo sair errado e a etiqueta desalinhar ao longo da bobina.
- */
-const PAGE_W = 110.07;
-const PAGE_H = 50.09;
-
-/** Margem lateral (7 mm) mais o recuo interno do HTML do GC (2 mm). */
-const MARGIN_X = 9.0;
-const FONT_SIZE = 14;
-/** Entrelinha medida entre as baselines do GC. */
-const LINE_H = 5.97;
-
-const Y_TOPO = 7.1;
-const Y_NOME = 13.07;
-/** Altura reservada às barras — o salto de 16,2 mm entre "Codigo:" e o número. */
-const BARCODE_H = 12.5;
-
-/**
- * Baseline do endereço, fixa no pé da etiqueta.
- *
- * É o único elemento que não existe no modelo do GC. Fixá-lo aqui embaixo
- * mantém o resto idêntico e garante que ele sempre caiba: com nome de duas
- * linhas o número do código fica em 41,2 mm, e ainda sobram quase 6 mm.
- */
-const Y_ENDERECO = 47.4;
-
-/** Endereço a imprimir: a localização física manda; sem ela, vale a Rational. */
-export function enderecoDaEtiqueta(item: EtiquetaItem): string {
-  const fisica = (item.localizacao ?? '').trim();
-  const rational = (item.localizacaoRational ?? '').trim();
-  if (fisica && rational) return `${fisica} - Rational ${rational}`;
-  if (fisica) return fisica;
-  if (rational) return `Rational ${rational}`;
-  return '';
-}
+// Etiqueta 100 × 60 mm, uma por página.
+const PAGE_W = 100;
+const PAGE_H = 60;
+const MARGIN_X = 6;
 
 function drawLabel(doc: jsPDF, item: EtiquetaItem): void {
   const usableW = PAGE_W - MARGIN_X * 2;
+  let y = 9;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(FONT_SIZE);
-  doc.text('WeDo Cozinhas', MARGIN_X, Y_TOPO);
+  doc.setFontSize(11);
+  doc.text('WeDo Cozinhas', MARGIN_X, y);
+  y += 5.5;
 
-  // Duas linhas no máximo. O GC corta o nome em 70 caracteres e, quando passa
-  // de duas linhas, a etiqueta dele sai SEM código de barras — foi o que
-  // aconteceu com o FORNO COMBINADO CHEFTOP. Aqui o corte é garantido.
   const nameLines = (doc.splitTextToSize(item.nome || '—', usableW) as string[]).slice(0, 2);
-  doc.text(nameLines, MARGIN_X, Y_NOME);
+  doc.text(nameLines, MARGIN_X, y);
+  y += nameLines.length * 5;
 
-  const y = Y_NOME + nameLines.length * LINE_H;
   doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
   doc.text(`Codigo: ${item.codigo || '—'}`, MARGIN_X, y);
+  y += 3;
 
+  // Código de barras
   const values = encodeCode128B(item.barcodeValue);
   if (values.length) {
     const { bars, totalModules } = code128Bars(values);
     const module = Math.min(0.5, usableW / totalModules);
     const barcodeW = totalModules * module;
     const x0 = (PAGE_W - barcodeW) / 2;
-    const barcodeY = y + 2;
+    const barcodeH = 16;
     doc.setFillColor(0, 0, 0);
     for (const bar of bars) {
-      doc.rect(x0 + bar.x * module, barcodeY, bar.width * module, BARCODE_H, 'F');
+      doc.rect(x0 + bar.x * module, y, bar.width * module, barcodeH, 'F');
     }
-    doc.text(sanitizeCode128B(item.barcodeValue), PAGE_W / 2, barcodeY + BARCODE_H + 3.7, {
-      align: 'center',
-    });
+    y += barcodeH + 4.5;
+    doc.setFontSize(10);
+    doc.text(sanitizeCode128B(item.barcodeValue), PAGE_W / 2, y, { align: 'center' });
+    y += 5;
   } else {
-    doc.text('(sem código para gerar barras)', MARGIN_X, y + LINE_H);
+    doc.setFontSize(9);
+    doc.text('(sem código para gerar barras)', MARGIN_X, y + 6);
+    y += 12;
   }
 
-  // Endereço do estoque, no pé. É por ele que o separador acha a peça, e vale
-  // tanto a localização física quanto a Rational — muita peça só tem a segunda.
-  const endereco = enderecoDaEtiqueta(item);
-  if (endereco) {
+  // Localização física, em destaque no rodapé
+  if (item.localizacao) {
     doc.setFont('helvetica', 'bold');
-    const linha = (doc.splitTextToSize(`LOCAL: ${endereco}`, usableW) as string[])[0];
-    doc.text(linha, MARGIN_X, Y_ENDERECO);
+    doc.setFontSize(11);
+    doc.text(`LOCAL: ${item.localizacao}`, MARGIN_X, PAGE_H - 6);
   }
 }
 

@@ -596,7 +596,12 @@ Deno.serve(async (req: Request) => {
     // NÃO pode levar a quantidade cheia — senão o cliente recebe a peça 2x.
     // Descontamos aqui, no servidor, o que já saiu (reservado + retirado).
     // ============================================
-    const alreadyDelivered = await fetchPartialDeliveredQuantities(String(orcamento.id));
+    // Quando vem da consolidação (partial_auxiliaries presente), NÃO deduzir:
+    // a consolidação já compensa cancelando os auxiliares no GC; deduzir aqui de novo
+    // zeraria o documento definitivo.
+    const alreadyDelivered = partialDeliveries.length > 0
+      ? new Map<string, number>()
+      : await fetchPartialDeliveredQuantities(String(orcamento.id));
     const deductionNotes: string[] = [];
     if (alreadyDelivered.size) {
       const remaining: any[] = [];
@@ -672,7 +677,7 @@ Deno.serve(async (req: Request) => {
       let stillExists = true;
       if (prev.os_id) {
         stillExists = false;
-        for (const path of [`/api/os/${prev.os_id}`, `/api/vendas/${prev.os_id}`]) {
+        for (const path of [`/api/ordens_servicos/${prev.os_id}`, `/api/vendas/${prev.os_id}`]) {
           try {
             const doc = await gcRequest(path, 'GET');
             const found = doc?.data ?? doc?.item ?? null;

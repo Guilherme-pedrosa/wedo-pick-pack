@@ -2340,6 +2340,14 @@ export type Database = {
         }
         Returns: string
       }
+      partial_writeoff_unlock_reconciliation: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_operation_id: string
+        }
+        Returns: string
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

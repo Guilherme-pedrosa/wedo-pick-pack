@@ -20,6 +20,7 @@ import {
   PartialWriteoffOperation,
   preparePartialBatch,
   searchPartialBudgets,
+  unlockPartialReconciliation,
 } from '@/api/partialWriteoff';
 import { checkDocumentExists } from '@/api/gcDocumentValidation';
 import { cn } from '@/lib/utils';
@@ -139,6 +140,7 @@ export default function PartialWriteoffPage() {
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
   const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
   const [audits, setAudits] = useState<Record<string, PartialDocumentAudit>>({});
   const [auditedAt, setAuditedAt] = useState<string | null>(null);
 
@@ -358,6 +360,31 @@ export default function PartialWriteoffPage() {
     }
   }
 
+  async function handleUnlockReconciliation() {
+    if (!selected || unlocking) return;
+    setUnlocking(true);
+    try {
+      const result = await auditPartialDocuments(selected.id);
+      setAudits(Object.fromEntries(result.map(item => [item.batchId, item])));
+      setAuditedAt(new Date().toISOString());
+      const failed = result.filter(item => item.state === 'error');
+      if (failed.length) {
+        toast.error('Não foi possível conferir os documentos no GestãoClick. Resolva a divergência antes de retomar.', { duration: 10000 });
+        return;
+      }
+      const divergent = result.filter(item => ['missing', 'cancelled', 'status_changed'].includes(item.state));
+      if (divergent.length) {
+        toast.warning(`Atenção: ${divergent.map(item => `#${item.documentCode || item.documentId || item.sequence} (${item.state})`).join(', ')}`, { duration: 10000 });
+      }
+      const operation = await unlockPartialReconciliation(selected.id);
+      toast.success(`Consolidação retomada. Novo status: ${statusLabels[operation.status] || operation.status}.`);
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setUnlocking(false);
+    }
+  }
 
 
   async function refresh() {
@@ -799,7 +826,23 @@ export default function PartialWriteoffPage() {
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Operação travada para conferência</AlertTitle>
-                    <AlertDescription>{selected.reconciliation_reason || 'O estado do documento no GestãoClick precisa ser conferido antes de continuar.'}</AlertDescription>
+                    <AlertDescription className="space-y-3">
+                      <p>{selected.reconciliation_reason || 'O estado do documento no GestãoClick precisa ser conferido antes de continuar.'}</p>
+                      {selected.definitive_document_id && (
+                        <p className="text-xs">
+                          Documento definitivo já criado: #{selected.definitive_document_code || selected.definitive_document_id}. A retomada reaproveita esse documento, sem duplicar.
+                        </p>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                        disabled={unlocking}
+                        onClick={handleUnlockReconciliation}
+                      >
+                        {unlocking ? 'Conferindo documentos...' : 'Retomar consolidação'}
+                      </Button>
+                    </AlertDescription>
                   </Alert>
                 )}
 

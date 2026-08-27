@@ -839,7 +839,66 @@ async function finishConsolidation(
   if (error) throw error;
 }
 
+/**
+ * Procura um documento definitivo já criado por uma consolidação anterior que
+ * falhou depois da criação. Evita duplicar documento + tarefa Auvo na retomada.
+ */
+async function findReusableDefinitiveDocument(
+  operation: PartialWriteoffOperation,
+  settings: Record<string, string>,
+): Promise<{ documentId: string; documentCode: string } | null> {
+  const candidates: string[] = [];
+  const persisted = normalizeId(operation.definitive_document_id);
+  if (persisted) candidates.push(persisted);
+
+  const { data: logs } = await cloud
+    .from('os_generation_logs')
+    .select('os_id, os_codigo, created_at')
+    .eq('orcamento_id', operation.budget_id)
+    .order('created_at', { ascending: false })
+    .limit(10);
+  for (const log of (logs || []) as any[]) {
+    const id = normalizeId(log?.os_id);
+    if (id && !candidates.includes(id)) candidates.push(id);
+  }
+  if (!candidates.length) return null;
+
+  const type: DocumentType = operation.document_type === 'os' ? 'os' : 'venda';
+  const cancelId = normalizeId(settings[`${type}_cancel_status_id`]);
+
+  for (const candidate of candidates) {
+    const path = type === 'os'
+      ? `/api/ordens_servicos/${encodeURIComponent(candidate)}`
+      : `/api/vendas/${encodeURIComponent(candidate)}`;
+    try {
+      const document = (await gcRequest(path))?.data;
+      if (!document || !normalizeId(document.id)) continue;
+      if (cancelId && normalizeId(document.situacao_id) === cancelId) continue;
+      return {
+        documentId: normalizeId(document.id) || candidate,
+        documentCode: String(document.codigo || ''),
+      };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function handleUnlockReconciliation(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  const operationId = String(body.operation_id || '');
+  if (!operationId) throw new Error('OPERATION_ID_REQUIRED');
+  const { error } = await cloud.rpc('partial_writeoff_unlock_reconciliation', {
+    p_operation_id: operationId,
+    p_actor_id: auth.id,
+    p_actor_name: auth.name,
+  });
+  if (error) throw new Error(error.message || 'RECONCILIATION_UNLOCK_FAILED');
+  return getOperationGraph(operationId);
+}
+
 async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+
   const operationId = String(body.operation_id || '');
   const operation = await getOperationGraph(operationId);
   if (operation.status === 'completed') return operation;
@@ -909,21 +968,36 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
           auvo_task_id: batch.auvo_task_id ? String(batch.auvo_task_id) : null,
           status: batch.status,
         }));
-      const result = await supabase.functions.invoke('generate-os', {
-        body: {
-          orcamento: operation.budget_snapshot,
-          auvo_user_id: auth.profile.auvo_user_id,
-          gc_usuario_id: auth.profile.gc_usuario_id || undefined,
-          auvo_customer_id: body.auvo_customer_id || undefined,
-          manual_equipamento: body.manual_equipamento || undefined,
-          partial_auxiliaries: partialAuxiliaries.length ? partialAuxiliaries : undefined,
-        },
-      });
-      generated = result.data;
-      if (result.error || generated?.error) {
-        throw new Error(generated?.error || result.error?.message || 'Falha ao gerar documento definitivo');
+
+      // Retomada: se uma tentativa anterior já criou o documento definitivo,
+      // reaproveita em vez de gerar outro documento + tarefa Auvo duplicados.
+      const reusable = await findReusableDefinitiveDocument(operation, settings);
+      if (reusable) {
+        generated = {
+          os_id: reusable.documentId,
+          os_codigo: reusable.documentCode,
+          auvo_task_id: operation.definitive_auvo_task_id || '',
+          reused: true,
+          warnings: ['Documento reaproveitado de consolidação anterior'],
+        };
+      } else {
+        const result = await supabase.functions.invoke('generate-os', {
+          body: {
+            orcamento: operation.budget_snapshot,
+            auvo_user_id: auth.profile.auvo_user_id,
+            gc_usuario_id: auth.profile.gc_usuario_id || undefined,
+            auvo_customer_id: body.auvo_customer_id || undefined,
+            manual_equipamento: body.manual_equipamento || undefined,
+            partial_auxiliaries: partialAuxiliaries.length ? partialAuxiliaries : undefined,
+          },
+        });
+        generated = result.data;
+        if (result.error || generated?.error) {
+          throw new Error(generated?.error || result.error?.message || 'Falha ao gerar documento definitivo');
+        }
       }
       generated.partial_auxiliaries = partialAuxiliaries;
+
       if (operation.document_type === 'os') {
         await updateDocumentStatus('os', String(generated.os_id), String(auth.profile.default_os_conclusion_status));
       }
@@ -1145,6 +1219,8 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
   if (action === 'prepare_batch') return { operation: await handlePrepareBatch(body, auth) } as T;
   if (action === 'confirm_batch') return { operation: await handleConfirmBatch(body, auth) } as T;
   if (action === 'consolidate') return { operation: await handleConsolidate(body, auth) } as T;
+  if (action === 'unlock_reconciliation') return { operation: await handleUnlockReconciliation(body, auth) } as T;
+
   if (action === 'cancel_operation') return { operation: await handleCancelOperation(body, auth) } as T;
   if (action === 'cancel_batch') return { operation: await handleCancelBatch(body, auth) } as T;
   if (action === 'force_cancel_operation') {

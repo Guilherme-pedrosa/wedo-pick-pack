@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Search, RefreshCw, Package, AlertTriangle, CheckCircle2, ShoppingCart, FileText, Wrench, Settings, Receipt } from 'lucide-react';
+import { Loader2, Search, RefreshCw, Package, AlertTriangle, CheckCircle2, ShoppingCart, FileText, Wrench, Settings, Receipt, Tag } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -18,6 +18,7 @@ import {
   ProductSearchResult,
 } from '@/api/produtoExplorer';
 import { logSystemAction } from '@/lib/systemLog';
+import EtiquetaAvulsaDialog from '@/components/etiquetas/EtiquetaAvulsaDialog';
 import { gcCompraUrl } from '@/lib/gcLinks';
 
 const fmtQty = (n: number) =>
@@ -111,6 +112,8 @@ export default function ProductExplorerPage() {
     return new Date(status.builtAt).toLocaleString('pt-BR');
   }, [status, indexReady, building]);
 
+  const [etiquetasAbertas, setEtiquetasAbertas] = useState(false);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -126,6 +129,14 @@ export default function ProductExplorerPage() {
               Índice: {lastBuilt}
             </span>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setEtiquetasAbertas(true)}
+          >
+            <Tag className="h-4 w-4" /> Imprimir etiquetas
+          </Button>
           <Link to="/produtos/explorar/config">
             <Button variant="outline" size="sm" className="gap-2">
               <Settings className="h-4 w-4" /> Configurar
@@ -142,6 +153,8 @@ export default function ProductExplorerPage() {
           </Button>
         </div>
       </div>
+
+      <EtiquetaAvulsaDialog open={etiquetasAbertas} onOpenChange={setEtiquetasAbertas} />
 
       {building && (
         <Card>

@@ -358,6 +358,31 @@ export default function PartialWriteoffPage() {
     }
   }
 
+  async function handleUnlockReconciliation() {
+    if (!selected || unlocking) return;
+    setUnlocking(true);
+    try {
+      const result = await auditPartialDocuments(selected.id);
+      setAudits(Object.fromEntries(result.map(item => [item.batchId, item])));
+      setAuditedAt(new Date().toISOString());
+      const failed = result.filter(item => item.state === 'error');
+      if (failed.length) {
+        toast.error('Não foi possível conferir os documentos no GestãoClick. Resolva a divergência antes de retomar.', { duration: 10000 });
+        return;
+      }
+      const divergent = result.filter(item => ['missing', 'cancelled', 'status_changed'].includes(item.state));
+      if (divergent.length) {
+        toast.warning(`Atenção: ${divergent.map(item => `#${item.documentCode || item.documentId || item.sequence} (${item.state})`).join(', ')}`, { duration: 10000 });
+      }
+      const operation = await unlockPartialReconciliation(selected.id);
+      toast.success(`Consolidação retomada. Novo status: ${STATUS_LABEL[operation.status] || operation.status}.`);
+      await refresh();
+    } catch (error) {
+      toast.error(friendlyError(error));
+    } finally {
+      setUnlocking(false);
+    }
+  }
 
 
   async function refresh() {

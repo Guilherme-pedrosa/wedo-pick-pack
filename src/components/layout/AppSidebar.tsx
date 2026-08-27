@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Calculator, Calendar } from "lucide-react";
+import { Calculator, Calendar, Tag } from "lucide-react";
 import {
   Bot,
   LayoutDashboard,
@@ -91,6 +91,7 @@ const menuGroups: MenuGroup[] = [
       { title: "Relatório Fornecedor", icon: FileText, href: "/compras/relatorio-fornecedor" },
       { title: "Análise Estoque", icon: BarChart3, href: "/analise-estoque" },
       { title: "Explorar Peças", icon: Search, href: "/produtos/explorar" },
+      { title: "Etiquetas", icon: Tag, href: "/etiquetas" },
       { title: "IA de Estoque", icon: Bot, href: "/estoque-ia" },
       { title: "Rastreador", icon: Search, href: "/rastreador" },
       { title: "Log OS Geradas", icon: ClipboardList, href: "/rastreador/logs" },

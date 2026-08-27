@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import type { ProductResult } from '@/components/controle/ProductSearchInput';
 
 /**
- * O diálogo depende da busca no índice de produtos e da API do GestãoClick.
+ * O seletor depende da busca no índice de produtos e da API do GestãoClick.
  * Aqui os dois viram dublês: o que importa testar é o comportamento da lista
  * — item escolhido fica fixo, escolher de novo soma em vez de duplicar, e a
  * quantidade de cada linha vira o número de páginas do PDF.
@@ -32,7 +32,7 @@ vi.mock('sonner', () => ({
   toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
 
-const { default: EtiquetaAvulsaDialog } = await import('./EtiquetaAvulsaDialog');
+const { default: SeletorEtiquetas } = await import('./SeletorEtiquetas');
 
 const peca = (id: string, nome: string, codigo: string): ProductResult => ({
   produto_id: id,
@@ -53,10 +53,10 @@ beforeEach(() => {
   );
 });
 
-describe('EtiquetaAvulsaDialog', () => {
+describe('SeletorEtiquetas', () => {
   it('mantém na lista cada peça escolhida, e vai acumulando', () => {
-    render(<EtiquetaAvulsaDialog open onOpenChange={() => {}} />);
-    expect(screen.getByText('Nenhuma peça escolhida ainda.')).toBeInTheDocument();
+    render(<SeletorEtiquetas />);
+    expect(screen.getByText(/Nenhuma peça escolhida ainda/)).toBeInTheDocument();
 
     act(() => selecionar(peca('1', 'TUBO DO DRENO UNOX', '124654')));
     act(() => selecionar(peca('2', 'JUNTA DE ENTRADA DE AR', 'KGN1544A')));
@@ -67,7 +67,7 @@ describe('EtiquetaAvulsaDialog', () => {
   });
 
   it('escolher a mesma peça de novo soma uma etiqueta em vez de duplicar a linha', () => {
-    render(<EtiquetaAvulsaDialog open onOpenChange={() => {}} />);
+    render(<SeletorEtiquetas />);
     act(() => selecionar(peca('1', 'TUBO DO DRENO UNOX', '124654')));
     act(() => selecionar(peca('1', 'TUBO DO DRENO UNOX', '124654')));
 
@@ -76,13 +76,13 @@ describe('EtiquetaAvulsaDialog', () => {
   });
 
   it('recusa peça sem código — sem código não há código de barras', () => {
-    render(<EtiquetaAvulsaDialog open onOpenChange={() => {}} />);
+    render(<SeletorEtiquetas />);
     act(() => selecionar({ produto_id: '9', nome: 'PECA SEM CODIGO', codigo_interno: null, codigo_barra: null, ativo: true }));
-    expect(screen.getByText('Nenhuma peça escolhida ainda.')).toBeInTheDocument();
+    expect(screen.getByText(/Nenhuma peça escolhida ainda/)).toBeInTheDocument();
   });
 
   it('a quantidade de cada linha vira o número de cópias no PDF', async () => {
-    render(<EtiquetaAvulsaDialog open onOpenChange={() => {}} />);
+    render(<SeletorEtiquetas />);
     act(() => selecionar(peca('1', 'TUBO DO DRENO UNOX', '124654')));
 
     fireEvent.change(screen.getByLabelText('Qtd'), { target: { value: '5' } });
@@ -102,7 +102,7 @@ describe('EtiquetaAvulsaDialog', () => {
   });
 
   it('quantidade inválida não zera a lista nem gera PDF vazio', () => {
-    render(<EtiquetaAvulsaDialog open onOpenChange={() => {}} />);
+    render(<SeletorEtiquetas />);
     act(() => selecionar(peca('1', 'TUBO DO DRENO UNOX', '124654')));
 
     fireEvent.change(screen.getByLabelText('Qtd'), { target: { value: '0' } });
@@ -113,9 +113,9 @@ describe('EtiquetaAvulsaDialog', () => {
   });
 
   it('remove a peça da lista', () => {
-    render(<EtiquetaAvulsaDialog open onOpenChange={() => {}} />);
+    render(<SeletorEtiquetas />);
     act(() => selecionar(peca('1', 'TUBO DO DRENO UNOX', '124654')));
     fireEvent.click(screen.getByRole('button', { name: 'Remover TUBO DO DRENO UNOX' }));
-    expect(screen.getByText('Nenhuma peça escolhida ainda.')).toBeInTheDocument();
+    expect(screen.getByText(/Nenhuma peça escolhida ainda/)).toBeInTheDocument();
   });
 });

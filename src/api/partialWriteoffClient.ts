@@ -1219,6 +1219,8 @@ export async function invokePartialWriteoffClient<T>(body: Record<string, unknow
   if (action === 'prepare_batch') return { operation: await handlePrepareBatch(body, auth) } as T;
   if (action === 'confirm_batch') return { operation: await handleConfirmBatch(body, auth) } as T;
   if (action === 'consolidate') return { operation: await handleConsolidate(body, auth) } as T;
+  if (action === 'unlock_reconciliation') return { operation: await handleUnlockReconciliation(body, auth) } as T;
+
   if (action === 'cancel_operation') return { operation: await handleCancelOperation(body, auth) } as T;
   if (action === 'cancel_batch') return { operation: await handleCancelBatch(body, auth) } as T;
   if (action === 'force_cancel_operation') {

@@ -81,7 +81,11 @@ export default function EtiquetaPrintDialog({ open, onClose, orderCode, items }:
           nome: produto.nome_produto,
           codigo: codigo || barcodeValue,
           barcodeValue,
+          // O Checkout mostra as duas localizacoes; a etiqueta so passava a
+          // fisica, entao quando o cadastro do produto so tem a Rational o
+          // rodape saia em branco -- foi o que aconteceu com as pecas UNOX.
           localizacao: produto.localizacao_fisica,
+          localizacaoRational: produto.localizacao_rational,
           copies: selected[i].copies,
         });
       });

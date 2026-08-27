@@ -945,7 +945,7 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
   }
 
   if (!existingSale) {
-    await cloud.from('os_generation_logs').insert({
+    const logPayload = {
       orcamento_codigo: operation.budget_code,
       orcamento_id: operation.budget_id,
       nome_cliente: operation.client_name,
@@ -958,8 +958,14 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
       warnings: generated.warnings || null,
       partial_auxiliaries: generated.partial_auxiliaries?.length ? generated.partial_auxiliaries : null,
       success: true,
-
-    });
+    };
+    let { error: logError } = await cloud.from('os_generation_logs').insert(logPayload);
+    if (logError) {
+      ({ error: logError } = await cloud.from('os_generation_logs').insert(logPayload));
+    }
+    if (logError) {
+      console.error('[partial-writeoff] falha ao registrar os_generation_logs:', logError.message);
+    }
   }
 
   await finishConsolidation(operationId, true, auth, generated);

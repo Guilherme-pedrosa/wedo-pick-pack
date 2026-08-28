@@ -171,6 +171,8 @@ export default function PurchaseTrackerPage() {
   const [statuses, setStatuses] = useState<{ id: string; nome: string }[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [loadingStatuses, setLoadingStatuses] = useState(true);
+  const [statusSearch, setStatusSearch] = useState('');
+
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [rows, setRows] = useState<CompraRow[]>([]);

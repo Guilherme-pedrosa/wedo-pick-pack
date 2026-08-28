@@ -26,6 +26,11 @@ const CODE128_PATTERNS = [
 ];
 
 const START_B = 104;
+const START_C = 105;
+/** Troca para o subconjunto C no meio do símbolo. */
+const CODE_C = 99;
+/** Troca para o subconjunto B no meio do símbolo. */
+const CODE_B = 100;
 const STOP = 106;
 
 /** Remove caracteres fora do conjunto Code 128 B (ASCII 32–126). */
@@ -44,6 +49,67 @@ export function encodeCode128B(value: string): number[] {
   for (const ch of clean) values.push(ch.charCodeAt(0) - 32);
   let checksum = START_B;
   for (let i = 1; i < values.length; i++) checksum += values[i] * i;
+  values.push(checksum % 103);
+  values.push(STOP);
+  return values;
+}
+
+const ehDigito = (ch: string) => ch >= '0' && ch <= '9';
+
+/** Quantos dígitos seguidos existem a partir de uma posição. */
+function digitosAPartirDe(txt: string, i: number): number {
+  let n = 0;
+  while (i + n < txt.length && ehDigito(txt[i + n])) n++;
+  return n;
+}
+
+/**
+ * Sequência Code 128 usando os subconjuntos B e C.
+ *
+ * O subconjunto C codifica dígitos **aos pares** — um símbolo para cada dois —
+ * e é o que torna um código numérico curto o bastante para caber na etiqueta
+ * com margem. Só com o B, os 13 dígitos de um EAN viravam 178 módulos: 89 mm
+ * numa etiqueta de 110 mm, de ponta a ponta, e o leitor não lia. Pelo C o
+ * mesmo código cai para 123 módulos, ~61 mm, com folga dos dois lados.
+ *
+ * A regra de troca é a usual: começa em C quando há pelo menos quatro dígitos
+ * à frente, volta para B quando sobra dígito ímpar ou aparece letra, e torna a
+ * entrar em C quando surge uma corrida de seis dígitos ou mais — abaixo disso
+ * o símbolo de troca custa mais do que economiza.
+ */
+export function encodeCode128(value: string): number[] {
+  const t = sanitizeCode128B(value);
+  if (!t) return [];
+
+  const values: number[] = [];
+  let i = 0;
+  let emC = digitosAPartirDe(t, 0) >= 4;
+  values.push(emC ? START_C : START_B);
+
+  while (i < t.length) {
+    if (emC) {
+      if (digitosAPartirDe(t, i) >= 2) {
+        values.push(Number(t.slice(i, i + 2)));
+        i += 2;
+        continue;
+      }
+      values.push(CODE_B);
+      emC = false;
+      continue;
+    }
+    const corrida = digitosAPartirDe(t, i);
+    // No fim da cadeia, dois dígitos já pagam a troca; no meio, exige seis.
+    if (corrida >= 6 || (corrida >= 2 && corrida % 2 === 0 && i + corrida === t.length)) {
+      values.push(CODE_C);
+      emC = true;
+      continue;
+    }
+    values.push(t.charCodeAt(i) - 32);
+    i += 1;
+  }
+
+  let checksum = values[0];
+  for (let k = 1; k < values.length; k++) checksum += values[k] * k;
   values.push(checksum % 103);
   values.push(STOP);
   return values;
@@ -144,7 +210,7 @@ function drawLabel(doc: jsPDF, item: EtiquetaItem): void {
   doc.setFont('helvetica', 'normal');
   doc.text(`Codigo: ${item.codigo || '—'}`, MARGIN_X, y);
 
-  const values = encodeCode128B(item.barcodeValue);
+  const values = encodeCode128(item.barcodeValue);
   if (values.length) {
     const { bars, totalModules } = code128Bars(values);
     const module = Math.min(0.5, usableW / totalModules);

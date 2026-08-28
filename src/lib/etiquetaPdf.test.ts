@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildEtiquetasPdf,
   code128Bars,
+  encodeCode128,
   encodeCode128B,
   enderecoDaEtiqueta,
   sanitizeCode128B,
@@ -91,5 +92,59 @@ describe('layout da etiqueta', () => {
       copies: 1,
     }]);
     expect(doc.getNumberOfPages()).toBe(1);
+  });
+});
+
+/**
+ * Decodifica a sequência de volta para texto, seguindo as trocas de
+ * subconjunto. Serve para provar que o codificador não está gerando um símbolo
+ * que o leitor consegue ler mas que significa outra coisa — falha pior que
+ * não ler.
+ */
+function decodificar(values: number[]): string {
+  const corpo = values.slice(0, -2); // tira checksum e stop
+  let emC = corpo[0] === 105;
+  let saida = '';
+  for (const v of corpo.slice(1)) {
+    if (v === 99) { emC = true; continue; }
+    if (v === 100) { emC = false; continue; }
+    saida += emC ? String(v).padStart(2, '0') : String.fromCharCode(v + 32);
+  }
+  return saida;
+}
+
+describe('encodeCode128 — subconjuntos B e C', () => {
+  const casos = ['2059144081848', '124654', 'KVM1319A', '50.01.050S', '7891234560001', '9', '12', 'A1B2C3'];
+
+  it.each(casos)('ida e volta preserva %s', (codigo) => {
+    expect(decodificar(encodeCode128(codigo))).toBe(codigo);
+  });
+
+  it('o checksum fecha pela fórmula posicional', () => {
+    for (const codigo of casos) {
+      const v = encodeCode128(codigo);
+      const corpo = v.slice(0, -2);
+      let soma = corpo[0];
+      for (let i = 1; i < corpo.length; i++) soma += corpo[i] * i;
+      expect(v[v.length - 2]).toBe(soma % 103);
+      expect(v[v.length - 1]).toBe(106);
+    }
+  });
+
+  it('encurta o código numérico pela metade — era o que não deixava ler', () => {
+    // 13 dígitos só no subconjunto B davam 178 módulos: 89 mm numa etiqueta de
+    // 110 mm, de ponta a ponta. Pelo C caem para 123, cerca de 61 mm.
+    expect(code128Bars(encodeCode128B('2059144081848')).totalModules).toBe(178);
+    expect(code128Bars(encodeCode128('2059144081848')).totalModules).toBe(123);
+  });
+
+  it('não troca de subconjunto quando não compensa', () => {
+    // Corrida curta de dígitos: o símbolo de troca custa mais do que economiza.
+    expect(encodeCode128('AB12CD')).not.toContain(99);
+  });
+
+  it('começa em C quando o código é todo numérico', () => {
+    expect(encodeCode128('124654')[0]).toBe(105);
+    expect(encodeCode128('KVM1319A')[0]).toBe(104);
   });
 });

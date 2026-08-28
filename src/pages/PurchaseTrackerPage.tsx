@@ -171,6 +171,8 @@ export default function PurchaseTrackerPage() {
   const [statuses, setStatuses] = useState<{ id: string; nome: string }[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [loadingStatuses, setLoadingStatuses] = useState(true);
+  const [statusSearch, setStatusSearch] = useState('');
+
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState({ step: '', checked: 0, total: 0 });
   const [rows, setRows] = useState<CompraRow[]>([]);
@@ -409,9 +411,26 @@ export default function PurchaseTrackerPage() {
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[420px] p-0" align="start">
+                <div className="p-2 border-b flex items-center gap-2">
+                  <input
+                    value={statusSearch}
+                    onChange={(e) => setStatusSearch(e.target.value)}
+                    placeholder="Buscar situação…"
+                    className="flex-1 h-8 rounded-md border bg-background px-2 text-sm outline-none"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelected(statuses.map(s => s.id))}
+                  >
+                    Marcar todas
+                  </Button>
+                </div>
                 <ScrollArea className="max-h-[360px]">
                   <div className="p-2">
-                    {statuses.map(s => (
+                    {statuses
+                      .filter(s => s.nome.toLowerCase().includes(statusSearch.trim().toLowerCase()))
+                      .map(s => (
                       <label
                         key={s.id}
                         className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent cursor-pointer text-sm"
@@ -428,6 +447,7 @@ export default function PurchaseTrackerPage() {
                     )}
                   </div>
                 </ScrollArea>
+
                 {selected.length > 0 && (
                   <div className="border-t p-2 flex justify-between">
                     <Button variant="ghost" size="sm" onClick={() => setSelected([])}>

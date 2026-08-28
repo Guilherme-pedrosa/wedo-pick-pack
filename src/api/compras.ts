@@ -363,13 +363,42 @@ async function deriveStatusComprasFromPedidos(): Promise<GCSituacaoCompra[]> {
 export async function getStatusCompras(): Promise<GCSituacaoCompra[]> {
   if (isUsingMock()) { await mockDelay(); return [...MOCK_STATUS_COMPRA]; }
   try {
-    const res = await apiRequest<{ data: GCSituacaoCompra[] }>('/api/situacoes_compras');
-    return res.data;
+    // GC pagina esse endpoint: percorre todas as páginas para não perder situações
+    const byId = new Map<string, GCSituacaoCompra>();
+    let page = 1;
+    let totalPages = 1;
+
+    while (page <= totalPages) {
+      const res = await apiRequest<{ data: any[]; meta?: GCMeta }>(
+        `/api/situacoes_compras?limite=100&pagina=${page}`,
+      );
+      totalPages = Math.max(1, Number(res.meta?.total_paginas || 1));
+
+      for (const row of res.data || []) {
+        const s = row?.Situacao ?? row?.situacao ?? row;
+        const id = normalizeId(s?.id);
+        const nome = String(s?.nome ?? '').trim();
+        if (!id || !nome || byId.has(id)) continue;
+        byId.set(id, {
+          id,
+          nome,
+          padrao: String(s?.padrao ?? '0'),
+          tipo_lancamento: String(s?.tipo_lancamento ?? ''),
+        });
+      }
+
+      page++;
+      if (page <= totalPages && !isUsingMock()) await new Promise(r => setTimeout(r, 250));
+    }
+
+    if (byId.size === 0) return deriveStatusComprasFromPedidos();
+    return [...byId.values()];
   } catch (error) {
     console.warn('[COMPRAS] Falha no endpoint de situações; derivando pelos pedidos de compra.', error);
     return deriveStatusComprasFromPedidos();
   }
 }
+
 
 // --- LIST ORDENS COMPRA ---
 export async function listOrdensCompra(situacaoId?: string, pagina = 1, extraQuery = ''): Promise<{ data: GCOrdemCompra[]; meta: GCMeta }> {

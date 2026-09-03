@@ -1123,11 +1123,11 @@ Deno.serve(async (req: Request) => {
         const codSet = new Set(alvos.map((r) => normalizeStr(r.codigo_interno)).filter(Boolean));
         const peca = alvos[0];
 
-        const janela = Math.min(Math.max(dias ?? 180, 7), 730);
-        const teto = Math.min(Math.max(max_documentos ?? 220, 20), 400);
+        const janela = Math.min(Math.max(dias ?? 365, 7), 1095);
+        const teto = Math.min(Math.max(max_documentos ?? 900, 20), 2000);
         const hoje = new Date();
         const ini = new Date(hoje.getTime() - janela * 86400000);
-        const fmt = (d: Date) => d.toISOString().slice(0, 10);
+        const iniStr = ini.toISOString().slice(0, 10);
 
         const alvosTipo = tipos?.length ? tipos : ["orcamento", "venda", "os", "compra"];
         const ENDPOINT: Record<string, string> = {

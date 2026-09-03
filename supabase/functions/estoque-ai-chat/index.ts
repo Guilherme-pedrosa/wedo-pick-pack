@@ -1086,8 +1086,8 @@ Deno.serve(async (req: Request) => {
           .array(z.enum(["orcamento", "venda", "os", "compra"]))
           .optional()
           .describe("Tipos de documento a varrer. Padrão: todos."),
-        dias: z.number().optional().describe("Janela de busca em dias (padrão 180, máx 730)."),
-        max_documentos: z.number().optional().describe("Teto de documentos analisados (padrão 220, máx 400)."),
+        dias: z.number().optional().describe("Janela de busca em dias (padrão 365, máx 1095)."),
+        max_documentos: z.number().optional().describe("Teto de documentos analisados (padrão 900, máx 2000)."),
       }),
       execute: async ({ termo, tipos, dias, max_documentos }) => {
         if (!GC_ACCESS || !GC_SECRET) return { erro: "Credenciais do GestãoClick não configuradas." };

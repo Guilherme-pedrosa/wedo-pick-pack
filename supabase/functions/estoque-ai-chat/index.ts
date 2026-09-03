@@ -182,6 +182,52 @@ async function fetchTabelasRef(access: string, secret: string): Promise<{ tipo_i
   return valores.map((v) => ({ tipo_id: String(v.tipo_id), nome_tipo: String(v.nome_tipo ?? "") }));
 }
 
+// ---------------------------------------------------------------------------
+// Poda de contexto: resultados de ferramenta (GC/estoque) podem somar centenas
+// de milhares de tokens e estourar o limite do modelo (HTTP 400 no gateway).
+// Aqui truncamos cada resultado e mantemos apenas as últimas rodadas.
+// ---------------------------------------------------------------------------
+const MAX_TOOL_RESULT_CHARS = 12000;
+const MAX_TOOL_RESULT_CHARS_ANTIGO = 1500;
+const MAX_MENSAGENS = 24;
+const MAX_TOTAL_CHARS = 400_000;
+
+function truncarTexto(texto: string, max: number): string {
+  return texto.length <= max
+    ? texto
+    : `${texto.slice(0, max)}\n…[resultado truncado: ${texto.length - max} caracteres omitidos]`;
+}
+
+function podarParte(part: any, max: number): any {
+  if (!part || typeof part !== "object") return part;
+  if (part.type === "tool-result" || part.type === "tool-error") {
+    const bruto = typeof part.output === "string" ? part.output : JSON.stringify(part.output ?? null);
+    return { ...part, output: { type: "text", value: truncarTexto(bruto, max) } };
+  }
+  if (part.type === "text" && typeof part.text === "string") {
+    return { ...part, text: truncarTexto(part.text, Math.max(max, 8000)) };
+  }
+  return part;
+}
+
+function prunarMensagens(msgs: any[]): any[] {
+  const recentes = msgs.length > MAX_MENSAGENS ? msgs.slice(-MAX_MENSAGENS) : msgs;
+  const limiteRecente = Math.max(recentes.length - 6, 0);
+
+  let podadas = recentes.map((m, i) => {
+    if (!m || !Array.isArray(m.content)) return m;
+    const max = i >= limiteRecente ? MAX_TOOL_RESULT_CHARS : MAX_TOOL_RESULT_CHARS_ANTIGO;
+    return { ...m, content: m.content.map((p: any) => podarParte(p, max)) };
+  });
+
+  // Rede de segurança: se ainda estiver enorme, descarta as mensagens mais antigas.
+  const tamanho = (arr: any[]) => JSON.stringify(arr).length;
+  while (podadas.length > 4 && tamanho(podadas) > MAX_TOTAL_CHARS) {
+    podadas = podadas.slice(2);
+  }
+  return podadas;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -1162,7 +1208,7 @@ Deno.serve(async (req: Request) => {
         "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para 'em qual venda/OS a peça saiu' ou 'última venda dessa peça' use consultar_vendas_da_peca; para TODO O RESTO do GC use consultar_gestaoclick.",
         "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela consulta o histórico de consumo/movimentações sincronizado e tenta confirmar o documento ao vivo no GestãoClick. Você SÓ pode citar uma saída se o documento vier com verificado=true. Se verificado_ao_vivo=false mas confirmado_historico=true, cite a saída como 'confirmada pelo histórico de consumo/movimentações' e NÃO invente o Nº exibido; use numero_documento somente quando retornado. É TERMINANTEMENTE PROIBIDO dizer que não houve vendas/OS/saídas quando a ferramenta retornou documentos verificados. Números internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
       ].join(" "),
-      messages: await convertToModelMessages(messages),
+      messages: prunarMensagens(await convertToModelMessages(messages)),
       tools: {
         consultar_estoque: consultarEstoque,
         cadastrar_produto: cadastrarProduto,

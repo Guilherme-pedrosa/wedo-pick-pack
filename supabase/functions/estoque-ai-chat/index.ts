@@ -187,10 +187,12 @@ async function fetchTabelasRef(access: string, secret: string): Promise<{ tipo_i
 // de milhares de tokens e estourar o limite do modelo (HTTP 400 no gateway).
 // Aqui truncamos cada resultado e mantemos apenas as últimas rodadas.
 // ---------------------------------------------------------------------------
-const MAX_TOOL_RESULT_CHARS = 80000;
-const MAX_TOOL_RESULT_CHARS_ANTIGO = 8000;
-const MAX_MENSAGENS = 40;
-const MAX_TOTAL_CHARS = 600_000;
+const MAX_TOOL_RESULT_CHARS = 30000;
+const MAX_TOOL_RESULT_CHARS_ANTIGO = 4000;
+const MAX_MENSAGENS = 24;
+// O payload ainda recebe system prompt + schemas das ferramentas. Um teto alto
+// aqui já produziu chamadas de 744 mil tokens, acima do limite do modelo.
+const MAX_TOTAL_CHARS = 120_000;
 
 // Trunca preservando início e fim (o fim costuma trazer totais/últimos itens).
 function truncarTexto(texto: string, max: number): string {
@@ -215,12 +217,12 @@ function podarParte(part: any, max: number): any {
 
 function prunarMensagens(msgs: any[]): any[] {
   const tamanho = (arr: any[]) => JSON.stringify(arr).length;
+  const saneadas = sanearToolCalls(msgs);
 
-  // Caminho normal: contexto dentro do limite → não mexe em NADA.
-  // (a poda agressiva estava mutilando o histórico e degradando as respostas)
-  if (tamanho(msgs) <= MAX_TOTAL_CHARS) return msgs;
+  // Contextos normais seguem intactos; apenas chamadas incompletas são limpas.
+  if (tamanho(saneadas) <= MAX_TOTAL_CHARS) return saneadas;
 
-  const recentes = msgs.length > MAX_MENSAGENS ? msgs.slice(-MAX_MENSAGENS) : msgs;
+  const recentes = saneadas.length > MAX_MENSAGENS ? saneadas.slice(-MAX_MENSAGENS) : saneadas;
   const limiteRecente = Math.max(recentes.length - 6, 0);
 
   let podadas = recentes.map((m, i) => {
@@ -230,8 +232,8 @@ function prunarMensagens(msgs: any[]): any[] {
   });
 
   // Rede de segurança: se ainda estiver enorme, descarta as mensagens mais antigas.
-  while (podadas.length > 4 && tamanho(podadas) > MAX_TOTAL_CHARS) {
-    podadas = podadas.slice(2);
+  while (podadas.length > 2 && tamanho(podadas) > MAX_TOTAL_CHARS) {
+    podadas = podadas.slice(1);
   }
   return sanearToolCalls(podadas);
 }

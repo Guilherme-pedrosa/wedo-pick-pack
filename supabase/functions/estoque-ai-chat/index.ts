@@ -225,8 +225,48 @@ function prunarMensagens(msgs: any[]): any[] {
   while (podadas.length > 4 && tamanho(podadas) > MAX_TOTAL_CHARS) {
     podadas = podadas.slice(2);
   }
-  return podadas;
+  return sanearToolCalls(podadas);
 }
+
+/**
+ * Remove tool-calls sem tool-result correspondente (e results órfãos), que
+ * acontecem quando o stream é interrompido no meio de uma chamada de tool.
+ * Sem isso o SDK lança AI_MissingToolResultsError.
+ */
+function sanearToolCalls(msgs: any[]): any[] {
+  const comResultado = new Set<string>();
+  for (const m of msgs) {
+    if (!Array.isArray(m?.content)) continue;
+    for (const p of m.content) {
+      if ((p?.type === "tool-result" || p?.type === "tool-error") && p.toolCallId) {
+        comResultado.add(p.toolCallId);
+      }
+    }
+  }
+
+  const idsChamados = new Set<string>();
+  const saida: any[] = [];
+  for (const m of msgs) {
+    if (!Array.isArray(m?.content)) {
+      saida.push(m);
+      continue;
+    }
+    const content = m.content.filter((p: any) => {
+      if (p?.type === "tool-call") {
+        if (!p.toolCallId || !comResultado.has(p.toolCallId)) return false;
+        idsChamados.add(p.toolCallId);
+        return true;
+      }
+      if (p?.type === "tool-result" || p?.type === "tool-error") {
+        return p.toolCallId ? idsChamados.has(p.toolCallId) : false;
+      }
+      return true;
+    });
+    if (content.length > 0) saida.push({ ...m, content });
+  }
+  return saida;
+}
+
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

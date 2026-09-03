@@ -1079,49 +1079,57 @@ Deno.serve(async (req: Request) => {
 
     const consultarDocumentosDaPeca = tool({
       description:
-        "Descobre em QUAIS documentos do GestãoClick (orçamentos, vendas, ordens de serviço e pedidos de compra) uma peça específica realmente aparece, conferindo ITEM A ITEM pelo produto_id/código interno. Use SEMPRE que perguntarem 'quais orçamentos têm essa peça', 'tem pedido de compra dessa peça', 'onde essa peça está cotada/comprada'. Só cite documentos retornados por esta ferramenta.",
+        "Descobre em QUAIS documentos do GestãoClick (orçamentos, vendas, ordens de serviço e pedidos de compra) uma ou várias peças realmente aparecem, conferindo ITEM A ITEM pelo produto_id/código interno. Envie TODOS os códigos da pergunta juntos em 'termos'; nunca faça uma chamada separada por peça. Só cite documentos retornados por esta ferramenta.",
       inputSchema: z.object({
-        termo: z.string().describe("Código interno, nome ou ID da peça. Ex: '40.00.606P'."),
+        termos: z
+          .array(z.string())
+          .min(1)
+          .max(30)
+          .describe("Lista completa de códigos internos, nomes ou IDs das peças da pergunta."),
         tipos: z
           .array(z.enum(["orcamento", "venda", "os", "compra"]))
           .optional()
           .describe("Tipos de documento a varrer. Padrão: todos."),
+        situacao: z
+          .string()
+          .optional()
+          .describe("Situação do documento a considerar, por nome. Ex: 'AGUARDANDO APROVAÇÃO'."),
         dias: z.number().optional().describe("Janela de busca em dias (padrão 365, máx 1095)."),
         max_documentos: z.number().optional().describe("Teto de documentos analisados (padrão 900, máx 2000)."),
       }),
-      execute: async ({ termo, tipos, dias, max_documentos }) => {
+      execute: async ({ termos, tipos, situacao, dias, max_documentos }) => {
         if (!GC_ACCESS || !GC_SECRET) return { erro: "Credenciais do GestãoClick não configuradas." };
-        const q = String(termo ?? "").trim();
-        if (!q) return { erro: "Informe o código ou nome da peça." };
+        const consultas = termos.map((termo) => String(termo ?? "").trim()).filter(Boolean);
+        if (consultas.length === 0) return { erro: "Informe ao menos um código ou nome de peça." };
 
-        // 1) Resolver a peça (código interno exato tem prioridade)
-        const { data: prods } = await supabase
-          .from("products_index")
-          .select("produto_id, nome, codigo_interno, codigo_barra")
-          .or(
-            `codigo_interno.ilike.%${q}%,codigo_barra.ilike.%${q}%,produto_id.eq.${/^\d+$/.test(q) ? q : 0},nome.ilike.%${q}%`,
-          )
-          .limit(10);
-        const rows = prods ?? [];
-        if (rows.length === 0) return { erro: `Peça não localizada no índice de produtos: "${q}".` };
-        const exato = rows.filter(
-          (r) => normalizeStr(r.codigo_interno) === normalizeStr(q) || String(r.produto_id) === q,
+        // Resolver todas as peças antes de varrer os documentos uma única vez.
+        const resolvidos = await Promise.all(
+          consultas.map(async (q) => {
+            const { data: prods } = await supabase
+              .from("products_index")
+              .select("produto_id, nome, codigo_interno, codigo_barra")
+              .or(
+                `codigo_interno.ilike.%${q}%,codigo_barra.ilike.%${q}%,produto_id.eq.${/^\d+$/.test(q) ? q : 0},nome.ilike.%${q}%`,
+              )
+              .limit(10);
+            const rows = prods ?? [];
+            const exatos = rows.filter(
+              (r) => normalizeStr(r.codigo_interno) === normalizeStr(q) || String(r.produto_id) === q,
+            );
+            const alvos = exatos.length > 0 ? exatos : rows.length <= 3 ? rows : [];
+            return { termo: q, alvos, ambiguo: rows.length > 3 && exatos.length === 0 };
+          }),
         );
-        if (exato.length === 0 && rows.length > 3) {
-          return {
-            ambiguo: true,
-            aviso: "Vários produtos casam com o termo. Peça o código interno exato ao usuário.",
-            opcoes: rows.slice(0, 10).map((r) => ({
-              identificacao: r.codigo_interno ? `[${r.codigo_interno}] ${r.nome}` : r.nome,
-              produto_id: String(r.produto_id),
-            })),
-          };
-        }
-        const alvos = exato.length > 0 ? exato : rows.slice(0, 3);
 
-        const idSet = new Set(alvos.map((r) => String(r.produto_id)));
-        const codSet = new Set(alvos.map((r) => normalizeStr(r.codigo_interno)).filter(Boolean));
-        const peca = alvos[0];
+        const mapaPorId = new Map<string, string>();
+        const mapaPorCodigo = new Map<string, string>();
+        for (const resolvido of resolvidos) {
+          for (const produto of resolvido.alvos) {
+            mapaPorId.set(String(produto.produto_id), resolvido.termo);
+            const codigo = normalizeStr(produto.codigo_interno);
+            if (codigo) mapaPorCodigo.set(codigo, resolvido.termo);
+          }
+        }
 
         const janela = Math.min(Math.max(dias ?? 365, 7), 1095);
         const teto = Math.min(Math.max(max_documentos ?? 900, 20), 2000);
@@ -1137,9 +1145,26 @@ Deno.serve(async (req: Request) => {
           compra: "compras",
         };
 
-        const resultados: Record<string, any[]> = {};
+        const resultados = Object.fromEntries(
+          resolvidos.map((r) => [
+            r.termo,
+            {
+              peca: r.alvos[0]
+                ? {
+                    identificacao: r.alvos[0].codigo_interno
+                      ? `[${r.alvos[0].codigo_interno}] ${r.alvos[0].nome}`
+                      : r.alvos[0].nome,
+                    produto_id: String(r.alvos[0].produto_id),
+                  }
+                : null,
+              ambiguo: r.ambiguo,
+              documentos: [] as any[],
+            },
+          ]),
+        );
         let analisados = 0;
         let truncado = false;
+        const situacaoNormalizada = normalizeStr(situacao ?? "");
 
         for (const tipo of alvosTipo) {
           const endpoint = ENDPOINT[tipo];
@@ -1161,6 +1186,8 @@ Deno.serve(async (req: Request) => {
                 anterioresAJanela++;
                 continue;
               }
+              const nomeSituacao = normalizeStr(flat?.nome_situacao ?? flat?.situacao ?? "");
+              if (situacaoNormalizada && !nomeSituacao.includes(situacaoNormalizada)) continue;
               cabecalhos.push(flat);
             }
             const tp = Number(resp.json?.meta?.total_paginas ?? 1);
@@ -1174,8 +1201,6 @@ Deno.serve(async (req: Request) => {
           cabecalhos.sort((a, b) =>
             String(b?.data ?? b?.data_emissao ?? "").localeCompare(String(a?.data ?? a?.data_emissao ?? "")),
           );
-          const encontrados: any[] = [];
-
           const LOTE = 10;
           for (let i = 0; i < cabecalhos.length; i += LOTE) {
             if (analisados >= teto) {
@@ -1190,49 +1215,48 @@ Deno.serve(async (req: Request) => {
             dets.forEach((det, k) => {
               if (!det.ok) return;
               const cab = lote[k];
-              const linhas = extrairLinhas(det.json).filter((l: any) => {
-                const pid = String(l?.produto_id ?? "");
-                const cod = normalizeStr(l?.codigo_interno ?? l?.codigo ?? "");
-                return idSet.has(pid) || (cod !== "" && codSet.has(cod));
-              });
-              if (linhas.length === 0) return;
-              encontrados.push({
-                tipo,
-                codigo: String(cab?.codigo ?? ""),
-                id: String(cab?.id ?? ""),
-                data: cab?.data ?? cab?.data_emissao ?? null,
-                situacao: cab?.nome_situacao ?? null,
-                cliente_ou_fornecedor: cab?.nome_cliente ?? cab?.nome_fornecedor ?? null,
-                previsao: cab?.previsao_entrega ?? cab?.data_previsao ?? null,
-                itens_da_peca: linhas.map((l: any) => ({
-                  nome_produto: l?.nome_produto ?? null,
-                  quantidade: parseDec(l?.quantidade),
-                  valor_unitario: parseDec(l?.valor_venda ?? l?.valor_custo),
-                  valor_total: parseDec(l?.valor_total),
-                })),
-              });
+              const linhasPorTermo = new Map<string, any[]>();
+              for (const linha of extrairLinhas(det.json)) {
+                const pid = String(linha?.produto_id ?? "");
+                const cod = normalizeStr(linha?.codigo_interno ?? linha?.codigo ?? "");
+                const termoEncontrado = mapaPorId.get(pid) ?? (cod ? mapaPorCodigo.get(cod) : undefined);
+                if (!termoEncontrado) continue;
+                const atuais = linhasPorTermo.get(termoEncontrado) ?? [];
+                atuais.push(linha);
+                linhasPorTermo.set(termoEncontrado, atuais);
+              }
+              for (const [termoEncontrado, linhas] of linhasPorTermo) {
+                resultados[termoEncontrado].documentos.push({
+                  tipo,
+                  codigo: String(cab?.codigo ?? ""),
+                  id: String(cab?.id ?? ""),
+                  data: cab?.data ?? cab?.data_emissao ?? null,
+                  situacao: cab?.nome_situacao ?? null,
+                  cliente_ou_fornecedor: cab?.nome_cliente ?? cab?.nome_fornecedor ?? null,
+                  previsao: cab?.previsao_entrega ?? cab?.data_previsao ?? null,
+                  itens_da_peca: linhas.map((l: any) => ({
+                    nome_produto: l?.nome_produto ?? null,
+                    quantidade: parseDec(l?.quantidade),
+                    valor_unitario: parseDec(l?.valor_venda ?? l?.valor_custo),
+                    valor_total: parseDec(l?.valor_total),
+                  })),
+                });
+              }
             });
             await new Promise((r) => setTimeout(r, 40));
           }
-
-          resultados[tipo] = encontrados;
         }
 
-        const total = Object.values(resultados).reduce((s, a) => s + a.length, 0);
         return {
-          peca: {
-            identificacao: peca.codigo_interno ? `[${peca.codigo_interno}] ${peca.nome}` : peca.nome,
-            produto_id: String(peca.produto_id),
-          },
           janela_dias: janela,
+          filtro_situacao: situacao ?? null,
           documentos_analisados: analisados,
           busca_truncada: truncado,
-          total_documentos_com_a_peca: total,
-          documentos: resultados,
-          aviso:
-            total === 0
-              ? `Nenhum documento com essa peça nos últimos ${janela} dias${truncado ? " (busca truncada; aumente 'dias' ou reduza os tipos)" : ""}.`
-              : null,
+          resultados: Object.values(resultados).map((resultado: any) => ({
+            ...resultado,
+            total_documentos_com_a_peca: resultado.documentos.length,
+          })),
+          nao_localizadas: resolvidos.filter((r) => r.alvos.length === 0 && !r.ambiguo).map((r) => r.termo),
         };
       },
     });
@@ -1429,7 +1453,7 @@ Deno.serve(async (req: Request) => {
         "ACESSO TOTAL AO GESTÃOCLICK (GC): Você TEM acesso de LEITURA a QUALQUER módulo do ERP GestãoClick através da ferramenta consultar_gestaoclick. Use-a para responder qualquer pergunta sobre ordens de serviço (OS), vendas, orçamentos, compras, clientes, fornecedores, técnicos, funcionários, usuários, recebimentos (contas a receber), pagamentos (contas a pagar), notas fiscais (NFe), serviços, situações, formas de pagamento, centros de custo, transportadoras e bancos. NUNCA diga que não tem acesso a um módulo do GC ou a informações financeiras/comerciais — SEMPRE consulte a ferramenta antes de responder. Passe a 'entidade' (ex: 'os', 'venda', 'orcamento', 'cliente', 'fornecedor', 'tecnico', 'recebimento', 'pagamento', 'nfe') e, quando aplicável, 'filtros' (ex: {data_inicio:'2026-01-01', data_fim:'2026-12-31', cliente_id:'123'}) ou o 'id' para o detalhe completo de um registro. Para varrer muitos registros aumente 'max_paginas'.",
         "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para 'em qual venda/OS a peça saiu' ou 'última venda dessa peça' use consultar_vendas_da_peca; para TODO O RESTO do GC use consultar_gestaoclick.",
         "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela consulta o histórico de consumo/movimentações sincronizado e tenta confirmar o documento ao vivo no GestãoClick. Você SÓ pode citar uma saída se o documento vier com verificado=true. Se verificado_ao_vivo=false mas confirmado_historico=true, cite a saída como 'confirmada pelo histórico de consumo/movimentações' e NÃO invente o Nº exibido; use numero_documento somente quando retornado. É TERMINANTEMENTE PROIBIDO dizer que não houve vendas/OS/saídas quando a ferramenta retornou documentos verificados. Números internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
-        "REGRA CRÍTICA — EM QUAIS ORÇAMENTOS/VENDAS/OS/COMPRAS UMA PEÇA APARECE: use OBRIGATORIAMENTE a ferramenta consultar_documentos_da_peca. Ela confere ITEM A ITEM (produto_id/código interno) dentro de cada documento do GC. É TERMINANTEMENTE PROIBIDO associar uma peça a um orçamento/pedido por semelhança de nome, por valor parecido ou por dedução: só afirme que a peça está no documento X se ela vier na lista 'itens_da_peca' retornada por essa ferramenta. Ao citar, use o nome_produto exatamente como retornado (não substitua pelo nome da peça que o usuário perguntou). Se busca_truncada=true, avise que a varredura foi parcial.",
+        "REGRA CRÍTICA — EM QUAIS ORÇAMENTOS/VENDAS/OS/COMPRAS UMA PEÇA APARECE: use OBRIGATORIAMENTE a ferramenta consultar_documentos_da_peca. Quando houver várias peças, faça UMA ÚNICA chamada e envie TODOS os códigos juntos no campo 'termos'; NUNCA dispare uma chamada por peça. Se o usuário pedir uma situação específica, envie-a em 'situacao'. A ferramenta confere ITEM A ITEM (produto_id/código interno) dentro de cada documento do GC. É TERMINANTEMENTE PROIBIDO associar uma peça a um orçamento/pedido por semelhança de nome, por valor parecido ou por dedução: só afirme que a peça está no documento X se ela vier na lista 'itens_da_peca' retornada por essa ferramenta. Ao citar, use o nome_produto exatamente como retornado (não substitua pelo nome da peça que o usuário perguntou). Se busca_truncada=true, avise que a varredura foi parcial.",
       ].join(" "),
       messages: prunarMensagens(
         await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),

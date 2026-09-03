@@ -48,6 +48,22 @@ export const useComprasStore = create<ComprasStore>()(
       setConfig: (c) => set(state => ({ config: { ...state.config, ...c } })),
       setOSIndexStatus: (s) => set({ osIndexStatus: s }),
     }),
-    { name: 'wedo-compras-store' }
+    {
+      name: 'wedo-compras-store',
+      version: 2,
+      partialize: (state) => ({
+        result: state.result,
+        config: state.config,
+        osIndexStatus: state.osIndexStatus,
+      }),
+      migrate: (persistedState) => {
+        const persisted = (persistedState ?? {}) as Partial<ComprasStore>;
+        return {
+          ...persisted,
+          isScanning: false,
+          progress: { step: '', checked: 0, total: 0 },
+        } as ComprasStore;
+      },
+    }
   )
 );

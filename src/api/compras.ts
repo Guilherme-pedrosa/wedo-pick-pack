@@ -469,22 +469,21 @@ export async function buildListaCompras(
 
   const partialDemand = await getActivePartialDemand();
 
-  // PHASE 1: Fetch all approved budgets
+  // PHASE 1: Fetch budgets once and filter locally. The GC API may ignore
+  // situacao_id; requesting every selected status would repeat the complete
+  // budget catalogue N times and make the purchase list appear frozen.
   onProgress?.('Buscando orçamentos aprovados…', 0, 1);
   const allOrcamentos: GCOrcamento[] = [];
   const situacaoOrcSet = new Set(situacaoOrcIds);
-  for (const sid of situacaoOrcIds) {
-    let page = 1;
-    while (true) {
-      const res = await listOrcamentos(sid, page);
-      // Client-side filter: GestãoClick API may ignore situacao_id param
-      const filtered = res.data.filter(o => situacaoOrcSet.has(String(o.situacao_id)));
-      allOrcamentos.push(...filtered);
-      console.log(`[COMPRAS] listOrcamentos sid=${sid} page=${page}: ${res.data.length} returned, ${filtered.length} after filter`);
-      if (page >= res.meta.total_paginas) break;
-      page++;
-      if (!isUsingMock()) await new Promise(r => setTimeout(r, 400));
-    }
+  let orcamentoPage = 1;
+  while (true) {
+    const res = await listOrcamentos(undefined, orcamentoPage);
+    const filtered = res.data.filter(o => situacaoOrcSet.has(String(o.situacao_id)));
+    allOrcamentos.push(...filtered);
+    onProgress?.(`Buscando orçamentos aprovados… página ${orcamentoPage} de ${res.meta.total_paginas}`, orcamentoPage, res.meta.total_paginas);
+    if (orcamentoPage >= res.meta.total_paginas) break;
+    orcamentoPage++;
+    if (!isUsingMock()) await new Promise(r => setTimeout(r, 350));
   }
 
   // PHASE 1b: Build reverse OS index and detect converted budgets
@@ -546,37 +545,24 @@ export async function buildListaCompras(
     console.log(`[COMPRAS] Phase 1b: ${orcamentosConvertidos.length} orçamento(s) já convertido(s) e removido(s) da lista de compras`);
   }
 
-  // PHASE 2a: Fetch purchase orders for selected statuses (quantity cross-reference)
-  onProgress?.('Buscando pedidos de compra selecionados…', 0, 1);
-  const allOrdensCompra: GCOrdemCompra[] = [];
-  for (const sid of situacaoCompraIds) {
-    let page = 1;
-    while (true) {
-      const res = await listOrdensCompra(sid, page);
-      allOrdensCompra.push(...res.data);
-      if (page >= res.meta.total_paginas) break;
-      page++;
-      if (!isUsingMock()) await new Promise(r => setTimeout(r, 400));
-    }
+  // PHASE 2: Fetch the purchase catalogue exactly once. Previously this loop
+  // downloaded every page once per status (and again for supplier history).
+  // Since GC can ignore situacao_id, selecting many statuses multiplied the
+  // same full scan and effectively locked the screen.
+  onProgress?.('Buscando pedidos de compra…', 0, 1);
+  const todasOrdens: GCOrdemCompra[] = [];
+  let compraPage = 1;
+  while (true) {
+    const res = await listOrdensCompra(undefined, compraPage);
+    todasOrdens.push(...res.data);
+    onProgress?.(`Buscando pedidos de compra… página ${compraPage} de ${res.meta.total_paginas}`, compraPage, res.meta.total_paginas);
+    if (compraPage >= res.meta.total_paginas) break;
+    compraPage++;
+    if (!isUsingMock()) await new Promise(r => setTimeout(r, 350));
   }
 
-  // PHASE 2b: Fetch ALL purchase orders (all statuses) to derive supplier info
-  onProgress?.('Buscando fornecedores via pedidos de compra…', 0, 1);
-  const allStatusCompra = await getStatusCompras();
-  const allOrdensForSupplier: GCOrdemCompra[] = [];
-  const fetchedSids = new Set(situacaoCompraIds);
-  for (const status of allStatusCompra) {
-    if (fetchedSids.has(status.id)) continue; // already fetched above
-    let page = 1;
-    while (true) {
-      const res = await listOrdensCompra(status.id, page);
-      allOrdensForSupplier.push(...res.data);
-      if (page >= res.meta.total_paginas) break;
-      page++;
-      if (!isUsingMock()) await new Promise(r => setTimeout(r, 400));
-    }
-  }
-  const todasOrdens = [...allOrdensCompra, ...allOrdensForSupplier];
+  const situacaoCompraSet = new Set(situacaoCompraIds);
+  const allOrdensCompra = todasOrdens.filter(ordem => situacaoCompraSet.has(String(ordem.situacao_id)));
 
   // Build purchase-orders map from SELECTED statuses only (user controls which count)
   const compraMap = new Map<string, {

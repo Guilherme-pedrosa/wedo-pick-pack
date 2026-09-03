@@ -182,6 +182,52 @@ async function fetchTabelasRef(access: string, secret: string): Promise<{ tipo_i
   return valores.map((v) => ({ tipo_id: String(v.tipo_id), nome_tipo: String(v.nome_tipo ?? "") }));
 }
 
+// ---------------------------------------------------------------------------
+// Poda de contexto: resultados de ferramenta (GC/estoque) podem somar centenas
+// de milhares de tokens e estourar o limite do modelo (HTTP 400 no gateway).
+// Aqui truncamos cada resultado e mantemos apenas as últimas rodadas.
+// ---------------------------------------------------------------------------
+const MAX_TOOL_RESULT_CHARS = 12000;
+const MAX_TOOL_RESULT_CHARS_ANTIGO = 1500;
+const MAX_MENSAGENS = 24;
+const MAX_TOTAL_CHARS = 400_000;
+
+function truncarTexto(texto: string, max: number): string {
+  return texto.length <= max
+    ? texto
+    : `${texto.slice(0, max)}\n…[resultado truncado: ${texto.length - max} caracteres omitidos]`;
+}
+
+function podarParte(part: any, max: number): any {
+  if (!part || typeof part !== "object") return part;
+  if (part.type === "tool-result" || part.type === "tool-error") {
+    const bruto = typeof part.output === "string" ? part.output : JSON.stringify(part.output ?? null);
+    return { ...part, output: { type: "text", value: truncarTexto(bruto, max) } };
+  }
+  if (part.type === "text" && typeof part.text === "string") {
+    return { ...part, text: truncarTexto(part.text, Math.max(max, 8000)) };
+  }
+  return part;
+}
+
+function prunarMensagens(msgs: any[]): any[] {
+  const recentes = msgs.length > MAX_MENSAGENS ? msgs.slice(-MAX_MENSAGENS) : msgs;
+  const limiteRecente = Math.max(recentes.length - 6, 0);
+
+  let podadas = recentes.map((m, i) => {
+    if (!m || !Array.isArray(m.content)) return m;
+    const max = i >= limiteRecente ? MAX_TOOL_RESULT_CHARS : MAX_TOOL_RESULT_CHARS_ANTIGO;
+    return { ...m, content: m.content.map((p: any) => podarParte(p, max)) };
+  });
+
+  // Rede de segurança: se ainda estiver enorme, descarta as mensagens mais antigas.
+  const tamanho = (arr: any[]) => JSON.stringify(arr).length;
+  while (podadas.length > 4 && tamanho(podadas) > MAX_TOTAL_CHARS) {
+    podadas = podadas.slice(2);
+  }
+  return podadas;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 

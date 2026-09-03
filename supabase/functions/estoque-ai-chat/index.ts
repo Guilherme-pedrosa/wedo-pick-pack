@@ -1066,6 +1066,168 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    // -----------------------------------------------------------------------
+    // Descobre em QUAIS documentos do GC uma peça aparece, conferindo item a
+    // item (produto_id / código interno). Evita "casar" documentos por
+    // semelhança de nome, o que produzia orçamentos e pedidos errados.
+    // -----------------------------------------------------------------------
+    function extrairLinhas(det: any): any[] {
+      const d = det?.data ?? det;
+      const arr = Array.isArray(d?.produtos) ? d.produtos : [];
+      return arr.map((p: any) => p?.produto ?? p).filter(Boolean);
+    }
+
+    const consultarDocumentosDaPeca = tool({
+      description:
+        "Descobre em QUAIS documentos do GestãoClick (orçamentos, vendas, ordens de serviço e pedidos de compra) uma peça específica realmente aparece, conferindo ITEM A ITEM pelo produto_id/código interno. Use SEMPRE que perguntarem 'quais orçamentos têm essa peça', 'tem pedido de compra dessa peça', 'onde essa peça está cotada/comprada'. Só cite documentos retornados por esta ferramenta.",
+      inputSchema: z.object({
+        termo: z.string().describe("Código interno, nome ou ID da peça. Ex: '40.00.606P'."),
+        tipos: z
+          .array(z.enum(["orcamento", "venda", "os", "compra"]))
+          .optional()
+          .describe("Tipos de documento a varrer. Padrão: todos."),
+        dias: z.number().optional().describe("Janela de busca em dias (padrão 180, máx 730)."),
+        max_documentos: z.number().optional().describe("Teto de documentos analisados (padrão 220, máx 400)."),
+      }),
+      execute: async ({ termo, tipos, dias, max_documentos }) => {
+        if (!GC_ACCESS || !GC_SECRET) return { erro: "Credenciais do GestãoClick não configuradas." };
+        const q = String(termo ?? "").trim();
+        if (!q) return { erro: "Informe o código ou nome da peça." };
+
+        // 1) Resolver a peça (código interno exato tem prioridade)
+        const { data: prods } = await supabase
+          .from("products_index")
+          .select("produto_id, nome, codigo_interno, codigo_barra")
+          .or(
+            `codigo_interno.ilike.%${q}%,codigo_barra.ilike.%${q}%,produto_id.eq.${/^\d+$/.test(q) ? q : 0},nome.ilike.%${q}%`,
+          )
+          .limit(10);
+        const rows = prods ?? [];
+        if (rows.length === 0) return { erro: `Peça não localizada no índice de produtos: "${q}".` };
+        const exato = rows.filter(
+          (r) => normalizeStr(r.codigo_interno) === normalizeStr(q) || String(r.produto_id) === q,
+        );
+        if (exato.length === 0 && rows.length > 3) {
+          return {
+            ambiguo: true,
+            aviso: "Vários produtos casam com o termo. Peça o código interno exato ao usuário.",
+            opcoes: rows.slice(0, 10).map((r) => ({
+              identificacao: r.codigo_interno ? `[${r.codigo_interno}] ${r.nome}` : r.nome,
+              produto_id: String(r.produto_id),
+            })),
+          };
+        }
+        const alvos = exato.length > 0 ? exato : rows.slice(0, 3);
+
+        const idSet = new Set(alvos.map((r) => String(r.produto_id)));
+        const codSet = new Set(alvos.map((r) => normalizeStr(r.codigo_interno)).filter(Boolean));
+        const peca = alvos[0];
+
+        const janela = Math.min(Math.max(dias ?? 180, 7), 730);
+        const teto = Math.min(Math.max(max_documentos ?? 220, 20), 400);
+        const hoje = new Date();
+        const ini = new Date(hoje.getTime() - janela * 86400000);
+        const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+        const alvosTipo = tipos?.length ? tipos : ["orcamento", "venda", "os", "compra"];
+        const ENDPOINT: Record<string, string> = {
+          orcamento: "orcamentos",
+          venda: "vendas",
+          os: "ordens_servicos",
+          compra: "compras",
+        };
+
+        const resultados: Record<string, any[]> = {};
+        let analisados = 0;
+        let truncado = false;
+
+        for (const tipo of alvosTipo) {
+          const endpoint = ENDPOINT[tipo];
+          const cabecalhos: any[] = [];
+          for (let page = 1; page <= 10; page++) {
+            const params = new URLSearchParams({
+              pagina: String(page),
+              data_inicio: fmt(ini),
+              data_fim: fmt(hoje),
+            });
+            const resp = await gcGetRaw(`/api/${endpoint}?${params.toString()}`);
+            if (!resp.ok) break;
+            const data: any[] = Array.isArray(resp.json?.data) ? resp.json.data : [];
+            for (const row of data) {
+              const flat =
+                row && typeof row === "object" && Object.keys(row).length === 1
+                  ? ((Object.values(row)[0] as any) ?? row)
+                  : row;
+              cabecalhos.push(flat);
+            }
+            const tp = Number(resp.json?.meta?.total_paginas ?? 1);
+            if (data.length === 0 || page >= tp) break;
+          }
+
+          // Mais recentes primeiro
+          cabecalhos.sort((a, b) => String(b?.data ?? "").localeCompare(String(a?.data ?? "")));
+          const encontrados: any[] = [];
+
+          for (let i = 0; i < cabecalhos.length; i += 4) {
+            if (analisados >= teto) {
+              truncado = true;
+              break;
+            }
+            const lote = cabecalhos.slice(i, i + 4);
+            analisados += lote.length;
+            const dets = await Promise.all(
+              lote.map((c) => gcGetRaw(`/api/${endpoint}/${encodeURIComponent(String(c?.id))}`)),
+            );
+            dets.forEach((det, k) => {
+              if (!det.ok) return;
+              const cab = lote[k];
+              const linhas = extrairLinhas(det.json).filter((l: any) => {
+                const pid = String(l?.produto_id ?? "");
+                const cod = normalizeStr(l?.codigo_interno ?? l?.codigo ?? "");
+                return idSet.has(pid) || (cod !== "" && codSet.has(cod));
+              });
+              if (linhas.length === 0) return;
+              encontrados.push({
+                tipo,
+                codigo: String(cab?.codigo ?? ""),
+                id: String(cab?.id ?? ""),
+                data: cab?.data ?? null,
+                situacao: cab?.nome_situacao ?? null,
+                cliente_ou_fornecedor: cab?.nome_cliente ?? cab?.nome_fornecedor ?? null,
+                previsao: cab?.previsao_entrega ?? cab?.data_previsao ?? null,
+                itens_da_peca: linhas.map((l: any) => ({
+                  nome_produto: l?.nome_produto ?? null,
+                  quantidade: parseDec(l?.quantidade),
+                  valor_unitario: parseDec(l?.valor_venda ?? l?.valor_custo),
+                  valor_total: parseDec(l?.valor_total),
+                })),
+              });
+            });
+            await new Promise((r) => setTimeout(r, 120));
+          }
+
+          resultados[tipo] = encontrados;
+        }
+
+        const total = Object.values(resultados).reduce((s, a) => s + a.length, 0);
+        return {
+          peca: {
+            identificacao: peca.codigo_interno ? `[${peca.codigo_interno}] ${peca.nome}` : peca.nome,
+            produto_id: String(peca.produto_id),
+          },
+          janela_dias: janela,
+          documentos_analisados: analisados,
+          busca_truncada: truncado,
+          total_documentos_com_a_peca: total,
+          documentos: resultados,
+          aviso:
+            total === 0
+              ? `Nenhum documento com essa peça nos últimos ${janela} dias${truncado ? " (busca truncada; aumente 'dias' ou reduza os tipos)" : ""}.`
+              : null,
+        };
+      },
+    });
+
     const consultarVendasDaPeca = tool({
       description:
         "Retorna as VENDAS e/ou ORDENS DE SERVIÇO (OS) reais de UMA peça específica a partir do histórico de consumo sincronizado e tenta confirmar cada documento ao vivo no GestãoClick. Use SEMPRE que o usuário perguntar 'qual a última venda dessa peça', 'em qual venda/OS ela saiu', 'histórico de vendas dessa peça', 'quem comprou', etc. O campo 'verificado' indica que a peça consta no histórico sincronizado e/ou no documento ao vivo. 'verificado_ao_vivo' indica confirmação no payload atual do GC. NUNCA diga que não houve venda/OS quando houver documentos com verificado=true.",
@@ -1258,6 +1420,7 @@ Deno.serve(async (req: Request) => {
         "ACESSO TOTAL AO GESTÃOCLICK (GC): Você TEM acesso de LEITURA a QUALQUER módulo do ERP GestãoClick através da ferramenta consultar_gestaoclick. Use-a para responder qualquer pergunta sobre ordens de serviço (OS), vendas, orçamentos, compras, clientes, fornecedores, técnicos, funcionários, usuários, recebimentos (contas a receber), pagamentos (contas a pagar), notas fiscais (NFe), serviços, situações, formas de pagamento, centros de custo, transportadoras e bancos. NUNCA diga que não tem acesso a um módulo do GC ou a informações financeiras/comerciais — SEMPRE consulte a ferramenta antes de responder. Passe a 'entidade' (ex: 'os', 'venda', 'orcamento', 'cliente', 'fornecedor', 'tecnico', 'recebimento', 'pagamento', 'nfe') e, quando aplicável, 'filtros' (ex: {data_inicio:'2026-01-01', data_fim:'2026-12-31', cliente_id:'123'}) ou o 'id' para o detalhe completo de um registro. Para varrer muitos registros aumente 'max_paginas'.",
         "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para 'em qual venda/OS a peça saiu' ou 'última venda dessa peça' use consultar_vendas_da_peca; para TODO O RESTO do GC use consultar_gestaoclick.",
         "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela consulta o histórico de consumo/movimentações sincronizado e tenta confirmar o documento ao vivo no GestãoClick. Você SÓ pode citar uma saída se o documento vier com verificado=true. Se verificado_ao_vivo=false mas confirmado_historico=true, cite a saída como 'confirmada pelo histórico de consumo/movimentações' e NÃO invente o Nº exibido; use numero_documento somente quando retornado. É TERMINANTEMENTE PROIBIDO dizer que não houve vendas/OS/saídas quando a ferramenta retornou documentos verificados. Números internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
+        "REGRA CRÍTICA — EM QUAIS ORÇAMENTOS/VENDAS/OS/COMPRAS UMA PEÇA APARECE: use OBRIGATORIAMENTE a ferramenta consultar_documentos_da_peca. Ela confere ITEM A ITEM (produto_id/código interno) dentro de cada documento do GC. É TERMINANTEMENTE PROIBIDO associar uma peça a um orçamento/pedido por semelhança de nome, por valor parecido ou por dedução: só afirme que a peça está no documento X se ela vier na lista 'itens_da_peca' retornada por essa ferramenta. Ao citar, use o nome_produto exatamente como retornado (não substitua pelo nome da peça que o usuário perguntou). Se busca_truncada=true, avise que a varredura foi parcial.",
       ].join(" "),
       messages: prunarMensagens(
         await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
@@ -1269,6 +1432,7 @@ Deno.serve(async (req: Request) => {
         consultar_pedidos_compra: consultarPedidosCompra,
         consultar_gestaoclick: consultarGestaoClick,
         consultar_vendas_da_peca: consultarVendasDaPeca,
+        consultar_documentos_da_peca: consultarDocumentosDaPeca,
       },
     });
 

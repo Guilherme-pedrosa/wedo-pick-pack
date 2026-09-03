@@ -1212,7 +1212,7 @@ Deno.serve(async (req: Request) => {
                 })),
               });
             });
-            await new Promise((r) => setTimeout(r, 120));
+            await new Promise((r) => setTimeout(r, 40));
           }
 
           resultados[tipo] = encontrados;

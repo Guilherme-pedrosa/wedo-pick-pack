@@ -1434,7 +1434,6 @@ Deno.serve(async (req: Request) => {
         consultar_vendas_da_peca: consultarVendasDaPeca,
         consultar_documentos_da_peca: consultarDocumentosDaPeca,
       },
-      },
     });
 
     return result.toUIMessageStreamResponse({ headers: corsHeaders });

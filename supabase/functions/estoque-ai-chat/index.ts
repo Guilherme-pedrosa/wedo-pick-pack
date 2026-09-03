@@ -1086,8 +1086,8 @@ Deno.serve(async (req: Request) => {
           .array(z.enum(["orcamento", "venda", "os", "compra"]))
           .optional()
           .describe("Tipos de documento a varrer. Padrão: todos."),
-        dias: z.number().optional().describe("Janela de busca em dias (padrão 180, máx 730)."),
-        max_documentos: z.number().optional().describe("Teto de documentos analisados (padrão 220, máx 400)."),
+        dias: z.number().optional().describe("Janela de busca em dias (padrão 365, máx 1095)."),
+        max_documentos: z.number().optional().describe("Teto de documentos analisados (padrão 900, máx 2000)."),
       }),
       execute: async ({ termo, tipos, dias, max_documentos }) => {
         if (!GC_ACCESS || !GC_SECRET) return { erro: "Credenciais do GestãoClick não configuradas." };
@@ -1123,11 +1123,11 @@ Deno.serve(async (req: Request) => {
         const codSet = new Set(alvos.map((r) => normalizeStr(r.codigo_interno)).filter(Boolean));
         const peca = alvos[0];
 
-        const janela = Math.min(Math.max(dias ?? 180, 7), 730);
-        const teto = Math.min(Math.max(max_documentos ?? 220, 20), 400);
+        const janela = Math.min(Math.max(dias ?? 365, 7), 1095);
+        const teto = Math.min(Math.max(max_documentos ?? 900, 20), 2000);
         const hoje = new Date();
         const ini = new Date(hoje.getTime() - janela * 86400000);
-        const fmt = (d: Date) => d.toISOString().slice(0, 10);
+        const iniStr = ini.toISOString().slice(0, 10);
 
         const alvosTipo = tipos?.length ? tipos : ["orcamento", "venda", "os", "compra"];
         const ENDPOINT: Record<string, string> = {
@@ -1144,36 +1144,45 @@ Deno.serve(async (req: Request) => {
         for (const tipo of alvosTipo) {
           const endpoint = ENDPOINT[tipo];
           const cabecalhos: any[] = [];
-          for (let page = 1; page <= 10; page++) {
-            const params = new URLSearchParams({
-              pagina: String(page),
-              data_inicio: fmt(ini),
-              data_fim: fmt(hoje),
-            });
-            const resp = await gcGetRaw(`/api/${endpoint}?${params.toString()}`);
+          // Os endpoints de listagem do GC ignoram data_inicio/data_fim:
+          // paginamos do mais recente para trás e filtramos a janela no cliente.
+          for (let page = 1; page <= 40; page++) {
+            const resp = await gcGetRaw(`/api/${endpoint}?limite=100&pagina=${page}`);
             if (!resp.ok) break;
             const data: any[] = Array.isArray(resp.json?.data) ? resp.json.data : [];
+            let anterioresAJanela = 0;
             for (const row of data) {
               const flat =
                 row && typeof row === "object" && Object.keys(row).length === 1
                   ? ((Object.values(row)[0] as any) ?? row)
                   : row;
+              const dataDoc = String(flat?.data ?? flat?.data_emissao ?? "");
+              if (dataDoc && dataDoc < iniStr) {
+                anterioresAJanela++;
+                continue;
+              }
               cabecalhos.push(flat);
             }
             const tp = Number(resp.json?.meta?.total_paginas ?? 1);
             if (data.length === 0 || page >= tp) break;
+            // página inteira fora da janela => já passamos do período
+            if (anterioresAJanela === data.length && data.length > 0) break;
+            if (cabecalhos.length >= teto) break;
           }
 
           // Mais recentes primeiro
-          cabecalhos.sort((a, b) => String(b?.data ?? "").localeCompare(String(a?.data ?? "")));
+          cabecalhos.sort((a, b) =>
+            String(b?.data ?? b?.data_emissao ?? "").localeCompare(String(a?.data ?? a?.data_emissao ?? "")),
+          );
           const encontrados: any[] = [];
 
-          for (let i = 0; i < cabecalhos.length; i += 4) {
+          const LOTE = 10;
+          for (let i = 0; i < cabecalhos.length; i += LOTE) {
             if (analisados >= teto) {
               truncado = true;
               break;
             }
-            const lote = cabecalhos.slice(i, i + 4);
+            const lote = cabecalhos.slice(i, i + LOTE);
             analisados += lote.length;
             const dets = await Promise.all(
               lote.map((c) => gcGetRaw(`/api/${endpoint}/${encodeURIComponent(String(c?.id))}`)),
@@ -1191,7 +1200,7 @@ Deno.serve(async (req: Request) => {
                 tipo,
                 codigo: String(cab?.codigo ?? ""),
                 id: String(cab?.id ?? ""),
-                data: cab?.data ?? null,
+                data: cab?.data ?? cab?.data_emissao ?? null,
                 situacao: cab?.nome_situacao ?? null,
                 cliente_ou_fornecedor: cab?.nome_cliente ?? cab?.nome_fornecedor ?? null,
                 previsao: cab?.previsao_entrega ?? cab?.data_previsao ?? null,
@@ -1203,7 +1212,7 @@ Deno.serve(async (req: Request) => {
                 })),
               });
             });
-            await new Promise((r) => setTimeout(r, 120));
+            await new Promise((r) => setTimeout(r, 40));
           }
 
           resultados[tipo] = encontrados;

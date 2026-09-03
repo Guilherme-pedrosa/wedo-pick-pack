@@ -1144,36 +1144,45 @@ Deno.serve(async (req: Request) => {
         for (const tipo of alvosTipo) {
           const endpoint = ENDPOINT[tipo];
           const cabecalhos: any[] = [];
-          for (let page = 1; page <= 10; page++) {
-            const params = new URLSearchParams({
-              pagina: String(page),
-              data_inicio: fmt(ini),
-              data_fim: fmt(hoje),
-            });
-            const resp = await gcGetRaw(`/api/${endpoint}?${params.toString()}`);
+          // Os endpoints de listagem do GC ignoram data_inicio/data_fim:
+          // paginamos do mais recente para trás e filtramos a janela no cliente.
+          for (let page = 1; page <= 40; page++) {
+            const resp = await gcGetRaw(`/api/${endpoint}?limite=100&pagina=${page}`);
             if (!resp.ok) break;
             const data: any[] = Array.isArray(resp.json?.data) ? resp.json.data : [];
+            let anterioresAJanela = 0;
             for (const row of data) {
               const flat =
                 row && typeof row === "object" && Object.keys(row).length === 1
                   ? ((Object.values(row)[0] as any) ?? row)
                   : row;
+              const dataDoc = String(flat?.data ?? flat?.data_emissao ?? "");
+              if (dataDoc && dataDoc < iniStr) {
+                anterioresAJanela++;
+                continue;
+              }
               cabecalhos.push(flat);
             }
             const tp = Number(resp.json?.meta?.total_paginas ?? 1);
             if (data.length === 0 || page >= tp) break;
+            // página inteira fora da janela => já passamos do período
+            if (anterioresAJanela === data.length && data.length > 0) break;
+            if (cabecalhos.length >= teto) break;
           }
 
           // Mais recentes primeiro
-          cabecalhos.sort((a, b) => String(b?.data ?? "").localeCompare(String(a?.data ?? "")));
+          cabecalhos.sort((a, b) =>
+            String(b?.data ?? b?.data_emissao ?? "").localeCompare(String(a?.data ?? a?.data_emissao ?? "")),
+          );
           const encontrados: any[] = [];
 
-          for (let i = 0; i < cabecalhos.length; i += 4) {
+          const LOTE = 10;
+          for (let i = 0; i < cabecalhos.length; i += LOTE) {
             if (analisados >= teto) {
               truncado = true;
               break;
             }
-            const lote = cabecalhos.slice(i, i + 4);
+            const lote = cabecalhos.slice(i, i + LOTE);
             analisados += lote.length;
             const dets = await Promise.all(
               lote.map((c) => gcGetRaw(`/api/${endpoint}/${encodeURIComponent(String(c?.id))}`)),

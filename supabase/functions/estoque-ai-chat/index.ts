@@ -1200,7 +1200,7 @@ Deno.serve(async (req: Request) => {
                 tipo,
                 codigo: String(cab?.codigo ?? ""),
                 id: String(cab?.id ?? ""),
-                data: cab?.data ?? null,
+                data: cab?.data ?? cab?.data_emissao ?? null,
                 situacao: cab?.nome_situacao ?? null,
                 cliente_ou_fornecedor: cab?.nome_cliente ?? cab?.nome_fornecedor ?? null,
                 previsao: cab?.previsao_entrega ?? cab?.data_previsao ?? null,

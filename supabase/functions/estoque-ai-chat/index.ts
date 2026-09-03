@@ -187,16 +187,19 @@ async function fetchTabelasRef(access: string, secret: string): Promise<{ tipo_i
 // de milhares de tokens e estourar o limite do modelo (HTTP 400 no gateway).
 // Aqui truncamos cada resultado e mantemos apenas as últimas rodadas.
 // ---------------------------------------------------------------------------
-const MAX_TOOL_RESULT_CHARS = 12000;
-const MAX_TOOL_RESULT_CHARS_ANTIGO = 1500;
-const MAX_MENSAGENS = 24;
-const MAX_TOTAL_CHARS = 400_000;
+const MAX_TOOL_RESULT_CHARS = 80000;
+const MAX_TOOL_RESULT_CHARS_ANTIGO = 8000;
+const MAX_MENSAGENS = 40;
+const MAX_TOTAL_CHARS = 600_000;
 
+// Trunca preservando início e fim (o fim costuma trazer totais/últimos itens).
 function truncarTexto(texto: string, max: number): string {
-  return texto.length <= max
-    ? texto
-    : `${texto.slice(0, max)}\n…[resultado truncado: ${texto.length - max} caracteres omitidos]`;
+  if (texto.length <= max) return texto;
+  const cabeca = Math.floor(max * 0.75);
+  const cauda = max - cabeca;
+  return `${texto.slice(0, cabeca)}\n…[${texto.length - max} caracteres omitidos no meio]…\n${texto.slice(-cauda)}`;
 }
+
 
 function podarParte(part: any, max: number): any {
   if (!part || typeof part !== "object") return part;

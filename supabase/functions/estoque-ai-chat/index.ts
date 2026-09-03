@@ -214,6 +214,12 @@ function podarParte(part: any, max: number): any {
 }
 
 function prunarMensagens(msgs: any[]): any[] {
+  const tamanho = (arr: any[]) => JSON.stringify(arr).length;
+
+  // Caminho normal: contexto dentro do limite → não mexe em NADA.
+  // (a poda agressiva estava mutilando o histórico e degradando as respostas)
+  if (tamanho(msgs) <= MAX_TOTAL_CHARS) return msgs;
+
   const recentes = msgs.length > MAX_MENSAGENS ? msgs.slice(-MAX_MENSAGENS) : msgs;
   const limiteRecente = Math.max(recentes.length - 6, 0);
 
@@ -224,12 +230,12 @@ function prunarMensagens(msgs: any[]): any[] {
   });
 
   // Rede de segurança: se ainda estiver enorme, descarta as mensagens mais antigas.
-  const tamanho = (arr: any[]) => JSON.stringify(arr).length;
   while (podadas.length > 4 && tamanho(podadas) > MAX_TOTAL_CHARS) {
     podadas = podadas.slice(2);
   }
   return sanearToolCalls(podadas);
 }
+
 
 /**
  * Remove tool-calls sem tool-result correspondente (e results órfãos), que

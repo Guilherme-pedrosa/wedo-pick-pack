@@ -225,8 +225,48 @@ function prunarMensagens(msgs: any[]): any[] {
   while (podadas.length > 4 && tamanho(podadas) > MAX_TOTAL_CHARS) {
     podadas = podadas.slice(2);
   }
-  return podadas;
+  return sanearToolCalls(podadas);
 }
+
+/**
+ * Remove tool-calls sem tool-result correspondente (e results órfãos), que
+ * acontecem quando o stream é interrompido no meio de uma chamada de tool.
+ * Sem isso o SDK lança AI_MissingToolResultsError.
+ */
+function sanearToolCalls(msgs: any[]): any[] {
+  const comResultado = new Set<string>();
+  for (const m of msgs) {
+    if (!Array.isArray(m?.content)) continue;
+    for (const p of m.content) {
+      if ((p?.type === "tool-result" || p?.type === "tool-error") && p.toolCallId) {
+        comResultado.add(p.toolCallId);
+      }
+    }
+  }
+
+  const idsChamados = new Set<string>();
+  const saida: any[] = [];
+  for (const m of msgs) {
+    if (!Array.isArray(m?.content)) {
+      saida.push(m);
+      continue;
+    }
+    const content = m.content.filter((p: any) => {
+      if (p?.type === "tool-call") {
+        if (!p.toolCallId || !comResultado.has(p.toolCallId)) return false;
+        idsChamados.add(p.toolCallId);
+        return true;
+      }
+      if (p?.type === "tool-result" || p?.type === "tool-error") {
+        return p.toolCallId ? idsChamados.has(p.toolCallId) : false;
+      }
+      return true;
+    });
+    if (content.length > 0) saida.push({ ...m, content });
+  }
+  return saida;
+}
+
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -1208,7 +1248,9 @@ Deno.serve(async (req: Request) => {
         "PREFERÊNCIA DE FERRAMENTAS: para estoque/saldo/preço use consultar_estoque; para histórico de saídas/consumo use analisar_consumo; para pedidos de compra/reposição use consultar_pedidos_compra; para 'em qual venda/OS a peça saiu' ou 'última venda dessa peça' use consultar_vendas_da_peca; para TODO O RESTO do GC use consultar_gestaoclick.",
         "REGRA CRÍTICA ANTI-ERRO — VENDAS/OS DE UMA PEÇA: Quando o usuário perguntar em qual venda ou OS uma peça saiu, ou qual a última venda dela, use OBRIGATORIAMENTE a ferramenta consultar_vendas_da_peca. Ela consulta o histórico de consumo/movimentações sincronizado e tenta confirmar o documento ao vivo no GestãoClick. Você SÓ pode citar uma saída se o documento vier com verificado=true. Se verificado_ao_vivo=false mas confirmado_historico=true, cite a saída como 'confirmada pelo histórico de consumo/movimentações' e NÃO invente o Nº exibido; use numero_documento somente quando retornado. É TERMINANTEMENTE PROIBIDO dizer que não houve vendas/OS/saídas quando a ferramenta retornou documentos verificados. Números internos (source_id/gc_id) NÃO são o mesmo que o Nº da venda exibido. Se nenhum documento vier verificado, diga honestamente que não conseguiu confirmar em qual venda/OS a peça saiu — NUNCA invente ou 'chute' um número. Melhor admitir que não confirmou do que dar informação errada.",
       ].join(" "),
-      messages: prunarMensagens(await convertToModelMessages(messages)),
+      messages: prunarMensagens(
+        await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
+      ),
       tools: {
         consultar_estoque: consultarEstoque,
         cadastrar_produto: cadastrarProduto,

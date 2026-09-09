@@ -1,3 +1,6 @@
+import { GC_API_USER_ID, installGcUsuarioId } from "../_shared/gc-user.ts";
+installGcUsuarioId();
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
 
 const corsHeaders = {
@@ -481,7 +484,7 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
   return atributos;
 }
 
-async function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity: number }>, waitingStatusId: string, marker: string, gcUserId?: string) {
+async function auxiliaryPayload(operation: any, selected: Array<{ item: any; quantity: number }>, waitingStatusId: string, marker: string) {
   const budget = operation.budget_snapshot || {};
   const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
   const note = `[${marker}] BAIXA PARCIAL do orçamento #${operation.budget_code}. Documento auxiliar: sem financeiro, comissão nem serviços.`;
@@ -495,7 +498,7 @@ async function auxiliaryPayload(operation: any, selected: Array<{ item: any; qua
     valor_frete: '0.00',
     condicao_pagamento: 'a_vista',
     centro_custo_id: budget.centro_custo_id || '501357',
-    usuario_id: gcUserId || '1320473',
+    usuario_id: GC_API_USER_ID,
     observacoes: note,
     observacoes_interna: marker,
   };
@@ -817,7 +820,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
   const settings = await getSettings();
   const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
   if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
-  const payload = await auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id);
+  const payload = await auxiliaryPayload(operation, selected, waitingStatus, batch.marker);
   const path = operation.document_type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
 
   let document: any = null;

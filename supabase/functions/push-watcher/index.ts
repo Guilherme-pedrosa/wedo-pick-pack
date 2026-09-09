@@ -1,3 +1,6 @@
+import { installGcUsuarioId } from "../_shared/gc-user.ts";
+installGcUsuarioId();
+
 // supabase/functions/push-watcher/index.ts
 // Polling watcher que diffa a fila do checkout (OS + Vendas)
 // e dispara push notifications:

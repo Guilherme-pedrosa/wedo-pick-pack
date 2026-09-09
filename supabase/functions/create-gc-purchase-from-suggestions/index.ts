@@ -1,3 +1,6 @@
+import { installGcUsuarioId } from "../_shared/gc-user.ts";
+installGcUsuarioId();
+
 // ============================================================================
 // create-gc-purchase-from-suggestions
 // Recebe suggestion_ids aprovados, agrupa por fornecedor e cria pedido(s) de

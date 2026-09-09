@@ -1,3 +1,6 @@
+import { installGcUsuarioId } from "../_shared/gc-user.ts";
+installGcUsuarioId();
+
 import { convertToModelMessages, streamText, tool, stepCountIs, type UIMessage } from "npm:ai";
 import { z } from "npm:zod@3";
 import { createClient } from "npm:@supabase/supabase-js@2";

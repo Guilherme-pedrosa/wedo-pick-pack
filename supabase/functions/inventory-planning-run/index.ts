@@ -1,3 +1,6 @@
+import { installGcUsuarioId } from "../_shared/gc-user.ts";
+installGcUsuarioId();
+
 // ============================================================================
 // inventory-planning-run
 // Motor de planejamento de compras do Pick Pack (backend-first).

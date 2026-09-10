@@ -23,11 +23,9 @@ export default function ConferencePanel() {
   const config = useCheckoutStore(s => s.config);
   const { user } = useAuth();
 
-  // Apenas Guilherme e Filipe podem digitar o código manualmente; os demais
-  // ficam restritos à leitura por coletor (desktop) / câmera (mobile).
-  const ALLOWED_MANUAL_EMAILS = ['guilherme@wedocorp.com', 'filipe.carvalho@wedocorp.com'];
-  const allowManualEntry = !!user?.email && ALLOWED_MANUAL_EMAILS.includes(user.email.toLowerCase());
-  const [manualCode, setManualCode] = useState('');
+  // Conferência exclusivamente por leitura de código de barras:
+  // desktop = coletor/scanner USB · mobile = câmera. Digitação de código bloqueada.
+
 
   const isMobile = useIsMobile();
   const [scanQty, setScanQty] = useState('1');

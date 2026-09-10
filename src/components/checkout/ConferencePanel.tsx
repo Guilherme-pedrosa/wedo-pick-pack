@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useAuth } from '@/hooks/useAuth';
+
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { matchItemByCode } from '@/lib/scanMatcher';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,7 @@ export default function ConferencePanel() {
   const confirmItem = useCheckoutStore(s => s.confirmItem);
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
-  const { user } = useAuth();
+  
 
   // Conferência exclusivamente por leitura de código de barras:
   // desktop = coletor/scanner USB · mobile = câmera. Digitação de código bloqueada.

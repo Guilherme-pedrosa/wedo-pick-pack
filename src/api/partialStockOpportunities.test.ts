@@ -7,12 +7,15 @@ import type { PartialWriteoffOperation } from './partialWriteoff';
 function operation(id: string, requested = 3, withdrawn = 0, reserved = 0, productId = 'p', variationId = ''): PartialWriteoffOperation {
   const line = { produto: { produto_id: productId, variacao_id: variationId, possui_variacao: variationId ? '1' : '0',
     quantidade: String(requested), valor_venda: '10', movimenta_estoque: '1', nome_produto: 'Peça' } };
-  return { id, budget_id: `budget-${id}`, budget_code: id, client_name: 'Cliente', document_type: 'os', status: 'awaiting_balance',
-    created_at: id, version: 1, batches: [],
+  return { id, budget_id: `budget-${id}`, budget_code: id, client_id: 'c', client_name: 'Cliente', document_type: 'os', status: 'awaiting_balance',
+    created_at: id, updated_at: id, completed_at: null, version: 1, batches: [],
+    definitive_document_id: null, definitive_document_code: null, definitive_auvo_task_id: null, reconciliation_reason: null,
     budget_snapshot: { id: `budget-${id}`, cliente_id: 'c', valor_total: String(requested * 10), produtos: [line], servicos: [], observacoes: 'Condições originais' },
-    items: [{ id: `item-${id}`, operation_id: id, product_id: productId, variation_id: variationId, product_name: 'Peça', product_code: '', unit: 'UN',
-      original_quantity: requested, withdrawn_quantity: withdrawn, reserved_quantity: reserved, line_snapshot: line }],
-  } as PartialWriteoffOperation;
+    items: [{ id: `item-${id}`, operation_id: id, line_key: `${productId}::${variationId}::0`, product_id: productId, variation_id: variationId, product_name: 'Peça', product_code: '', unit: 'UN',
+      original_quantity: requested, withdrawn_quantity: withdrawn, reserved_quantity: reserved, line_snapshot: line,
+      pending_purchase_quantity: requested - withdrawn, available_to_reserve_quantity: requested - withdrawn - reserved,
+      global_reserved_quantity: reserved, reserved_other_operations_quantity: 0 }],
+  };
 }
 function fixture(operations: PartialWriteoffOperation[], stock = 3) {
   const requests: string[] = [];

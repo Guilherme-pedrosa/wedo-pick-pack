@@ -1,15 +1,16 @@
 import { installGcUsuarioId } from "../_shared/gc-user.ts";
 installGcUsuarioId();
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GC_API_URL = 'https://api.gestaoclick.com';
+const GC_API_URL = "https://api.gestaoclick.com";
 const BATCH_SIZE = 3;
 const BATCH_DELAY_MS = 1100;
 
@@ -18,21 +19,21 @@ function wait(ms: number) {
 }
 
 function normalizeForFingerprint(val: unknown): string {
-  if (val === null || val === undefined) return '';
+  if (val === null || val === undefined) return "";
   return String(val).trim().toLowerCase();
 }
 
 function onlyDigits(val: unknown): string {
-  if (val === null || val === undefined) return '';
-  return String(val).replace(/\D/g, '');
+  if (val === null || val === undefined) return "";
+  return String(val).replace(/\D/g, "");
 }
 
 async function sha256(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
-  const hash = await crypto.subtle.digest('SHA-256', data);
+  const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function computeFingerprintInput(p: Record<string, unknown>): string {
@@ -42,21 +43,17 @@ function computeFingerprintInput(p: Record<string, unknown>): string {
     normalizeForFingerprint(p.codigo_interno),
     onlyDigits(p.codigo_barra),
     String(!!p.possui_variacao),
-    String(p.ativo !== false && p.ativo !== '0' && p.ativo !== 'false'),
-  ].join('|');
+    String(p.ativo !== false && p.ativo !== "0" && p.ativo !== "false"),
+  ].join("|");
 }
 
-async function gcFetch(
-  path: string,
-  accessToken: string,
-  secretToken: string,
-): Promise<Record<string, unknown>> {
+async function gcFetch(path: string, accessToken: string, secretToken: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${GC_API_URL}${path}`, {
     headers: {
-      'access-token': accessToken,
-      'secret-access-token': secretToken,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+      "access-token": accessToken,
+      "secret-access-token": secretToken,
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
   });
   const body = await res.text();
@@ -95,14 +92,14 @@ async function getProductDetail(
 async function closeStaleRuns(supabaseAdmin: ReturnType<typeof createClient>) {
   const cutoff = new Date(Date.now() - 45 * 60 * 1000).toISOString();
   await supabaseAdmin
-    .from('sync_runs')
+    .from("sync_runs")
     .update({
-      status: 'failed',
+      status: "failed",
       finished_at: new Date().toISOString(),
-      notes: 'Execução interrompida (sem conclusão registrada) — encerrada automaticamente.',
+      notes: "Execução interrompida (sem conclusão registrada) — encerrada automaticamente.",
     })
-    .eq('status', 'running')
-    .lt('started_at', cutoff);
+    .eq("status", "running")
+    .lt("started_at", cutoff);
 }
 
 // Helper to update progress in sync_runs
@@ -113,14 +110,13 @@ async function updateProgress(
   total: number,
 ) {
   await supabaseAdmin
-    .from('sync_runs')
+    .from("sync_runs")
     .update({
       fetched_count: processed,
       total_count: total,
     })
-    .eq('id', runId);
+    .eq("id", runId);
 }
-
 
 async function syncFull(
   supabaseAdmin: ReturnType<typeof createClient>,
@@ -129,9 +125,9 @@ async function syncFull(
   selection?: Set<string>,
 ) {
   const { data: run } = await supabaseAdmin
-    .from('sync_runs')
-    .insert({ run_type: selection ? 'incremental' : 'full', status: 'running', total_count: 0 })
-    .select('id')
+    .from("sync_runs")
+    .insert({ run_type: selection ? "incremental" : "full", status: "running", total_count: 0 })
+    .select("id")
     .single();
   const runId = run!.id;
 
@@ -154,11 +150,13 @@ async function syncFull(
       }
 
       const results = await Promise.all(
-        pageBatch.map((p) => listProductsPage(p, accessToken, secretToken).catch((e) => {
-          errorsCount++;
-          notes.push(`Page ${p} error: ${e.message}`);
-          return { data: [], meta: { total_paginas: totalPages, total_registros: totalRegistros } };
-        })),
+        pageBatch.map((p) =>
+          listProductsPage(p, accessToken, secretToken).catch((e) => {
+            errorsCount++;
+            notes.push(`Page ${p} error: ${e.message}`);
+            return { data: [], meta: { total_paginas: totalPages, total_registros: totalRegistros } };
+          }),
+        ),
       );
 
       for (const r of results) {
@@ -175,15 +173,24 @@ async function syncFull(
       if (page <= totalPages) await wait(BATCH_DELAY_MS);
     }
 
-    if (allProducts.length !== totalRegistros || new Set(allProducts.map(p => String(p.id))).size !== allProducts.length || errorsCount) {
-      throw new Error('Catálogo de produtos incompleto ou alterado durante a leitura. Índice anterior preservado.');
+    if (
+      allProducts.length !== totalRegistros ||
+      new Set(allProducts.map((p) => String(p.id))).size !== allProducts.length ||
+      errorsCount
+    ) {
+      throw new Error("Catálogo de produtos incompleto ou alterado durante a leitura. Índice anterior preservado.");
     }
     if (selection) {
-      allProducts = allProducts.filter(p => selection.has(String(p.id)));
-      const found = new Set(allProducts.map(p => String(p.id)));
-      const missing = [...selection].filter(id => !found.has(id));
-      if (missing.length) { errorsCount += missing.length; notes.push(`Referências não encontradas no catálogo atual: ${missing.join(', ')}`); }
-      notes.push(`Produtos de uso recente: ${allProducts.length}/${selection.size}. Leitura paginada do catálogo, sem interromper a lista na mesma peça a cada execução.`);
+      allProducts = allProducts.filter((p) => selection.has(String(p.id)));
+      const found = new Set(allProducts.map((p) => String(p.id)));
+      const missing = [...selection].filter((id) => !found.has(id));
+      if (missing.length) {
+        errorsCount += missing.length;
+        notes.push(`Referências não encontradas no catálogo atual: ${missing.join(", ")}`);
+      }
+      notes.push(
+        `Produtos de uso recente: ${allProducts.length}/${selection.size}. Leitura paginada do catálogo, sem interromper a lista na mesma peça a cada execução.`,
+      );
     }
     const totalProducts = allProducts.length;
     await updateProgress(supabaseAdmin, runId, 0, totalProducts);
@@ -200,19 +207,21 @@ async function syncFull(
           const fp = await sha256(fpInput);
           const produtoId = String(product.id);
           const hasVariacao = !!(product.variacoes && (product.variacoes as unknown[]).length > 0);
-          const isAtivo = product.ativo !== false && product.ativo !== '0' && product.ativo !== 'false';
+          const isAtivo = product.ativo !== false && product.ativo !== "0" && product.ativo !== "false";
           const codigoInterno = product.codigo_interno ? String(product.codigo_interno).trim() : null;
           const codigoBarra = product.codigo_barra ? String(product.codigo_barra).trim() : null;
 
           // Extract first fornecedor_id from product data
           const fornecedores = product.fornecedores as { fornecedor_id?: string }[] | undefined;
-          const fornecedorId = fornecedores?.[0]?.fornecedor_id 
-            ? String(fornecedores[0].fornecedor_id) 
-            : (product.fornecedor_id ? String(product.fornecedor_id) : null);
+          const fornecedorId = fornecedores?.[0]?.fornecedor_id
+            ? String(fornecedores[0].fornecedor_id)
+            : product.fornecedor_id
+              ? String(product.fornecedor_id)
+              : null;
 
           rows.push({
             produto_id: produtoId,
-            nome: String(product.nome || ''),
+            nome: String(product.nome || ""),
             codigo_interno: codigoInterno || null,
             codigo_barra: codigoBarra || null,
             possui_variacao: hasVariacao,
@@ -235,9 +244,7 @@ async function syncFull(
       }
 
       if (rows.length > 0) {
-        const { error } = await supabaseAdmin
-          .from('products_index')
-          .upsert(rows, { onConflict: 'produto_id' });
+        const { error } = await supabaseAdmin.from("products_index").upsert(rows, { onConflict: "produto_id" });
         if (error) {
           errorsCount += rows.length;
           notes.push(`Batch upsert error at ${i}: ${error.message}`);
@@ -250,41 +257,39 @@ async function syncFull(
       await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
     }
 
-    const status = errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
+    const status = errorsCount === 0 ? "success" : errorsCount < processedCount ? "partial" : "failed";
 
     await supabaseAdmin
-      .from('sync_runs')
+      .from("sync_runs")
       .update({
         finished_at: new Date().toISOString(),
         fetched_count: processedCount,
         upsert_count: upsertCount,
         errors_count: errorsCount,
         total_count: totalProducts,
-        notes: notes.length ? notes.join('\n') : null,
+        notes: notes.length ? notes.join("\n") : null,
         status,
       })
-      .eq('id', runId);
+      .eq("id", runId);
 
     return { runId, fetchedCount: processedCount, upsertCount, errorsCount, status, totalCount: totalProducts };
   } catch (e) {
     await supabaseAdmin
-      .from('sync_runs')
+      .from("sync_runs")
       .update({
         finished_at: new Date().toISOString(),
         fetched_count: processedCount,
         upsert_count: upsertCount,
         errors_count: errorsCount + 1,
-        notes: notes.concat((e as Error).message).join('\n'),
-        status: 'failed',
+        notes: notes.concat((e as Error).message).join("\n"),
+        status: "failed",
       })
-      .eq('id', runId);
+      .eq("id", runId);
     throw e;
   }
 }
 
-async function syncIncremental(
-  db: ReturnType<typeof createClient>, accessToken: string, secretToken: string,
-) {
+async function syncIncremental(db: ReturnType<typeof createClient>, accessToken: string, secretToken: string) {
   const ids = new Set<string>();
   const collect = async (table: string, select: string, configure: (query: any) => any, field: string) => {
     for (let from = 0; ; from += 1000) {
@@ -294,35 +299,54 @@ async function syncIncremental(
       if (data.length < 1000) break;
     }
   };
-  await collect('box_items', 'produto_id, boxes!inner(status)', q => q.eq('boxes.status', 'active').order('id'), 'produto_id');
-  await collect('toolbox_items', 'produto_id, toolboxes!inner(status)', q => q.eq('toolboxes.status', 'active').order('id'), 'produto_id');
-  await collect('product_queries', 'resolved_produto_id', q => q.gte('created_at', new Date(Date.now()-86400000).toISOString()).not('resolved_produto_id','is',null).order('id'), 'resolved_produto_id');
+  await collect(
+    "box_items",
+    "produto_id, boxes!inner(status)",
+    (q) => q.eq("boxes.status", "active").order("id"),
+    "produto_id",
+  );
+  await collect(
+    "toolbox_items",
+    "produto_id, toolboxes!inner(status)",
+    (q) => q.eq("toolboxes.status", "active").order("id"),
+    "produto_id",
+  );
+  await collect(
+    "product_queries",
+    "resolved_produto_id",
+    (q) =>
+      q
+        .gte("created_at", new Date(Date.now() - 86400000).toISOString())
+        .not("resolved_produto_id", "is", null)
+        .order("id"),
+    "resolved_produto_id",
+  );
   // O catálogo completo já termina em dezenas de segundos no mesmo ambiente.
   // Reaproveitá-lo evita centenas de GETs individuais e atualiza saldo/custo
   // mesmo quando nome e código (o fingerprint antigo) não mudaram.
   return syncFull(db, accessToken, secretToken, ids);
 }
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const GC_ACCESS_TOKEN = Deno.env.get('GC_ACCESS_TOKEN');
-  const GC_SECRET_TOKEN = Deno.env.get('GC_SECRET_TOKEN');
-  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
-  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const GC_ACCESS_TOKEN = Deno.env.get("GC_ACCESS_TOKEN");
+  const GC_SECRET_TOKEN = Deno.env.get("GC_SECRET_TOKEN");
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
   if (!GC_ACCESS_TOKEN || !GC_SECRET_TOKEN) {
-    return new Response(JSON.stringify({ error: 'GC credentials not configured' }), {
+    return new Response(JSON.stringify({ error: "GC credentials not configured" }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return new Response(JSON.stringify({ error: 'Supabase credentials not configured' }), {
+    return new Response(JSON.stringify({ error: "Supabase credentials not configured" }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -331,12 +355,12 @@ Deno.serve(async (req: Request) => {
   try {
     await closeStaleRuns(supabaseAdmin);
     const body = await req.json();
-    const runType = body.run_type || 'full';
+    const runType = body.run_type || "full";
 
     console.log(`Starting ${runType} sync...`);
 
     let result;
-    if (runType === 'incremental') {
+    if (runType === "incremental") {
       result = await syncIncremental(supabaseAdmin, GC_ACCESS_TOKEN, GC_SECRET_TOKEN);
     } else {
       result = await syncFull(supabaseAdmin, GC_ACCESS_TOKEN, GC_SECRET_TOKEN);
@@ -346,14 +370,15 @@ Deno.serve(async (req: Request) => {
 
     return new Response(JSON.stringify(result), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    console.error('Sync error:', message);
+    const message = e instanceof Error ? e.message : "Unknown error";
+    console.error("Sync error:", message);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
+// Publicacao manual da auditoria operacional 2026-09-11.

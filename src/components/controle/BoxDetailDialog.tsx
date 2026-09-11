@@ -88,6 +88,7 @@ export default function BoxDetailDialog({
   onDelete,
   onClone,
 }: Props) {
+  const [inactiveProductIds, setInactiveProductIds] = useState<Set<string>>(new Set());
   const [selectedProduct, setSelectedProduct] = useState<ProductResult | null>(null);
   const [qty, setQty] = useState(1);
   const [adding, setAdding] = useState(false);
@@ -185,16 +186,18 @@ export default function BoxDetailDialog({
     const produtoIds = [...new Set(items.map((item) => item.produto_id).filter(Boolean))];
     if (produtoIds.length === 0) {
       setInternalCodeMap({});
+      setInactiveProductIds(new Set());
       return;
     }
 
     supabase
       .from("products_index")
-      .select("produto_id, codigo_interno")
+      .select("produto_id, codigo_interno, ativo")
       .in("produto_id", produtoIds)
       .then(({ data, error }) => {
         if (error || !data) {
           setInternalCodeMap({});
+          setInactiveProductIds(new Set());
           return;
         }
 
@@ -205,6 +208,7 @@ export default function BoxDetailDialog({
           }
         });
         setInternalCodeMap(map);
+        setInactiveProductIds(new Set(data.filter(product => product.ativo === false).map(product => product.produto_id)));
       });
   }, [items]);
 
@@ -560,6 +564,9 @@ export default function BoxDetailDialog({
                           Cód: {internalCodeMap[item.produto_id] || "não informado"} · Qtd: {item.quantidade}
                           {item.preco_unitario > 0 && ` · ${formatCurrency(item.preco_unitario)}`}
                         </p>
+                        {inactiveProductIds.has(item.produto_id) && (
+                          <p className="mt-1 text-xs text-amber-700">Cadastro inativo ou removido no GestãoClick. Quantidade física preservada; conferir o cadastro antes de movimentar este item.</p>
+                        )}
                         {isPendenciasBox && reversalLogs[item.produto_id] && (
                           <div className="mt-1 p-1.5 bg-warning/10 border border-warning/20 rounded text-[11px] space-y-0.5">
                             <p className="flex items-center gap-1 font-medium text-warning">

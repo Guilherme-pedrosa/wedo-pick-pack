@@ -58,7 +58,7 @@ async function gcFetch(path: string, accessToken: string, secretToken: string): 
   });
   const body = await res.text();
   if (!res.ok) {
-    throw new Error(`GC API ${res.status}: ${body.slice(0, 300)}`);
+    throw Object.assign(new Error(`GC API ${res.status}: ${body.slice(0, 300)}`), { status: res.status });
   }
   return JSON.parse(body);
 }
@@ -185,8 +185,21 @@ async function syncFull(
       const found = new Set(allProducts.map((p) => String(p.id)));
       const missing = [...selection].filter((id) => !found.has(id));
       if (missing.length) {
-        errorsCount += missing.length;
-        notes.push(`Referências não encontradas no catálogo atual: ${missing.join(", ")}`);
+        for (const id of missing.slice(0, 10)) {
+          try {
+            const detail = await gcFetch(`/api/produtos/${encodeURIComponent(id)}`, accessToken, secretToken);
+            const product = detail.data as Record<string, unknown>;
+            if (String(product?.id) !== id) throw new Error('Produto não confirmado');
+            allProducts.push(product);
+          } catch (error) {
+            if ((error as { status?: number }).status === 404) {
+              const saved = await supabaseAdmin.from('products_index').update({ ativo: false, last_synced_at: new Date().toISOString() }).eq('produto_id', id);
+              if (saved.error) { errorsCount++; notes.push(`Falha ao sinalizar cadastro removido: ${id}`); }
+              else notes.push(`Cadastro removido do GC (404): ${id}. Retirado da busca de produtos ativos; quantidades nas caixas e histórico preservados.`);
+            } else { errorsCount++; notes.push(`Referência sem confirmação no GC: ${id}`); }
+          }
+        }
+        if (missing.length > 10) { errorsCount += missing.length - 10; notes.push(`Outras referências não localizadas: ${missing.slice(10).join(', ')}`); }
       }
       notes.push(
         `Produtos de uso recente: ${allProducts.length}/${selection.size}. Leitura paginada do catálogo, sem interromper a lista na mesma peça a cada execução.`,

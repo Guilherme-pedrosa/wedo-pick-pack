@@ -23,6 +23,7 @@ beforeEach(async()=>{
  vi.stubGlobal('fetch',vi.fn(async(input:any)=>{
    const url=new URL(typeof input==='string'?input:input.url);m.requests.push(url.pathname+url.search);
    const page=Number(url.searchParams.get('pagina'));
+   if(url.pathname==='/api/produtos/2')return new Response(JSON.stringify({message:'Produto não encontrado'}),{status:404});
    if(url.pathname!=='/api/produtos'||!page)throw Error('Não deveria buscar produto individual');
    return new Response(JSON.stringify({data:m.products.slice((page-1)*100,page*100),meta:{total_paginas:3,total_registros:m.broken?206:205}}),{status:200});
  }));
@@ -43,5 +44,12 @@ describe('sincronização incremental sem repetir somente os primeiros produtos'
   m.broken=true;
   const response=await handler(new Request('https://test/sync',{method:'POST',body:JSON.stringify({run_type:'incremental'})}));
   expect(response.status).toBe(500);expect(m.rows).toEqual([]);expect(m.updates.at(-1).status).toBe('failed');
+ });
+ it('sinaliza cadastro removido por 404, preservando caixas e sem interromper os demais produtos',async()=>{
+  m.products[1]={...m.products[1],id:'206'};
+  const response=await handler(new Request('https://test/sync',{method:'POST',body:JSON.stringify({run_type:'incremental'})}));
+  expect(await response.json()).toMatchObject({status:'success',fetchedCount:2,errorsCount:0});
+  expect(m.updates).toContainEqual(expect.objectContaining({ativo:false}));
+  expect(m.updates.at(-1).notes).toContain('Cadastro removido do GC (404): 2');
  });
 });

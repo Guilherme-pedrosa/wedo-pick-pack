@@ -855,6 +855,7 @@ async function findReusableDefinitiveDocument(
     .from('os_generation_logs')
     .select('os_id, os_codigo, created_at')
     .eq('orcamento_id', operation.budget_id)
+    .eq('success', true)
     .order('created_at', { ascending: false })
     .limit(10);
   for (const log of (logs || []) as any[]) {

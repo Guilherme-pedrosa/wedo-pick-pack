@@ -56,6 +56,7 @@ const statusLabels: Record<string, string> = {
   partial_separation: 'Separação parcial',
   awaiting_balance: 'Aguardando saldo',
   ready_to_consolidate: 'Pronto para consolidar',
+  awaiting_execution: 'Baixas realizadas — aguardando execução',
   consolidating: 'Consolidando',
   completed: 'Concluído',
   cancelled: 'Cancelado',
@@ -1075,6 +1076,18 @@ export default function PartialWriteoffPage() {
                     </div>
                   )}
                 </div>
+
+                {selected.status === 'awaiting_execution' && (
+                  <Alert className="border-amber-200 bg-amber-50">
+                    <ClipboardCheck className="h-4 w-4" />
+                    <AlertTitle>Todas as baixas realizadas — aguardando última execução</AlertTitle>
+                    <AlertDescription>
+                      As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua
+                      vinculada ao orçamento #{selected.budget_code}. A conciliação final permanece
+                      bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {selected.status === 'ready_to_consolidate' && (
                   <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">

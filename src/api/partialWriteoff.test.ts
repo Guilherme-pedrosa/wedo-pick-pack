@@ -62,6 +62,12 @@ function operation(withdrawn: number, status: PartialWriteoffOperation['status']
 }
 
 describe('demanda da baixa parcial', () => {
+  it('mantém vínculo e saldo zero enquanto aguarda execução, sem gerar nova demanda', () => {
+    const result = buildActivePartialDemand([operation(10, 'awaiting_execution')]);
+    expect(result.activeBudgetIds.has('budget-10')).toBe(true);
+    expect(result.pendingByBudgetAndProduct.get('budget-10')?.get('product-1')).toBe(0);
+    expect(result.auxiliaryDocumentIds.has('os:aux-10')).toBe(true);
+  });
   it('mantém somente o saldo pendente após uma retirada de 4 em 10', () => {
     const result = buildActivePartialDemand([operation(4)]);
     expect(result.pendingByBudgetAndProduct.get('budget-10')?.get('product-1')).toBe(6);

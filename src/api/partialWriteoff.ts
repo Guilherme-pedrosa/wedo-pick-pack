@@ -7,6 +7,7 @@ export type PartialWriteoffStatus =
   | 'partial_separation'
   | 'awaiting_balance'
   | 'ready_to_consolidate'
+  | 'awaiting_execution'
   | 'consolidating'
   | 'completed'
   | 'cancelled'

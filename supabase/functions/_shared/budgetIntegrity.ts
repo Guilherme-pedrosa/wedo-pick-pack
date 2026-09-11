@@ -6,7 +6,12 @@ const operational = new Set(['situacao_id', 'nome_situacao', 'cor_situacao', 'si
 
 function scalar(value: unknown): string {
   const text = String(value ?? '').trim();
-  return /^-?\d+(?:\.\d+)?$/.test(text) ? Number(text).toString() : text;
+  if (!/^-?\d+(?:\.\d+)?$/.test(text)) return text;
+  // Não converter identificadores grandes para Number: isso perderia dígitos.
+  const [whole, fraction = ''] = text.replace(/^-/, '').split('.');
+  const integer = whole.replace(/^0+(?=\d)/, '');
+  const decimal = fraction.replace(/0+$/, '');
+  return `${text.startsWith('-') && (integer !== '0' || decimal) ? '-' : ''}${integer}${decimal ? `.${decimal}` : ''}`;
 }
 
 /** Confere os campos originais; o GC pode acrescentar IDs/metadados na resposta. */

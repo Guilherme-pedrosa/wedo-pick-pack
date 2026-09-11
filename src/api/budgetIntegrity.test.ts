@@ -35,4 +35,8 @@ describe('preservação integral do orçamento', () => {
     items[0].withdrawn_quantity = 4;
     expect(() => assertOperationQuantities(budget(), items)).toThrow('baixas');
   });
+  it('distingue todos os dígitos de identificadores grandes sem perder precisão', () => {
+    expect(documentDifferences({ equipamento_id: '9127637542627376' }, { equipamento_id: '9127637542627377' })).toEqual(['equipamento_id']);
+    expect(documentDifferences({ quantidade: '03.0000' }, { quantidade: 3 })).toEqual([]);
+  });
 });

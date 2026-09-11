@@ -61,6 +61,28 @@ function fixture() {
 }
 
 describe('consolidação integral com preservação do histórico', () => {
+  it('consolida execuções com dispensa explícita de tarefas preservando o orçamento', async () => {
+    const f = fixture(); f.operation.batches[0].auvo_task_id = null; f.operation.batches[0].auvo_task_requested = false;
+    const originalRpc = f.ports.rpc;
+    f.ports.rpc = (name,p) => name === 'partial_writeoff_historical_tasks' ? Promise.resolve([]) : originalRpc(name,p);
+    await consolidateExecutedOs(f.operation, f.ports);
+    expect(f.docs.final.produtos).toEqual(f.budget.produtos);
+    expect(f.docs.final.servicos).toEqual(f.budget.servicos);
+    expect(f.docs.final.observacoes_interna).toContain('sem solicitação');
+  });
+  it.each(['reservation', 'partial_execution'] as const)('bloqueia consolidação antes de qualquer chamada quando tarefa solicitada está pendente em %s', async flow => {
+    const f = fixture(); f.operation.flow_mode = flow;
+    f.operation.batches[0].auvo_task_id = null; f.operation.batches[0].auvo_task_requested = true;
+    await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('tarefa Auvo solicitada');
+    expect(f.calls).toEqual([]);
+  });
+  it('preserva tarefa solicitada na transferência de reserva para a OS integral', async () => {
+    const f = fixture(); f.operation.flow_mode = 'reservation'; f.operation.batches[0].auvo_task_requested = true;
+    f.aux.situacao_id = 'reserve'; f.aux.nome_situacao = 'Baixa pra reserva de peças - Aguardando Compra';
+    await consolidateExecutedOs(f.operation, f.ports);
+    expect(f.docs.final.atributos.find((a:any) => a.atributo.atributo_id === '73344').atributo.conteudo).toContain('20');
+    expect(f.docs.final.situacao_estoque).toBe('0');
+  });
   it('cria a integral antes de cancelar auxiliares e mantém todas as tarefas sem chamar Auvo', async () => {
     const f = fixture();
     const result = await consolidateExecutedOs(f.operation, f.ports);

@@ -1,6 +1,7 @@
 import { appendUniqueNote, consolidationReference, executionDocument, isCancelledStatus, isExecutedStatus, requireExecutedDocuments, type GcRecord } from './partialExecution.ts';
 import type { ConsolidationOperation as PartialWriteoffOperation } from './partialExecution.ts';
 import { assertBudgetUnchanged, documentDifferences } from './budgetIntegrity.ts';
+import { assertRequestedAuvoTasksLinked } from './partialAuvo.ts';
 
 export interface ConsolidationPorts<T extends PartialWriteoffOperation = PartialWriteoffOperation> {
   gc(path: string, method?: string, payload?: unknown): Promise<GcRecord>;
@@ -70,7 +71,8 @@ export function assertAuxiliaryCoverage(budget: GcRecord, auxiliaries: GcRecord[
 export function definitivePayload(operation: PartialWriteoffOperation, budget: GcRecord, auxiliaries: GcRecord[],
   attributes: GcRecord[], waitingStatus: string, historicTasks: string[] = []): GcRecord {
   const taskIds = [...new Set([...operation.batches.map(b => b.auvo_task_id || ''), ...historicTasks].filter(Boolean))];
-  if (!taskIds.length && operation.flow_mode !== 'reservation') throw new Error('As tarefas Auvo das execuções precisam estar vinculadas antes de consolidar.');
+  assertRequestedAuvoTasksLinked(operation.batches.filter(b => b.confirmed_at));
+  if (!taskIds.length && operation.flow_mode !== 'reservation' && operation.batches.some(b => b.confirmed_at && b.auvo_task_requested !== false)) throw new Error('As tarefas Auvo das execuções precisam estar vinculadas antes de consolidar.');
   const normalize = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const sourceAttributes = (budget.atributos || []).map((a: GcRecord) => unwrap(a, 'atributo'));
   const mapped: GcRecord[] = [];
@@ -99,7 +101,7 @@ export function definitivePayload(operation: PartialWriteoffOperation, budget: G
   const notes = auxiliaries.map(d => `OS parcial #${d.codigo} (${d.id}) — ${d.nome_situacao}\n${d.observacoes || ''}\n${d.observacoes_interna || ''}`).join('\n\n');
   return { ...writableDocument(budget), data: budget.data || new Date().toISOString().slice(0, 10),
     situacao_id: waitingStatus, atributos: mapped,
-    observacoes_interna: [budget.observacoes_interna, marker, `Consolidação integral do orçamento #${operation.budget_code}.`, taskIds.length ? `Tarefas Auvo preservadas: ${taskIds.join(', ')}.` : 'Reserva transferida para a OS integral. Aguardando Checkout; nenhuma execução ou tarefa Auvo criada.', notes].filter(Boolean).join('\n\n') };
+    observacoes_interna: [budget.observacoes_interna, marker, `Consolidação integral do orçamento #${operation.budget_code}.`, taskIds.length ? `Tarefas Auvo preservadas: ${taskIds.join(', ')}.` : 'Lotes sem solicitação de tarefa Auvo.', notes].filter(Boolean).join('\n\n') };
 }
 
 async function readDocument(ports: ConsolidationPorts, id: string): Promise<GcRecord> {
@@ -134,6 +136,7 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
   const settings = await ports.settings();
   const marker = `PP-CONSOLIDACAO-${operation.id}`;
   const batches = operation.batches.filter(b => b.confirmed_at && b.auxiliary_document_id);
+  assertRequestedAuvoTasksLinked(batches);
   const auxiliaries: GcRecord[] = [];
   for (const batch of batches) auxiliaries.push(await readDocument(ports, batch.auxiliary_document_id!));
   if (auxiliaries.some(d => String(d.situacao_financeiro) === '1' || [d.nota_fiscal_id, d.nota_fiscal_servico_id].some(id => id && String(id) !== '0'))) {

@@ -978,6 +978,7 @@ export type Database = {
       }
       partial_writeoff_batches: {
         Row: {
+          auvo_task_requested: boolean | null
           auvo_task_error: string | null
           auvo_task_id: string | null
           auxiliary_document_code: string | null
@@ -997,6 +998,7 @@ export type Database = {
         }
         Insert: {
           auvo_task_error?: string | null
+          auvo_task_requested?: boolean | null
           auvo_task_id?: string | null
           auxiliary_document_code?: string | null
           auxiliary_document_id?: string | null
@@ -1015,6 +1017,7 @@ export type Database = {
         }
         Update: {
           auvo_task_error?: string | null
+          auvo_task_requested?: boolean | null
           auvo_task_id?: string | null
           auxiliary_document_code?: string | null
           auxiliary_document_id?: string | null

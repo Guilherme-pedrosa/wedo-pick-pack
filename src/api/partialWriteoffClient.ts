@@ -5,6 +5,7 @@ import { assertStockConflict, commitmentFor, fetchOsStockCommitments } from './o
 import { assertCheckoutStock } from './checkoutStockGuard';
 import { assertBudgetUnchanged, assertOperationQuantities } from './budgetIntegrity';
 import { assertStatusOnlyChange, writableDocument } from './partialConsolidation';
+import { wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -340,7 +341,7 @@ function auxiliaryPayload(
 
   const products = selected.map(({ item, quantity }) => selectedLine(item.line_snapshot, quantity));
   const sourceLabel = operationSourceKind(operation) === 'venda' ? 'da venda' : 'do orcamento';
-  const note = `[${marker}] BAIXA PARCIAL ${sourceLabel} #${operation.budget_code}. Documento auxiliar: sem financeiro, comissao, servicos ou Auvo.`;
+  const note = `[${marker}] BAIXA PARCIAL ${sourceLabel} #${operation.budget_code}. Documento auxiliar: sem financeiro, comissao ou servicos.`;
   const common: Record<string, any> = {
     cliente_id: operation.client_id,
     data: new Date().toISOString().slice(0, 10),
@@ -582,9 +583,10 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   }
 
   const idempotencyKey = String(body.idempotency_key || crypto.randomUUID());
-  const { data: reservation, error: reserveError } = await cloud.rpc('partial_writeoff_reserve_batch', {
+  const { data: reservation, error: reserveError } = await cloud.rpc('partial_writeoff_reserve_batch_with_options', {
     p_operation_id: operationId,
     p_idempotency_key: idempotencyKey,
+    p_create_auvo_task: body.create_auvo_task === true,
     p_items: selectedWithStock.map(({ item, quantity, stockQuantity, physicalStock, externalCommitted }) => ({
       item_id: item.id,
       quantity,
@@ -607,7 +609,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   if (batchError) throw batchError;
   if (batch.status === 'awaiting_checkout') {
     await syncOriginalBudgetPartialStatus(operation, batchId, auth);
-    return getOperationGraph(operationId);
+    return finishPreparedBatch(batchId, body, auth);
   }
   if (existingReservation && batch.status === 'creating') {
     let recovered: any | null = null;
@@ -625,7 +627,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
     });
     if (attachRecoveredError) throw attachRecoveredError;
     await syncOriginalBudgetPartialStatus(operation, batchId, auth);
-    return getOperationGraph(operationId);
+    return finishPreparedBatch(batchId, body, auth);
   }
   if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
 
@@ -689,36 +691,49 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   }
 
   await syncOriginalBudgetPartialStatus(operation, batchId, auth);
+  return finishPreparedBatch(batchId, body, auth);
+}
 
+async function finishPreparedBatch(batchId: string, body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
+  let operation = await getOperationGraph(String(body.operation_id));
+  const batch = operation.batches.find(b => b.id === batchId)!;
+  if (wantsPartialAuvoTask(batch, operation.flow_mode) && !batch.auvo_task_id) {
+    try {
+      await createBatchAuvoTask(batchId, body.auvo_customer_id ? String(body.auvo_customer_id) : undefined);
+    } catch (taskError) {
+      console.error('[partial-writeoff] falha ao criar tarefa Auvo:', compact(taskError));
+    }
+    operation = await getOperationGraph(operation.id);
+  }
   if (operation.flow_mode === 'reservation') {
     const reserved = await handleConfirmBatch({ batch_id: batchId }, auth);
-    if (reserved.items.every(i => Number(i.withdrawn_quantity) === Number(i.original_quantity) && Number(i.reserved_quantity) === 0)) {
-      return handleConsolidate({ operation_id: operationId }, auth);
+    const pendingTask = reserved.batches.some(b => b.confirmed_at && b.auvo_task_requested === true && !b.auvo_task_id);
+    if (!pendingTask && reserved.items.every(i => Number(i.withdrawn_quantity) === Number(i.original_quantity) && Number(i.reserved_quantity) === 0)) {
+      return handleConsolidate({ operation_id: operation.id }, auth);
     }
     return reserved;
   }
-
-  // Tarefa Auvo da entrega parcial: roda no servidor (credenciais Auvo são secretas).
-  // Falha aqui NÃO invalida o lote — fica registrado o aviso para nova tentativa.
-  try {
-    await createBatchAuvoTask(batchId, body.auvo_customer_id ? String(body.auvo_customer_id) : undefined);
-  } catch (taskError) {
-    console.error('[partial-writeoff] falha ao criar tarefa Auvo:', compact(taskError));
-  }
-  return getOperationGraph(operationId);
+  return operation;
 }
 
 /** Cria a tarefa Auvo do lote via edge function (usa AUVO_API_KEY/TOKEN do servidor). */
 export async function createBatchAuvoTask(batchId: string, auvoCustomerId?: string): Promise<void> {
-  const { data: batch, error: batchError } = await cloud.from('partial_writeoff_batches').select('operation_id').eq('id', batchId).single();
+  const { data: batch, error: batchError } = await cloud.from('partial_writeoff_batches').select('*').eq('id', batchId).single();
   if (batchError) throw batchError;
-  if ((await getOperationGraph(batch.operation_id)).flow_mode === 'reservation') throw new Error('Reserva de peças não cria tarefa Auvo.');
+  if (batch.auvo_task_id) return;
+  if (!wantsPartialAuvoTask(batch, (await getOperationGraph(batch.operation_id)).flow_mode)) throw new Error('Este lote foi aberto sem solicitar tarefa Auvo.');
+  if (!['awaiting_checkout', 'confirmed'].includes(batch.status)) throw new Error('O lote não está disponível para criar tarefa Auvo.');
   const { data, error } = await supabase.functions.invoke('partial-writeoff', {
     body: { action: 'create_batch_task', batch_id: batchId, auvo_customer_id: auvoCustomerId },
   });
   if (error || (data as any)?.error) {
-    throw new Error((data as any)?.error || error?.message || 'Falha ao criar tarefa no Auvo');
+    let message = (data as any)?.error || error?.message || 'Falha ao criar tarefa no Auvo';
+    try { message = (await (error as any)?.context?.json())?.error || message; } catch { /* keep transport error */ }
+    await cloud.from('partial_writeoff_batches').update({ auvo_task_error: message }).eq('id', batchId).is('auvo_task_id', null);
+    throw new Error(message);
   }
+  const { data: saved, error: savedError } = await cloud.from('partial_writeoff_batches').select('auvo_task_id').eq('id', batchId).single();
+  if (savedError || !saved?.auvo_task_id) throw new Error('A criação da tarefa ainda não foi confirmada. Confira o histórico antes de tentar novamente.');
 }
 
 async function handleConfirmBatch(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {

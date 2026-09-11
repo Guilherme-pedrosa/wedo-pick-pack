@@ -27,6 +27,8 @@ import {
 import { checkDocumentExists } from '@/api/gcDocumentValidation';
 import { commitmentFor, fetchOsStockCommitments } from '@/api/osStockCommitments';
 import { cn } from '@/lib/utils';
+import { Checkbox } from '@/components/ui/checkbox';
+import { wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 
@@ -152,6 +154,7 @@ export default function PartialWriteoffPage() {
   const [cancelling, setCancelling] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
+  const [createAuvoTask, setCreateAuvoTask] = useState(false);
   const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
@@ -220,6 +223,7 @@ export default function PartialWriteoffPage() {
 
   useEffect(() => {
     batchRequestKey.current = null;
+    setCreateAuvoTask(false);
   }, [selected?.id]);
 
   const stockQuery = useQuery({
@@ -568,9 +572,14 @@ export default function PartialWriteoffPage() {
     setPreparing(true);
     try {
       if (!batchRequestKey.current) batchRequestKey.current = crypto.randomUUID();
-      await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current as string);
+      const result = await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current as string, { createAuvoTask });
       batchRequestKey.current = null;
+      setCreateAuvoTask(false);
       await refresh();
+      if (result.batches.some(b => b.auvo_task_requested === true && !b.auvo_task_id && !['cancelled', 'failed'].includes(b.status))) {
+        toast.warning('OS criada. A tarefa Auvo solicitada está pendente; confira o aviso no histórico.', { duration: 10000 });
+        return;
+      }
       toast.success(selected.flow_mode === 'reservation' ? 'Reserva aplicada no GC. Ao completar todas as peças, a OS integral é liberada para Checkout.' : 'Documento auxiliar criado. O lote já está na fila do Checkout.');
       navigate('/checkout');
     } catch (error) {
@@ -627,7 +636,7 @@ export default function PartialWriteoffPage() {
           <AlertTriangle className="h-4 w-4 text-amber-700" />
           <AlertTitle>Fluxo isolado e rastreável</AlertTitle>
           <AlertDescription>
-            Os auxiliares movimentam estoque e mantêm as tarefas Auvo de cada execução. Após a última execução, a OS integral reúne o orçamento e referencia todo o histórico.
+            Escolha em cada nova OS parcial se deseja criar tarefa no Auvo. A OS integral preserva o orçamento completo e o histórico das retiradas e tarefas existentes.
           </AlertDescription>
         </Alert>
 
@@ -1027,7 +1036,17 @@ export default function PartialWriteoffPage() {
                   <div className="flex flex-col items-start justify-between gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center">
                     <div>
                       <p className="font-medium">Criar o próximo lote</p>
-                      <p className="text-sm text-muted-foreground">{selected.flow_mode === 'reservation' ? 'A reserva retira as peças da disponibilidade no GC, sem tarefa Auvo nem execução. Com todas as peças reservadas, a OS integral entra no Checkout.' : 'O documento auxiliar aparecerá no Checkout e só movimentará estoque depois da conferência completa.'}</p>
+                      <p className="text-sm text-muted-foreground">{selected.flow_mode === 'reservation' ? 'A reserva retira as peças da disponibilidade no GC. Com todas as peças reservadas, a OS integral entra no Checkout.' : 'O documento auxiliar aparecerá no Checkout e só movimentará estoque depois da conferência completa.'}</p>
+                      {selected.document_type === 'os' && (
+                        <div className="mt-3 space-y-1">
+                          <label htmlFor="partial-create-auvo-task" className="flex items-center gap-2 text-sm font-medium">
+                            <Checkbox id="partial-create-auvo-task" checked={createAuvoTask} disabled={preparing || !!batchRequestKey.current}
+                              onCheckedChange={value => setCreateAuvoTask(value === true)} />
+                            Criar tarefa no Auvo para esta OS
+                          </label>
+                          <p className="text-xs text-muted-foreground">{createAuvoTask ? 'Será solicitada uma tarefa para esta OS parcial, vinculada ao histórico.' : 'Esta OS será aberta sem criar tarefa no Auvo.'}</p>
+                        </div>
+                      )}
                     </div>
                     <Button onClick={handlePrepare} disabled={preparing || requestedItems.length === 0 || stockQuery.isLoading || !commitmentsQuery.data || commitmentsQuery.isError}>
                       {preparing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
@@ -1077,12 +1096,12 @@ export default function PartialWriteoffPage() {
                               >
                                 Tarefa Auvo #{batch.auvo_task_id}
                               </a>
-                            ) : selected.flow_mode === 'reservation' ? <p className="text-xs text-muted-foreground">Reserva sem tarefa Auvo e sem execução</p> : (
+                            ) : !wantsPartialAuvoTask(batch, selected.flow_mode) ? <p className="text-xs text-muted-foreground">{batch.auvo_task_requested === false ? 'Tarefa Auvo não solicitada para esta OS' : 'Reserva sem tarefa Auvo'}</p> : (
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-xs text-destructive">
                                   {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
                                 </p>
-                                {batch.auxiliary_document_id && (
+                                {batch.auxiliary_document_id && ['awaiting_checkout', 'confirmed'].includes(batch.status) && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -1132,7 +1151,7 @@ export default function PartialWriteoffPage() {
                     <ClipboardCheck className="h-4 w-4" />
                     <AlertTitle>{selected.flow_mode === 'reservation' ? 'Reserva completa — preparando OS integral' : 'Todas as baixas realizadas — aguardando última execução'}</AlertTitle>
                     <AlertDescription>
-                      {selected.flow_mode === 'reservation' ? 'As peças estão reservadas no GC. A rotina confere a reserva integral e transfere o compromisso para a OS de Checkout, sem criar tarefa Auvo ou execução.' : `As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua vinculada ao orçamento #${selected.budget_code}. A conciliação final permanece bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.`}
+                      {selected.flow_mode === 'reservation' ? 'As peças estão reservadas no GC. A rotina confere a reserva integral e transfere o compromisso para a OS de Checkout, preservando as tarefas Auvo solicitadas nos lotes.' : `As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua vinculada ao orçamento #${selected.budget_code}. A conciliação final permanece bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.`}
                       {(selected.execution_documents || []).filter(d => selected.flow_mode === 'reservation' ? !d.stockApplied : !d.executed).map(d => (
                         <p key={d.documentId} className="mt-2">OS #{d.documentCode}: {d.statusName}</p>
                       ))}

@@ -6,7 +6,7 @@ export interface ConsolidationOperation {
   budget_snapshot: GcRecord;
   definitive_document_id: string | null; definitive_document_code: string | null;
   consolidation_stage?: string | null; execution_documents?: ExecutionDocument[];
-  batches: Array<{ id: string; confirmed_at: string | null; auxiliary_document_id: string | null; auvo_task_id: string | null }>;
+  batches: Array<{ id: string; confirmed_at: string | null; auxiliary_document_id: string | null; auvo_task_id: string | null; auvo_task_requested?: boolean | null }>;
 }
 
 export function normalizedStatus(value: unknown): string {

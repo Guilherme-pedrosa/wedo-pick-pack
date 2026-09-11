@@ -73,6 +73,7 @@ export interface PartialWriteoffBatch {
   error_message: string | null;
   auvo_task_id: string | null;
   auvo_task_error: string | null;
+  auvo_task_requested?: boolean | null;
   created_at: string;
   confirmed_at: string | null;
 
@@ -209,11 +210,13 @@ export async function preparePartialBatch(
   operationId: string,
   items: Array<{ item_id: string; quantity: number }>,
   idempotencyKey: string = crypto.randomUUID(),
+  options: { createAuvoTask: boolean } = { createAuvoTask: false },
 ): Promise<PartialWriteoffOperation> {
   const data = await invoke<{ operation: PartialWriteoffOperation }>({
     action: 'prepare_batch',
     operation_id: operationId,
     idempotency_key: idempotencyKey,
+    create_auvo_task: options.createAuvoTask,
     items,
   });
   return data.operation;

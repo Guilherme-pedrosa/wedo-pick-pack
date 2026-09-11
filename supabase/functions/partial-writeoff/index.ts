@@ -1,4 +1,5 @@
 import { GC_API_USER_ID, installGcUsuarioId } from "../_shared/gc-user.ts";
+import { wantsPartialAuvoTask } from '../_shared/partialAuvo.ts';
 installGcUsuarioId();
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
@@ -769,9 +770,10 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
   }
 
   const idempotencyKey = String(body.idempotency_key || crypto.randomUUID());
-  const { data: reservation, error: reserveError } = await service.rpc('partial_writeoff_reserve_batch', {
+  const { data: reservation, error: reserveError } = await service.rpc('partial_writeoff_reserve_batch_with_options', {
     p_operation_id: operationId,
     p_idempotency_key: idempotencyKey,
+    p_create_auvo_task: body.create_auvo_task === true,
     p_items: selectedWithStock.map(({ item, quantity, stockQuantity }) => ({
       item_id: item.id,
       quantity,
@@ -792,6 +794,9 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
   if (batchError) throw batchError;
   if (batch.status === 'awaiting_checkout') {
     await syncOriginalBudgetPartialStatus(operation, batchId, auth);
+    if (wantsPartialAuvoTask(batch, operation.flow_mode) && !batch.auvo_task_id) {
+      try { await handleCreateBatchTask({ ...body, batch_id: batchId }, auth); } catch { /* saved in history */ }
+    }
     return getOperationGraph(operationId);
   }
   if (existingReservation && batch.status === 'creating') {
@@ -813,6 +818,9 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     });
     if (attachRecoveredError) throw attachRecoveredError;
     await syncOriginalBudgetPartialStatus(operation, batchId, auth);
+    if (wantsPartialAuvoTask(batch, operation.flow_mode) && !batch.auvo_task_id) {
+      try { await handleCreateBatchTask({ ...body, batch_id: batchId }, auth); } catch { /* saved in history */ }
+    }
     return getOperationGraph(operationId);
   }
   if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
@@ -877,6 +885,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
     auxiliary_document_id: String(document.id),
     auxiliary_document_code: String(document.codigo || ''),
   };
+  if (!wantsPartialAuvoTask(batch, operation.flow_mode)) return getOperationGraph(operationId);
   try {
     if (!auth.profile.auvo_user_id) throw new Error('Usuário sem "auvo_user_id" configurado no perfil');
     const taskId = await createPartialAuvoTask(
@@ -1145,7 +1154,8 @@ async function handleCreateBatchTask(body: any, auth: AuthContext) {
   if (!auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
 
   const operation = await getOperationGraph(String(batch.operation_id));
-  if (operation.flow_mode === 'reservation') throw new Error('Reserva não cria tarefa Auvo.');
+  if (!wantsPartialAuvoTask(batch, operation.flow_mode)) throw new Error('Este lote foi aberto sem solicitar tarefa Auvo.');
+  if (!['awaiting_checkout', 'confirmed'].includes(batch.status)) throw new Error('O lote não está disponível para criar tarefa Auvo.');
   const { data: batchItems, error: itemsError } = await service
     .from('partial_writeoff_batch_items')
     .select('quantity, partial_writeoff_items(*)')

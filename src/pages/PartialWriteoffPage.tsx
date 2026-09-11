@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   auditPartialDocuments,
@@ -14,6 +14,7 @@ import {
 
   consolidatePartialOperation,
   getPartialStockAvailability,
+  getPartialOperation,
   listPartialOperations,
   listPartialReservationSources,
   openPartialOperation,
@@ -135,13 +136,15 @@ function stockVariationId(item: PartialWriteoffOperation['items'][number]): stri
 
 export default function PartialWriteoffPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const linkedOperationId = searchParams.get('operation');
   const queryClient = useQueryClient();
   const [term, setTerm] = useState('');
   const [budgetKind, setBudgetKind] = useState<PartialBudgetSearchResult['budget_kind'] | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<PartialBudgetSearchResult[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(linkedOperationId);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [preparing, setPreparing] = useState(false);
@@ -171,7 +174,15 @@ export default function PartialWriteoffPage() {
     staleTime: 5000,
   });
   const operations = operationsQuery.data || [];
-  const selected = operations.find(operation => operation.id === selectedId) || null;
+  const linkedOperationQuery = useQuery({
+    queryKey: ['partial-writeoff-linked-operation', linkedOperationId],
+    queryFn: () => getPartialOperation(linkedOperationId!),
+    enabled: !!linkedOperationId && operationsQuery.isSuccess && !operations.some(o => o.id === linkedOperationId),
+    retry: false,
+  });
+  const selected = operations.find(operation => operation.id === selectedId)
+    || (selectedId === linkedOperationId ? linkedOperationQuery.data : null) || null;
+  useEffect(() => { if (linkedOperationId) setSelectedId(linkedOperationId); }, [linkedOperationId]);
 
   const executionQuery = useQuery({
     queryKey: ['partial-writeoff-execution', selected?.id],

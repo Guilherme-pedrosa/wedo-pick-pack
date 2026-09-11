@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -39,6 +39,9 @@ import {
 } from '@/api/operationsDashboard';
 import ComprasSnapshotDialog from '@/components/dashboard/ComprasSnapshotDialog';
 import ReturnsSummaryCard from '@/components/dashboard/ReturnsSummaryCard';
+import PartialStockOpportunitiesCard from '@/components/dashboard/PartialStockOpportunitiesCard';
+import { getPartialStockOpportunities } from '@/api/partialStockOpportunities';
+import { fetchOsStockCommitments } from '@/api/osStockCommitments';
 
 type AlertLevel = 'critical' | 'warning' | 'info';
 
@@ -399,6 +402,16 @@ function buildAttentionItems(
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const partialStockQuery = useQuery({
+    queryKey: ['partial-stock-opportunities'],
+    queryFn: () => getPartialStockOpportunities(() => queryClient.fetchQuery({
+      queryKey: ['os-stock-commitments'], queryFn: fetchOsStockCommitments, staleTime: 0,
+    })),
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+    retry: false,
+  });
   const [comprasDialogOpen, setComprasDialogOpen] = useState(false);
   const cloudQuery = useQuery({
     queryKey: ['operations-dashboard', 'cloud'],
@@ -422,7 +435,7 @@ const DashboardPage = () => {
   );
 
   const refreshAll = async () => {
-    await Promise.all([cloudQuery.refetch(), integrationQuery.refetch()]);
+    await Promise.all([cloudQuery.refetch(), integrationQuery.refetch(), partialStockQuery.refetch()]);
   };
 
   if (cloudQuery.isLoading) {
@@ -457,7 +470,7 @@ const DashboardPage = () => {
   const agendaProgress = integration && integration.agendaToday > 0
     ? Math.round((integration.agendaFinished / integration.agendaToday) * 100)
     : 0;
-  const allRefreshing = cloudQuery.isFetching || integrationQuery.isFetching;
+  const allRefreshing = cloudQuery.isFetching || integrationQuery.isFetching || partialStockQuery.isFetching;
 
   return (
     <div className="space-y-7 animate-in fade-in duration-300">
@@ -524,6 +537,7 @@ const DashboardPage = () => {
         />
       </div>
 
+      <PartialStockOpportunitiesCard data={partialStockQuery.data} error={partialStockQuery.error} fetching={partialStockQuery.isFetching} onRefresh={() => void partialStockQuery.refetch()} />
       <ReturnsSummaryCard />
 
 

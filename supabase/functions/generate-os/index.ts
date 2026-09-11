@@ -1,4 +1,7 @@
 import { installGcUsuarioId } from "../_shared/gc-user.ts";
+import { BUDGET_GENERATION_VERSION, readAuthoritativeBudget } from '../_shared/budgetKind.ts';
+import { assertBudgetUnchanged } from '../_shared/budgetIntegrity.ts';
+import { writableDocument } from '../_shared/partialConsolidation.ts';
 installGcUsuarioId();
 
 const corsHeaders = {
@@ -15,7 +18,7 @@ const GENERATION_RULES = {
   os: { budgetStatusId: '7109779', documentStatusId: '7063581', taskType: 180177, questionnaireId: 214757 },
   venda: { budgetStatusId: '7706107', documentStatusId: '9303817', taskType: 200268, questionnaireId: 224444 },
 } as const;
-const GENERATION_RULES_VERSION = '2026-09-11-product-sales-v1';
+const GENERATION_RULES_VERSION = BUDGET_GENERATION_VERSION;
 
 // ---------- helpers ----------
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -238,12 +241,9 @@ function formatMoney(value: number): string {
   return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
 }
 
-// GC devolve valores com 4 casas decimais (ex.: 601.1600). O sistema
-// financeiro/fiscal opera em BRL com 2 casas — enviar 4 casas causa
-// diferenças de arredondamento entre linhas × cabeçalho × parcelas e o
-// GC responde 400 Bad Request. Normalizamos toda linha monetária para 2 casas
-// antes de qualquer POST/PUT.
-const MONEY_FIELDS = ['valor_venda', 'valor_custo', 'valor_total', 'desconto_valor', 'valor_frete', 'valor'];
+// Preserve GC unit prices/costs at their original precision. Only document
+// totals and payments use cents; rounding unit prices changes the budget.
+const MONEY_FIELDS = ['valor_total', 'desconto_valor', 'valor_frete', 'valor'];
 function round2Money(value: unknown): string {
   return formatMoney(parseMoney(value));
 }
@@ -560,26 +560,16 @@ Deno.serve(async (req: Request) => {
     // pedido" ends up higher than the parcelas → "valor das parcelas, faltando X".
     // Fetching the full orçamento gives us the priced lines GC expects.
     // ============================================
-    try {
-      const fullOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, 'GET');
-      if (fullOrc?.data) {
-        // Overlay GC's authoritative data, keeping any frontend-only helper fields.
-        orcamento = { ...orcamento, ...fullOrc.data };
-        console.log(`[generate-os] Loaded authoritative orçamento #${orcamento.codigo}: produtos=${(orcamento.produtos || []).length}, servicos=${(orcamento.servicos || []).length}, valor_total=${orcamento.valor_total}`);
-      }
-    } catch (fetchErr) {
-      console.warn('[generate-os] Could not re-fetch full orçamento, using frontend payload:', fetchErr);
+    const source = await readAuthoritativeBudget(path => gcRequest(path, 'GET'), String(orcamento.id || ''));
+    if (body.budget_kind && body.budget_kind !== source.kind) {
+      throw new Error('O tipo do orçamento mudou no GC. Atualize o Rastreador antes de gerar.');
     }
+    orcamento = { ...orcamento, ...source.budget };
+    const docKind = source.documentKind;
+    console.log(`[generate-os] Orçamento #${orcamento.codigo}: tipo GC=${source.kind}, destino=${docKind}`);
 
-    // ============================================
-    // ANTI-DUPLICAÇÃO DE ITENS
-    // O payload do frontend (rastreador) é montado com paginação paralela e pode
-    // trazer a MESMA linha repetida. O GC cria uma linha para cada entrada
-    // recebida no POST → a OS/Venda nasce com os produtos duplicados.
-    // Removemos duplicatas exatas (mesmo produto/variação/qtd/valor) antes de enviar.
-    // ============================================
-    orcamento.produtos = dedupeGCLines(orcamento.produtos, 'produto');
-    orcamento.servicos = dedupeGCLines(orcamento.servicos, 'servico');
+    // The authoritative document has already replaced the frontend lines.
+    // Preserve even repeated lines: they are part of the original quantities.
 
     // ============================================
     // ANTI-ENTREGA DUPLICADA (BAIXA PARCIAL)
@@ -634,11 +624,9 @@ Deno.serve(async (req: Request) => {
 
 
 
-    // Regra de negócio: orçamento com QUALQUER linha de serviço vira OS.
-    // Orçamento só de produto vira Venda.
-    const hasServiceLine = Array.isArray(orcamento.servicos) && orcamento.servicos.length > 0;
-    const isServico = hasServiceLine || parseMoney(orcamento.valor_servicos) > 0;
-    const docKind: 'os' | 'venda' = isServico ? 'os' : 'venda';
+    // The authoritative GC budget collection determines the destination.
+    // Product budgets may contain free technical hours and still generate sales.
+    const isServico = docKind === 'os';
     const generationRules = GENERATION_RULES[docKind];
 
 
@@ -1104,6 +1092,9 @@ Deno.serve(async (req: Request) => {
         centro_custo_id: orcamento.centro_custo_id || '501357',
         situacao_id: VENDA_SITUACAO_ID,
       };
+      for (const field of ['introducao', 'aos_cuidados_de', 'validade', 'previsao_entrega', 'enderecos', 'exibir_endereco', 'transportadora_id']) {
+        if (orcamento[field] != null) vendaPayload[field] = orcamento[field];
+      }
       if (vendaAtributos.length) vendaPayload.atributos = vendaAtributos;
       if (orcamento.vendedor_id) vendaPayload.vendedor_id = orcamento.vendedor_id;
       if (orcamento.observacoes) vendaPayload.observacoes = orcamento.observacoes;
@@ -1149,15 +1140,13 @@ Deno.serve(async (req: Request) => {
     try {
       console.log(`[generate-os] Step 6: Updating orçamento #${orcamento.codigo} status to ${NEW_ORC_STATUS_ID}...`);
 
-      let orcForUpdate = orcamento;
-      try {
-        const latestOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, 'GET');
-        if (latestOrc?.data) orcForUpdate = { ...orcamento, ...latestOrc.data };
-      } catch (latestErr) {
-        console.warn('[generate-os] Could not refresh orçamento before status update:', latestErr);
-      }
+      const latestOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, 'GET');
+      const orcForUpdate = latestOrc?.data;
+      if (!orcForUpdate || String(orcForUpdate.id) !== String(orcamento.id)) throw new Error('Não foi possível reler o orçamento antes de atualizar a situação.');
+      assertBudgetUnchanged(source.budget, orcForUpdate);
 
       const orcUpdatePayload: Record<string, any> = {
+        ...writableDocument(orcForUpdate),
         cliente_id: orcForUpdate.cliente_id,
         data: orcForUpdate.data || new Date().toISOString().split('T')[0],
         situacao_id: NEW_ORC_STATUS_ID,

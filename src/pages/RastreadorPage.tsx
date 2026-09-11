@@ -6,6 +6,7 @@ import { AuvoCustomerPicker, AuvoCustomerSelection } from '@/components/rastread
 import { rastrearOrcamentos, RastreadorResult, OrcamentoReadiness, ConflictInfo, OSReservedInfo } from '@/api/rastreador';
 import { OrcamentoConvertidoWarning } from '@/api/types';
 import { GCOrcamento } from '@/api/types';
+import { assertBudgetGenerationReady, documentLabelForBudget, readBudgetGenerationSource } from '@/api/budgetGeneration';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -357,6 +358,17 @@ export default function RastreadorPage() {
   // OS generation state
   const [generatingOS, setGeneratingOS] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<OrcamentoReadiness | null>(null);
+  const generationSourceQuery = useQuery({
+    queryKey: ['budget-generation-source', confirmEntry?.orcamento.id],
+    queryFn: () => readBudgetGenerationSource(confirmEntry!.orcamento.id),
+    enabled: !!confirmEntry, staleTime: 0, retry: false,
+  });
+  const generationReadyQuery = useQuery({
+    queryKey: ['budget-generation-ready'], queryFn: async () => { await assertBudgetGenerationReady(); return true; },
+    enabled: !!confirmEntry, staleTime: 0, retry: false,
+  });
+  const confirmBudgetKind = generationSourceQuery.data?.kind || confirmEntry?.orcamento.budget_kind;
+  const confirmDocLabel = documentLabelForBudget(confirmBudgetKind);
   const [auvoSelection, setAuvoSelection] = useState<AuvoCustomerSelection | null>(null);
   const confirmClienteId = confirmEntry ? String((confirmEntry.orcamento as any).cliente_id || '') : '';
   const gcClienteQuery = useQuery({
@@ -374,12 +386,15 @@ export default function RastreadorPage() {
     osCodigo?: string;
     error?: string;
     duplicate?: boolean;
+    docKind?: 'os' | 'venda';
   } | null>(null);
 
   const handleGenerateOS = async (entry: OrcamentoReadiness) => {
     setGeneratingOS(true);
     setGenerationResult(null);
     try {
+      await assertBudgetGenerationReady();
+      const source = await readBudgetGenerationSource(entry.orcamento.id);
       // Get current user profile for auvo_user_id and gc_usuario_id
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sessão expirada');
@@ -392,28 +407,29 @@ export default function RastreadorPage() {
 
       const auvoUserId = (profile as any)?.auvo_user_id;
       if (!auvoUserId) {
-        toast.error('Configure seu ID de Usuário Auvo nas Configurações antes de gerar OS.');
+        toast.error('Configure seu ID de Usuário Auvo nas Configurações antes de gerar o documento.');
         setConfirmEntry(null);
         setGeneratingOS(false);
         return;
       }
 
       // Cliente é sempre obrigatório: ou vem de uma tarefa OS válida, ou vem do cliente Auvo validado
-      const sourceTaskId = getSourceTaskOsId(entry.orcamento);
+      const sourceTaskId = getSourceTaskOsId(source.budget as GCOrcamento);
       const hasValidSourceTask = parsePositiveInt(sourceTaskId) !== null;
       const selectedCustomerId = parsePositiveInt(auvoSelection?.id || '');
 
       if (!hasValidSourceTask && !selectedCustomerId) {
-        toast.error('Selecione e valide o cliente Auvo antes de gerar a OS.');
+        toast.error('Selecione e valide o cliente Auvo antes de gerar o documento.');
         setGeneratingOS(false);
         return;
       }
 
       // Equipment is optional (warning only, not blocking)
-      const equipFromOrc = getEquipamento(entry.orcamento);
+      const equipFromOrc = getEquipamento(source.budget as GCOrcamento);
 
       const bodyPayload: Record<string, unknown> = {
-        orcamento: entry.orcamento,
+        orcamento: source.budget,
+        budget_kind: source.kind,
         auvo_user_id: auvoUserId,
         gc_usuario_id: (profile as any)?.gc_usuario_id || undefined,
       };
@@ -495,6 +511,7 @@ export default function RastreadorPage() {
 
       setGenerationResult({
         success: true,
+        docKind: data.doc_kind,
         auvoTaskId: data.auvo_task_id,
         osCodigo: data.os_codigo,
       });
@@ -840,7 +857,7 @@ export default function RastreadorPage() {
             )}
             {!entry.osLinked && ready && alreadyGenerated && (
               <Badge variant="outline" className="text-[10px] px-1.5 border-green-500 text-green-600">
-                <CheckCircle2 className="h-3 w-3 mr-1" /> OS Gerada
+                <CheckCircle2 className="h-3 w-3 mr-1" /> Documento gerado
               </Badge>
             )}
             {!entry.osLinked && ready && !alreadyGenerated && (
@@ -852,7 +869,7 @@ export default function RastreadorPage() {
                 disabled={isGenerating}
               >
                 {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                Gerar OS
+                Gerar {documentLabelForBudget(entry.orcamento.budget_kind)}
               </Button>
             )}
             <span className="text-xs text-muted-foreground">{formatDate(entry.orcamento.data)}</span>
@@ -918,7 +935,7 @@ export default function RastreadorPage() {
             ))}
             {hasConflict && (
               <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700">
-                ⚠ Itens comprometidos: se esta OS for gerada, outros orçamentos/OSs que precisam das mesmas peças poderão ficar sem estoque.
+                ⚠ Itens comprometidos: se este documento for gerado, outros orçamentos/OSs que precisam das mesmas peças poderão ficar sem estoque.
               </div>
             )}
           </div>
@@ -1491,7 +1508,7 @@ export default function RastreadorPage() {
                 <div className="flex items-center gap-2">
                   <PackageCheck className="h-4 w-4 text-green-600" />
                   <h2 className="text-sm font-bold text-foreground">
-                    Prontos para virar OS ({prontosOrdenados.length})
+                    Prontos para gerar venda ou OS ({prontosOrdenados.length})
                   </h2>
                 </div>
                 <div className="space-y-2">
@@ -1591,9 +1608,9 @@ export default function RastreadorPage() {
       <Dialog open={!!confirmEntry} onOpenChange={(open) => { if (!open) { setConfirmEntry(null); setGenerationResult(null); setManualEquipamento(''); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Gerar OS + Tarefa Auvo</DialogTitle>
+            <DialogTitle>Gerar {confirmDocLabel} + Tarefa Auvo</DialogTitle>
             <DialogDescription>
-              Confirme a geração da OS e tarefa de execução.
+              {confirmBudgetKind === 'produto' ? 'Orçamento de produto: gerar venda e tarefa de entrega.' : confirmBudgetKind === 'servico' ? 'Orçamento de serviço: gerar OS e tarefa de execução.' : 'Conferindo o tipo do orçamento no GestãoClick.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1683,8 +1700,8 @@ export default function RastreadorPage() {
                 <p>O sistema irá:</p>
                 <ol className="list-decimal list-inside space-y-0.5 ml-1">
                   <li>Criar tarefa no Auvo (sem técnico, sem data)</li>
-                  <li>Criar OS no GestãoClick com o nº da tarefa</li>
-                  <li>Vincular nº do orçamento e tarefa de execução</li>
+                  <li>Criar {confirmDocLabel} no GestãoClick com o nº da tarefa</li>
+                  <li>Vincular nº do orçamento e tarefa de {confirmBudgetKind === 'produto' ? 'entrega' : 'execução'}</li>
                 </ol>
               </div>
             </div>
@@ -1696,7 +1713,7 @@ export default function RastreadorPage() {
                 <CheckCircle2 className="h-5 w-5 text-green-600" />
                 <span className="font-semibold text-sm text-green-600">Gerado com sucesso!</span>
               </div>
-              <p className="text-sm">OS: <strong>#{generationResult.osCodigo}</strong></p>
+              <p className="text-sm">{generationResult.docKind === 'venda' ? 'Venda' : confirmDocLabel}: <strong>#{generationResult.osCodigo}</strong></p>
               <p className="text-sm">Tarefa Auvo: <strong>#{generationResult.auvoTaskId}</strong></p>
             </div>
           )}
@@ -1706,16 +1723,19 @@ export default function RastreadorPage() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className={`h-5 w-5 ${generationResult.duplicate ? 'text-amber-600' : 'text-destructive'}`} />
                 <span className={`font-semibold text-sm ${generationResult.duplicate ? 'text-amber-600' : 'text-destructive'}`}>
-                  {generationResult.duplicate ? 'OS já gerada!' : 'Erro na geração'}
+                  {generationResult.duplicate ? 'Documento já gerado!' : 'Erro na geração'}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">{generationResult.error}</p>
               {generationResult.duplicate && generationResult.osCodigo && (
-                <p className="text-sm font-medium">OS existente: <strong>#{generationResult.osCodigo}</strong></p>
+                <p className="text-sm font-medium">Documento existente: <strong>#{generationResult.osCodigo}</strong></p>
               )}
             </div>
           )}
 
+          {!generationResult && (generationSourceQuery.error || generationReadyQuery.error) && (
+            <p role="alert" className="text-sm text-destructive">{String((generationSourceQuery.error || generationReadyQuery.error)?.message)}</p>
+          )}
           <DialogFooter>
             {!generationResult && (
               <>
@@ -1724,7 +1744,7 @@ export default function RastreadorPage() {
                 </Button>
                 <Button
                   onClick={() => confirmEntry && handleGenerateOS(confirmEntry)}
-                  disabled={generatingOS || (() => {
+                  disabled={generatingOS || !generationSourceQuery.data || !!generationSourceQuery.error || !generationReadyQuery.data || !!generationReadyQuery.error || (() => {
                     if (!confirmEntry) return true;
                     const sourceTaskId = getSourceTaskOsId(confirmEntry.orcamento);
                     const hasValidSourceTask = parsePositiveInt(sourceTaskId) !== null;

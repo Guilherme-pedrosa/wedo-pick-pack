@@ -144,10 +144,10 @@ export async function rastrearOrcamentos(
   const allOrcamentos: GCOrcamento[] = [];
   const situacaoSet = new Set(situacaoIds);
 
-  for (const sid of situacaoIds) {
+  for (const sid of situacaoIds) for (const kind of ['produto', 'servico'] as const) {
     let page = 1;
     while (true) {
-      const res = await listOrcamentos(sid, page, nomeCliente);
+      const res = await listOrcamentos(sid, page, nomeCliente, kind);
       const filtered = res.data.filter(o => situacaoSet.has(String(o.situacao_id)));
       allOrcamentos.push(...filtered);
       if (page >= res.meta.total_paginas) break;

@@ -127,6 +127,7 @@ export interface GCOrcamentoProduto {
 }
 
 export interface GCOrcamento {
+  budget_kind?: 'produto' | 'servico';
   id: string;
   codigo: string;
   cliente_id: string;

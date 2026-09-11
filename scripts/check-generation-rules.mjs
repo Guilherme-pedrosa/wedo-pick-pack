@@ -6,7 +6,7 @@ const response=await fetch(`${env.VITE_SUPABASE_URL}/functions/v1/generate-os`,{
   body:JSON.stringify({action:'generation_rules'}),signal:AbortSignal.timeout(30000),
 });
 const result=await response.json();
-const ready=response.ok && result.version==='2026-09-11-product-sales-v1'
+const ready=response.ok && result.version==='2026-09-11-budget-kind-v2'
   && result.rules?.venda?.budgetStatusId==='7706107' && result.rules?.venda?.documentStatusId==='9303817'
   && result.rules?.venda?.questionnaireId===224444;
 console.log(JSON.stringify({ready,httpStatus:response.status,result}));

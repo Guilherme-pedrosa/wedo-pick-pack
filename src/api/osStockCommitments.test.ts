@@ -15,6 +15,7 @@ describe('compromissos globais de estoque', () => {
   it('não conta executadas ou canceladas, mas conta NÃO EXECUTADO', () => {
     expect(pendingOsLines(os('100', 'EXECUTADO - AGUARDANDO PAGAMENTO'))).toEqual([]);
     expect(pendingOsLines(os('100', 'Cancelada - Uso em OS'))).toEqual([]);
+    expect(pendingOsLines(os('8883', 'CHAMADO FECHADO - FATURADO'))).toEqual([]);
     expect(pendingOsLines(os('100', 'NÃO EXECUTADO'))).toHaveLength(1);
   });
   it('mostra a OS aguardando execução já baixada sem descontar duas vezes do saldo do GC', () => {
@@ -26,6 +27,10 @@ describe('compromissos globais de estoque', () => {
     const rows = pendingOsLines(os('100', undefined, '0', 'v2'));
     expect(commitmentFor(rows, 'p', 'v').quantity).toBe(0);
     expect(() => assertStockConflict(1, 1, 1, rows, 'p', 'v')).toThrow('reservas locais 1');
+  });
+  it('não inventa vínculo com produto do catálogo para uma linha avulsa sem produto_id', () => {
+    const document=os('4846');document.produtos[0].produto.produto_id='';
+    expect(pendingOsLines(document)).toEqual([]);
   });
   it('lê a segunda página e não publica resultado parcial quando há falha', async () => {
     const request = vi.fn().mockResolvedValueOnce({ data: [os('1')], meta: { total_paginas: 2, total_registros: 2, pagina_atual: 1 } })

@@ -978,9 +978,9 @@ export type Database = {
       }
       partial_writeoff_batches: {
         Row: {
-          auvo_task_requested: boolean | null
           auvo_task_error: string | null
           auvo_task_id: string | null
+          auvo_task_requested: boolean | null
           auxiliary_document_code: string | null
           auxiliary_document_id: string | null
           auxiliary_document_type: string
@@ -998,8 +998,8 @@ export type Database = {
         }
         Insert: {
           auvo_task_error?: string | null
-          auvo_task_requested?: boolean | null
           auvo_task_id?: string | null
+          auvo_task_requested?: boolean | null
           auxiliary_document_code?: string | null
           auxiliary_document_id?: string | null
           auxiliary_document_type: string
@@ -1017,8 +1017,8 @@ export type Database = {
         }
         Update: {
           auvo_task_error?: string | null
-          auvo_task_requested?: boolean | null
           auvo_task_id?: string | null
+          auvo_task_requested?: boolean | null
           auxiliary_document_code?: string | null
           auxiliary_document_id?: string | null
           auxiliary_document_type?: string
@@ -1180,6 +1180,7 @@ export type Database = {
           client_id: string
           client_name: string
           completed_at: string | null
+          consolidation_stage: string | null
           created_at: string
           created_by: string | null
           created_by_name: string | null
@@ -1187,6 +1188,9 @@ export type Database = {
           definitive_document_code: string | null
           definitive_document_id: string | null
           document_type: string
+          execution_documents: Json
+          execution_verified_at: string | null
+          flow_mode: string
           id: string
           reconciliation_reason: string | null
           status: string
@@ -1200,6 +1204,7 @@ export type Database = {
           client_id: string
           client_name: string
           completed_at?: string | null
+          consolidation_stage?: string | null
           created_at?: string
           created_by?: string | null
           created_by_name?: string | null
@@ -1207,6 +1212,9 @@ export type Database = {
           definitive_document_code?: string | null
           definitive_document_id?: string | null
           document_type: string
+          execution_documents?: Json
+          execution_verified_at?: string | null
+          flow_mode?: string
           id?: string
           reconciliation_reason?: string | null
           status?: string
@@ -1220,6 +1228,7 @@ export type Database = {
           client_id?: string
           client_name?: string
           completed_at?: string | null
+          consolidation_stage?: string | null
           created_at?: string
           created_by?: string | null
           created_by_name?: string | null
@@ -1227,6 +1236,9 @@ export type Database = {
           definitive_document_code?: string | null
           definitive_document_id?: string | null
           document_type?: string
+          execution_documents?: Json
+          execution_verified_at?: string | null
+          flow_mode?: string
           id?: string
           reconciliation_reason?: string | null
           status?: string
@@ -1316,6 +1328,27 @@ export type Database = {
           situacao_id?: string
           updated_at?: string
           valor_total?: number
+        }
+        Relationships: []
+      }
+      preserved_auvo_tasks: {
+        Row: {
+          budget_id: string
+          created_at: string
+          error_message: string | null
+          task_id: string
+        }
+        Insert: {
+          budget_id: string
+          created_at?: string
+          error_message?: string | null
+          task_id: string
+        }
+        Update: {
+          budget_id?: string
+          created_at?: string
+          error_message?: string | null
+          task_id?: string
         }
         Relationships: []
       }
@@ -2206,6 +2239,11 @@ export type Database = {
       }
     }
     Functions: {
+      compras_partial_revision: { Args: never; Returns: string }
+      compras_worker_api: {
+        Args: { p_action: string; p_payload?: Json; p_token: string }
+        Returns: Json
+      }
       has_any_admin: { Args: never; Returns: boolean }
       has_role: {
         Args: {
@@ -2213,6 +2251,19 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      partial_execution_authorized: {
+        Args: { p_token: string }
+        Returns: boolean
+      }
+      partial_execution_worker_api: {
+        Args: {
+          p_action: string
+          p_operation_id?: string
+          p_payload?: Json
+          p_token: string
+        }
+        Returns: Json
       }
       partial_writeoff_attach_auxiliary: {
         Args: {
@@ -2240,6 +2291,16 @@ export type Database = {
           p_reason?: string
         }
         Returns: string
+      }
+      partial_writeoff_checkpoint: {
+        Args: {
+          p_document_code?: string
+          p_document_id?: string
+          p_operation_id: string
+          p_payload?: Json
+          p_stage: string
+        }
+        Returns: undefined
       }
       partial_writeoff_claim_confirmation: {
         Args: { p_batch_id: string }
@@ -2297,6 +2358,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      partial_writeoff_historical_tasks: {
+        Args: { p_operation_id: string }
+        Returns: Json
+      }
       partial_writeoff_mark_batch_reconciliation: {
         Args: {
           p_actor_id?: string
@@ -2317,6 +2382,14 @@ export type Database = {
         }
         Returns: string
       }
+      partial_writeoff_reconcile_gc_debit: {
+        Args: { p_batch_id: string; p_gc_document: Json; p_source_budget: Json }
+        Returns: Json
+      }
+      partial_writeoff_record_execution: {
+        Args: { p_documents: Json; p_operation_id: string }
+        Returns: string
+      }
       partial_writeoff_refresh_inventory_consumption: {
         Args: { p_batch_id: string }
         Returns: number
@@ -2325,10 +2398,25 @@ export type Database = {
         Args: { p_batch_id: string; p_error_message: string }
         Returns: undefined
       }
+      partial_writeoff_request_auvo_task: {
+        Args: { p_batch_id: string }
+        Returns: Json
+      }
       partial_writeoff_reserve_batch: {
         Args: {
           p_actor_id?: string
           p_actor_name?: string
+          p_idempotency_key: string
+          p_items: Json
+          p_operation_id: string
+        }
+        Returns: Json
+      }
+      partial_writeoff_reserve_batch_with_options: {
+        Args: {
+          p_actor_id?: string
+          p_actor_name?: string
+          p_create_auvo_task?: boolean
           p_idempotency_key: string
           p_items: Json
           p_operation_id: string
@@ -2341,6 +2429,10 @@ export type Database = {
           p_actor_name?: string
           p_operation_id: string
         }
+        Returns: string
+      }
+      partial_writeoff_retry_confirmation: {
+        Args: { p_batch_id: string }
         Returns: string
       }
       partial_writeoff_unlock_reconciliation: {

@@ -754,7 +754,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     .single();
   if (batchError || !batch) throw new Error('BATCH_NOT_FOUND');
   if (batch.status === 'confirmed') return getOperationGraph(batch.operation_id);
-  if (batch.status !== 'awaiting_checkout') throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
+  if (!['awaiting_checkout', 'reconciliation_required'].includes(batch.status)) throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
   const operation = await getOperationGraph(batch.operation_id);
   const sourceBeforeCheckout = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
   assertBudgetUnchanged(operation.budget_snapshot, sourceBeforeCheckout);
@@ -784,7 +784,16 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   }
   if (type === 'os' && String(currentDocument?.situacao_estoque) !== '1') await assertCheckoutStock(String(batch.auxiliary_document_id), currentDocument, batchId);
 
-  const { data: claim, error: claimError } = await cloud.rpc('partial_writeoff_claim_confirmation', {
+  if (String(currentDocument?.situacao_estoque) === '1') {
+    const reconciled = await cloud.rpc('partial_writeoff_reconcile_gc_debit', {
+      p_batch_id: batchId, p_gc_document: currentDocument, p_source_budget: sourceBeforeCheckout,
+    });
+    if (reconciled.error) throw reconciled.error;
+    return getOperationGraph(batch.operation_id);
+  }
+
+  const { data: claim, error: claimError } = await cloud.rpc(batch.status === 'reconciliation_required'
+    ? 'partial_writeoff_retry_confirmation' : 'partial_writeoff_claim_confirmation', {
     p_batch_id: batchId,
   });
   if (claimError) throw claimError;
@@ -792,21 +801,6 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
 
   const settings = await getSettings();
   const stockStatus = settings[`${type}_stock_status_id`];
-  const currentStatus = normalizeId(currentDocument?.situacao_id);
-  // O documento pode ter sido baixado por fora (ex.: handoff "Retirada pelo técnico").
-  // Nesse caso o estoque já saiu no GestãoClick e reenviar o PUT só geraria erro.
-  const alreadyDebited = String(currentDocument?.situacao_estoque) === '1';
-  if (alreadyDebited) {
-    const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
-      p_batch_id: batchId,
-      p_success: true,
-      p_error_message: null,
-      p_actor_id: auth.id,
-      p_actor_name: auth.name,
-    });
-    if (finishError) throw finishError;
-    return getOperationGraph(batch.operation_id);
-  }
   try {
     await updateDocumentStatus(type, String(batch.auxiliary_document_id), stockStatus);
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
@@ -1198,31 +1192,31 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
       const expected = [waitingId, stockId, TECHNICIAN_WITHDRAWAL_STATUS_ID, '7063705'].filter(Boolean);
 
       const enriched = { ...base, situacaoId, situacaoNome, documentCode: String(document.codigo || base.documentCode || '') };
-      const debited = situacaoId === stockId || situacaoId === TECHNICIAN_WITHDRAWAL_STATUS_ID;
+      const debited = String(document.situacao_estoque) === '1';
 
       if (cancelId && situacaoId === cancelId) {
         results.push({ ...enriched, state: 'cancelled', message: `Documento cancelado no GestãoClick ("${situacaoNome}").` });
-      } else if (debited && base.batchStatus === 'awaiting_checkout') {
+      } else if (debited && ['awaiting_checkout', 'reconciliation_required'].includes(base.batchStatus)) {
         // Estoque já saiu no ERP (checkout/handoff feito por fora): confirma o lote
         // localmente para a reserva virar retirada e parar de bloquear saldo.
         let message = `Estoque já baixado no GestãoClick ("${situacaoNome}"). Lote confirmado automaticamente.`;
         try {
-          const claim = await cloud.rpc('partial_writeoff_claim_confirmation', { p_batch_id: batch.id });
-          if (claim.error) throw claim.error;
-          if (claim.data !== 'confirmed') {
-            const finish = await cloud.rpc('partial_writeoff_finish_confirmation', {
-              p_batch_id: batch.id,
-              p_success: true,
-              p_error_message: null,
-              p_actor_id: null,
-              p_actor_name: 'Auditoria automática',
-            });
-            if (finish.error) throw finish.error;
-          }
+          const operation = await getOperationGraph(operationId);
+          const source = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
+          assertBudgetUnchanged(operation.budget_snapshot, source);
+          assertOperationQuantities(operation.budget_snapshot, operation.items);
+          // One atomic, idempotent local confirmation. Never send another GC PUT.
+          // The RPC also checks document identity, marker, client and every batch quantity.
+          const reconciled = await cloud.rpc('partial_writeoff_reconcile_gc_debit', {
+            p_batch_id: batch.id, p_gc_document: document, p_source_budget: source,
+          });
+          if (reconciled.error) throw reconciled.error;
         } catch (syncError) {
           message = `Estoque já baixado no GestãoClick ("${situacaoNome}"), mas a confirmação local falhou: ${compact(syncError)}`;
+          results.push({ ...enriched, state: 'error', message });
+          continue;
         }
-        results.push({ ...enriched, state: 'ok', message });
+        results.push({ ...enriched, batchStatus: 'confirmed', state: 'ok', message });
       } else if (expected.length && !expected.includes(situacaoId) && !isExecutedStatus(situacaoNome)) {
         results.push({ ...enriched, state: 'status_changed', message: `Situação mudou no GestãoClick: "${situacaoNome}".` });
       } else {

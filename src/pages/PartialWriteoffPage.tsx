@@ -382,6 +382,8 @@ export default function PartialWriteoffPage() {
       const missing = result.filter(item => item.state === 'missing').length;
       const cancelled = result.filter(item => item.state === 'cancelled').length;
       const changed = result.filter(item => item.state === 'status_changed').length;
+      const errors = result.filter(item => item.state === 'error');
+      await refresh();
       if (missing || cancelled) {
         toast.error(`Auditoria: ${missing} documento(s) excluído(s) e ${cancelled} cancelado(s) no GestãoClick. Cancele os lotes para liberar as reservas.`, { duration: 10000 });
         
@@ -396,6 +398,8 @@ export default function PartialWriteoffPage() {
           }
         }
         await refresh();
+      } else if (errors.length) {
+        toast.error(errors.map(item => item.message).join('\n'), { duration: 10000 });
       } else if (changed) {
         toast.warning(`Auditoria: ${changed} documento(s) com situação diferente da esperada.`);
       } else {
@@ -496,6 +500,13 @@ export default function PartialWriteoffPage() {
     try {
       const previousStock = stockQuery.data;
       forceFreshStockRef.current = true;
+      if (selected?.batches.some(batch => ['awaiting_checkout', 'reconciliation_required'].includes(batch.status))) {
+        const audits = await auditPartialDocuments(selected.id);
+        setAudits(Object.fromEntries(audits.map(item => [item.batchId, item])));
+        setAuditedAt(new Date().toISOString());
+        const errors = audits.filter(item => item.state === 'error');
+        if (errors.length) throw new Error(errors.map(item => item.message).join('\n'));
+      }
       await queryClient.invalidateQueries({ queryKey: ['partial-checkout-queue'] });
       const result = await operationsQuery.refetch();
       if (result.error) throw result.error;
@@ -938,23 +949,22 @@ export default function PartialWriteoffPage() {
                         const max = availability.maxReservable;
                         const disabled = max <= 0 || !commitmentsQuery.data || !!commitmentsQuery.error || !['awaiting_separation', 'partial_separation', 'awaiting_balance'].includes(selected.status);
                         const isFullyWithdrawn = Number(item.withdrawn_quantity) >= Number(item.original_quantity);
-                        const notWithdrawn = !isFullyWithdrawn;
 
                         return (
                           <tr key={item.id} className={cn(
                             "border-t transition-colors",
-                            overcommitted ? "bg-red-50" : isFullyWithdrawn ? "bg-green-50/50" : "bg-red-50/50"
+                            isFullyWithdrawn ? "bg-green-50/50" : "bg-red-50/50"
                           )}>
                             <td className="px-3 py-2">
                               <p className={cn("font-medium", isFullyWithdrawn ? "text-green-800" : "text-red-800")}>{item.product_name}</p>
                               <p className="text-xs text-muted-foreground">{productCodeFor(item) || (internalCodesQuery.isLoading ? '…' : '')}</p>
                             </td>
                             <td className="px-3 py-2 text-right">{fmtQty(item.original_quantity)}</td>
-                            <td className={cn("px-3 py-2 text-right font-medium", isFullyWithdrawn ? "text-green-700 font-bold" : "text-red-700")}>{fmtQty(item.withdrawn_quantity)}</td>
+                            <td className={cn("px-3 py-2 text-right font-medium", Number(item.withdrawn_quantity) > 0 ? "text-green-700 font-bold" : "text-red-700")}>{fmtQty(item.withdrawn_quantity)}</td>
 
                             <td className="px-3 py-2 text-right text-amber-700">{fmtQty(item.reserved_quantity)}</td>
 
-                            <td className="px-3 py-2 text-right font-semibold">{fmtQty(item.pending_purchase_quantity)}</td>
+                            <td className={cn("px-3 py-2 text-right font-semibold", Number(item.pending_purchase_quantity) > 0 ? "text-red-700" : "text-green-700")}>{fmtQty(item.pending_purchase_quantity)}</td>
                             <td className="px-3 py-2 text-right">
                               {stockQuery.isFetching
                                 ? <Loader2 className="ml-auto h-4 w-4 animate-spin text-muted-foreground" aria-label="Consultando saldo" />

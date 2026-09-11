@@ -335,8 +335,8 @@ export async function forceDeletePartialOperation(operationId: string): Promise<
 
 export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]> {
   const operations = await listPartialOperations();
-  return operations.flatMap((operation) => operation.batches
-    .filter((batch) => batch.status === 'awaiting_checkout' && batch.auxiliary_document_id)
+  return operations.filter(operation => !['completed', 'cancelled', 'consolidating'].includes(operation.status)).flatMap((operation) => operation.batches
+    .filter((batch) => ['awaiting_checkout', 'reconciliation_required'].includes(batch.status) && batch.auxiliary_document_id)
     .map((batch) => ({
       batchId: batch.id,
       operationId: operation.id,

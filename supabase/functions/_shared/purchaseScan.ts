@@ -22,26 +22,45 @@ export interface PurchaseScanPorts {
   progress?(step: string, checked: number, total: number): void;
 }
 
+class CatalogChanged extends Error {}
+
 export async function purchaseCatalog(gc: PurchaseScanPorts['gc'], path: string, progress?: PurchaseScanPorts['progress']): Promise<GcRecord[]> {
-  const rows: GcRecord[] = [], seen = new Set<string>();
-  let pages = 1, count: number | undefined;
-  for (let page = 1; page <= pages; page++) {
-    const res = await gc(`${path}${path.includes('?') ? '&' : '?'}limite=100&pagina=${page}`);
-    const total = Number(res.meta?.total_paginas), records = Number(res.meta?.total_registros);
-    if (!Array.isArray(res.data) || !Number.isInteger(total) || total < 0 || !Number.isInteger(records) || records < 0
-      || Number(res.meta?.pagina_atual) !== page || (page > 1 && (pages !== total || count !== records))) {
-      throw new Error(`Consulta incompleta de ${path}. Atualize a lista novamente.`);
+  // O GC é usado durante a varredura. Recomeça somente o catálogo que mudou,
+  // sem aceitar páginas de momentos diferentes nem reexecutar consultas já validadas.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const rows: GcRecord[] = [], seen = new Set<string>();
+      let pages = 1, count: number | undefined;
+      const request = (page: number) => gc(`${path}${path.includes('?') ? '&' : '?'}limite=100&pagina=${page}`);
+      const consume = (res: GcRecord, page: number) => {
+        const total = Number(res.meta?.total_paginas), records = Number(res.meta?.total_registros);
+        if (!Array.isArray(res.data) || !Number.isInteger(total) || total < 0 || !Number.isInteger(records) || records < 0 || Number(res.meta?.pagina_atual) !== page) {
+          throw new Error(`Consulta incompleta de ${path}. Atualize a lista novamente.`);
+        }
+        if (page > 1 && (pages !== total || count !== records)) throw new CatalogChanged(`O catálogo ${path} mudou durante a leitura.`);
+        pages = total; count = records;
+        for (const raw of res.data) {
+          const row = unwrap(raw), rowId = id(row.id);
+          if (!rowId || seen.has(rowId)) throw new CatalogChanged(`Paginação inconsistente de ${path}.`);
+          seen.add(rowId); rows.push(row);
+        }
+        progress?.(`Conferindo ${path.includes('ordens_servicos') ? 'OS' : path.includes('orcamentos') ? 'orçamentos' : 'pedidos de compra'}… página ${page} de ${pages}`, page, pages);
+      };
+      consume(await request(1), 1);
+      // Três leituras independentes por vez reduzem a janela em que o catálogo pode mudar.
+      for (let page = 2; page <= pages; page += 3) {
+        const pageNumbers = Array.from({ length: Math.min(3, pages - page + 1) }, (_, i) => page + i);
+        const responses = await Promise.all(pageNumbers.map(request));
+        responses.forEach((res, i) => consume(res, pageNumbers[i]));
+      }
+      if (rows.length !== count) throw new CatalogChanged(`Registros ausentes em ${path}. A lista anterior foi preservada.`);
+      return rows;
+    } catch (error) {
+      if (!(error instanceof CatalogChanged) || attempt === 2) throw error;
+      progress?.('O GC mudou durante a consulta. Repetindo a conferência desse catálogo…', 0, 1);
     }
-    pages = total; count = records;
-    for (const raw of res.data) {
-      const row = unwrap(raw), rowId = id(row.id);
-      if (!rowId || seen.has(rowId)) throw new Error(`Paginação inconsistente de ${path}. Atualize a lista novamente.`);
-      seen.add(rowId); rows.push(row);
-    }
-    progress?.(`Conferindo ${path.includes('ordens_servicos') ? 'OS' : path.includes('orcamentos') ? 'orçamentos' : 'pedidos de compra'}… página ${page} de ${pages}`, page, pages);
   }
-  if (rows.length !== count) throw new Error(`Registros ausentes em ${path}. A lista anterior foi preservada.`);
-  return rows;
+  throw new Error('Não foi possível concluir a consulta do GC.');
 }
 
 /** Mesmo motor no navegador e na rotina automática. Nunca modifica documentos ou quantidades. */

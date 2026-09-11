@@ -121,4 +121,15 @@ describe('compras com saldos de baixas parciais', () => {
   it('recusa paginação truncada em vez de omitir documentos da lista', async () => {
     await expect(purchaseCatalog(async () => ({ data: [], meta: { total_paginas: 1, total_registros: 2, pagina_atual: 1 } }), '/api/compras')).rejects.toThrow('Registros ausentes');
   });
+  it('repete o catálogo se uma OS entrar durante a leitura e só retorna páginas consistentes', async () => {
+    let attempt = 0;
+    const rows = await purchaseCatalog(async path => {
+      const page = Number(new URL(path, 'https://gc.test').searchParams.get('pagina'));
+      if (page === 1) attempt++;
+      return { data: [{ id: `os-${page}` }], meta: { total_paginas: 2, pagina_atual: page,
+        total_registros: attempt === 1 && page === 2 ? 3 : 2 } };
+    }, '/api/ordens_servicos');
+    expect(attempt).toBe(2);
+    expect(rows.map(r => r.id)).toEqual(['os-1', 'os-2']);
+  });
 });

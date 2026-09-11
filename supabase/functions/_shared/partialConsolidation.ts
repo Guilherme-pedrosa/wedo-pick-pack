@@ -2,6 +2,7 @@ import { appendUniqueNote, consolidationReference, executionDocument, isCancelle
 import type { ConsolidationOperation as PartialWriteoffOperation } from './partialExecution.ts';
 import { assertBudgetUnchanged, documentDifferences } from './budgetIntegrity.ts';
 import { assertRequestedAuvoTasksLinked } from './partialAuvo.ts';
+import { budgetTechnicalHours } from './technicalHours.ts';
 
 export interface ConsolidationPorts<T extends PartialWriteoffOperation = PartialWriteoffOperation> {
   gc(path: string, method?: string, payload?: unknown): Promise<GcRecord>;
@@ -38,7 +39,7 @@ export function assertDefinitiveContents(source: GcRecord, actual: GcRecord): vo
 /** Uma troca de situação não autoriza perder os demais campos do documento. */
 export function assertStatusOnlyChange(source: GcRecord, actual: GcRecord): void {
   const differences = documentDifferences(source, actual);
-  if (differences.length) throw new Error(`A troca de situação alterou o campo ${differences[0]}. Conferência obrigatória; os dados anteriores foram preservados no histórico.`);
+  if (differences.length) throw new Error(`A troca de situação alterou o campo ${differences[0]}. Confira o documento no GC antes de continuar.`);
 }
 
 export function writableDocument(document: GcRecord): GcRecord {
@@ -96,7 +97,8 @@ export function definitivePayload(operation: PartialWriteoffOperation, budget: G
   const sourceValue = (id: string) => String(sourceAttributes.find((a: GcRecord) => String(a.atributo_id) === id)?.conteudo || '');
   if (sourceValue('73341') || taskIds[0]) setAttr('73343', sourceValue('73341') || taskIds[0]);
   setAttr('68658', sourceValue('73350') || 'CLIENTE');
-  setAttr('73897', sourceValue('67350') || '0');
+  const hours = budgetTechnicalHours(budget);
+  if (hours !== null) setAttr('73897', hours);
   const marker = `PP-CONSOLIDACAO-${operation.id}`;
   const notes = auxiliaries.map(d => `OS parcial #${d.codigo} (${d.id}) — ${d.nome_situacao}\n${d.observacoes || ''}\n${d.observacoes_interna || ''}`).join('\n\n');
   return { ...writableDocument(budget), data: budget.data || new Date().toISOString().slice(0, 10),

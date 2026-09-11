@@ -40,6 +40,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const session = useCheckoutStore(s => s.session);
   const config = useCheckoutStore(s => s.config);
   const concludeSession = useCheckoutStore(s => s.concludeSession);
+  const recordGCConfirmation = useCheckoutStore(s => s.recordGCConfirmation);
   const queryClient = useQueryClient();
   const isPartialWriteoff = !!session?.partialWriteoff;
 
@@ -55,14 +56,14 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const statusQuery = useQuery({
     queryKey: ['statuses-conclusion', session?.tipo],
     queryFn: () => session?.tipo === 'os' ? getStatusOS() : getStatusVendas(),
-    enabled: open && !isPartialWriteoff,
+    enabled: open && !isPartialWriteoff && !session?.gcConfirmation,
   });
 
   const defaultStatus = statusQuery.data?.some((s) => s.id === configuredDefaultStatus)
     ? configuredDefaultStatus
     : '';
   const hasDefault = !!defaultStatus;
-  const effectiveStatus = isPartialWriteoff ? 'partial-writeoff' : (hasDefault ? defaultStatus : selectedStatus);
+  const effectiveStatus = session?.gcConfirmation?.targetStatusId || (isPartialWriteoff ? 'partial-writeoff' : (hasDefault ? defaultStatus : selectedStatus));
   const configuredStatusName = statusQuery.data?.find(s => s.id === defaultStatus)?.nome || (hasDefault ? `Status #${defaultStatus}` : '');
 
   if (!session) return null;
@@ -89,7 +90,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
       toast.error('Selecione um status');
       return;
     }
-    if (!isPartialWriteoff && !statusQuery.data?.some((status) => status.id === effectiveStatus)) {
+    if (!session.gcConfirmation && !isPartialWriteoff && !statusQuery.data?.some((status) => status.id === effectiveStatus)) {
       toast.error('A situação selecionada não pertence a este tipo de documento.');
       return;
     }
@@ -97,7 +98,10 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
     try {
       let targetStatusName: string;
       let targetStatusId: string;
-      if (isPartialWriteoff) {
+      if (session.gcConfirmation) {
+        targetStatusName = session.gcConfirmation.targetStatusName;
+        targetStatusId = session.gcConfirmation.targetStatusId;
+      } else if (isPartialWriteoff) {
         await confirmPartialBatch(session.partialWriteoff!.batchId);
         targetStatusName = 'Baixa parcial aplicada (somente estoque)';
         targetStatusId = `partial:${session.partialWriteoff!.batchId}`;
@@ -107,12 +111,14 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;
       } else {
-        await updateVendaStatus(session.refId, session.rawOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
+        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder, undefined, 'venda');
+        await updateVendaStatus(session.refId, freshOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;
       }
 
-      const concludedAt = new Date().toISOString();
+      const concludedAt = session.gcConfirmation?.concludedAt || new Date().toISOString();
+      recordGCConfirmation({ targetStatusId, targetStatusName, concludedAt });
 
       await createSeparation({
         order_type: session.tipo,
@@ -202,7 +208,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
       } else if (msg === 'AUTH_REQUIRED') {
         toast.error('🔒 Sessão expirada. Faça login novamente para concluir a separação.');
       } else if (msg === 'SEPARATION_SAVE_FAILED') {
-        toast.error('💾 Falha ao registrar a separação no histórico. Nada foi finalizado localmente.');
+        toast.error('O GC já confirmou a atualização. Falhou apenas o histórico: tente salvar novamente; a baixa não será repetida.', { duration: 10000 });
       } else {
         toast.error(`Erro ao atualizar GestãoClick: ${msg}`);
       }
@@ -229,6 +235,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           </div>
           <p>Itens conferidos: <strong>{confirmedCount} de {totalCount}</strong></p>
           <p>Tempo de separação: <strong>{elapsed()}</strong></p>
+          {session.gcConfirmation && <p className="text-amber-700">GC já confirmado. Falta salvar o histórico da separação.</p>}
           {forced && unconfirmed > 0 && (
             <div className="flex items-center gap-2 text-amber-700 bg-amber-50 rounded p-2 mt-2">
               <AlertTriangle className="h-4 w-4" />
@@ -242,7 +249,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
             <label className="text-sm font-medium">Movimento no GestãoClick:</label>
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
               <strong>Baixa parcial — somente estoque.</strong><br />
-              Financeiro, comissão, serviços e Auvo não serão lançados neste lote.
+              Esta confirmação movimenta somente estoque. A tarefa Auvo, quando solicitada, fica vinculada ao lote.
             </div>
           </div>
         ) : hasDefault ? (
@@ -304,7 +311,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
             className="bg-success text-success-foreground hover:bg-success/90"
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            ✓ Confirmar e Atualizar
+            {session.gcConfirmation ? 'Salvar histórico pendente' : '✓ Confirmar e Atualizar'}
           </Button>
         </DialogFooter>
       </DialogContent>

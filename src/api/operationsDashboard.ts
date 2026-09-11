@@ -148,6 +148,18 @@ function isBusinessActivity(log: SystemLog): boolean {
   return !['auth', 'navigation', 'dashboard', 'admin'].includes(log.module);
 }
 
+export function summarizePartialOperations(operations: Array<{ id: string; status: string }>, batches: Array<{ operation_id: string; status: string }>) {
+  const active = operations.filter(row => !['completed', 'cancelled'].includes(row.status));
+  const activeIds = new Set(active.map(row => row.id));
+  const pending = batches.filter(row => activeIds.has(row.operation_id) && ['awaiting_checkout', 'confirming', 'reconciliation_required'].includes(row.status));
+  const reconciliation = new Set([
+    ...active.filter(row => row.status === 'reconciliation_required').map(row => row.id),
+    ...pending.filter(row => row.status === 'reconciliation_required').map(row => row.operation_id),
+  ]);
+  return { active: active.length, awaitingBalance: active.filter(row => row.status === 'awaiting_balance').length,
+    reconciliationRequired: reconciliation.size, awaitingCheckoutBatches: pending.length };
+}
+
 export async function getCloudOperationsDashboard(
   now = new Date(),
 ): Promise<CloudOperationsDashboard> {
@@ -209,12 +221,12 @@ export async function getCloudOperationsDashboard(
       .limit(500),
     supabase
       .from('partial_writeoff_operations')
-      .select('status')
-      .neq('status', 'completed'),
+      .select('id, status')
+      .not('status', 'in', '(completed,cancelled)'),
     supabase
       .from('partial_writeoff_batches')
-      .select('status')
-      .eq('status', 'awaiting_checkout'),
+      .select('operation_id, status')
+      .in('status', ['awaiting_checkout', 'confirming', 'reconciliation_required']),
     supabase
       .from('boxes')
       .select('status, verified, needs_replenish')
@@ -293,12 +305,7 @@ export async function getCloudOperationsDashboard(
       scannedAt: tracker.created_at,
     } : null,
     generations,
-    partialWriteoff: {
-      active: activeOperations.length,
-      awaitingBalance: activeOperations.filter((row) => row.status === 'awaiting_balance').length,
-      reconciliationRequired: activeOperations.filter((row) => row.status === 'reconciliation_required').length,
-      awaitingCheckoutBatches: partialBatchesResult.data?.length || 0,
-    },
+    partialWriteoff: summarizePartialOperations(activeOperations, partialBatchesResult.data || []),
     assets: {
       activeBoxes: boxes.length,
       boxesPendingConference: boxes.filter((row) => !row.verified).length,

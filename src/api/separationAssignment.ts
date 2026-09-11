@@ -34,6 +34,8 @@ export async function assignSeparationToTechnician(input: {
   }
 
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('AUTH_REQUIRED');
+  if (separation.invalidated) throw new Error('Esta separação foi invalidada. Atualize antes de vincular o técnico.');
   let gcUsuarioId: string | undefined;
   let operatorName = separation.operator_name || 'Operador';
   if (user) {
@@ -53,7 +55,7 @@ export async function assignSeparationToTechnician(input: {
     .map((item) => `${item.code || item.name} x${item.confirmed_quantity}`)
     .join(', ');
   const extraItems = Math.max(0, items.length - 8);
-  const piecesQuantity = items.reduce((total, item) => total + Number(item.confirmed_quantity || item.expected_quantity || 0), 0);
+  const piecesQuantity = items.reduce((total, item) => total + Number(item.confirmed_quantity ?? 0), 0);
   const gcNote = [
     `Técnico vinculado às peças separadas: ${technician.name} (ID ${technician.gc_id})`,
     auvoTaskId ? `Tarefa Auvo ${auvoTaskId}` : null,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ClipboardCheck, Check, X, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +49,7 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
   const [stockProgress, setStockProgress] = useState<string | null>(null);
 
   // Reset when items change
-  useState(() => {
+  useEffect(() => {
     setCheckItems(
       items.map((i) => ({
         produto_id: i.produto_id,
@@ -59,7 +59,7 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
         observacao: "",
       }))
     );
-  });
+  }, [toolbox?.id, items]);
 
   const toggleItem = (idx: number) => {
     setCheckItems((prev) =>
@@ -122,7 +122,8 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
         observacao: item.observacao || null,
       }));
 
-      await (supabase.from("toolbox_conference_items") as any).insert(confItems);
+      const insertedItems = await (supabase.from("toolbox_conference_items") as any).insert(confItems);
+      if (insertedItems.error) throw insertedItems.error;
 
       // Log the conference
       await logToolboxMovement({
@@ -152,6 +153,9 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
           });
 
           toast.warning(`${missingItems.length} ferramenta(s) ausente(s)!`, { duration: 8000 });
+          toast.warning('Conferência registrada. O estoque das ferramentas ausentes não será devolvido, e o vínculo com o técnico será mantido até resolver a pendência.', { duration: 10000 });
+          onCompleted();
+          return;
         }
 
         // Return stock via stock adjustment reversal
@@ -175,18 +179,19 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
                 details: result.summary || "Estorno de ajuste de estoque no ERP",
               });
             } else {
-              toast.error(`Erro ao devolver estoque: ${result.error}`);
+              throw new Error(result.error || 'Estorno não confirmado');
             }
           } catch (err) {
             console.error("Stock entrada error:", err);
-            toast.error("Erro ao estornar ajuste de estoque no ERP.");
+            throw err;
           }
         }
 
         // Unlink technician and clear venda_gc_id
-        await (supabase.from("toolboxes") as any)
+        const unlinked = await (supabase.from("toolboxes") as any)
           .update({ technician_name: null, technician_gc_id: null, venda_gc_id: null })
-          .eq("id", toolbox.id);
+          .eq("id", toolbox.id).select('id').single();
+        if (unlinked.error || !unlinked.data) throw new Error('Estorno confirmado, mas o vínculo não foi salvo. Tente novamente; o estoque não será estornado duas vezes.');
 
         await logToolboxMovement({
           toolboxId: toolbox.id,
@@ -207,7 +212,7 @@ export default function ToolboxConferenceDialog({ toolbox, items, onClose, onCom
       onCompleted();
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao salvar conferência");
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar conferência. Vínculo preservado.");
     } finally {
       setSaving(false);
     }

@@ -1,3 +1,6 @@
+import { changeDocumentStatus } from './gcStatusUpdate';
+import { documentStockLines } from '../../supabase/functions/_shared/osStockCommitments';
+import { isCancelledStatus, isExecutedStatus } from './partialExecution';
 import { GCOrdemServico, GCVenda, GCSituacao, GCMeta, GCProdutoItem, GCOrdemCompra } from './types';
 import { listOrdensCompra } from './compras';
 import { MOCK_OS, MOCK_VENDAS, MOCK_STATUS_OS, MOCK_STATUS_VENDA } from './mockData';
@@ -20,9 +23,10 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
   const payload = options?.body ? JSON.parse(options.body) : undefined;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), GC_PROXY_TIMEOUT_MS);
+        timeout = setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), GC_PROXY_TIMEOUT_MS);
       });
 
       const invokePromise = supabase.functions.invoke('gc-proxy', {
@@ -30,6 +34,7 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
       });
 
       const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
+      clearTimeout(timeout);
 
       if (error) {
         const msg = error.message || 'Erro de conexão com o servidor';
@@ -78,6 +83,8 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
 
       if (message === 'REQUEST_TIMEOUT') throw new Error('TIMEOUT');
       throw err instanceof Error ? err : new Error('Erro de conexão com o servidor');
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -85,31 +92,6 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
 }
 
 const mockDelay = () => new Promise(r => setTimeout(r, 300));
-
-const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-function normalizeStatusId(value: unknown): string {
-  return String(value ?? '').trim();
-}
-
-async function confirmStatusApplied(tipo: 'os' | 'venda', id: string, expectedStatusId: string): Promise<boolean> {
-  const path = tipo === 'os' ? `/api/ordens_servicos/${id}` : `/api/vendas/${id}`;
-  const expected = normalizeStatusId(expectedStatusId);
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const res = await apiRequest<{ data?: { situacao_id?: string | number } }>(path);
-      const current = normalizeStatusId(res?.data?.situacao_id);
-      if (current === expected) return true;
-    } catch {
-      // ignore transient read errors and retry
-    }
-
-    if (attempt < 2) await wait(900);
-  }
-
-  return false;
-}
 
 // --- LIST ---
 export async function listOS(situacaoId?: string, pagina = 1, pesquisa?: string, limite = 100): Promise<{ data: GCOrdemServico[]; meta: GCMeta }> {
@@ -275,707 +257,16 @@ export async function getStatusVendas(): Promise<GCSituacao[]> {
 }
 
 // --- UPDATE STATUS ---
-async function fetchLatestForStatusUpdate<T>(path: string, fallback: T): Promise<T> {
-  try {
-    const res = await apiRequest<{ data?: T }>(path);
-    if (res?.data) return res.data;
-  } catch (error) {
-    console.warn(
-      `[GC] Failed to fetch latest doc before status update (${path}):`,
-      error instanceof Error ? error.message : error
-    );
-  }
-  return fallback;
+export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, _gcUsuarioId?: string, customNote?: string): Promise<void> {
+  if (isUsingMock()) { await mockDelay(); return; }
+  await changeDocumentStatus(apiRequest, 'os', id, rawOrder, newStatusId, operatorName, customNote);
 }
 
-type GCUpdateResponse = {
-  data?: { situacao_id?: string | number };
-  situacao_id?: string | number;
-};
-
-function roundTo(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round((value + Number.EPSILON) * factor) / factor;
+export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string, _gcUsuarioId?: string, customNote?: string): Promise<void> {
+  if (isUsingMock()) { await mockDelay(); return; }
+  await changeDocumentStatus(apiRequest, 'venda', id, rawOrder, newStatusId, operatorName, customNote);
 }
 
-function parseCurrency(value: unknown): number {
-  const raw = String(value ?? '').trim();
-  if (!raw) return 0;
-  const normalized = raw.includes(',')
-    ? raw.replace(/\./g, '').replace(',', '.')
-    : raw;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function formatCurrency(value: number, decimals = 2): string {
-  return roundTo(value, decimals).toFixed(decimals);
-}
-
-const MONEY_FIELDS = ['valor_venda', 'valor_custo', 'valor_total', 'desconto_valor', 'valor_frete', 'valor'];
-
-function normalizeMoneyValue(value: unknown): string {
-  return formatCurrency(parseCurrency(value), 2);
-}
-
-function normalizeLineMoney<T extends Record<string, any>>(
-  items: T[] | undefined,
-  key: 'produto' | 'servico'
-): T[] | undefined {
-  if (!Array.isArray(items)) return items;
-
-  return items.map((entry) => {
-    const line = entry?.[key] || entry;
-    if (!line || typeof line !== 'object') return entry;
-
-    const normalizedLine = { ...line };
-    for (const field of MONEY_FIELDS) {
-      if (normalizedLine[field] != null && String(normalizedLine[field]).trim() !== '') {
-        normalizedLine[field] = normalizeMoneyValue(normalizedLine[field]);
-      }
-    }
-    if (normalizedLine.desconto_porcentagem != null && String(normalizedLine.desconto_porcentagem).trim() !== '') {
-      normalizedLine.desconto_porcentagem = normalizeMoneyValue(normalizedLine.desconto_porcentagem);
-    }
-
-    if (entry?.[key] && typeof entry[key] === 'object') {
-      return { ...entry, [key]: normalizedLine };
-    }
-
-    return normalizedLine as T;
-  });
-}
-
-function normalizePaymentsMoney(payments: any[] | undefined): any[] | undefined {
-  if (!Array.isArray(payments)) return payments;
-  return payments.map((payment) => {
-    if (payment?.pagamento && typeof payment.pagamento === 'object') {
-      return {
-        ...payment,
-        pagamento: {
-          ...payment.pagamento,
-          valor: normalizeMoneyValue(payment.pagamento.valor),
-        },
-      };
-    }
-    if (payment?.valor != null) return { ...payment, valor: normalizeMoneyValue(payment.valor) };
-    return payment;
-  });
-}
-
-const FINANCIAL_SCALE = 4n;
-const FINANCIAL_FACTOR = 10n ** FINANCIAL_SCALE;
-
-function parseScaledDecimal(value: unknown, scale = Number(FINANCIAL_SCALE)): bigint {
-  const raw = String(value ?? '').trim();
-  if (!raw) return 0n;
-
-  const normalized = raw.includes(',')
-    ? raw.replace(/\./g, '').replace(',', '.')
-    : raw;
-  const sign = normalized.startsWith('-') ? -1n : 1n;
-  const unsigned = normalized.replace(/^[+-]/, '');
-  const [integerPart = '0', fractionPart = ''] = unsigned.split('.');
-  const integerDigits = integerPart.replace(/\D/g, '') || '0';
-  const fractionDigits = fractionPart.replace(/\D/g, '');
-  const keptFraction = fractionDigits.slice(0, scale).padEnd(scale, '0');
-  const nextDigit = Number(fractionDigits[scale] || '0');
-
-  let scaled = BigInt(integerDigits) * (10n ** BigInt(scale)) + BigInt(keptFraction || '0');
-  if (nextDigit >= 5) scaled += 1n;
-  return scaled * sign;
-}
-
-function roundFractionToInt(numerator: bigint, denominator: bigint): bigint {
-  if (denominator <= 0n) return 0n;
-  if (numerator <= 0n) return 0n;
-  return (numerator + denominator / 2n) / denominator;
-}
-
-function computeExpectedLineGrossUnitPrice(line: Record<string, any>): number | null {
-  const qty = parseCurrency(line.quantidade);
-  if (qty <= 0) return null;
-
-  const hasLineTotal = String(line.valor_total ?? '').trim() !== '';
-  if (!hasLineTotal) return null;
-
-  const lineTotal = parseCurrency(line.valor_total);
-  const fixedDiscount = parseCurrency(line.desconto_valor);
-  const percentDiscount = parseCurrency(line.desconto_porcentagem);
-
-  // GestãoClick validates PUTs using the gross unit price (before line discounts).
-  // Some documents with fixed discounts come back from GET with valor_venda already
-  // netted down to zero, which makes the ERP subtract the discount twice on update.
-  if (fixedDiscount > 0) {
-    return (lineTotal + fixedDiscount) / qty;
-  }
-
-  if (percentDiscount > 0 && percentDiscount < 100) {
-    const factor = 1 - percentDiscount / 100;
-    if (factor <= 0) return null;
-    return lineTotal / qty / factor;
-  }
-
-  return lineTotal / qty;
-}
-
-/**
- * Conservative line price normalization.
- *
- * Only fixes the specific double-discount bug where GestãoClick GET returns
- * `valor_venda = 0` (or near zero) on a line that has a `desconto_valor > 0`.
- * In that case, sending the payload back as-is causes the ERP to subtract the
- * discount a second time.
- *
- * In all other cases — including normal lines with discounts — we leave
- * `valor_venda` untouched. The values returned by GET are already consistent
- * with the installments stored in the ERP, and rewriting them would introduce
- * sub-cent rounding drift that triggers "valor das parcelas" errors.
- */
-function normalizeLineUnitPrice<T extends Record<string, any>>(
-  items: T[] | undefined,
-  key: 'produto' | 'servico'
-): T[] | undefined {
-  if (!Array.isArray(items)) return items;
-
-  return items.map((entry) => {
-    const line = entry?.[key];
-    if (!line || typeof line !== 'object') return entry;
-
-    const qty = parseCurrency(line.quantidade);
-    const currentUnit = parseCurrency(line.valor_venda);
-    const fixedDiscount = parseCurrency(line.desconto_valor);
-    const lineTotal = parseCurrency(line.valor_total);
-
-    const declaredLineCents = Math.round(lineTotal * 100);
-    const computedLineCents = computeLineTotalCents(line);
-
-    // Fix small rounding drift from fractional quantities without changing the
-    // order total. Example OS 9742: qty 1,500 × unit 145,73 is validated by GC as
-    // 218,60 by our calc path, but the GC-declared line total is 218,59. When the
-    // difference is below R$ 0,50, always trust GestãoClick's valor_total and send
-    // the exact gross unit implied by that value so the PUT validates the stored
-    // total instead of our recomputed total.
-    const hasLineRoundingDrift =
-      qty > 0 &&
-      lineTotal >= 0 &&
-      computedLineCents != null &&
-      computedLineCents !== declaredLineCents &&
-      Math.abs(computedLineCents - declaredLineCents) < 50;
-
-    if (hasLineRoundingDrift) {
-      const expectedUnit = computeExpectedLineGrossUnitPrice(line);
-      if (expectedUnit != null && Number.isFinite(expectedUnit) && expectedUnit >= 0) {
-        return {
-          ...entry,
-          [key]: {
-            ...line,
-            valor_venda: formatCurrency(expectedUnit, 2),
-          },
-        };
-      }
-    }
-
-    // Only intervene in the exact double-discount scenario:
-    // valor_venda is effectively zero, but the line carries a fixed discount
-    // and a positive line total. Without this fix the ERP would subtract the
-    // discount twice on PUT.
-    const isDoubleDiscountBug =
-      qty > 0 &&
-      fixedDiscount > 0 &&
-      currentUnit < 0.005 &&
-      lineTotal > 0;
-
-    if (!isDoubleDiscountBug) return entry;
-
-    const grossUnit = (lineTotal + fixedDiscount) / qty;
-    if (!Number.isFinite(grossUnit) || grossUnit <= 0) return entry;
-
-    return {
-      ...entry,
-      [key]: {
-        ...line,
-        valor_venda: formatCurrency(grossUnit, 2),
-      },
-    };
-  });
-}
-
-function computeNormalizedDocumentTotalCents(payload: Record<string, any>): number | null {
-  let totalCents = 0;
-  let hasLine = false;
-
-  const addLines = (items: any[] | undefined, key: 'produto' | 'servico') => {
-    if (!Array.isArray(items)) return;
-
-    for (const entry of items) {
-      const line = entry?.[key] || entry;
-      if (!line || typeof line !== 'object') continue;
-
-      const qty = parseCurrency(line.quantidade);
-      const unit = parseCurrency(line.valor_venda);
-      if (qty <= 0 || String(line.valor_venda ?? '').trim() === '') continue;
-
-      let lineTotal = qty * unit;
-      const discountType = String(line.tipo_desconto || line.desconto_tipo || 'R$').trim();
-      const fixedDiscount = parseCurrency(line.desconto_valor);
-      const percentDiscount = parseCurrency(line.desconto_porcentagem);
-
-      if (discountType === '%' && percentDiscount > 0) {
-        lineTotal *= 1 - percentDiscount / 100;
-      } else if (fixedDiscount > 0) {
-        lineTotal -= fixedDiscount;
-      }
-
-      totalCents += Math.round(Math.max(0, lineTotal) * 100);
-      hasLine = true;
-    }
-  };
-
-  addLines(payload.produtos, 'produto');
-  addLines(payload.servicos, 'servico');
-
-  if (!hasLine) return null;
-
-  const headerDiscountCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
-  const headerPercent = parseCurrency(payload.desconto_porcentagem);
-  const freteCents = Math.round(parseCurrency(payload.valor_frete) * 100);
-  let subtotalCents = totalCents;
-
-  if (headerPercent > 0 && headerPercent < 100) {
-    subtotalCents = Math.round(subtotalCents * (1 - headerPercent / 100));
-  }
-
-  return subtotalCents - headerDiscountCents + freteCents;
-}
-
-function applySmallRoundingDiscount(payload: Record<string, any>): Record<string, any> {
-  const declaredCents = Math.round(parseCurrency(payload.valor_total) * 100);
-  if (declaredCents <= 0) return payload;
-
-  const computedCents = computeNormalizedDocumentTotalCents(payload);
-  if (computedCents == null || computedCents === declaredCents) return payload;
-
-  const diffCents = computedCents - declaredCents;
-  if (Math.abs(diffCents) > 100) return payload;
-
-  const currentDiscountCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
-  const nextDiscountCents = currentDiscountCents + diffCents;
-  if (nextDiscountCents < 0) return payload;
-
-  console.warn(`[GC] Ajuste financeiro de centavos na separação: calculado=${formatCurrency(computedCents / 100)}, declarado=${formatCurrency(declaredCents / 100)}, ajuste=${formatCurrency(diffCents / 100)}.`);
-
-  return {
-    ...payload,
-    tipo_desconto: 'R$',
-    desconto_tipo: 'R$',
-    desconto_valor: formatCurrency(nextDiscountCents / 100),
-    desconto_porcentagem: '0.00',
-  };
-}
-
-function isInstallmentMismatchError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : '';
-  return message.includes('valor do pedido') && message.includes('valor das parcelas');
-}
-
-/** Read the valor from a pagamento entry, handling both flat {valor} and nested {pagamento:{valor}} */
-function getPagamentoValor(p: any): number {
-  if (p?.pagamento?.valor != null) return parseCurrency(p.pagamento.valor);
-  return parseCurrency(p?.valor);
-}
-
-/** Set the valor on a pagamento entry, preserving whichever structure it uses */
-function setPagamentoValor(p: any, newValor: string): any {
-  if (p?.pagamento && typeof p.pagamento === 'object') {
-    return { ...p, pagamento: { ...p.pagamento, valor: newValor } };
-  }
-  return { ...p, valor: newValor };
-}
-
-function computeLineTotalCents(line: Record<string, any>): number | null {
-  const qty = parseScaledDecimal(line?.quantidade);
-  const unit = parseScaledDecimal(line?.valor_venda);
-  if (qty <= 0n || unit < 0n || String(line?.valor_venda ?? '').trim() === '') return null;
-
-  const fixedDiscount = parseScaledDecimal(line?.desconto_valor);
-  const percentDiscount = parseScaledDecimal(line?.desconto_porcentagem);
-  const maxPercent = 100n * FINANCIAL_FACTOR;
-
-  let amountNumerator = qty * unit;
-  let amountDenominator = FINANCIAL_FACTOR * FINANCIAL_FACTOR;
-
-  if (percentDiscount > 0n) {
-    if (percentDiscount >= maxPercent) {
-      amountNumerator = 0n;
-    } else {
-      amountNumerator *= maxPercent - percentDiscount;
-      amountDenominator *= maxPercent;
-    }
-  }
-
-  const centsNumerator = (amountNumerator * 100n * FINANCIAL_FACTOR) - (fixedDiscount * 100n * amountDenominator);
-  const centsDenominator = amountDenominator * FINANCIAL_FACTOR;
-  const cents = roundFractionToInt(centsNumerator, centsDenominator);
-  return Number(cents);
-}
-
-/**
- * Compute the order total the same way GestãoClick's PUT validator does after
- * our line-unit normalization: calculate each line from quantidade × valor_venda,
- * round each line to cents, then sum.
- */
-function computeRecomputedTotalCents(payload: Record<string, any>): number | null {
-  const lineSumCents = (arr: any[] | undefined, key: 'produto' | 'servico'): number => {
-    if (!Array.isArray(arr)) return 0;
-    return arr.reduce((s, entry) => {
-      const line = entry?.[key] || entry;
-      const computed = computeLineTotalCents(line);
-      if (computed != null) return s + computed;
-
-      const declared = line?.valor_total;
-      if (declared !== undefined && declared !== null && String(declared).trim() !== '') {
-        return s + Math.round(parseCurrency(declared) * 100);
-      }
-      return s;
-    }, 0);
-  };
-
-  const produtosCents = lineSumCents(payload.produtos, 'produto');
-  const servicosCents = lineSumCents(payload.servicos, 'servico');
-  if (produtosCents <= 0 && servicosCents <= 0) return null;
-
-  const descontoCents = Math.round(parseCurrency(payload.desconto_valor) * 100);
-  const descontoPct = parseCurrency(payload.desconto_porcentagem);
-  const freteCents = Math.round(parseCurrency(payload.valor_frete) * 100);
-
-  let subtotalCents = produtosCents + servicosCents;
-  if (descontoPct > 0 && descontoPct < 100) {
-    subtotalCents = Math.round(subtotalCents * (1 - descontoPct / 100));
-  }
-  const totalCents = subtotalCents - descontoCents + freteCents;
-  return totalCents > 0 ? totalCents : null;
-}
-
-function recalcPagamentos(payload: Record<string, any>): Record<string, any> {
-  const declaredTotalCents = Math.round(parseCurrency(payload.valor_total) * 100);
-  const recomputedCents = computeRecomputedTotalCents(payload);
-
-  // The document's valor_total is authoritative. Do not "fix" a stored 5361,41
-  // into 5361,42; instead line-unit normalization above must make GC validate
-  // the stored total.
-  const targetCents = declaredTotalCents > 0 ? declaredTotalCents : (recomputedCents ?? 0);
-
-  if (targetCents <= 0 || !Array.isArray(payload.pagamentos) || payload.pagamentos.length === 0) {
-    return payload;
-  }
-
-  const nextPayload = payload;
-
-  const parcCentsList = nextPayload.pagamentos.map((p: any) => Math.round(getPagamentoValor(p) * 100));
-  const parcTotalCents = parcCentsList.reduce((s: number, c: number) => s + c, 0);
-
-  // Already exact to the cent — no adjustment needed
-  if (parcTotalCents === targetCents) return nextPayload;
-
-  console.warn(`[GC] Pagamentos total (${parcTotalCents / 100}) ≠ alvo (${targetCents / 100}). Diff=${(targetCents - parcTotalCents) / 100}. Redistribuindo.`);
-
-  if (nextPayload.pagamentos.length === 1) {
-    return {
-      ...nextPayload,
-      pagamentos: [setPagamentoValor(nextPayload.pagamentos[0], formatCurrency(targetCents / 100))],
-    };
-  }
-
-  // Distribute in cents proportionally; assign rounding remainder to last parcel
-  const baseCents = parcTotalCents > 0 ? parcCentsList : nextPayload.pagamentos.map(() => Math.floor(targetCents / nextPayload.pagamentos.length));
-  const baseSum = baseCents.reduce((s: number, c: number) => s + c, 0) || 1;
-
-  let distributedCents = 0;
-  const newCentsList: number[] = nextPayload.pagamentos.map((_: any, i: number) => {
-    if (i === nextPayload.pagamentos.length - 1) {
-      return targetCents - distributedCents;
-    }
-    const portion = Math.round((baseCents[i] * targetCents) / baseSum);
-    distributedCents += portion;
-    return portion;
-  });
-
-  const adjusted = nextPayload.pagamentos.map((p: any, i: number) =>
-    setPagamentoValor(p, formatCurrency(newCentsList[i] / 100))
-  );
-
-  return { ...nextPayload, pagamentos: adjusted };
-}
-
-function withInstallmentPrecisionFallback(payload: Record<string, any>): Record<string, any> {
-  const normalized: Record<string, any> = {
-    ...payload,
-    produtos: normalizeLineMoney(normalizeLineUnitPrice(payload.produtos, 'produto'), 'produto') || payload.produtos,
-    servicos: normalizeLineMoney(normalizeLineUnitPrice(payload.servicos, 'servico'), 'servico') || payload.servicos,
-    pagamentos: normalizePaymentsMoney(payload.pagamentos),
-  };
-  for (const field of ['valor_total', 'valor_frete', 'desconto_valor']) {
-    if (normalized[field] != null && String(normalized[field]).trim() !== '') {
-      normalized[field] = normalizeMoneyValue(normalized[field]);
-    }
-  }
-  if (normalized.desconto_porcentagem != null && String(normalized.desconto_porcentagem).trim() !== '') {
-    normalized.desconto_porcentagem = normalizeMoneyValue(normalized.desconto_porcentagem);
-  }
-
-  return recalcPagamentos(applySmallRoundingDiscount(normalized));
-}
-
-// O GestãoClick SÓ registra as linhas e recalcula o valor_total em PUT quando
-// produtos/serviços são enviados em formato PLANO (sem o wrapper produto/servico).
-// Se enviados aninhados ({ produto: {...} }), o GC zera o valor do pedido (0,00).
-function flattenLinesForGC(payload: Record<string, any>): Record<string, any> {
-  const out = { ...payload };
-  if (Array.isArray(payload.produtos)) {
-    out.produtos = payload.produtos.map((e: any) =>
-      e && typeof e.produto === 'object' && e.produto ? e.produto : e
-    );
-  }
-  if (Array.isArray(payload.servicos)) {
-    out.servicos = payload.servicos.map((e: any) =>
-      e && typeof e.servico === 'object' && e.servico ? e.servico : e
-    );
-  }
-  return out;
-}
-
-async function putStatusWithRetry(path: string, payload: Record<string, any>): Promise<GCUpdateResponse> {
-  const fixedPayload = flattenLinesForGC(withInstallmentPrecisionFallback(payload));
-
-  try {
-    return await apiRequest<GCUpdateResponse>(path, {
-      method: 'PUT',
-      body: JSON.stringify(fixedPayload),
-    });
-  } catch (error) {
-    if (!isInstallmentMismatchError(error)) throw error;
-
-    console.warn('[GC] Installment mismatch detected. Retrying with normalized financial payload.');
-    return apiRequest<GCUpdateResponse>(path, {
-      method: 'PUT',
-      body: JSON.stringify(flattenLinesForGC(withInstallmentPrecisionFallback(fixedPayload))),
-    });
-  }
-}
-
-function shouldFallbackToFullStatusPayload(error: unknown): boolean {
-  // O PUT mínimo do GC ainda valida o financeiro existente. Quando ele reclama
-  // de parcelas, reenviamos o documento completo normalizado em centavos,
-  // usando `valor_total` das linhas como fonte — sem recalcular por quantidade
-  // com 3 casas decimais.
-  if (isInstallmentMismatchError(error)) return true;
-
-  const message = error instanceof Error ? error.message.toLowerCase() : '';
-  return (
-    message.includes('obrigat') ||
-    message.includes('required') ||
-    message.includes('necess') ||
-    message.includes('inválid') ||
-    message.includes('invalid') ||
-    message.includes('não informado') ||
-    message.includes('nao informado')
-  );
-}
-
-async function putStatusOnlyWithFallback(
-  path: string,
-  minimalPayload: Record<string, any>,
-  fullPayload: Record<string, any>
-): Promise<GCUpdateResponse> {
-  try {
-    return await apiRequest<GCUpdateResponse>(path, {
-      method: 'PUT',
-      body: JSON.stringify(flattenLinesForGC(withInstallmentPrecisionFallback(minimalPayload))),
-    });
-  } catch (error) {
-    if (!shouldFallbackToFullStatusPayload(error)) throw error;
-
-    console.warn('[GC] PUT mínimo de status recusado. Reenviando payload completo preservado.');
-    return putStatusWithRetry(path, fullPayload);
-  }
-}
-
-export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, gcUsuarioId?: string, customNote?: string): Promise<void> {
-  if (isUsingMock()) {
-    await mockDelay();
-    return;
-  }
-
-  const latestOrder = await fetchLatestForStatusUpdate<GCOrdemServico & Record<string, any>>(
-    `/api/ordens_servicos/${id}`,
-    rawOrder as GCOrdemServico & Record<string, any>
-  );
-
-  const obsInterna = latestOrder.observacoes_interna || rawOrder.observacoes_interna || '';
-  const separator = obsInterna.trim() ? '\n' : '';
-  const now = new Date().toLocaleString('pt-BR');
-  const operatorNote = customNote
-    ? `${separator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
-    : '';
-
-  const obs = latestOrder.observacoes || rawOrder.observacoes || '';
-  const obsSeparator = obs.trim() ? '\n' : '';
-  const obsNote = customNote
-    ? `${obsSeparator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
-    : '';
-
-  const payload: Record<string, any> = {
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    codigo: latestOrder.codigo ?? rawOrder.codigo,
-    data: latestOrder.data_entrada || latestOrder.data || rawOrder.data_entrada || rawOrder.data,
-    situacao_id: newStatusId,
-    vendedor_id: latestOrder.vendedor_id ?? rawOrder.vendedor_id,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    valor_total: latestOrder.valor_total ?? rawOrder.valor_total,
-    valor_frete: latestOrder.valor_frete || rawOrder.valor_frete || '0.00',
-    condicao_pagamento: latestOrder.condicao_pagamento || rawOrder.condicao_pagamento || 'a_vista',
-    produtos: latestOrder.produtos || rawOrder.produtos,
-    servicos: latestOrder.servicos || rawOrder.servicos || [],
-    atributos: latestOrder.atributos || rawOrder.atributos || [],
-    equipamentos: latestOrder.equipamentos || rawOrder.equipamentos || [],
-  };
-
-  // Preserve pagamentos + desconto to avoid total vs parcelas mismatch
-  if (latestOrder.pagamentos?.length) payload.pagamentos = latestOrder.pagamentos;
-  else if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
-  if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
-  if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
-
-  // Sempre atribui ao usuário API GC (guilherme.pedrosa@outlook.com), não ao humano logado
-  payload.usuario_id = '1320473';
-
-  const minimalPayload: Record<string, any> = {
-    // GC reseta o cliente para "Consumidor" quando o PUT não informa cliente_id.
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    situacao_id: newStatusId,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    // GC zera o valor do pedido (0,00) quando o PUT não reenvia as linhas/valores.
-    valor_total: payload.valor_total,
-    valor_frete: payload.valor_frete,
-    condicao_pagamento: payload.condicao_pagamento,
-    produtos: payload.produtos,
-    servicos: payload.servicos,
-  };
-  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
-  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
-  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
-  minimalPayload.usuario_id = '1320473';
-
-  const putResponse = await putStatusOnlyWithFallback(`/api/ordens_servicos/${id}`, minimalPayload, payload);
-
-  const expectedStatus = normalizeStatusId(newStatusId);
-  const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
-
-  if (returnedStatus && returnedStatus !== expectedStatus) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-
-  const confirmed = await confirmStatusApplied('os', id, expectedStatus);
-  if (!confirmed) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-}
-
-export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string, gcUsuarioId?: string, customNote?: string): Promise<void> {
-  if (isUsingMock()) {
-    await mockDelay();
-    return;
-  }
-
-  const latestOrder = await fetchLatestForStatusUpdate<GCVenda & Record<string, any>>(
-    `/api/vendas/${id}`,
-    rawOrder as GCVenda & Record<string, any>
-  );
-
-  const obsInterna = latestOrder.observacoes_interna || (rawOrder as any).observacoes_interna || '';
-  const separator = obsInterna.trim() ? '\n' : '';
-  const now = new Date().toLocaleString('pt-BR');
-  const operatorNote = customNote
-    ? `${separator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${separator}[WeDo Checkout] Separação realizada por: ${operatorName} em ${now}`
-    : '';
-
-  const obs = latestOrder.observacoes || (rawOrder as any).observacoes || '';
-  const obsSeparator = obs.trim() ? '\n' : '';
-  const obsNote = customNote
-    ? `${obsSeparator}[WeDo Checkout] ${customNote} em ${now}`
-    : operatorName
-    ? `${obsSeparator}[WeDo Checkout] Separação por: ${operatorName} em ${now}`
-    : '';
-
-  const payload: Record<string, any> = {
-    tipo: latestOrder.tipo || (rawOrder as any).tipo || 'produto',
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    codigo: latestOrder.codigo ?? rawOrder.codigo,
-    data: latestOrder.data || rawOrder.data,
-    situacao_id: newStatusId,
-    vendedor_id: latestOrder.vendedor_id ?? rawOrder.vendedor_id,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    valor_total: latestOrder.valor_total ?? rawOrder.valor_total,
-    valor_frete: latestOrder.valor_frete || rawOrder.valor_frete || '0.00',
-    condicao_pagamento: latestOrder.condicao_pagamento || rawOrder.condicao_pagamento || 'a_vista',
-    produtos: latestOrder.produtos || rawOrder.produtos,
-    servicos: latestOrder.servicos || rawOrder.servicos || [],
-  };
-
-  // Preserve pagamentos + desconto to avoid total vs parcelas mismatch
-  if (latestOrder.pagamentos?.length) payload.pagamentos = latestOrder.pagamentos;
-  else if (rawOrder.pagamentos?.length) payload.pagamentos = rawOrder.pagamentos;
-  if (latestOrder.desconto_valor != null) payload.desconto_valor = latestOrder.desconto_valor;
-  if (latestOrder.desconto_porcentagem != null) payload.desconto_porcentagem = latestOrder.desconto_porcentagem;
-
-  // Sempre atribui ao usuário API GC (guilherme.pedrosa@outlook.com), não ao humano logado
-  payload.usuario_id = '1320473';
-
-  const minimalPayload: Record<string, any> = {
-    tipo: payload.tipo,
-    // GC reseta o cliente para "Consumidor" quando o PUT não informa cliente_id.
-    cliente_id: latestOrder.cliente_id ?? rawOrder.cliente_id,
-    situacao_id: newStatusId,
-    observacoes: obs + obsNote,
-    observacoes_interna: obsInterna + operatorNote,
-    // GC zera o valor do pedido (0,00) quando o PUT não reenvia as linhas/valores.
-    valor_total: payload.valor_total,
-    valor_frete: payload.valor_frete,
-    condicao_pagamento: payload.condicao_pagamento,
-    produtos: payload.produtos,
-    servicos: payload.servicos,
-  };
-  if (payload.pagamentos) minimalPayload.pagamentos = payload.pagamentos;
-  if (payload.desconto_valor != null) minimalPayload.desconto_valor = payload.desconto_valor;
-  if (payload.desconto_porcentagem != null) minimalPayload.desconto_porcentagem = payload.desconto_porcentagem;
-  minimalPayload.usuario_id = '1320473';
-
-  const putResponse = await putStatusOnlyWithFallback(`/api/vendas/${id}`, minimalPayload, payload);
-
-  const expectedStatus = normalizeStatusId(newStatusId);
-  const returnedStatus = normalizeStatusId(putResponse?.data?.situacao_id ?? putResponse?.situacao_id);
-
-  if (returnedStatus && returnedStatus !== expectedStatus) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-
-  const confirmed = await confirmStatusApplied('venda', id, expectedStatus);
-  if (!confirmed) {
-    throw new Error('STATUS_NOT_APPLIED');
-  }
-}
-
-// --- STOCK CHECK ---
 export interface ProductStockInfo {
   produto_id: string;
   estoque: number;
@@ -990,6 +281,7 @@ export interface StockConflictPO {
 }
 
 export interface StockConflict {
+  variacao_id?: string;
   nome_produto: string;
   produto_id: string;
   estoque: number;
@@ -1043,12 +335,13 @@ export function parseProductStockResponse(
       };
     }>;
   } | undefined;
-  if (!data) return null;
+  if (!data || (data.id != null && String(data.id) !== produtoId)) return null;
 
-  let estoqueRaw: string | number = data.estoque ?? 0;
+  let estoqueRaw: string | number | undefined = data.estoque;
   const variacoes = data.variacoes ?? [];
+  const requestedVariationId = String(variacaoId ?? '').trim();
+  if (requestedVariationId && !variacoes.length) return null;
   if (variacoes.length > 0) {
-    const requestedVariationId = String(variacaoId ?? '').trim();
     const matchingVariation = requestedVariationId
       ? variacoes.find(entry => {
           const variation = entry.variacao || entry;
@@ -1059,14 +352,16 @@ export function parseProductStockResponse(
     if (requestedVariationId && !matchingVariation) return null;
     const selectedVariation = matchingVariation ?? (variacoes.length === 1 ? variacoes[0] : undefined);
     const selectedVariationData = selectedVariation?.variacao || selectedVariation;
-    if (selectedVariationData?.estoque != null) estoqueRaw = selectedVariationData.estoque;
+    if (selectedVariationData) estoqueRaw = selectedVariationData.estoque;
   }
 
+  if (estoqueRaw == null || String(estoqueRaw).trim() === '') return null;
   const estoque = Number(String(estoqueRaw).replace(',', '.'));
+  if (!Number.isFinite(estoque)) return null;
   const valorCusto = Number(String(data.valor_custo ?? 0).replace(',', '.'));
   return {
     produto_id: String(data.id ?? produtoId),
-    estoque: Number.isFinite(estoque) ? estoque : 0,
+    estoque,
     valor_custo: Number.isFinite(valorCusto) ? valorCusto : 0,
   };
 }
@@ -1109,23 +404,26 @@ export async function checkStockForOrders(
   orders: Array<GCOrdemServico | GCVenda>,
   onProgress?: (checked: number, total: number) => void,
 ): Promise<StockScanResult> {
-  // Collect all unique produto_ids across all orders (track variacao_id seen for each pid)
+  const stockKey = (p: any) => `${p.produto_id}::${String(p.possui_variacao) === '0' ? '' : p.variacao_id || ''}`;
+  const selected = orders.filter(order => !isCancelledStatus(order.nome_situacao) && !isExecutedStatus(order.nome_situacao));
   const productOrderMap = new Map<string, { orderId: string; orderCodigo: string; orderCliente: string; qty: number; nome: string }[]>();
-  const variacaoIdByPid = new Map<string, string>();
+  const productByKey = new Map<string, { productId: string; variationId: string }>();
 
-  for (const order of orders) {
-    for (const p of order.produtos || []) {
-      const pid = p.produto.produto_id;
-      const vid = String((p.produto as any).variacao_id ?? '').trim();
-      if (vid && !variacaoIdByPid.has(pid)) variacaoIdByPid.set(pid, vid);
-      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
+  for (const order of selected) {
+    if (String(order.situacao_estoque) === '1') continue;
+    for (const line of documentStockLines(order)) {
+      const pid = `${line.productId}::${line.variationId}`;
+      const qty = line.quantity;
+      productByKey.set(pid, line);
       if (!productOrderMap.has(pid)) productOrderMap.set(pid, []);
+      const previous = productOrderMap.get(pid)!.find(entry => entry.orderId === order.id);
+      if (previous) { previous.qty += qty; continue; }
       productOrderMap.get(pid)!.push({
         orderId: order.id,
         orderCodigo: order.codigo,
         orderCliente: order.nome_cliente,
         qty,
-        nome: p.produto.nome_produto,
+        nome: order.produtos.find(p => p.produto.produto_id === line.productId)?.produto.nome_produto || line.productId,
       });
     }
   }
@@ -1139,9 +437,13 @@ export async function checkStockForOrders(
   // Fetch 3 at a time (rate limit)
   for (let i = 0; i < uniqueIds.length; i += 3) {
     const batch = uniqueIds.slice(i, i + 3);
-    const results = await Promise.all(batch.map(id => getProductStock(id, variacaoIdByPid.get(id))));
+    const results = await Promise.all(batch.map(id => {
+      const product = productByKey.get(id)!;
+      return getProductStock(product.productId, product.variationId || undefined, { forceFresh: true });
+    }));
     batch.forEach((id, idx) => {
       const r = results[idx];
+      if (!r) throw new Error('A varredura não conseguiu confirmar todos os saldos. Nenhum pedido será marcado como disponível com dados incompletos.');
       if (r) {
         stockMap.set(id, r.estoque);
         costMap.set(id, r.valor_custo);
@@ -1156,12 +458,10 @@ export async function checkStockForOrders(
 
   // Determine which orders have full stock
   const fullStockOrders = new Set<string>();
-  for (const order of orders) {
-    const allInStock = (order.produtos || []).every(p => {
-      const pid = p.produto.produto_id;
-      const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
-      const available = stockMap.get(pid) ?? 0;
-      return available >= qty;
+  for (const order of selected) {
+    const allInStock = [...productOrderMap].every(([k, entries]) => {
+      const entry = entries.find(e => e.orderId === order.id);
+      return !entry || (stockMap.get(k) ?? 0) >= entry.qty;
     });
     if (allInStock) fullStockOrders.add(order.id);
   }
@@ -1175,7 +475,8 @@ export async function checkStockForOrders(
     if (totalDemand > stock && entries.length > 1) {
       conflictPids.add(pid);
       conflicts.push({
-        produto_id: pid,
+        produto_id: productByKey.get(pid)!.productId,
+        variacao_id: productByKey.get(pid)!.variationId,
         nome_produto: entries[0].nome,
         estoque: stock,
         demanda_total: totalDemand,
@@ -1194,8 +495,9 @@ export async function checkStockForOrders(
       while (true) {
         const res = await listOrdensCompra(undefined, page);
         for (const po of res.data) {
+          if (String((po as any).situacao_estoque) === '1' || /CANCEL|RECEBID|CONCLUID/.test(String(po.nome_situacao).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase())) continue;
           for (const p of po.produtos || []) {
-            const pid = p.produto.produto_id;
+            const pid = stockKey(p.produto);
             if (conflictPids.has(pid)) {
               const qty = typeof p.produto.quantidade === 'number' ? p.produto.quantidade : parseFloat(String(p.produto.quantidade)) || 0;
               if (!poMap.has(pid)) poMap.set(pid, []);
@@ -1213,7 +515,7 @@ export async function checkStockForOrders(
       }
       // Attach PO data to conflicts
       for (const c of conflicts) {
-        c.pedidos_compra = poMap.get(c.produto_id) || [];
+        c.pedidos_compra = poMap.get(`${c.produto_id}::${c.variacao_id || ''}`) || [];
       }
     } catch (e) {
       console.warn('[STOCK SCAN] Failed to fetch purchase orders for conflicts:', e);
@@ -1234,7 +536,7 @@ export async function checkStockForOrders(
 
     for (const p of order.produtos || []) {
       const pid = p.produto.produto_id;
-      const custo = costMap.get(pid) ?? 0;
+      const custo = costMap.get(stockKey(p.produto)) ?? 0;
       if (custo <= 0) continue;
 
       const valorVendaRaw = String(p.produto.valor_venda ?? '');
@@ -1296,8 +598,9 @@ interface GCProductDetail {
 
 async function getProductDetail(produtoId: string, forceFresh = false): Promise<GCProductDetail | null> {
   try {
-    const res = await apiRequest<{ data: GCProductDetail }>(`/api/produtos/${produtoId}${forceFresh ? `?cache_bust=${Date.now()}` : ''}`);
-    return res.data;
+    const res = await apiRequest<{ data: GCProductDetail & { Produto?: GCProductDetail; produto?: GCProductDetail } }>(`/api/produtos/${produtoId}${forceFresh ? `?cache_bust=${Date.now()}` : ''}`);
+    const detail = res.data?.Produto || res.data?.produto || res.data;
+    return detail && String(detail.id) === produtoId ? detail : null;
   } catch {
     return null;
   }
@@ -1348,8 +651,8 @@ export async function enrichOrderProducts(
     const codigoProduto = detail.codigo_interno || '';
 
     if (produto.variacao_id && detail.variacoes) {
-      const variacao = detail.variacoes.find(v => v.variacao.id === produto.variacao_id);
-      if (variacao?.variacao.codigo) {
+      const variacao = detail.variacoes.map((v: any) => v.variacao || v).find(v => String(v.id) === produto.variacao_id);
+      if (variacao?.codigo) {
         if (!codigoBarras) codigoBarras = '';
       }
     }

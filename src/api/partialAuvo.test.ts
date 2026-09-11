@@ -44,6 +44,12 @@ beforeEach(() => {
 });
 
 describe('escolha de tarefa Auvo por OS parcial', () => {
+  it('repara apenas o vínculo quando a tarefa já existe e o GC falhou', async () => {
+    mock.batch.auvo_task_id = '123'; mock.batch.auvo_task_error = 'Vínculo GC pendente';
+    await createBatchAuvoTask('batch', undefined, { requestIfMissing: true });
+    expect(mock.invoke).toHaveBeenCalledExactlyOnceWith('partial-writeoff', { body: { action: 'create_batch_task', batch_id: 'batch' } });
+    expect(mock.rpc).not.toHaveBeenCalled();
+  });
   it('começa marcada para cada nova abertura', () => {
     expect(DEFAULT_CREATE_PARTIAL_AUVO_TASK).toBe(true);
   });

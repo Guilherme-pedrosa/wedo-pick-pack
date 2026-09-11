@@ -167,7 +167,7 @@ export default function OrderQueue() {
     if (stockConflicts.length === 0) return new Set<string>();
 
     // For each conflicted product, allocate stock to orders sorted by code (ascending)
-    // Orders that already got separated consume stock first
+    // A varredura já exclui documentos que efetivamente movimentaram estoque.
     const orderDeficits = new Map<string, boolean>(); // orderId -> has deficit
 
     for (const conflict of stockConflicts) {
@@ -182,12 +182,6 @@ export default function OrderQueue() {
         // Find the order id from filtered list
         const order = filteredByConfig.find(o => o.codigo === p.codigo);
         if (!order) continue;
-
-        // If already separated, this order consumed stock
-        if (separatedIds.has(order.id)) {
-          remaining -= p.qtd;
-          continue;
-        }
 
         // Check if this order can be fulfilled
         if (remaining < p.qtd) {
@@ -286,12 +280,13 @@ export default function OrderQueue() {
   }, [startSession, applyProductMetadata]);
 
   const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
+    if (session?.refId === id && session.tipo === tipo && !session.concludedAt) return;
     // Block already-separated orders
     if (separatedIds.has(id)) {
       toast.info('Esta OS já foi separada.');
       return;
     }
-    if (session && session.refId !== id && !session.concludedAt) {
+    if (session && !session.concludedAt) {
       setConfirmSwitch({ tipo, id });
       return;
     }
@@ -576,7 +571,8 @@ export default function OrderQueue() {
                   key={entry.batchId}
                   className={`p-3 cursor-pointer border-l-4 border-l-amber-500 bg-amber-50/70 hover:shadow-md ${isActive ? 'ring-2 ring-amber-400' : ''} ${loading ? 'pointer-events-none opacity-50' : ''}`}
                   onClick={() => {
-                    if (session && session.refId !== entry.documentId && !session.concludedAt) {
+                    if (isActive) return;
+                    if (session && !session.concludedAt) {
                       setConfirmSwitch({ tipo: entry.type, id: entry.documentId, partialEntry: entry });
                       return;
                     }

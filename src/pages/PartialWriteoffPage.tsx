@@ -1133,6 +1133,12 @@ export default function PartialWriteoffPage() {
                                 )}
                               </div>
                             )}
+                            {batch.auvo_task_id && batch.auvo_task_error && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-amber-700">{batch.auvo_task_error}</p>
+                                <Button variant="outline" size="sm" disabled={!!retryingTaskId} onClick={() => handleRetryAuvoTask(batch.id)}>Reparar vínculo no GC</Button>
+                              </div>
+                            )}
                             {audit && (
                               <p className={`text-xs font-medium ${auditTone}`}>
                                 {audit.state === 'ok' ? '✓ ' : audit.state === 'unchecked' ? '• ' : '⚠ '}{audit.message}

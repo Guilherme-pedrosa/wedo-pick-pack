@@ -50,7 +50,7 @@ export const useComprasStore = create<ComprasStore>()(
     }),
     {
       name: 'wedo-compras-store',
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         result: state.result,
         config: state.config,

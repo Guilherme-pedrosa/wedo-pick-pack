@@ -60,9 +60,13 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
 
     try {
       // 1) Carregar itens da maleta
-      const { data: items } = await (supabase.from("toolbox_items") as any)
+      const { data: items, error: itemsError } = await (supabase.from("toolbox_items") as any)
         .select("*")
         .eq("toolbox_id", toolbox.id);
+      if (itemsError || !items) throw new Error('Não foi possível conferir os itens da maleta. Nenhuma saída foi iniciada.');
+      const latest = await (supabase.from('toolboxes') as any).select('technician_gc_id, venda_gc_id').eq('id', toolbox.id).single();
+      if (latest.error || !latest.data) throw new Error('Não foi possível conferir a maleta atual.');
+      if (latest.data.technician_gc_id || latest.data.venda_gc_id) throw new Error('Esta maleta já possui técnico ou saída vinculada. Atualize a tela antes de continuar.');
 
       // 2) Primeiro cria a venda/baixa de estoque; se falhar, aborta sem vincular a maleta
       let vendaGcId: string | null = null;
@@ -73,6 +77,7 @@ export default function ToolboxTechnicianLinkDialog({ toolbox, onClose, onLinked
         setStockProgress(`Aplicando ajuste de estoque (${items.length} itens)...`);
 
         const result = await executeStockSaida({
+          toolboxId: toolbox.id,
           items: items.map((i: any) => ({
             produto_id: i.produto_id,
             nome_produto: i.nome_produto,

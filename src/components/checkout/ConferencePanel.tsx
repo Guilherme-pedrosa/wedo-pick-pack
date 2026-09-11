@@ -328,7 +328,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
               <Clock className="h-4 w-4" />
               <span className="font-mono text-sm">{elapsed}</span>
             </div>
-            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive h-8 px-2" onClick={cancelSession}>
+            <Button disabled={!!session.gcConfirmation} variant="ghost" size="sm" className="text-destructive hover:text-destructive h-8 px-2" onClick={cancelSession}>
               <X className="h-4 w-4" />
               <span className="hidden sm:inline ml-1">Cancelar</span>
             </Button>
@@ -337,6 +337,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
       </div>
 
       {/* Scan zone — desktop: coletor/scanner USB · mobile: câmera */}
+      {session.gcConfirmation && <div role="status" className="px-4 pt-3 text-sm text-amber-700">Atualização no GC confirmada. Use Concluir Separação para salvar o histórico pendente sem repetir a baixa.</div>}
       {productMetadataLoading && <div role="status" className="flex items-center gap-2 px-4 pt-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Conferindo os produtos deste pedido: estoque, códigos e localizações…</div>}
       <div className="border-2 border-secondary bg-secondary/10 mx-3 md:mx-4 mt-3 md:mt-4 rounded-lg p-3">
         <div className="flex flex-col gap-2">

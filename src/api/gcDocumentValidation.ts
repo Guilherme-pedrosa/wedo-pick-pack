@@ -6,18 +6,15 @@ export async function checkDocumentExists(type: OrderType, documentId: string): 
     ? `/api/ordens_servicos/${encodeURIComponent(documentId)}`
     : `/api/vendas/${encodeURIComponent(documentId)}`;
     
-  try {
-    const { data, error } = await supabase.functions.invoke('gestaoclick-proxy', {
+    const { data, error } = await supabase.functions.invoke('gc-proxy', {
       body: { path, method: 'GET' }
     });
     
-    if (error) return false;
-    // GC returns 200 with status=error for not found sometimes, or actual 404
-    if (data?.status === 'error' || data?.code === 404) return false;
-    
-    return !!(data?.data?.id || data?.id);
-  } catch (e) {
-    console.error("Error checking GC document:", e);
-    return false;
-  }
+    // Falha de consulta não prova exclusão e jamais autoriza liberar uma reserva.
+    if (error) throw new Error('Não foi possível conferir a existência do documento no GC. Reserva preservada.');
+    if (Number(data?._proxy?.gc_http_status || data?.code) === 404) return false;
+    if (data?._proxy?.ok !== true || data?.status === 'error' || String(data?.data?.id) !== documentId) {
+      throw new Error('Resposta inconclusiva sobre o documento no GC. Reserva preservada.');
+    }
+    return true;
 }

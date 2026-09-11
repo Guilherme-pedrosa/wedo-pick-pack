@@ -4,6 +4,7 @@ import {
   documentTypeForBudgetKind,
   isBudgetEligibleForPartialWriteoff,
   isSaleEligibleForPartialWriteoff,
+  operationItemsFromBudget,
 } from './partialWriteoffClient';
 
 function operation(withdrawn: number, status: PartialWriteoffOperation['status'] = 'awaiting_balance'): PartialWriteoffOperation {
@@ -111,6 +112,14 @@ describe('comprometimento global de estoque', () => {
 });
 
 describe('origem do orçamento no GestãoClick', () => {
+  it('não infere tipo por horas técnicas e bloqueia documentos cancelados',()=>{
+    expect(()=>documentTypeForBudgetKind(undefined,{servicos:[{id:'s'}]})).toThrow('Tipo');
+    expect(isBudgetEligibleForPartialWriteoff({nome_situacao:'CANCELADO'})).toBe(false);
+    expect(isSaleEligibleForPartialWriteoff({nome_situacao:'CANCELADA',situacao_estoque:'0'})).toBe(false);
+  });
+  it('não cria reserva de linha que não movimenta estoque',()=>{
+    expect(operationItemsFromBudget({produtos:[{produto:{produto_id:'p',quantidade:'2',movimenta_estoque:'0'}}]})).toEqual([]);
+  });
   it('mantém orçamento de produto como venda mesmo quando possui serviço adicional', () => {
     expect(documentTypeForBudgetKind('produto', { servicos: [{ id: 'service-1' }] })).toBe('venda');
   });

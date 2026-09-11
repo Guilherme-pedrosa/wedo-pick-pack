@@ -2,8 +2,10 @@ import type { ComprasResult, ItemCompra, OrcamentoConvertidoWarning } from '../.
 import type { PartialWriteoffOperation } from '../../../src/api/partialWriteoff.ts';
 import { pendingOsLines, excluded } from './osStockCommitments.ts';
 import { normalizedStatus, type GcRecord } from './partialExecution.ts';
+import { currentPartialDemand } from './currentPartialDemand.ts';
+import { assertBudgetUnchanged } from './budgetIntegrity.ts';
 
-export const PURCHASE_SCAN_VERSION = 2;
+export const PURCHASE_SCAN_VERSION = 3;
 export const BUDGET_STATUS_NAMES = ['APROVADO - AGUARDANDO COMPRA', 'COMPRADO - AGUARDANDO CHEGADA', 'COMPRADO - AG CHEGADA PARA ESTOQUE'];
 export const PURCHASE_STATUS_NAMES = ['Em Cotação', 'Aguardando Aprovação', 'Aprovada - AG COMPRA', 'COMPRADO - AG CHEGADA', 'SOLICITADO - GARANTIA', 'COMPRADO - AG CHEGADA PARA ESTOQUE'];
 const id = (v: unknown) => ['0', 'null', 'undefined'].includes(String(v)) ? '' : String(v ?? '').trim();
@@ -117,18 +119,23 @@ export async function scanPurchases(ports: PurchaseScanPorts, budgetStatuses: st
     }
   }
   let partialCount = 0;
+  const sourceReads: Array<{ path: string; source: GcRecord }> = [];
   const localReservations: Array<{ raw: GcRecord; quantity: number; code: string; client: string }> = [];
   for (const op of operations) {
     if (!op.items.length) throw new Error(`Saldo da baixa #${op.budget_code} não informado.`);
+    const sale = op.budget_id.startsWith('venda:') || op.budget_snapshot?._partial_source_kind === 'venda';
+    const sourceId = String(op.budget_snapshot?._partial_source_id || op.budget_id.replace(/^venda:/, ''));
+    const path = `/api/${sale ? 'vendas' : 'orcamentos'}/${encodeURIComponent(sourceId)}`;
+    const source = (await ports.gc(path)).data;
+    if (!source || id(source.id) !== sourceId || (source.cliente_id != null && id(source.cliente_id) !== op.client_id)) throw new Error(`Origem da baixa #${op.budget_code} não confirmada no GC.`);
+    sourceReads.push({ path, source });
     let hasDemand = false;
-    for (const item of op.items) {
-      const original = number(item.original_quantity), withdrawn = number(item.withdrawn_quantity), reserved = number(item.reserved_quantity);
-      if (![original, withdrawn, reserved].every(n => Number.isFinite(n) && n >= 0) || withdrawn + reserved > original + 0.000001) throw new Error(`Saldo inconsistente na baixa #${op.budget_code}.`);
-      const raw = { ...product((item.line_snapshot || {}) as GcRecord), produto_id: item.product_id, variacao_id: item.variation_id,
-        nome_produto: item.product_name, codigo_produto: item.product_code, sigla_unidade: item.unit };
+    for (const current of currentPartialDemand(op, source)) {
+      const { raw, reserved } = current;
+      if (current.changed) warnings.push(`Origem #${op.budget_code} atualizada no GC: compras considera ${current.requested} solicitado(s), ${current.withdrawn} retirado(s) e ${reserved} reservado(s) de ${raw.nome_produto || raw.produto_id}. Atualize a referência da baixa antes de abrir outro lote.`);
       // Reserva local não é compra nova; protege o estoque destinado a outro lote.
       if (reserved > 0) localReservations.push({ raw, quantity: reserved, code: `Baixa ${op.budget_code}`, client: op.client_name });
-      const quantity = qty(Math.max(0, original - withdrawn - reserved));
+      const quantity = current.pending;
       if (quantity <= 0) continue;
       hasDemand = true;
       demands.push({ raw, quantity, reference: { id: op.budget_id, codigo: op.budget_code, qtd: quantity, nome_cliente: op.client_name,
@@ -218,6 +225,7 @@ export async function scanPurchases(ports: PurchaseScanPorts, budgetStatuses: st
     item.estimativa = item.qtd_efetiva_a_comprar * item.ultimo_preco;
   }
   if (fingerprint(operations) !== fingerprint(await ports.partials())) throw new Error('Uma baixa mudou durante a varredura. Atualize a lista para conferir o novo saldo.');
+  for (const read of sourceReads) assertBudgetUnchanged(read.source, (await ports.gc(read.path)).data || {});
   const all = [...items.values()];
   const itensList = all.filter(i => i.qtd_efetiva_a_comprar > 0), itensOkList = all.filter(i => i.qtd_a_comprar === 0);
   const itensCobertosporPedido = all.filter(i => i.qtd_a_comprar > 0 && i.qtd_efetiva_a_comprar === 0);

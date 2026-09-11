@@ -27,6 +27,11 @@ function fixture(ops = [operation()]) {
   const gc = async (path: string) => {
     const name = path.split('/api/')[1].split('?')[0];
     if (name === 'produtos/p1') return { data: detail };
+    if (name === 'orcamentos/budget1') return { data: structuredClone(records.orcamentos.find(r => r.id === 'budget1')) };
+    if (name.startsWith('vendas/')) {
+      const sourceId = name.slice('vendas/'.length), op = ops.find(o => o.budget_id === `venda:${sourceId}`)!;
+      return { data: { id: sourceId, produtos: [line(op.items[0].original_quantity)] } };
+    }
     const data = records[name];
     if (!data) throw new Error(`Consulta inesperada ${path}`);
     return { data, meta: { total_paginas: data.length ? 1 : 0, pagina_atual: 1, total_registros: data.length } };
@@ -51,10 +56,20 @@ describe('compras com saldos de baixas parciais', () => {
     expect(result.itensList[0].orcamentos[0]).toMatchObject({ source_kind: 'venda', qtd: 6 });
     expect(result.partialOperationsIncluded).toBe(1);
   });
-  it('não duplica demanda quando a baixa também está no filtro nem depende das linhas atuais do orçamento', async () => {
-    const f = fixture(); f.records.orcamentos[0].produtos = [];
+  it('não duplica demanda e usa a quantidade atual do orçamento, inclusive aumentos', async () => {
+    const f = fixture(); f.records.orcamentos[0].produtos = [line(12)];
     const result = await f.scan(['baixa-parcial']);
-    expect(result.itensList[0].qtd_necessaria).toBe(6);
+    expect(result.itensList[0].qtd_necessaria).toBe(8);
+    expect(result.warnings?.[0]).toContain('12 solicitado');
+    expect(f.ops[0].items[0].original_quantity).toBe(10);
+  });
+  it('não aceita orçamento reduzido abaixo das peças já retiradas', async () => {
+    const f = fixture(); f.records.orcamentos[0].produtos = [line(3)];
+    await expect(f.scan()).rejects.toThrow('reduzido abaixo');
+  });
+  it('inclui item acrescentado no orçamento durante uma baixa parcial', async () => {
+    const f = fixture(); f.records.orcamentos[0].produtos.push(line(2));
+    expect((await f.scan()).itensList[0].qtd_necessaria).toBe(8);
   });
   it('desconta pedido parcial, mas mantém o saldo sem pedido em A comprar', async () => {
     const f = fixture(); f.detail.estoque = 1;

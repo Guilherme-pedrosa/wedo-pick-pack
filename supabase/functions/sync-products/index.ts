@@ -12,7 +12,6 @@ const corsHeaders = {
 const GC_API_URL = 'https://api.gestaoclick.com';
 const BATCH_SIZE = 3;
 const BATCH_DELAY_MS = 1100;
-const TIME_BUDGET_MS = 100_000;
 
 function wait(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -127,10 +126,11 @@ async function syncFull(
   supabaseAdmin: ReturnType<typeof createClient>,
   accessToken: string,
   secretToken: string,
+  selection?: Set<string>,
 ) {
   const { data: run } = await supabaseAdmin
     .from('sync_runs')
-    .insert({ run_type: 'full', status: 'running', total_count: 0 })
+    .insert({ run_type: selection ? 'incremental' : 'full', status: 'running', total_count: 0 })
     .select('id')
     .single();
   const runId = run!.id;
@@ -145,7 +145,7 @@ async function syncFull(
     let page = 1;
     let totalPages = 1;
     let totalRegistros = 0;
-    const allProducts: Record<string, unknown>[] = [];
+    let allProducts: Record<string, unknown>[] = [];
 
     while (page <= totalPages) {
       const pageBatch: number[] = [];
@@ -175,6 +175,16 @@ async function syncFull(
       if (page <= totalPages) await wait(BATCH_DELAY_MS);
     }
 
+    if (allProducts.length !== totalRegistros || new Set(allProducts.map(p => String(p.id))).size !== allProducts.length || errorsCount) {
+      throw new Error('Catálogo de produtos incompleto ou alterado durante a leitura. Índice anterior preservado.');
+    }
+    if (selection) {
+      allProducts = allProducts.filter(p => selection.has(String(p.id)));
+      const found = new Set(allProducts.map(p => String(p.id)));
+      const missing = [...selection].filter(id => !found.has(id));
+      if (missing.length) { errorsCount += missing.length; notes.push(`Referências não encontradas no catálogo atual: ${missing.join(', ')}`); }
+      notes.push(`Produtos de uso recente: ${allProducts.length}/${selection.size}. Leitura paginada do catálogo, sem interromper a lista na mesma peça a cada execução.`);
+    }
     const totalProducts = allProducts.length;
     await updateProgress(supabaseAdmin, runId, 0, totalProducts);
 
@@ -273,185 +283,25 @@ async function syncFull(
 }
 
 async function syncIncremental(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  accessToken: string,
-  secretToken: string,
+  db: ReturnType<typeof createClient>, accessToken: string, secretToken: string,
 ) {
-  const { data: run } = await supabaseAdmin
-    .from('sync_runs')
-    .insert({ run_type: 'incremental', status: 'running', total_count: 0 })
-    .select('id')
-    .single();
-  const runId = run!.id;
-
-  const startedMs = Date.now();
-  let processedCount = 0;
-  let upsertCount = 0;
-  let errorsCount = 0;
-  const notes: string[] = [];
-
-  try {
-    const hotSetIds = new Set<string>();
-
-    const { data: activeBoxItems } = await supabaseAdmin
-      .from('box_items')
-      .select('produto_id, boxes!inner(status)')
-      .eq('boxes.status', 'active');
-    if (activeBoxItems) {
-      for (const item of activeBoxItems) hotSetIds.add(item.produto_id);
+  const ids = new Set<string>();
+  const collect = async (table: string, select: string, configure: (query: any) => any, field: string) => {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await configure(db.from(table).select(select)).range(from, from + 999);
+      if (error || !Array.isArray(data)) throw new Error(`Não foi possível conferir os produtos recentes: ${table}`);
+      for (const row of data) if (row[field]) ids.add(String(row[field]));
+      if (data.length < 1000) break;
     }
-
-    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: recentQueries } = await supabaseAdmin
-      .from('product_queries')
-      .select('resolved_produto_id')
-      .gte('created_at', since24h)
-      .not('resolved_produto_id', 'is', null);
-    if (recentQueries) {
-      for (const q of recentQueries) {
-        if (q.resolved_produto_id) hotSetIds.add(q.resolved_produto_id);
-      }
-    }
-
-    const uniqueIds = [...hotSetIds];
-    const totalProducts = uniqueIds.length;
-    notes.push(`Hot set size: ${totalProducts}`);
-
-    await updateProgress(supabaseAdmin, runId, 0, totalProducts);
-
-    if (totalProducts === 0) {
-      await supabaseAdmin
-        .from('sync_runs')
-        .update({
-          finished_at: new Date().toISOString(),
-          fetched_count: 0,
-          upsert_count: 0,
-          errors_count: 0,
-          total_count: 0,
-          notes: 'Empty hot set, nothing to sync',
-          status: 'success',
-        })
-        .eq('id', runId);
-      return { runId, fetchedCount: 0, upsertCount: 0, errorsCount: 0, status: 'success', totalCount: 0 };
-    }
-
-    for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
-      const batch = uniqueIds.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(
-        batch.map((id) => getProductDetail(id, accessToken, secretToken)),
-      );
-
-      for (const product of results) {
-        processedCount++;
-        if (!product) {
-          errorsCount++;
-          continue;
-        }
-
-        try {
-          const fpInput = computeFingerprintInput(product);
-          const fp = await sha256(fpInput);
-          const produtoId = String(product.id);
-          const hasVariacao = !!(product.variacoes && (product.variacoes as unknown[]).length > 0);
-          const isAtivo = product.ativo !== false && product.ativo !== '0' && product.ativo !== 'false';
-
-          const { data: existing } = await supabaseAdmin
-            .from('products_index')
-            .select('fingerprint')
-            .eq('produto_id', produtoId)
-            .maybeSingle();
-
-          if (existing && existing.fingerprint === fp) {
-            await supabaseAdmin
-              .from('products_index')
-              .update({ last_seen_at: new Date().toISOString() })
-              .eq('produto_id', produtoId);
-          } else {
-            const codigoInterno = product.codigo_interno ? String(product.codigo_interno).trim() : null;
-            const codigoBarra = product.codigo_barra ? String(product.codigo_barra).trim() : null;
-
-            const fornecedores = product.fornecedores as { fornecedor_id?: string }[] | undefined;
-            const fornecedorId = fornecedores?.[0]?.fornecedor_id 
-              ? String(fornecedores[0].fornecedor_id) 
-              : (product.fornecedor_id ? String(product.fornecedor_id) : null);
-
-            await supabaseAdmin.from('products_index').upsert(
-              {
-                produto_id: produtoId,
-                nome: String(product.nome || ''),
-                codigo_interno: codigoInterno || null,
-                codigo_barra: codigoBarra || null,
-                possui_variacao: hasVariacao,
-                ativo: isAtivo,
-                fingerprint: fp,
-                fornecedor_id: fornecedorId,
-                last_synced_at: new Date().toISOString(),
-                last_seen_at: new Date().toISOString(),
-                payload_min_json: {
-                  valor_custo: product.valor_custo,
-                  preco_venda: product.valor_venda || product.preco,
-                  estoque: product.estoque,
-                  nome_grupo: product.nome_grupo,
-                },
-              },
-              { onConflict: 'produto_id' },
-            );
-            upsertCount++;
-          }
-        } catch (e) {
-          errorsCount++;
-          notes.push(`Product ${product.id} error: ${(e as Error).message}`);
-        }
-      }
-
-      // Update progress after each batch
-      await updateProgress(supabaseAdmin, runId, processedCount, totalProducts);
-
-      // Orçamento de tempo: encerra de forma limpa antes do runtime matar o processo
-      if (Date.now() - startedMs > TIME_BUDGET_MS) {
-        notes.push(`Interrompido por tempo após ${processedCount}/${totalProducts} produtos.`);
-        break;
-      }
-
-      if (i + BATCH_SIZE < uniqueIds.length) await wait(BATCH_DELAY_MS);
-    }
-
-    const incomplete = processedCount < totalProducts;
-    const status = incomplete
-      ? 'partial'
-      : errorsCount === 0 ? 'success' : errorsCount < processedCount ? 'partial' : 'failed';
-
-
-    await supabaseAdmin
-      .from('sync_runs')
-      .update({
-        finished_at: new Date().toISOString(),
-        fetched_count: processedCount,
-        upsert_count: upsertCount,
-        errors_count: errorsCount,
-        total_count: totalProducts,
-        notes: notes.length ? notes.join('\n') : null,
-        status,
-      })
-      .eq('id', runId);
-
-    return { runId, fetchedCount: processedCount, upsertCount, errorsCount, status, totalCount: totalProducts };
-  } catch (e) {
-    await supabaseAdmin
-      .from('sync_runs')
-      .update({
-        finished_at: new Date().toISOString(),
-        fetched_count: processedCount,
-        upsert_count: upsertCount,
-        errors_count: errorsCount + 1,
-        notes: notes.concat((e as Error).message).join('\n'),
-        status: 'failed',
-      })
-      .eq('id', runId);
-    throw e;
-  }
+  };
+  await collect('box_items', 'produto_id, boxes!inner(status)', q => q.eq('boxes.status', 'active').order('id'), 'produto_id');
+  await collect('toolbox_items', 'produto_id, toolboxes!inner(status)', q => q.eq('toolboxes.status', 'active').order('id'), 'produto_id');
+  await collect('product_queries', 'resolved_produto_id', q => q.gte('created_at', new Date(Date.now()-86400000).toISOString()).not('resolved_produto_id','is',null).order('id'), 'resolved_produto_id');
+  // O catálogo completo já termina em dezenas de segundos no mesmo ambiente.
+  // Reaproveitá-lo evita centenas de GETs individuais e atualiza saldo/custo
+  // mesmo quando nome e código (o fingerprint antigo) não mudaram.
+  return syncFull(db, accessToken, secretToken, ids);
 }
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });

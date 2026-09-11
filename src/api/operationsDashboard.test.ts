@@ -5,7 +5,14 @@ import {
   summarizeGenerationLogs,
   summarizeIntegrationOperations,
   summarizeSyncRuns,
+  summarizePartialOperations,
 } from '@/api/operationsDashboard';
+
+it('conta lotes pendentes mesmo quando a operação saiu indevidamente de reconciliação',()=>{
+ const result=summarizePartialOperations([{id:'6277',status:'awaiting_separation'},{id:'6278',status:'reconciliation_required'},{id:'old',status:'cancelled'}],
+  [{operation_id:'6277',status:'reconciliation_required'},{operation_id:'6278',status:'reconciliation_required'},{operation_id:'old',status:'awaiting_checkout'}]);
+ expect(result).toEqual({active:2,awaitingBalance:0,reconciliationRequired:2,awaitingCheckoutBatches:2});
+});
 
 type GenerationLog = Parameters<typeof summarizeGenerationLogs>[0][number];
 type SyncRun = Parameters<typeof summarizeSyncRuns>[0][number];

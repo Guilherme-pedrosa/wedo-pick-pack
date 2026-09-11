@@ -19,6 +19,12 @@ export const excluded = (os: GcRecord) => !STOCK_COMMITMENT_STATUSES.has(normali
 
 export function pendingOsLines(os: GcRecord): OsStockCommitment[] {
   if (excluded(os)) return [];
+  return documentStockLines(os);
+}
+
+/** Produtos da OS/venda selecionada. A lista de situações filtra compromissos
+ * externos; nunca pode dispensar a validação da baixa que será feita agora. */
+export function documentStockLines(os: GcRecord): OsStockCommitment[] {
   if (!os.nome_situacao || !['0', '1'].includes(String(os.situacao_estoque))) throw new Error(`Não foi possível validar a OS #${os.codigo || os.id}.`);
   if (!Array.isArray(os.produtos) && number(os.valor_produtos) !== 0) throw new Error(`Itens incompletos na OS #${os.codigo || os.id}.`);
   return (os.produtos || []).flatMap((line: GcRecord) => {

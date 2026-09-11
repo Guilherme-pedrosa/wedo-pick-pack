@@ -1,15 +1,17 @@
 import { supabase } from '@/integrations/supabase/client';
-import { getOS, getProductStock } from './gestaoclick';
+import { getOS, getVenda, getProductStock } from './gestaoclick';
 import { assertDefinitiveContents } from './partialConsolidation';
-import { assertStockConflict, fetchOsStockCommitments, pendingOsLines } from './osStockCommitments';
+import { assertStockConflict, fetchOsStockCommitments } from './osStockCommitments';
+import { documentStockLines } from '../../supabase/functions/_shared/osStockCommitments';
 import { isCancelledStatus, isExecutedStatus, type GcRecord } from './partialExecution';
 
 /** Consulta fresca antes de iniciar e antes de aplicar a baixa. */
-export async function assertCheckoutStock(osId: string, expected?: GcRecord, ownBatchId?: string): Promise<GcRecord> {
-  const current = await getOS(osId) as unknown as GcRecord;
-  if (isCancelledStatus(current.nome_situacao) || isExecutedStatus(current.nome_situacao)) throw new Error('Esta OS foi cancelada ou já executada. Atualize a fila antes de conferir.');
+export async function assertCheckoutStock(osId: string, expected?: GcRecord, ownBatchId?: string, type: 'os' | 'venda' = 'os'): Promise<GcRecord> {
+  const current = await (type === 'os' ? getOS(osId) : getVenda(osId)) as unknown as GcRecord;
+  if (!current || String(current.id) !== osId) throw new Error('Documento inconsistente no GestãoClick. Atualize a fila.');
+  if (isCancelledStatus(current.nome_situacao) || isExecutedStatus(current.nome_situacao)) throw new Error('Este documento foi cancelado ou já executado. Atualize a fila antes de conferir.');
   if (expected) assertDefinitiveContents(expected, current);
-  const requested = pendingOsLines(current);
+  const requested = documentStockLines(current);
   if (String(current.situacao_estoque) === '1') return current;
   const external = await fetchOsStockCommitments();
   const reservations: GcRecord[] = [];
@@ -41,7 +43,7 @@ export async function assertCheckoutStock(osId: string, expected?: GcRecord, own
     const reserved = reservations.filter(r => r.product_id === line.productId && (!line.variationId || !r.variation_id || r.variation_id === line.variationId))
       .reduce((n, r) => n + Number(r.reserved_quantity), 0);
     const ownQuantity = line.variationId ? (own.get(key) || 0) : [...own].filter(([k]) => k.startsWith(`${line.productId}::`)).reduce((n, [, q]) => n + q, 0);
-    assertStockConflict(stock.estoque, line.quantity, Math.max(0, reserved - ownQuantity), external, line.productId, line.variationId, osId);
+    assertStockConflict(stock.estoque, line.quantity, Math.max(0, reserved - ownQuantity), external, line.productId, line.variationId, type === 'os' ? osId : undefined);
   }
   return current;
 }

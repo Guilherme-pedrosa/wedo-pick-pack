@@ -28,7 +28,6 @@ import { toast } from "sonner";
 import ProductSearchInput, { ProductResult } from "./ProductSearchInput";
 import BarcodeScannerModal from "@/components/checkout/BarcodeScannerModal";
 import { logToolboxMovement } from "@/lib/toolboxMovementLog";
-import { executeStockEntrada } from "@/api/stockMovement";
 import ToolboxHandoffReceipt from "./ToolboxHandoffReceipt";
 
 export interface ToolboxData {
@@ -202,6 +201,10 @@ export default function ToolboxDetailDialog({
 
   const handleReturnItem = async () => {
     if (!returningItem || !toolbox || returnQty < 1) return;
+    if (toolbox.venda_gc_id) {
+      toast.error('Esta maleta tem uma saída de estoque vinculada. Use a conferência da devolução integral: devolver apenas um item não pode estornar todas as ferramentas.');
+      return;
+    }
     setReturning(true);
     try {
       if (returnQty >= returningItem.quantidade) {
@@ -230,30 +233,6 @@ export default function ToolboxDetailDialog({
       });
 
       toast.success(`${returningItem.nome_produto} devolvido`);
-
-      // Estorna ajuste de estoque no ERP quando houver referência vinculada
-      if (toolbox.venda_gc_id) {
-        try {
-          toast.info("Estornando ajuste de estoque no ERP...");
-          const result = await executeStockEntrada({
-            vendaGcId: toolbox.venda_gc_id,
-            toolboxName: toolbox.name,
-            technicianName: toolbox.technician_name || "",
-          });
-          if (result.success) {
-            // Clear venda_gc_id from toolbox
-            await (supabase.from("toolboxes") as any)
-              .update({ venda_gc_id: null })
-              .eq("id", toolbox.id);
-            toast.success("Ajuste de estoque estornado no ERP");
-          } else {
-            toast.error(`Erro ao estornar ajuste: ${result.error}`);
-          }
-        } catch (err) {
-          console.error("Error reverting stock adjustment:", err);
-          toast.error("Erro ao estornar ajuste de estoque no ERP");
-        }
-      }
 
       setReturningItem(null);
       setReturnQty(1);

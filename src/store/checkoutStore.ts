@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { Order, OrderType, PickingItem, PickingSession } from '@/api/types';
 
 interface CheckoutConfig {
+  operatorUserId: string;
   osStatusToShow: string[];
   vendaStatusToShow: string[];
   defaultOSConclusionStatus: string;
@@ -12,6 +13,7 @@ interface CheckoutConfig {
 }
 
 interface CheckoutStore {
+  sessionsByUser: Record<string, PickingSession | null>;
   session: PickingSession | null;
   productMetadataLoading: boolean;
   metadataRequestId: string | null;
@@ -21,6 +23,7 @@ interface CheckoutStore {
   applyProductMetadata: (requestId: string, products?: Order['produtos']) => void;
   confirmItem: (itemId: string, qtd?: number) => void;
   concludeSession: () => void;
+  recordGCConfirmation: (confirmation: NonNullable<PickingSession['gcConfirmation']>) => void;
   cancelSession: () => void;
   setConfig: (config: Partial<CheckoutConfig>) => void;
 }
@@ -50,12 +53,14 @@ function buildItems(order: Order): PickingItem[] {
 
 export const useCheckoutStore = create<CheckoutStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       session: null,
+      sessionsByUser: {},
       productMetadataLoading: false,
       metadataRequestId: null,
       concludedSessions: [],
       config: {
+        operatorUserId: '',
         osStatusToShow: [],
         vendaStatusToShow: [],
         defaultOSConclusionStatus: '',
@@ -64,6 +69,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
         gcUsuarioId: '',
       },
       startSession: (tipo, order, partialWriteoff) => {
+        if (get().session?.gcConfirmation && !get().session?.concludedAt) throw new Error('Salve o histórico da separação já confirmada antes de abrir outro pedido.');
         // Extract equipment name from OS equipamentos array
         let equipmentName: string | undefined;
         if ('equipamentos' in order && Array.isArray(order.equipamentos) && order.equipamentos.length > 0) {
@@ -74,6 +80,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
         }
 
         const session: PickingSession = {
+          operatorUserId: get().config.operatorUserId,
           tipo,
           refId: order.id,
           codigo: order.codigo,
@@ -110,7 +117,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
       },
       confirmItem: (itemId, qtd = 1) => {
         set((state) => {
-          if (!state.session) return state;
+          if (!state.session || state.session.concludedAt || state.session.gcConfirmation || !Number.isFinite(qtd) || qtd <= 0) return state;
 
           const items = state.session.items;
           const idx = items.findIndex((item) => item.id === itemId);
@@ -143,16 +150,25 @@ export const useCheckoutStore = create<CheckoutStore>()(
           };
         });
       },
-      cancelSession: () => set({ session: null, productMetadataLoading: false, metadataRequestId: null }),
+      recordGCConfirmation: confirmation => set(state => state.session ? { session: { ...state.session, gcConfirmation: confirmation } } : state),
+      cancelSession: () => set(state => state.session?.gcConfirmation && !state.session.concludedAt ? state : { session: null, productMetadataLoading: false, metadataRequestId: null }),
       setConfig: (partial) => {
-        set((state) => ({
-          config: { ...state.config, ...partial },
-        }));
+        set(state => {
+          const config = { ...state.config, ...partial };
+          if (partial.operatorUserId && partial.operatorUserId !== state.config.operatorUserId) {
+            const sessionsByUser = { ...state.sessionsByUser };
+            if (state.config.operatorUserId) sessionsByUser[state.config.operatorUserId] = state.session;
+            return { config, sessionsByUser, session: sessionsByUser[partial.operatorUserId] || null, productMetadataLoading: false, metadataRequestId: null };
+          }
+          return { config };
+        });
       },
     }),
     {
       name: 'wedo-checkout-store',
       partialize: (state) => ({
+        session: state.session,
+        sessionsByUser: state.sessionsByUser,
         concludedSessions: state.concludedSessions,
         config: state.config,
       }),

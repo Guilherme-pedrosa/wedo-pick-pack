@@ -1,5 +1,8 @@
 import { GC_API_USER_ID, installGcUsuarioId } from "../_shared/gc-user.ts";
 import { wantsPartialAuvoTask } from '../_shared/partialAuvo.ts';
+import { budgetTechnicalHours } from '../_shared/technicalHours.ts';
+import { assertBudgetUnchanged, assertOperationQuantities } from '../_shared/budgetIntegrity.ts';
+import { assertStatusOnlyChange, writableDocument } from '../_shared/partialConsolidation.ts';
 installGcUsuarioId();
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.98.0';
@@ -387,7 +390,7 @@ async function createPartialAuvoTask(
     idUserFrom: Number(auvoUserId),
     orientation,
     priority: 2,
-    questionnaireId: AUVO_QUESTIONNAIRE_ID,
+    questionnaireId: operation.document_type === 'venda' ? 224444 : AUVO_QUESTIONNAIRE_ID,
     address,
     latitude: -23.55,
     longitude: -46.63,
@@ -395,7 +398,22 @@ async function createPartialAuvoTask(
   };
   if (equipmentIds.length) payload.equipmentsId = equipmentIds;
 
-  return auvoCreateTask(token, payload);
+  const claim = await service.rpc('partial_writeoff_claim_auvo_creation', { p_batch_id: batch.id });
+  if (claim.error) throw new Error(claim.error.message);
+  if (claim.data !== 'claimed') return String(claim.data);
+  let taskId: string;
+  try {
+    taskId = await auvoCreateTask(token, payload);
+  } catch (error) {
+    // Somente rejeição explícita autoriza nova tentativa. Timeout pode ter criado a tarefa.
+    if (/Auvo rejeitou a tarefa \((400|401|403|404|422|429)\)/.test(compact(error))) {
+      await service.from('partial_writeoff_batches').update({ auvo_creation_started_at: null }).eq('id', batch.id).is('auvo_task_id', null);
+    }
+    throw error;
+  }
+  const saved = await service.from('partial_writeoff_batches').update({ auvo_task_id: taskId, auvo_task_error: null }).eq('id', batch.id).select('id').single();
+  if (saved.error || !saved.data) throw new Error(`Tarefa Auvo #${taskId} já criada, mas o vínculo local falhou. Não crie outra; reconcilie esta tarefa.`);
+  return taskId;
 }
 
 /** Grava o número da tarefa Auvo no campo extra do documento auxiliar no GC. */
@@ -414,11 +432,12 @@ async function attachAuvoTaskToAuxiliary(
 
   const taskAttrId = type === 'os' ? findAttr('tarefa', 'execu') : findAttr('tarefa', 'entrega');
   const budgetAttrId = findAttr('numero', 'orcamento');
+  if (!taskAttrId) throw new Error('Campo da tarefa Auvo não localizado no cadastro do GC.');
   const path = type === 'os'
     ? `/api/ordens_servicos/${encodeURIComponent(documentId)}`
     : `/api/vendas/${encodeURIComponent(documentId)}`;
   const latest = (await gcRequest(path))?.data;
-  if (!latest) return;
+  if (String(latest?.id) !== documentId) throw new Error('Documento auxiliar não confirmado no GC.');
 
   // Preserva TODOS os atributos obrigatórios já gravados e só sobrescreve os dois alvos.
   const atributos = normalizeDocumentAtributos(latest, type);
@@ -436,6 +455,9 @@ async function attachAuvoTaskToAuxiliary(
   const payload = statusUpdatePayload(latest, normalizeId(latest.situacao_id), type);
   payload.atributos = atributos;
   await gcRequest(path, 'PUT', payload);
+  const confirmed = (await gcRequest(path))?.data;
+  if (String(confirmed?.id) !== documentId) throw new Error('Vínculo da tarefa ainda não confirmado no GC.');
+  assertStatusOnlyChange({ ...latest, atributos }, confirmed);
 }
 
 /**
@@ -468,7 +490,7 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
   if (type === 'os') {
     const tarefaOs = budgetAttrValue(budget, '73341', 'tarefa os');
     const localReparo = budgetAttrValue(budget, '73350', 'local do reparo');
-    const horas = budgetAttrValue(budget, '67350', 'horas tecnicas');
+    const horas = budgetTechnicalHours(budget);
     // IDs oficiais do cadastro de atributos de OS no GC. A descoberta por nome
     // continua sendo usada, mas nunca pode fazer o POST perder campos obrigatórios.
     push(findAttr('81831', 'numero', 'orcamento'), numeroOrcamento);
@@ -476,7 +498,8 @@ async function buildAuxiliaryAtributos(operation: any, type: DocumentType) {
     // Preenchido de verdade logo após a criação da tarefa Auvo desta entrega.
     push(findAttr('73344', 'tarefa', 'execu'), tarefaOs || '-');
     push(findAttr('68658', 'local', 'reparo'), localReparo || 'CLIENTE');
-    push(findAttr('73897', 'horas', 'tecnic'), horas || '1');
+    if (horas === null) throw new Error('Horas técnicas não informadas no orçamento. Preencha a origem no GC.');
+    push(findAttr('73897', 'horas', 'tecnic'), horas);
   } else {
     push(findAttr('', 'numero', 'orcamento'), numeroOrcamento);
     push(findAttr('', 'tarefa', 'entrega'), '-');
@@ -588,7 +611,11 @@ function normalizeDocumentAtributos(document: any, type: DocumentType): Array<{ 
     if (!has('73343')) upsert('73343', '-');
     if (!has('73344')) upsert('73344', '-');
     if (!has('68658')) upsert('68658', 'CLIENTE');
-    if (!has('73897')) upsert('73897', '1');
+    if (!has('73897')) {
+      const hours = budgetTechnicalHours(document);
+      if (hours === null) throw new Error('A OS está sem HORAS TÉCNICAS. Preencha o campo no GC antes de continuar.');
+      upsert('73897', hours);
+    }
   }
   return list;
 }
@@ -600,7 +627,7 @@ function statusUpdatePayload(document: any, statusId: string, type: DocumentType
     'pagamentos', 'vendedor_id', 'tecnico_id', 'centro_custo_id', 'usuario_id',
     'observacoes', 'observacoes_interna', 'desconto_valor', 'desconto_tipo', 'tipo_desconto',
   ];
-  const payload: Record<string, any> = { situacao_id: statusId };
+  const payload: Record<string, any> = { ...writableDocument(document), situacao_id: statusId };
   for (const key of keys) {
     if (document?.[key] !== undefined && document?.[key] !== null) payload[key] = document[key];
   }
@@ -1150,10 +1177,23 @@ async function handleCreateBatchTask(body: any, auth: AuthContext) {
     .single();
   if (batchError || !batch) throw new Error('BATCH_NOT_FOUND');
   if (!batch.auxiliary_document_id) throw new Error('BATCH_WITHOUT_DOCUMENT');
-  if (batch.auvo_task_id) return batch;
+  if (batch.auvo_task_id) {
+    if (!batch.auvo_task_error) return batch;
+    const existingOperation = await getOperationGraph(String(batch.operation_id));
+    await attachAuvoTaskToAuxiliary(batch.auxiliary_document_type, String(batch.auxiliary_document_id), String(batch.auvo_task_id), String(existingOperation.budget_code || ''));
+    const repaired = await service.from('partial_writeoff_batches').update({ auvo_task_error: null }).eq('id', batchId).select('*').single();
+    if (repaired.error) throw repaired.error;
+    return repaired.data;
+  }
   if (!auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
 
   const operation = await getOperationGraph(String(batch.operation_id));
+  const sourceId = String(operation.budget_snapshot?._partial_source_id || operation.budget_id.replace(/^venda:/, ''));
+  const saleSource = operation.budget_snapshot?._partial_source_kind === 'venda' || operation.budget_id.startsWith('venda:');
+  const currentSource = (await gcRequest(`/api/${saleSource ? 'vendas' : 'orcamentos'}/${encodeURIComponent(sourceId)}`)).data;
+  if (String(currentSource?.id) !== sourceId) throw new Error('Origem atual da baixa não confirmada no GC.');
+  assertBudgetUnchanged(operation.budget_snapshot, currentSource);
+  assertOperationQuantities(currentSource, operation.items);
   if (!wantsPartialAuvoTask(batch, operation.flow_mode)) throw new Error('Este lote foi aberto sem solicitar tarefa Auvo.');
   if (!['awaiting_checkout', 'confirmed'].includes(batch.status)) throw new Error('O lote não está disponível para criar tarefa Auvo.');
   const { data: batchItems, error: itemsError } = await service
@@ -1174,6 +1214,7 @@ async function handleCreateBatchTask(body: any, auth: AuthContext) {
       String(auth.profile.auvo_user_id),
       body.auvo_customer_id ? String(body.auvo_customer_id) : undefined,
     );
+    let linkWarning: string | null = null;
     try {
       await attachAuvoTaskToAuxiliary(
         batch.auxiliary_document_type as DocumentType,
@@ -1182,11 +1223,12 @@ async function handleCreateBatchTask(body: any, auth: AuthContext) {
         String(operation.budget_code || ''),
       );
     } catch (linkError) {
-      console.warn('[partial-writeoff] tarefa criada mas não vinculada ao GC:', compact(linkError));
+      linkWarning = `Tarefa #${taskId} criada. Vínculo no GC pendente: ${compact(linkError)}`.slice(0, 500);
+      console.warn('[partial-writeoff]', linkWarning);
     }
     const { data: updated } = await service
       .from('partial_writeoff_batches')
-      .update({ auvo_task_id: taskId, auvo_task_error: null })
+      .update({ auvo_task_id: taskId, auvo_task_error: linkWarning })
       .eq('id', batchId)
       .select('*')
       .single();
@@ -1198,7 +1240,7 @@ async function handleCreateBatchTask(body: any, auth: AuthContext) {
       actor_id: auth.id,
       actor_name: auth.name,
     });
-    return updated || { ...batch, auvo_task_id: taskId, auvo_task_error: null };
+    return updated || { ...batch, auvo_task_id: taskId, auvo_task_error: linkWarning };
   } catch (taskError) {
     const message = compact(taskError).slice(0, 500) || 'Falha desconhecida ao criar tarefa no Auvo';
     console.error('[partial-writeoff] falha ao criar tarefa Auvo:', message);
@@ -1220,9 +1262,13 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'METHOD_NOT_ALLOWED' }, 405);
 
   try {
-    const auth = await authenticate(req);
     const body = await req.json();
     const action = String(body?.action || '');
+    if (action === 'rules') return json({ version: '2026-09-11-audit-v3', saleQuestionnaire: 224444, taskCreationLock: true, legacyMutationsDisabled: true });
+    const auth = await authenticate(req);
+    if (['open_operation', 'prepare_batch', 'confirm_batch', 'consolidate'].includes(action)) {
+      return json({ error: 'Atualize a aplicação para usar o fluxo que confere o orçamento original e o estoque. Esta versão antiga não pode movimentar documentos.' }, 409);
+    }
 
     if (action === 'search_budgets') {
       const budgets = await searchBudgets(String(body.term || ''));

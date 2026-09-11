@@ -18,6 +18,7 @@ export interface GCProdutoItem {
 }
 
 export interface GCOrdemServico {
+  situacao_estoque?: string;
   id: string;
   codigo: string;
   cliente_id: string;
@@ -50,6 +51,7 @@ export interface GCOrdemServico {
 }
 
 export interface GCVenda {
+  situacao_estoque?: string;
   id: string;
   codigo: string;
   tipo: string;
@@ -93,6 +95,8 @@ export interface PickingItem {
 }
 
 export interface PickingSession {
+  operatorUserId?: string;
+  gcConfirmation?: { targetStatusId: string; targetStatusName: string; concludedAt: string };
   tipo: OrderType;
   refId: string;
   codigo: string;

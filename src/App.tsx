@@ -5,42 +5,43 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useCheckoutStore } from "@/store/checkoutStore";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
-import DashboardPage from "./pages/DashboardPage";
-import BoxesPage from "./pages/controle/BoxesPage";
-import ToolboxesPage from "./pages/controle/ToolboxesPage";
-import TechniciansPage from "./pages/controle/TechniciansPage";
-import HandoffLogsPage from "./pages/controle/HandoffLogsPage";
-import ToolboxLogsPage from "./pages/controle/ToolboxLogsPage";
-import CheckinLogsPage from "./pages/controle/CheckinLogsPage";
-import BaixaLogsPage from "./pages/controle/BaixaLogsPage";
-import HandoffHistoryPage from "./pages/controle/HandoffHistoryPage";
-import CheckoutPage from "./pages/CheckoutPage";
-import PartialWriteoffPage from "./pages/PartialWriteoffPage";
-import ConfigPage from "./pages/ConfigPage";
-import InventoryPolicyPage from "./pages/InventoryPolicyPage";
-import InventoryAnalysisPage from "./pages/InventoryAnalysisPage";
-import ComprasPage from "./pages/ComprasPage";
-import PurchaseTrackerPage from "./pages/PurchaseTrackerPage";
-import RelatorioPedidosPage from "./pages/RelatorioPedidosPage";
-import RastreadorPage from "./pages/RastreadorPage";
-import OrcamentoAnalysisPage from "./pages/OrcamentoAnalysisPage";
-import EtiquetasPage from '@/pages/EtiquetasPage';
-import ProductExplorerPage from "./pages/ProductExplorerPage";
-import EstoqueIAPage from "./pages/EstoqueIAPage";
-import ProductExplorerConfigPage from "./pages/ProductExplorerConfigPage";
-import OSGenerationLogsPage from "./pages/OSGenerationLogsPage";
-import AdminUsersPage from "./pages/AdminUsersPage";
-import SeparationsPage from "./pages/SeparationsPage";
-import ProductDetailPage from "./pages/ProductDetailPage";
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const BoxesPage = lazy(() => import("./pages/controle/BoxesPage"));
+const ToolboxesPage = lazy(() => import("./pages/controle/ToolboxesPage"));
+const TechniciansPage = lazy(() => import("./pages/controle/TechniciansPage"));
+const HandoffLogsPage = lazy(() => import("./pages/controle/HandoffLogsPage"));
+const ToolboxLogsPage = lazy(() => import("./pages/controle/ToolboxLogsPage"));
+const CheckinLogsPage = lazy(() => import("./pages/controle/CheckinLogsPage"));
+const BaixaLogsPage = lazy(() => import("./pages/controle/BaixaLogsPage"));
+const HandoffHistoryPage = lazy(() => import("./pages/controle/HandoffHistoryPage"));
+const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
+const PartialWriteoffPage = lazy(() => import("./pages/PartialWriteoffPage"));
+const ConfigPage = lazy(() => import("./pages/ConfigPage"));
+const InventoryPolicyPage = lazy(() => import("./pages/InventoryPolicyPage"));
+const InventoryAnalysisPage = lazy(() => import("./pages/InventoryAnalysisPage"));
+const ComprasPage = lazy(() => import("./pages/ComprasPage"));
+const PurchaseTrackerPage = lazy(() => import("./pages/PurchaseTrackerPage"));
+const RelatorioPedidosPage = lazy(() => import("./pages/RelatorioPedidosPage"));
+const RastreadorPage = lazy(() => import("./pages/RastreadorPage"));
+const OrcamentoAnalysisPage = lazy(() => import("./pages/OrcamentoAnalysisPage"));
+const EtiquetasPage = lazy(() => import("@/pages/EtiquetasPage"));
+const ProductExplorerPage = lazy(() => import("./pages/ProductExplorerPage"));
+const EstoqueIAPage = lazy(() => import("./pages/EstoqueIAPage"));
+const ProductExplorerConfigPage = lazy(() => import("./pages/ProductExplorerConfigPage"));
+const OSGenerationLogsPage = lazy(() => import("./pages/OSGenerationLogsPage"));
+const AdminUsersPage = lazy(() => import("./pages/AdminUsersPage"));
+const SeparationsPage = lazy(() => import("./pages/SeparationsPage"));
+const ProductDetailPage = lazy(() => import("./pages/ProductDetailPage"));
 
-import ReturnLogsPage from "./pages/ReturnLogsPage";
-import LoginPage from "./pages/LoginPage";
-import SystemLogsPage from "./pages/SystemLogsPage";
-import SetupPage from "./pages/SetupPage";
-import NotFound from "./pages/NotFound";
+const ReturnLogsPage = lazy(() => import("./pages/ReturnLogsPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const SystemLogsPage = lazy(() => import("./pages/SystemLogsPage"));
+const SetupPage = lazy(() => import("./pages/SetupPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const queryClient = new QueryClient();
 function AuthenticatedApp() {
   const { user, profile, isAdmin, loading } = useAuth();
   const setConfig = useCheckoutStore(s => s.setConfig);
+  const operatorUserId = useCheckoutStore(s => s.config.operatorUserId);
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
 
   // Check if any admin exists
@@ -70,17 +72,20 @@ function AuthenticatedApp() {
 
   // Sync checkout config from user profile
   useEffect(() => {
-    if (profile) {
+    if (user) {
       setConfig({
-        operatorName: profile.name,
-        gcUsuarioId: profile.gc_usuario_id || '',
-        osStatusToShow: profile.os_status_to_show ?? [],
-        vendaStatusToShow: profile.venda_status_to_show ?? [],
-        defaultOSConclusionStatus: profile.default_os_conclusion_status ?? '',
-        defaultVendaConclusionStatus: profile.default_venda_conclusion_status ?? '',
+        operatorUserId: user?.id || '',
+        operatorName: profile?.name || user.email || '',
+        gcUsuarioId: profile?.gc_usuario_id || '',
+        osStatusToShow: profile?.os_status_to_show ?? [],
+        vendaStatusToShow: profile?.venda_status_to_show ?? [],
+        defaultOSConclusionStatus: profile?.default_os_conclusion_status ?? '',
+        defaultVendaConclusionStatus: profile?.default_venda_conclusion_status ?? '',
       });
     }
   }, [
+    user?.id,
+    user?.email,
     profile?.name,
     profile?.gc_usuario_id,
     profile?.os_status_to_show,
@@ -105,6 +110,7 @@ function AuthenticatedApp() {
   if (!user) {
     return <LoginPage />;
   }
+  if (operatorUserId !== user.id) return <div role="status" className="p-6">Carregando seu perfil e sua conferência…</div>;
 
   return (
     <Routes>
@@ -160,7 +166,11 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AuthenticatedApp />
+        <RouteErrorBoundary>
+          <Suspense fallback={<div role="status" className="min-h-screen flex items-center justify-center gap-2"><Loader2 className="h-6 w-6 animate-spin" />Carregando tela…</div>}>
+            <AuthenticatedApp />
+          </Suspense>
+        </RouteErrorBoundary>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

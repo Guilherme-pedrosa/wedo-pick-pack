@@ -119,8 +119,15 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
     throw new Error('AUTH_REQUIRED');
   }
 
+  // Mesmo Checkout gera o mesmo UUID, inclusive após recarregar a tela ou perder
+  // a resposta do INSERT. A chave primária impede duas gravações concorrentes.
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([input.order_type, input.order_id, input.started_at, user.id])));
+  const hash = Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+  const id = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+
   const payload = {
     ...input,
+    id,
     user_id: user.id,
     client_id: input.client_id || null,
     items: input.items as unknown as never,
@@ -133,6 +140,9 @@ export async function createSeparation(input: CreateSeparationInput): Promise<Se
     .single();
 
   if (error || !data) {
+    const existing = await supabase.from('separations').select('*').eq('id', id).maybeSingle();
+    if (!existing.error && existing.data && existing.data.order_id === input.order_id && existing.data.order_type === input.order_type
+      && existing.data.target_status_id === input.target_status_id && !existing.data.invalidated) return existing.data as unknown as SeparationRecord;
     console.error('Error creating separation:', error);
     throw new Error('SEPARATION_SAVE_FAILED');
   }

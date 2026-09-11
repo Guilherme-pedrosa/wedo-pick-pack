@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 const m = vi.hoisted(() => {
   const saved=new Map<string,string>();
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(k:string)=>saved.get(k)??null,setItem:(k:string,v:string)=>saved.set(k,v),removeItem:(k:string)=>saved.delete(k)}});
-  return { getOS: vi.fn(), getVenda: vi.fn(), enrich: vi.fn(), findPartial: vi.fn(), stockGuard: vi.fn(), updateOS: vi.fn(), updateVenda: vi.fn(), confirmPartial: vi.fn(), error: vi.fn(), mobile: false };
+  return { getOS: vi.fn(), getVenda: vi.fn(), enrich: vi.fn(), findPartial: vi.fn(), stockGuard: vi.fn(), updateOS: vi.fn(), updateVenda: vi.fn(), confirmPartial: vi.fn(), save: vi.fn(), error: vi.fn(), mobile: false };
 });
 const product = (id: string, quantity: number) => ({ produto: { produto_id: id, variacao_id: '', nome_produto: `Produto ${id}`, codigo_produto: `COD-${id}`, codigo_barras: '', quantidade: quantity, sigla_unidade: 'UN' } });
 const order = (id: string, code: string, quantity=2) => ({ id, codigo: code, cliente_id: 'client', nome_cliente: 'Cliente', situacao_id: 'waiting', nome_situacao: 'PEDIDO EM CONFERENCIA', valor_total: '100', data: '2026-09-11', produtos: [product(id,quantity)] });
@@ -20,7 +20,7 @@ vi.mock('@/api/gestaoclick', () => ({
 }));
 vi.mock('@/api/partialWriteoff', () => ({ getPartialCheckoutQueue: async () => [partial], findPartialBatchByDocument:m.findPartial, confirmPartialBatch:m.confirmPartial }));
 vi.mock('@/api/checkoutStockGuard', () => ({ assertCheckoutStock:m.stockGuard }));
-vi.mock('@/api/separations', () => ({ getValidSeparatedOrderIds: async () => new Set(), createSeparation:vi.fn(), snapshotPickingItems:vi.fn() }));
+vi.mock('@/api/separations', () => ({ getValidSeparatedOrderIds: async () => new Set(), createSeparation:m.save, snapshotPickingItems:vi.fn() }));
 vi.mock('@/lib/systemLog', () => ({ logSystemAction:vi.fn() }));
 vi.mock('@/hooks/use-mobile', () => ({ useIsMobile: () => m.mobile }));
 vi.mock('sonner', () => ({ toast:{error:m.error,warning:vi.fn(),info:vi.fn(),success:vi.fn()} }));
@@ -30,7 +30,8 @@ const deferred = <T,>() => { let resolve!: (value:T)=>void; const promise=new Pr
 let clients: QueryClient[]=[];
 beforeEach(() => {
   vi.clearAllMocks(); m.mobile=false;
-  useCheckoutStore.getState().cancelSession();
+  useCheckoutStore.setState({session:null,metadataRequestId:null,productMetadataLoading:false});
+  m.save.mockReset().mockResolvedValue({id:'separation'});
   useCheckoutStore.getState().setConfig({osStatusToShow:[],vendaStatusToShow:[],defaultOSConclusionStatus:'stock',defaultVendaConclusionStatus:'stock'});
   m.getOS.mockImplementation(async id => id==='partial' ? order(id,'10226',3) : order(id,'4559'));
   m.getVenda.mockResolvedValue(order('sale','8000'));
@@ -41,6 +42,46 @@ afterEach(() => { cleanup(); clients.forEach(c=>c.clear()); clients=[]; });
 function show(url='/checkout') { const client=new QueryClient({defaultOptions:{queries:{retry:false}}}); clients.push(client); render(<MemoryRouter initialEntries={[url]}><QueryClientProvider client={client}><CheckoutPage /></QueryClientProvider></MemoryRouter>); }
 
 describe('fila → itens → conferência do Checkout', () => {
+  it('guarda conferências separadas quando o operador troca de conta',()=>{
+    const store=useCheckoutStore.getState(); store.setConfig({operatorUserId:'operator-a'});
+    store.startSession('os',order('normal','4559'));
+    const item=useCheckoutStore.getState().session!.items[0]; store.confirmItem(item.id,1);
+    store.setConfig({operatorUserId:'operator-b'}); expect(useCheckoutStore.getState().session).toBeNull();
+    store.setConfig({operatorUserId:'operator-a'});
+    expect(useCheckoutStore.getState().session?.items[0].qtd_conferida).toBe(1);
+    expect(useCheckoutStore.getState().session?.operatorUserId).toBe('operator-a');
+  });
+  it.each([false, true])('clicar de novo no pedido em andamento preserva as quantidades (parcial=%s)',async partialOrder=>{
+    show(); const label=partialOrder?'OS #10226':'#4559';
+    fireEvent.click(await screen.findByText(label)); await screen.findByText(partialOrder?'Produto partial':'Produto normal');
+    const item=useCheckoutStore.getState().session!.items[0]; act(()=>useCheckoutStore.getState().confirmItem(item.id,1));
+    fireEvent.click(screen.getAllByText(label)[0]);
+    expect(m.getOS).toHaveBeenCalledTimes(1);
+    expect(useCheckoutStore.getState().session!.items[0].qtd_conferida).toBe(1);
+  });
+  it('falha de histórico repete apenas a gravação local e preserva a confirmação GC após recarregar',async()=>{
+    m.save.mockRejectedValueOnce(new Error('SEPARATION_SAVE_FAILED')).mockResolvedValue({id:'ok'});
+    show(); fireEvent.click(await screen.findByText('#4559')); await screen.findByText('Produto normal');
+    const item=useCheckoutStore.getState().session!.items[0]; act(()=>useCheckoutStore.getState().confirmItem(item.id,2));
+    fireEvent.click(screen.getByRole('button',{name:/Concluir Separação/})); fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button',{name:/Confirmar e Atualizar/}));
+    await waitFor(()=>expect(m.save).toHaveBeenCalledTimes(1));
+    expect(useCheckoutStore.getState().session?.gcConfirmation?.targetStatusId).toBe('stock');
+    await act(async()=>useCheckoutStore.persist.rehydrate());
+    expect(useCheckoutStore.getState().session?.gcConfirmation?.targetStatusId).toBe('stock');
+    fireEvent.click(await screen.findByRole('button',{name:'Salvar histórico pendente'}));
+    await waitFor(()=>expect(m.save).toHaveBeenCalledTimes(2));
+    expect(m.updateOS).toHaveBeenCalledTimes(1); expect(m.stockGuard).toHaveBeenCalledTimes(1);
+  });
+  it('aplica a conferência final de estoque também nas vendas',async()=>{
+    m.stockGuard.mockRejectedValue(new Error('Conflito de estoque')); show();
+    fireEvent.click(await screen.findByRole('button',{name:'Vendas'})); fireEvent.click(await screen.findByText('#8000')); await screen.findByText('Produto sale');
+    const item=useCheckoutStore.getState().session!.items[0]; act(()=>useCheckoutStore.getState().confirmItem(item.id,2));
+    fireEvent.click(screen.getByRole('button',{name:/Concluir Separação/})); fireEvent.click(await screen.findByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button',{name:/Confirmar e Atualizar/}));
+    await waitFor(()=>expect(m.stockGuard).toHaveBeenCalledWith('sale',expect.any(Object),undefined,'venda'));
+    expect(m.updateVenda).not.toHaveBeenCalled(); expect(m.save).not.toHaveBeenCalled();
+  });
   it.each([false, true])('retoma apenas o lote do link da baixa parcial (mobile=%s)', async mobile => {
     m.mobile = mobile; show('/checkout?partialBatch=batch');
     await screen.findByText('Produto partial');

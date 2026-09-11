@@ -133,7 +133,7 @@ export default function OrcamentosPanel() {
 
   useEffect(() => {
     const previous = useComprasStore.getState().result;
-    if (!hydrated || upgradedOldResult.current || isScanning || !selectedCompra.length || !previous || previous.purchaseScanVersion === 2) return;
+    if (!hydrated || upgradedOldResult.current || isScanning || !selectedCompra.length || !previous || previous.purchaseScanVersion === 3) return;
     upgradedOldResult.current = true;
     void handleGenerate();
   }, [hydrated, isScanning, selectedCompra, selectedSituacoes]);

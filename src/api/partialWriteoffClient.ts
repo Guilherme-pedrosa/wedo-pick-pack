@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
-import { executionDocument, isExecutedStatus } from './partialExecution';
+import { executionDocument, isExecutedStatus, isCancelledStatus } from './partialExecution';
+import { strictProductStock } from './partialStockOpportunities';
 import { consolidateExecutedOs } from './partialConsolidation';
 import { assertStockConflict, commitmentFor, fetchOsStockCommitments } from './osStockCommitments';
 import { assertCheckoutStock } from './checkoutStockGuard';
@@ -110,8 +111,7 @@ function lineKey(product: any, index: number): string {
 export function documentTypeForBudgetKind(kind: BudgetKind | undefined, budget: any): DocumentType {
   if (kind === 'produto' || kind === 'venda') return 'venda';
   if (kind === 'servico') return 'os';
-  const hasServices = Array.isArray(budget?.servicos) && budget.servicos.length > 0;
-  return hasServices || numberValue(budget?.valor_servicos) > 0 ? 'os' : 'venda';
+  throw new Error('Tipo do orçamento não confirmado. Consulte a origem no GC antes de abrir a baixa parcial.');
 }
 
 export function isBudgetEligibleForPartialWriteoff(budget: any): boolean {
@@ -120,11 +120,11 @@ export function isBudgetEligibleForPartialWriteoff(budget: any): boolean {
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('pt-BR');
   const generatedDocument = /\b(os|venda)\b.*\bgerad[ao]\b|\bgerad[ao]\b.*\b(os|venda)\b/.test(status);
-  return !generatedDocument;
+  return !generatedDocument && !isCancelledStatus(budget?.nome_situacao) && String(budget?.situacao_estoque) !== '1';
 }
 
 export function isSaleEligibleForPartialWriteoff(sale: any): boolean {
-  return String(sale?.situacao_estoque ?? '').trim() === '0';
+  return String(sale?.situacao_estoque ?? '').trim() === '0' && !isCancelledStatus(sale?.nome_situacao) && !isExecutedStatus(sale?.nome_situacao);
 }
 
 function isSourceEligibleForPartialWriteoff(kind: BudgetKind, source: any): boolean {
@@ -150,7 +150,7 @@ function operationSourceId(operation: PartialWriteoffOperation): string {
     : operation.budget_id;
 }
 
-function operationItemsFromBudget(budget: any) {
+export function operationItemsFromBudget(budget: any) {
   return (budget?.produtos || []).map((line: any, index: number) => {
     const product = unwrapProductLine(line);
     return {
@@ -163,13 +163,13 @@ function operationItemsFromBudget(budget: any) {
       original_quantity: numberValue(product.quantidade),
       line_snapshot: line,
     };
-  }).filter((item: any) => item.product_id && item.original_quantity > 0);
+  }).filter((item: any) => item.product_id && item.original_quantity > 0 && String(unwrapProductLine(item.line_snapshot).movimenta_estoque) !== '0');
 }
 
 async function fetchSource(id: string, kind: BudgetKind): Promise<any> {
   const collection = kind === 'venda' ? '/api/vendas' : '/api/orcamentos';
   const response = await gcRequest(`${collection}/${encodeURIComponent(id)}`);
-  if (!response?.data?.id) throw new Error('BUDGET_NOT_FOUND');
+  if (String(response?.data?.id) !== id) throw new Error('BUDGET_NOT_FOUND');
   return response.data;
 }
 
@@ -187,6 +187,7 @@ async function searchBudgets(term: string, kind: BudgetKind): Promise<Array<any 
     `${collection}?pagina=1&limite=100&pesquisa=${encoded}`,
   ];
   const settled = await Promise.allSettled(requests.map(path => gcRequest(path)));
+  if (settled.every(result => result.status === 'rejected')) throw new Error('Não foi possível pesquisar no GestãoClick. Tente novamente; a pesquisa não foi concluída.');
   const rows = settled.flatMap(result => result.status === 'fulfilled'
     ? (result.value?.data || []).map((row: any) => ({
         ...row,
@@ -215,17 +216,6 @@ async function searchBudgets(term: string, kind: BudgetKind): Promise<Array<any 
 
 function unwrapProductDetail(response: any): any {
   return response?.data?.Produto || response?.data?.produto || response?.data || {};
-}
-
-function currentStock(detail: any, variationId: string, hasVariation: boolean): number {
-  if (hasVariation && variationId && Array.isArray(detail?.variacoes)) {
-    const match = detail.variacoes.find((entry: any) => {
-      const variation = entry?.variacao || entry;
-      return normalizeId(variation?.id || variation?.variacao_id) === variationId;
-    });
-    if (match) return numberValue((match?.variacao || match)?.estoque);
-  }
-  return numberValue(detail?.estoque);
 }
 
 async function getOperationGraph(operationId: string): Promise<PartialWriteoffOperation> {
@@ -576,8 +566,9 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
     const detail = unwrapProductDetail(await gcRequest(`/api/produtos/${encodeURIComponent(item.product_id)}`));
     const lineSnapshot = item.line_snapshot as { produto?: { possui_variacao?: unknown } } | undefined;
     const hasVariation = String(lineSnapshot?.produto?.possui_variacao ?? '').trim() === '1';
-    const stock = currentStock(detail, item.variation_id, hasVariation);
     const variation = hasVariation ? item.variation_id : '';
+    if (hasVariation && !variation) throw new Error(`Variação não identificada: ${item.product_name}`);
+    const stock = strictProductStock({ data: detail }, item.product_id, variation).stock;
     const external = commitmentFor(commitments, item.product_id, variation);
     assertStockConflict(stock, quantity, Number(item.global_reserved_quantity || 0), commitments, item.product_id, variation);
     selectedWithStock.push({ item, quantity, physicalStock: stock, externalCommitted: external.outstanding,
@@ -722,7 +713,12 @@ async function finishPreparedBatch(batchId: string, body: any, auth: AuthContext
 export async function createBatchAuvoTask(batchId: string, auvoCustomerId?: string, options: { requestIfMissing?: boolean } = {}): Promise<void> {
   const { data: batch, error: batchError } = await cloud.from('partial_writeoff_batches').select('*').eq('id', batchId).single();
   if (batchError) throw batchError;
-  if (batch.auvo_task_id) return;
+  if (batch.auvo_task_id && !batch.auvo_task_error) return;
+  if (batch.auvo_task_id) {
+    const repair = await supabase.functions.invoke('partial-writeoff', { body: { action: 'create_batch_task', batch_id: batchId } });
+    if (repair.error || repair.data?.error) throw new Error(repair.data?.error || repair.error?.message || 'Falha ao reparar vínculo no GC.');
+    return;
+  }
   const operation = await getOperationGraph(batch.operation_id);
   if (!options.requestIfMissing && !wantsPartialAuvoTask(batch, operation.flow_mode)) throw new Error('Este lote foi aberto sem solicitar tarefa Auvo.');
   if (!canRequestPartialAuvoTask(batch, operation)) throw new Error('O lote não está disponível para criar tarefa Auvo.');
@@ -743,6 +739,7 @@ export async function createBatchAuvoTask(batchId: string, auvoCustomerId?: stri
     await cloud.from('partial_writeoff_batches').update({ auvo_task_error: message }).eq('id', batchId).is('auvo_task_id', null);
     throw new Error(message);
   }
+  if ((data as any)?.batch?.auvo_task_error) throw new Error((data as any).batch.auvo_task_error);
   const { data: saved, error: savedError } = await cloud.from('partial_writeoff_batches').select('auvo_task_id').eq('id', batchId).single();
   if (savedError || !saved?.auvo_task_id) throw new Error('A criação da tarefa ainda não foi confirmada. Confira o histórico antes de tentar novamente.');
 }
@@ -784,7 +781,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   if (!sameQuantities(quantityMap(expectedLines), quantityMap(currentDocument?.produtos || []))) {
     throw new Error('AUXILIARY_ITEMS_CHANGED');
   }
-  if (type === 'os' && String(currentDocument?.situacao_estoque) !== '1') await assertCheckoutStock(String(batch.auxiliary_document_id), currentDocument, batchId);
+  if (String(currentDocument?.situacao_estoque) !== '1') await assertCheckoutStock(String(batch.auxiliary_document_id), currentDocument, batchId, type);
 
   if (String(currentDocument?.situacao_estoque) === '1') {
     const reconciled = await cloud.rpc('partial_writeoff_reconcile_gc_debit', {
@@ -819,7 +816,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     let applied = false;
     try {
       const latest = (await gcRequest(path))?.data;
-      const latestStatus = normalizeId(latest?.situacao_id);
+      assertStatusOnlyChange(type === 'os' ? withMissingTechnicalHours(currentDocument, sourceBeforeCheckout) : currentDocument, latest);
       applied = String(latest?.situacao_estoque) === '1' && sameQuantities(quantityMap(expectedLines), quantityMap(latest?.produtos || []));
     } catch { /* keep false */ }
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {

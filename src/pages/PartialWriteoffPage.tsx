@@ -185,6 +185,9 @@ export default function PartialWriteoffPage() {
   });
   const selected = operations.find(operation => operation.id === selectedId)
     || (selectedId === linkedOperationId ? linkedOperationQuery.data : null) || null;
+  const pendingCheckoutBatch = selected?.batches
+    .filter(batch => batch.auxiliary_document_id && ['awaiting_checkout', 'reconciliation_required'].includes(batch.status))
+    .sort((a, b) => a.sequence - b.sequence)[0];
   useEffect(() => { if (linkedOperationId) setSelectedId(linkedOperationId); }, [linkedOperationId]);
 
   const executionQuery = useQuery({
@@ -428,9 +431,11 @@ export default function PartialWriteoffPage() {
         return;
       }
       const divergent = result.filter(item => ['missing', 'cancelled', 'status_changed'].includes(item.state));
-      if (result.some(item => item.state === 'pending_checkout')) {
-        toast.warning('Há lotes sem baixa no GestãoClick. Retome esses lotes no Checkout antes de consolidar.', { duration: 10000 });
-        await refresh();
+      const pending = result.filter(item => item.state === 'pending_checkout').sort((a, b) => a.sequence - b.sequence);
+      if (pending.length) {
+        const next = pending[0];
+        toast.info(`${next.type === 'os' ? 'OS' : 'Venda'} #${next.documentCode} ainda sem baixa. Abrindo a conferência deste lote no Checkout.`);
+        navigate(`/checkout?partialBatch=${encodeURIComponent(next.batchId)}`);
         return;
       }
       if (divergent.length) {
@@ -899,9 +904,12 @@ export default function PartialWriteoffPage() {
                 {selected.status === 'reconciliation_required' && (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Operação travada para conferência</AlertTitle>
+                    <AlertTitle>{pendingCheckoutBatch ? 'Confirmação do lote pendente' : 'Operação travada para conferência'}</AlertTitle>
                     <AlertDescription className="space-y-3">
-                      <p>{selected.reconciliation_reason || 'O estado do documento no GestãoClick precisa ser conferido antes de continuar.'}</p>
+                      {pendingCheckoutBatch && (
+                        <p>A confirmação da {pendingCheckoutBatch.auxiliary_document_type === 'os' ? 'OS' : 'venda'} #{pendingCheckoutBatch.auxiliary_document_code} precisa ser retomada. O botão abaixo verifica o GC e abre a conferência do mesmo lote no Checkout.</p>
+                      )}
+                      <p>{pendingCheckoutBatch && 'Falha registrada na tentativa anterior: '}{selected.reconciliation_reason || 'O estado do documento no GestãoClick precisa ser conferido antes de continuar.'}</p>
                       {selected.definitive_document_id && (
                         <p className="text-xs">
                           Documento definitivo já criado: #{selected.definitive_document_code || selected.definitive_document_id}. A retomada reaproveita esse documento, sem duplicar.
@@ -914,7 +922,7 @@ export default function PartialWriteoffPage() {
                         disabled={unlocking}
                         onClick={handleUnlockReconciliation}
                       >
-                        {unlocking ? 'Conferindo documentos...' : 'Retomar consolidação'}
+                        {unlocking ? 'Conferindo documentos...' : pendingCheckoutBatch ? 'Retomar confirmação no Checkout' : 'Retomar consolidação'}
                       </Button>
                     </AlertDescription>
                   </Alert>

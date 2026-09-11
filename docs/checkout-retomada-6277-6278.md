@@ -11,3 +11,9 @@ A auditoria retorna “baixa ainda não aplicada”, em vez de sucesso genérico
 Validação: 191 testes passaram, incluindo retomada da mesma OS com uma única atualização, preservação de campos/quantidades e auditoria sem novo movimento. Typecheck e build também foram executados. Evidências antes/depois: `outputs/pick-pack-evidence/6277-hours-repair.json` e `6278-hours-repair.json`, fora do repositório.
 
 Os lotes permanecem pendentes até a conclusão da conferência no Checkout. Reservas locais ou preenchimento de um campo obrigatório não equivalem à baixa de estoque.
+
+## Ajuste da retomada às 19:34
+
+Nova leitura da 6277 confirmou a OS 10228 em PEDIDO EM CONFERENCIA, `situacao_estoque=0`, com HORAS TÉCNICAS já preenchido com 8. O botão superior ainda dizia “Retomar consolidação” e, ao detectar a baixa pendente, apenas mostrava um aviso. Esse caminho foi corrigido: quando existe lote pendente, o botão diz “Retomar confirmação no Checkout”; após conferir o GC, abre o lote correspondente no Checkout. A falha anterior é identificada como histórica. A retomada usa o mesmo lote e preserva outra conferência em andamento por meio da confirmação de troca já existente. Nenhuma baixa, quantidade ou documento foi alterado neste ajuste.
+
+Validação do ajuste: 27 testes de auditoria/retomada/carregamento passaram; checagem de tipos e build aprovados.

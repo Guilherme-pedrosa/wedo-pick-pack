@@ -284,6 +284,8 @@ export interface ItemCompra {
   fornecedor_nome?: string;
   fornecedor_telefone?: string;
   orcamentos: Array<{
+    source_kind?: 'orcamento' | 'venda';
+    partial_operation_id?: string;
     id: string;
     codigo: string;
     qtd: number;
@@ -307,6 +309,9 @@ export interface ItemCompra {
 }
 
 export interface ComprasResult {
+  purchaseScanVersion?: number;
+  partialOperationsIncluded?: number;
+  warnings?: string[];
   itensList: ItemCompra[];
   itensOkList: ItemCompra[];
   itensCobertosporPedido: ItemCompra[];

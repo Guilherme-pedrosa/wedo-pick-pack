@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { OrderType } from './types';
+import { readPartialPurchaseOperations } from '../../supabase/functions/_shared/partialPurchaseOperations';
 import { invokePartialWriteoffClient } from './partialWriteoffClient';
 import type { ExecutionDocument } from './partialExecution';
 
@@ -399,15 +400,5 @@ export function buildActivePartialDemand(operations: PartialWriteoffOperation[])
 }
 
 export async function getActivePartialDemand(): Promise<ActivePartialDemand> {
-  const empty: ActivePartialDemand = {
-    activeBudgetIds: new Set(),
-    auxiliaryDocumentIds: new Set(),
-    pendingByBudgetAndProduct: new Map(),
-  };
-  try {
-    const operations = await listPartialOperations();
-    return buildActivePartialDemand(operations);
-  } catch {
-    return empty;
-  }
+  return buildActivePartialDemand(await readPartialPurchaseOperations(supabase));
 }

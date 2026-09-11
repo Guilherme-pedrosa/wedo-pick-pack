@@ -1,0 +1,23 @@
+name: Atualizar compras incluindo saldos de baixas parciais
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */3 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: purchase-scan-production
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Conferir necessidades e atualizar a lista
+        run: node scripts/purchase-scan-worker.mjs
+        env:
+          PARTIAL_EXECUTION_TOKEN: ${{ secrets.PARTIAL_EXECUTION_TOKEN }}

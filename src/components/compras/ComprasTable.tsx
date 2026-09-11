@@ -115,7 +115,7 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
             <SortHeader label="Últ. Preço" col="ultimo_preco" />
             <SortHeader label="Estimativa" col="estimativa" />
             <SortHeader label="Fornecedor" col="fornecedor_nome" />
-            <TableHead className="text-xs">Orçamentos</TableHead>
+            <TableHead className="text-xs">Orçamentos / vendas</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -243,7 +243,8 @@ export default function ComprasTable({ items, showOkStyle, showCoveredStyle, con
                                       variant="outline"
                                       className={`text-[10px] font-mono whitespace-nowrap ${isConverted ? 'bg-amber-100 text-amber-800 border-amber-300' : ''}`}
                                     >
-                                      {orc.codigo} ({orc.qtd})
+                                      {orc.source_kind === 'venda' ? 'Venda ' : ''}{orc.codigo} ({orc.qtd})
+                                      {orc.partial_operation_id && <span className="ml-1 text-emerald-700">• Saldo parcial</span>}
                                       {isConverted && (
                                         <span className="ml-1 text-[9px] font-semibold text-amber-700">• Convertido</span>
                                       )}

@@ -1,8 +1,7 @@
 import {
   GCSituacao, GCMeta, GCOrcamento, GCProdutoDetalhe, GCFornecedor,
   GCOrdemCompra, GCSituacaoCompra,
-  ItemCompra, ComprasResult, OrcamentoConvertidoWarning,
-  OSIndex, OSIndexEntry,
+  ComprasResult, OSIndex,
 } from './types';
 import {
   MOCK_STATUS_ORCAMENTO, MOCK_ORCAMENTOS, MOCK_PRODUTOS_DETALHE, MOCK_FORNECEDORES,
@@ -11,6 +10,9 @@ import {
 import { scopeSituationCatalog } from './situationScopes';
 import { supabase } from '@/integrations/supabase/client';
 import { getActivePartialDemand } from './partialWriteoff';
+import { scanPurchases } from '../../supabase/functions/_shared/purchaseScan';
+import { readPartialPurchaseOperations } from '../../supabase/functions/_shared/partialPurchaseOperations';
+import { pendingOsLines } from './osStockCommitments';
 
 const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 
@@ -62,28 +64,6 @@ function parseDecimal(value: string | number | null | undefined): number {
   return parseFloat(raw) || 0;
 }
 
-function normalizeText(value: unknown): string {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-}
-
-function isConvertedBudgetFlag(value: unknown): boolean {
-  const normalized = normalizeText(value);
-  if (!normalized) return false;
-  if (/^\d+$/.test(normalized)) return Number(normalized) > 0;
-  return normalized === 'true' || normalized === 'sim' || normalized === 'yes';
-}
-
-function hasConvertedBudgetByFlags(orcamento: GCOrcamento): boolean {
-  return (
-    isConvertedBudgetFlag(orcamento.situacao_financeiro) ||
-    isConvertedBudgetFlag(orcamento.situacao_estoque)
-  );
-}
-
 // --- REVERSE OS INDEX ---
 // Scans all OS records and maps orçamento codes found in OS atributos → OS info
 // Cached in memory with 5min TTL
@@ -95,15 +75,6 @@ export interface OSReservedDemand {
 
 let osIndexCache: { index: OSIndex; builtAt: number; totalVinculos: number; reservedDemand: OSReservedDemand } | null = null;
 const OS_INDEX_TTL = 5 * 60 * 1000; // 5 minutes
-
-// OS statuses that consume stock but don't move it in GC
-const OS_RESERVED_STATUS_NAMES = [
-  'AGUARDANDO COMPRA DE PECAS',
-  'AGUARDANDO CHEGADA DE PECAS',
-  'AGUARDANDO FABRICACAO',
-  'PEDIDO EM CONFERENCIA',
-  'SERVICO AGUARDANDO EXECUCAO',
-];
 
 function normalizeForMatch(value: string): string {
   return value
@@ -132,30 +103,6 @@ function resolveOSCode(osRecord: any): string {
   }
 
   return '';
-}
-
-function resolveProductGroup(detail: GCProdutoDetalhe | null | undefined): string | undefined {
-  if (!detail) return undefined;
-  const raw = detail as any;
-
-  const candidates = [
-    raw?.nome_grupo,
-    raw?.grupo_nome,
-    raw?.grupo,
-    raw?.nome_categoria,
-    raw?.categoria_nome,
-    raw?.grupo_produto?.nome,
-    raw?.grupo?.nome,
-    raw?.categoria?.nome,
-    raw?.payload_min_json?.nome_grupo,
-  ];
-
-  for (const value of candidates) {
-    const normalized = String(value ?? '').trim();
-    if (normalized) return normalized;
-  }
-
-  return undefined;
 }
 
 export async function buildOSIndex(
@@ -188,7 +135,6 @@ export async function buildOSIndex(
       const osRef = osCodigo || osId || '—';
       const nomeSituacao = String(os?.nome_situacao ?? '');
       const nomeCliente = String(os?.nome_cliente ?? '');
-      const normalizedSituacao = normalizeForMatch(nomeSituacao);
 
       // Collect budget-to-OS links from atributos
       for (const wrapper of os?.atributos || []) {
@@ -208,24 +154,11 @@ export async function buildOSIndex(
         vinculos++;
       }
 
-      // Collect reserved stock from OSs in non-stock-moving statuses
-      if (OS_RESERVED_STATUS_NAMES.includes(normalizedSituacao)) {
-        for (const wrapper of os?.produtos || []) {
-          const p = wrapper?.produto;
-          if (!p) continue;
-          const pid = normalizeId(p.produto_id);
-          if (!pid) continue;
-          const vid = normalizeId(p.variacao_id);
-          const key = vid ? `${pid}::${vid}` : pid;
-          const qtd = parseDecimal(p.quantidade);
-          if (qtd <= 0) continue;
-
-          if (!reservedDemand[key]) {
-            reservedDemand[key] = { qty: 0, orcamentos: [] };
-          }
-          reservedDemand[key].qty += qtd;
-          reservedDemand[key].orcamentos.push({ os_codigo: osRef, nome_cliente: nomeCliente, qtd });
-        }
+      for (const line of pendingOsLines(os)) {
+        const key = line.variationId ? `${line.productId}::${line.variationId}` : line.productId;
+        if (!reservedDemand[key]) reservedDemand[key] = { qty: 0, orcamentos: [] };
+        reservedDemand[key].qty += line.quantity;
+        reservedDemand[key].orcamentos.push({ os_codigo: line.code, nome_cliente: line.client, qtd: line.quantity });
       }
     }
 
@@ -460,413 +393,15 @@ export async function listOrdensCompra(situacaoId?: string, pagina = 1, extraQue
   return { data, meta: raw.meta };
 }
 
-// --- MAIN ENGINE ---
+// --- MAIN ENGINE: compartilhado com a varredura automática ---
 export async function buildListaCompras(
   situacaoOrcIds: string[],
   situacaoCompraIds: string[],
   onProgress?: (step: string, checked: number, total: number) => void,
 ): Promise<ComprasResult> {
-
-  const partialDemand = await getActivePartialDemand();
-
-  // PHASE 1: Fetch budgets once and filter locally. The GC API may ignore
-  // situacao_id; requesting every selected status would repeat the complete
-  // budget catalogue N times and make the purchase list appear frozen.
-  onProgress?.('Buscando orçamentos aprovados…', 0, 1);
-  const allOrcamentos: GCOrcamento[] = [];
-  const situacaoOrcSet = new Set(situacaoOrcIds);
-  let orcamentoPage = 1;
-  while (true) {
-    const res = await listOrcamentos(undefined, orcamentoPage);
-    const filtered = res.data.filter(o => situacaoOrcSet.has(String(o.situacao_id)));
-    allOrcamentos.push(...filtered);
-    onProgress?.(`Buscando orçamentos aprovados… página ${orcamentoPage} de ${res.meta.total_paginas}`, orcamentoPage, res.meta.total_paginas);
-    if (orcamentoPage >= res.meta.total_paginas) break;
-    orcamentoPage++;
-    if (!isUsingMock()) await new Promise(r => setTimeout(r, 350));
-  }
-
-  // PHASE 1b: Build reverse OS index and detect converted budgets
-  onProgress?.('Construindo índice de OS…', 0, 1);
-  const { index: osIndex, totalVinculos, reservedDemand } = await buildOSIndex(
-    (step, checked, total) => onProgress?.(step, checked, total),
-  );
-  console.log(`[COMPRAS] OS Index ready: ${totalVinculos} vínculos`);
-
-  onProgress?.('Filtrando orçamentos já convertidos…', 0, allOrcamentos.length);
-  const convertedById = new Map<string, OrcamentoConvertidoWarning>();
-  const orcamentosElegiveis: GCOrcamento[] = [];
-
-  for (let i = 0; i < allOrcamentos.length; i++) {
-    const o = allOrcamentos[i];
-    const byFlags = hasConvertedBudgetByFlags(o);
-    const osMatch = osIndex[String(o.codigo)];
-
-    const isPartialBudget = partialDemand.activeBudgetIds.has(o.id);
-    if (!isPartialBudget && (byFlags || osMatch)) {
-      if (!convertedById.has(o.id)) {
-        const reason = byFlags ? 'flag' as const : 'os_index' as const;
-        const linkNumber = osMatch?.os_codigo ?? null;
-        const linkId = osMatch?.os_id ?? null;
-        const linkSituacao = osMatch?.nome_situacao ?? null;
-
-        let warning = '';
-        if (osMatch) {
-          warning = `Orçamento #${o.codigo} → já é OS #${osMatch.os_codigo} [${osMatch.nome_situacao}]`;
-        } else {
-          warning = `Orçamento #${o.codigo} → convertido (flag financeiro/estoque)`;
-        }
-
-        convertedById.set(o.id, {
-          orcamento_id: o.id,
-          codigo: o.codigo,
-          nome_cliente: o.nome_cliente,
-          situacao_financeiro: String(o.situacao_financeiro ?? ''),
-          situacao_estoque: String(o.situacao_estoque ?? ''),
-          reason,
-          link_number: linkNumber,
-          link_id: linkId,
-          link_situacao: linkSituacao,
-          warning,
-        });
-
-        console.warn(`[COMPRAS] ${warning}`);
-      }
-    } else {
-      orcamentosElegiveis.push(o);
-    }
-
-    onProgress?.('Filtrando orçamentos já convertidos…', i + 1, allOrcamentos.length);
-  }
-
-  const orcamentosConvertidos = [...convertedById.values()];
-
-  if (orcamentosConvertidos.length > 0) {
-    console.log(`[COMPRAS] Phase 1b: ${orcamentosConvertidos.length} orçamento(s) já convertido(s) e removido(s) da lista de compras`);
-  }
-
-  // PHASE 2: Fetch the purchase catalogue exactly once. Previously this loop
-  // downloaded every page once per status (and again for supplier history).
-  // Since GC can ignore situacao_id, selecting many statuses multiplied the
-  // same full scan and effectively locked the screen.
-  onProgress?.('Buscando pedidos de compra…', 0, 1);
-  const todasOrdens: GCOrdemCompra[] = [];
-  let compraPage = 1;
-  while (true) {
-    const res = await listOrdensCompra(undefined, compraPage);
-    todasOrdens.push(...res.data);
-    onProgress?.(`Buscando pedidos de compra… página ${compraPage} de ${res.meta.total_paginas}`, compraPage, res.meta.total_paginas);
-    if (compraPage >= res.meta.total_paginas) break;
-    compraPage++;
-    if (!isUsingMock()) await new Promise(r => setTimeout(r, 350));
-  }
-
-  const situacaoCompraSet = new Set(situacaoCompraIds);
-  const allOrdensCompra = todasOrdens.filter(ordem => situacaoCompraSet.has(String(ordem.situacao_id)));
-
-  // Build purchase-orders map from SELECTED statuses only (user controls which count)
-  const compraMap = new Map<string, {
-    qtd: number;
-    ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; data_emissao?: string }>;
-  }>();
-  const compraMapByProduto = new Map<string, {
-    qtd: number;
-    ordens: Array<{ id: string; codigo: string; qtd: number; nome_fornecedor: string; situacao: string; data_emissao?: string }>;
-  }>();
-  for (const ordem of allOrdensCompra) {
-    for (const p of ordem.produtos || []) {
-      const produtoId = normalizeId(p.produto.produto_id);
-      if (!produtoId) continue;
-      const key = makeProdutoKey(produtoId, p.produto.variacao_id);
-      const qty = parseDecimal(p.produto.quantidade);
-
-      if (!compraMap.has(key)) compraMap.set(key, { qtd: 0, ordens: [] });
-      const entry = compraMap.get(key)!;
-      entry.qtd += qty;
-      entry.ordens.push({
-        id: ordem.id, codigo: ordem.codigo, qtd: qty,
-        nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao,
-        data_emissao: ordem.data_emissao,
-      });
-
-      if (!compraMapByProduto.has(produtoId)) compraMapByProduto.set(produtoId, { qtd: 0, ordens: [] });
-      const byProdutoEntry = compraMapByProduto.get(produtoId)!;
-      byProdutoEntry.qtd += qty;
-      byProdutoEntry.ordens.push({
-        id: ordem.id, codigo: ordem.codigo, qtd: qty,
-        nome_fornecedor: ordem.nome_fornecedor, situacao: ordem.nome_situacao,
-        data_emissao: ordem.data_emissao,
-      });
-    }
-  }
-
-  // Build supplier map from ALL purchase orders (all statuses/all time)
-  const fornecedorPorProduto = new Map<string, { fornecedor_id: string; nome_fornecedor: string }>();
-  for (const ordem of todasOrdens) {
-    for (const p of ordem.produtos || []) {
-      const pid = normalizeId(p.produto.produto_id);
-      if (!pid) continue;
-      if (!fornecedorPorProduto.has(pid)) {
-        fornecedorPorProduto.set(pid, {
-          fornecedor_id: ordem.fornecedor_id,
-          nome_fornecedor: ordem.nome_fornecedor,
-        });
-      }
-    }
-  }
-
-  // PHASE 3: Aggregate budget quantities per product (excluding converted budgets)
-  const productMap = new Map<string, {
-    produto_id: string; variacao_id: string; nome_produto: string;
-    codigo_produto: string; sigla_unidade: string; movimenta_estoque: string;
-    qtd_total: number;
-    orcamentos: Array<{ id: string; codigo: string; qtd: number; nome_cliente: string }>;
-  }>();
-
-  for (const orc of orcamentosElegiveis) {
-    const partialByProduct = partialDemand.pendingByBudgetAndProduct.get(orc.id);
-    const processedPartialKeys = new Set<string>();
-    for (const p of orc.produtos || []) {
-      const produtoId = normalizeId(p.produto.produto_id);
-      if (!produtoId) continue;
-      const variacaoId = normalizeId(p.produto.variacao_id);
-      const key = makeProdutoKey(produtoId, variacaoId);
-      let qty = parseDecimal(p.produto.quantidade);
-      if (partialByProduct) {
-        if (processedPartialKeys.has(key)) continue;
-        processedPartialKeys.add(key);
-        qty = partialByProduct.get(key) ?? 0;
-      }
-      if (qty <= 0) continue;
-      if (!productMap.has(key)) {
-        productMap.set(key, {
-          produto_id: produtoId, variacao_id: variacaoId,
-          nome_produto: p.produto.nome_produto, codigo_produto: p.produto.codigo_produto,
-          sigla_unidade: p.produto.sigla_unidade, movimenta_estoque: p.produto.movimenta_estoque ?? '1',
-          qtd_total: 0, orcamentos: [],
-        });
-      }
-      const entry = productMap.get(key)!;
-      entry.qtd_total += qty;
-      entry.orcamentos.push({ id: orc.id, codigo: orc.codigo, qtd: qty, nome_cliente: orc.nome_cliente });
-    }
-  }
-
-  // PHASE 4: Fetch stock + cost (supplier derived from purchase orders above)
-  const uniqueKeys = [...productMap.keys()];
-  const total = uniqueKeys.length;
-  const detailCache = new Map<string, GCProdutoDetalhe | null>();
-
-  for (let i = 0; i < uniqueKeys.length; i += 2) {
-    const batch = uniqueKeys.slice(i, i + 2);
-    onProgress?.('Verificando estoque e preços…', i, total);
-    await Promise.all(batch.map(async key => {
-      const entry = productMap.get(key)!;
-      if (!detailCache.has(entry.produto_id)) {
-        const detail = await getProdutoDetalhe(entry.produto_id);
-        detailCache.set(entry.produto_id, detail);
-      }
-    }));
-    if (i + 2 < uniqueKeys.length && !isUsingMock()) await new Promise(r => setTimeout(r, 500));
-  }
-  onProgress?.('Cruzando pedidos de compra…', total, total);
-
-  // DEBUG: Log maps for troubleshooting
-  console.log('[COMPRAS DEBUG] compraMap keys:', [...compraMap.keys()]);
-  console.log('[COMPRAS DEBUG] compraMapByProduto keys:', [...compraMapByProduto.keys()]);
-  console.log('[COMPRAS DEBUG] productMap keys:', [...productMap.keys()]);
-  console.log('[COMPRAS DEBUG] allOrdensCompra count:', allOrdensCompra.length);
-  console.log('[COMPRAS DEBUG] todasOrdens count:', todasOrdens.length);
-
-  // PHASE 5: Build ItemCompra list with cross-reference
-  const allItems: ItemCompra[] = [];
-
-  for (const [key, entry] of productMap) {
-    const detail = detailCache.get(entry.produto_id);
-    let estoqueAtual = 0;
-    let valorCusto = 0;
-    let movimentaEstoque = entry.movimenta_estoque === '1';
-
-    if (detail) {
-      movimentaEstoque = detail.movimenta_estoque === '1';
-      if (entry.variacao_id && detail.variacoes?.length) {
-        const v = detail.variacoes.find(v => String(v.variacao.id) === String(entry.variacao_id));
-        estoqueAtual = v
-          ? parseDecimal(v.variacao.estoque)
-          : parseDecimal(detail.estoque);
-      } else {
-        estoqueAtual = parseDecimal(detail.estoque);
-      }
-      valorCusto = parseDecimal(detail.valor_custo);
-    }
-
-    // OS reserved demand — try exact key, then fallback to produto_id only
-    const fullKey = makeProdutoKey(entry.produto_id, entry.variacao_id);
-    const pidOnly = String(entry.produto_id).trim();
-    const reservaEntry = reservedDemand[fullKey] ?? reservedDemand[pidOnly];
-    const estoqueReservadoOS = reservaEntry?.qty ?? 0;
-    const osReservas = reservaEntry?.orcamentos ?? [];
-
-    // Effective available stock after OS reservations
-    const estoqueDisponivel = Math.max(0, estoqueAtual - estoqueReservadoOS);
-
-    // Lookup purchase orders — try exact key first, fall back to produto_id only
-    const compraEntry =
-      compraMap.get(fullKey) ??
-      compraMapByProduto.get(pidOnly);
-
-    // De-duplicate ordens_compra (fallback may have dupes)
-    const rawOrdens = compraEntry?.ordens ?? [];
-    const seenOrdemIds = new Set<string>();
-    const ordensCompra = rawOrdens.filter(o => {
-      if (seenOrdemIds.has(o.id)) return false;
-      seenOrdemIds.add(o.id);
-      return true;
-    });
-
-    const qtdJaEmCompra = compraEntry?.qtd ?? 0;
-
-    const qtdNecessaria = entry.qtd_total;
-    const deficit = Math.max(0, qtdNecessaria - estoqueDisponivel);
-    const qtdEfetivaAComprar = Math.max(0, deficit - qtdJaEmCompra);
-    const estimativa = qtdEfetivaAComprar * valorCusto;
-
-    // Supplier derived from purchase orders
-    const fornecedorInfo = fornecedorPorProduto.get(entry.produto_id);
-    const fornecedorNome = fornecedorInfo?.nome_fornecedor;
-    const fornecedorId = fornecedorInfo?.fornecedor_id;
-
-    allItems.push({
-      produto_id: entry.produto_id,
-      variacao_id: entry.variacao_id,
-      nome_produto: detail?.nome || entry.nome_produto,
-      codigo_produto: detail?.codigo_interno || entry.codigo_produto,
-      sigla_unidade: entry.sigla_unidade,
-      grupo: resolveProductGroup(detail),
-      estoque_atual: estoqueAtual,
-      estoque_reservado_os: estoqueReservadoOS,
-      estoque_disponivel: estoqueDisponivel,
-      qtd_necessaria: qtdNecessaria,
-      qtd_a_comprar: deficit,
-      qtd_ja_em_compra: qtdJaEmCompra,
-      qtd_efetiva_a_comprar: qtdEfetivaAComprar,
-      ultimo_preco: valorCusto,
-      estimativa,
-      movimenta_estoque: movimentaEstoque,
-      fornecedor_id: fornecedorId,
-      fornecedor_nome: fornecedorNome,
-      fornecedor_telefone: undefined,
-      orcamentos: entry.orcamentos,
-      ordens_compra: ordensCompra,
-      os_reservas: osReservas.length > 0 ? osReservas : undefined,
-    });
-  }
-
-  // PHASE 5b: Inject OS-only deficit items (reserved by OS but not in any orçamento)
-  const processedProductKeys = new Set(productMap.keys());
-  const osOnlyKeys = Object.keys(reservedDemand).filter(k => !processedProductKeys.has(k));
-
-  if (osOnlyKeys.length > 0) {
-    onProgress?.('Verificando déficits de OS sem orçamento…', 0, osOnlyKeys.length);
-    // Fetch stock for OS-only products
-    for (let i = 0; i < osOnlyKeys.length; i += 2) {
-      const batch = osOnlyKeys.slice(i, i + 2);
-      await Promise.all(batch.map(async key => {
-        const reserva = reservedDemand[key];
-        // Extract produto_id from key (may be "pid::vid" or just "pid")
-        const parts = key.split('::');
-        const produtoId = parts[0];
-        const variacaoId = parts[1] || '';
-
-        if (!detailCache.has(produtoId)) {
-          const detail = await getProdutoDetalhe(produtoId);
-          detailCache.set(produtoId, detail);
-        }
-        const detail = detailCache.get(produtoId);
-
-        let estoqueAtual = 0;
-        let valorCusto = 0;
-        let movimentaEstoque = true;
-
-        if (detail) {
-          movimentaEstoque = detail.movimenta_estoque === '1';
-          if (variacaoId && detail.variacoes?.length) {
-            const v = detail.variacoes.find(v => String(v.variacao.id) === String(variacaoId));
-            estoqueAtual = v ? parseDecimal(v.variacao.estoque) : parseDecimal(detail.estoque);
-          } else {
-            estoqueAtual = parseDecimal(detail.estoque);
-          }
-          valorCusto = parseDecimal(detail.valor_custo);
-        }
-
-        const estoqueReservadoOS = reserva.qty;
-        const osReservas = reserva.orcamentos;
-        const estoqueDisponivel = Math.max(0, estoqueAtual - estoqueReservadoOS);
-        const deficit = estoqueReservadoOS - estoqueAtual; // pure OS deficit
-
-        if (deficit > 0) {
-          // Check purchase orders
-          const fullKey = variacaoId ? `${produtoId}::${variacaoId}` : produtoId;
-          const compraEntry = compraMap.get(fullKey) ?? compraMapByProduto.get(produtoId);
-          const qtdJaEmCompra = compraEntry?.qtd ?? 0;
-          const rawOrdens = compraEntry?.ordens ?? [];
-          const seenOrdemIds = new Set<string>();
-          const ordensCompra = rawOrdens.filter(o => {
-            if (seenOrdemIds.has(o.id)) return false;
-            seenOrdemIds.add(o.id);
-            return true;
-          });
-
-          const qtdEfetivaAComprar = Math.max(0, deficit - qtdJaEmCompra);
-          const estimativa = qtdEfetivaAComprar * valorCusto;
-
-          const fornecedorInfo = fornecedorPorProduto.get(produtoId);
-
-          allItems.push({
-            produto_id: produtoId,
-            variacao_id: variacaoId,
-            nome_produto: detail?.nome || `Produto ${produtoId}`,
-            codigo_produto: detail?.codigo_interno || '',
-            sigla_unidade: 'UN',
-            grupo: resolveProductGroup(detail),
-            estoque_atual: estoqueAtual,
-            estoque_reservado_os: estoqueReservadoOS,
-            estoque_disponivel: estoqueDisponivel,
-            qtd_necessaria: 0, // no quote demand
-            qtd_a_comprar: deficit,
-            qtd_ja_em_compra: qtdJaEmCompra,
-            qtd_efetiva_a_comprar: qtdEfetivaAComprar,
-            ultimo_preco: valorCusto,
-            estimativa,
-            movimenta_estoque: movimentaEstoque,
-            fornecedor_id: fornecedorInfo?.fornecedor_id,
-            fornecedor_nome: fornecedorInfo?.nome_fornecedor,
-            fornecedor_telefone: undefined,
-            orcamentos: [], // no budgets — pure OS deficit
-            ordens_compra: ordensCompra,
-            os_reservas: osReservas,
-          });
-        }
-      }));
-      if (i + 2 < osOnlyKeys.length && !isUsingMock()) await new Promise(r => setTimeout(r, 500));
-    }
-  }
-
-  const itensList = allItems.filter(i => i.qtd_efetiva_a_comprar > 0);
-  const itensCobertos = allItems.filter(i => i.qtd_efetiva_a_comprar === 0 && i.qtd_a_comprar > 0);
-  const itensOkList = allItems.filter(i => i.qtd_a_comprar === 0);
-  const estimativaTotal = itensList.reduce((sum, i) => sum + i.estimativa, 0);
-
-  return {
-    itensList,
-    itensOkList,
-    itensCobertosporPedido: itensCobertos,
-    orcamentosConvertidos,
-    totalOrcamentos: orcamentosElegiveis.length,
-    totalProdutosSemEstoque: itensList.length,
-    totalProdutosOk: itensOkList.length,
-    totalItensCobertosporPedido: itensCobertos.length,
-    estimativaTotal,
-    scannedAt: new Date().toISOString(),
-  };
+  return scanPurchases({
+    gc: path => apiRequest(path),
+    partials: () => readPartialPurchaseOperations(supabase),
+    progress: onProgress,
+  }, situacaoOrcIds, situacaoCompraIds);
 }

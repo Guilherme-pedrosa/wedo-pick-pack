@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getStatusOrcamentos, getStatusCompras, listOrcamentos, buildListaCompras, getOSIndexStatus } from '@/api/compras';
+import { getStatusOrcamentos, getStatusCompras, listOrcamentos, buildListaCompras } from '@/api/compras';
 import { useComprasStore } from '@/store/comprasStore';
 import { GCOrcamento } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -19,6 +19,7 @@ export default function OrcamentosPanel() {
   const [selectedCompra, setSelectedCompra] = useState<string[]>(config.situacoesCompraEmAndamento ?? []);
   const [orcamentos, setOrcamentos] = useState<GCOrcamento[]>([]);
   const [loadingOrc, setLoadingOrc] = useState(false);
+  const upgradedOldResult = useRef(false);
   const [hydrated, setHydrated] = useState(useComprasStore.persist.hasHydrated());
 
   const STATUS_ORC_CACHE = 'wedo-cache-status-orcamentos-v2';
@@ -102,7 +103,6 @@ export default function OrcamentosPanel() {
   }, [selectedSituacoes]);
 
   const handleGenerate = async () => {
-    if (selectedSituacoes.length === 0) return;
     if (selectedCompra.length === 0) {
       toast.error('Selecione ao menos 1 status em "Pedidos de Compra — Cruzamento"');
       return;
@@ -116,9 +116,7 @@ export default function OrcamentosPanel() {
         (step, checked, total) => setProgress({ step, checked, total }),
       );
       setResult(result);
-      // Update OS index status in store
-      const idxStatus = getOSIndexStatus();
-      if (idxStatus) setOSIndexStatus(idxStatus);
+      setOSIndexStatus(null);
       const parts = [`${result.totalProdutosSemEstoque} itens para comprar`];
       if (result.totalItensCobertosporPedido > 0) parts.push(`${result.totalItensCobertosporPedido} cobertos por pedido`);
       if (result.orcamentosConvertidos.length > 0) parts.push(`${result.orcamentosConvertidos.length} bloqueado(s) por OS`);
@@ -126,12 +124,19 @@ export default function OrcamentosPanel() {
       toast.success(`Lista gerada! ${parts.join(', ')}.`);
       logSystemAction({ module: "compras", action: "Lista de compras gerada", details: { itens_comprar: result.totalProdutosSemEstoque, cobertos_pedido: result.totalItensCobertosporPedido, situacoes: selectedSituacoes.length } });
     } catch (err) {
-      toast.error('Erro ao gerar lista de compras');
+      toast.error(err instanceof Error ? err.message : 'Erro ao gerar lista de compras');
       console.error(err);
     } finally {
       setScanning(false);
     }
   };
+
+  useEffect(() => {
+    const previous = useComprasStore.getState().result;
+    if (!hydrated || upgradedOldResult.current || isScanning || !selectedCompra.length || !previous || previous.purchaseScanVersion === 2) return;
+    upgradedOldResult.current = true;
+    void handleGenerate();
+  }, [hydrated, isScanning, selectedCompra, selectedSituacoes]);
 
   const formatDate = (d: string) => {
     try { const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; } catch { return d; }
@@ -146,6 +151,7 @@ export default function OrcamentosPanel() {
           <h2 className="text-sm font-bold text-foreground">Orçamentos</h2>
         </div>
         <p className="text-xs text-muted-foreground">Selecione as situações aprovadas</p>
+        <p className="text-xs text-emerald-700">As peças faltantes de todas as baixas parciais abertas entram sempre, inclusive vendas, independentemente destes filtros.</p>
 
         {statusQuery.isLoading && !statusQuery.data ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -262,7 +268,7 @@ export default function OrcamentosPanel() {
           </div>
         )}
         <Button className="w-full gap-2" size="lg" onClick={handleGenerate}
-          disabled={selectedSituacoes.length === 0 || selectedCompra.length === 0 || isScanning}>
+          disabled={selectedCompra.length === 0 || isScanning}>
           {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
           🛒 Gerar Lista de Compras
         </Button>

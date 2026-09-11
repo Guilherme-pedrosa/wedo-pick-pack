@@ -1,0 +1,31 @@
+# Compras: saldo parcial permanece como necessidade
+
+## Falha corrigida
+
+A lista manual e a rotina automática filtravam o catálogo pelos status de orçamento antes de aplicar os saldos parciais. Depois da primeira baixa, a situação do documento-mãe mudava para “Baixa parcial realizada” e suas peças desapareciam da demanda. Vendas também não entravam no catálogo de orçamentos. A leitura antiga limitava operações e transformava falhas em lista vazia.
+
+## Regra
+
+- Todas as baixas abertas entram pela tabela oficial de saldos, inclusive vendas e operações em reconciliação. Os filtros de situação só controlam os demais orçamentos.
+- Demanda pendente = quantidade original − retirada confirmada − reserva local. A reserva local é considerada separadamente no comprometimento do estoque, sem ser contada duas vezes.
+- A mesma baixa não entra novamente pelo orçamento nem pela OS auxiliar. A lista não modifica os documentos, suas quantidades, o histórico de retiradas ou as tarefas Auvo.
+- Estoque e pedidos são agregados uma vez por produto/variação. Produtos sem variações usam o estoque do produto, mesmo que o GC informe um identificador de variação padrão na linha.
+- Compromisso de OS segue as seis situações autorizadas e exige ausência de saída de estoque. Retirada pelo técnico e qualquer OS já baixada não comprometem novamente.
+- Só a quantidade ainda aberta de pedidos selecionados cobre a necessidade. Pedidos cancelados, finalizados ou já recebidos não cobrem novamente. Pedido de outra variação não cobre o item.
+- Saldo sem cobertura permanece em “A comprar”; cobertura parcial mantém a diferença. A origem aparece como “Saldo parcial”, com o número do orçamento ou venda.
+- Erro de leitura ou mudança da baixa durante o cálculo impede a substituição do resultado anterior por uma lista incompleta. Listas antigas salvas no navegador são identificadas como anteriores à correção.
+
+## Execução
+
+`supabase/functions/_shared/purchaseScan.ts` é o motor usado pelo navegador, pela rotina GitHub e pelo código da Edge Function. O carregador de baixas percorre todas as páginas de operações, itens e lotes.
+
+A rotina `purchase-scan.yml` substitui o agendamento antigo de compras, mantendo a periodicidade de três horas e execução manual. Usa Node 24 e a credencial de rotina já configurada. A RPC `compras_worker_api` permite somente ler saldos e inserir snapshots; confere novamente a revisão dos saldos antes de gravar. O job antigo só deve ser desativado após a nova execução ser verificada.
+
+Publicar o frontend não comprova implantação de Edge Functions. Por isso, o caminho de produção automático verificável é o workflow GitHub; não depende de mensagem ao agente Lovable.
+
+## Validação
+
+Testes cobrem status fora do filtro, venda, reconciliação, conversão/OS auxiliar, duplicação, retirada, reserva, pedido parcial/cancelado/recebido, variações, saldo zerado, paginação incompleta e alterações durante o cálculo. A verificação real deve comparar as pendências das baixas abertas com as três categorias: comprar, coberto por pedido e com estoque.
+
+
+Conferência real em 11/09/2026: cinco baixas com saldo, sete linhas pendentes. Seis linhas sem estoque/pedido voltam a “A comprar”: orçamento 6345 (5 lixas massa GR120, 2 lixas ferro G220, 8 sapatas silicone), orçamento 5334 (1 suporte articulado), venda 2604 (1 disco ralar) e venda 800003501 (1 controlador MT-526C). Orçamento 6438 permanece com 3 cortinas disponíveis em estoque, sem compra adicional. Resultado total: 24 produtos para comprar, 31 cobertos por pedido e 25 documentos na demanda. 122 testes, typecheck e build aprovados.

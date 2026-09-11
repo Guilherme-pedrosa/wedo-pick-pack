@@ -1,6 +1,5 @@
 import { useComprasStore } from '@/store/comprasStore';
 import { ItemCompra, OrcamentoConvertidoWarning } from '@/api/types';
-import { getOSIndexStatus } from '@/api/compras';
 import ComprasTable from './ComprasTable';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -201,6 +200,12 @@ export default function ComprasResultPanel() {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {result.purchaseScanVersion !== 2 ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">Esta lista é anterior à correção dos saldos parciais. Gere uma nova lista para incluir todas as peças faltantes.</div>
+        ) : (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm">Saldos de {result.partialOperationsIncluded ?? 0} baixa(s) parcial(is) incluídos automaticamente. Peças sem cobertura de estoque ou pedido permanecem em “A comprar”.</div>
+        )}
+        {(result.warnings || []).map(message => <p key={message} className="text-sm text-amber-800">{message}</p>)}
         {/* Blocked / Converted budgets section */}
         {convertidos.length > 0 && !convertidosDismissed && (
           <Collapsible open={blockedExpanded} onOpenChange={setBlockedExpanded}>

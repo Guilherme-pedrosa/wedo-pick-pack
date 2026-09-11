@@ -28,7 +28,7 @@ import { checkDocumentExists } from '@/api/gcDocumentValidation';
 import { commitmentFor, fetchOsStockCommitments } from '@/api/osStockCommitments';
 import { cn } from '@/lib/utils';
 import { Checkbox } from '@/components/ui/checkbox';
-import { wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
+import { canRequestPartialAuvoTask, DEFAULT_CREATE_PARTIAL_AUVO_TASK, wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 
@@ -154,7 +154,7 @@ export default function PartialWriteoffPage() {
   const [cancelling, setCancelling] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
-  const [createAuvoTask, setCreateAuvoTask] = useState(false);
+  const [createAuvoTask, setCreateAuvoTask] = useState(DEFAULT_CREATE_PARTIAL_AUVO_TASK);
   const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
@@ -223,7 +223,7 @@ export default function PartialWriteoffPage() {
 
   useEffect(() => {
     batchRequestKey.current = null;
-    setCreateAuvoTask(false);
+    setCreateAuvoTask(DEFAULT_CREATE_PARTIAL_AUVO_TASK);
   }, [selected?.id]);
 
   const stockQuery = useQuery({
@@ -301,11 +301,11 @@ export default function PartialWriteoffPage() {
     try {
       await retryBatchAuvoTask(batchId);
       toast.success('Tarefa criada no Auvo.');
-      await refresh();
     } catch (error) {
       toast.error(friendlyError(error));
     } finally {
       setRetryingTaskId(null);
+      await refresh();
     }
   }
 
@@ -574,7 +574,7 @@ export default function PartialWriteoffPage() {
       if (!batchRequestKey.current) batchRequestKey.current = crypto.randomUUID();
       const result = await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current as string, { createAuvoTask });
       batchRequestKey.current = null;
-      setCreateAuvoTask(false);
+      setCreateAuvoTask(DEFAULT_CREATE_PARTIAL_AUVO_TASK);
       await refresh();
       if (result.batches.some(b => b.auvo_task_requested === true && !b.auvo_task_id && !['cancelled', 'failed'].includes(b.status))) {
         toast.warning('OS criada. A tarefa Auvo solicitada está pendente; confira o aviso no histórico.', { duration: 10000 });
@@ -1096,21 +1096,21 @@ export default function PartialWriteoffPage() {
                               >
                                 Tarefa Auvo #{batch.auvo_task_id}
                               </a>
-                            ) : !wantsPartialAuvoTask(batch, selected.flow_mode) ? <p className="text-xs text-muted-foreground">{batch.auvo_task_requested === false ? 'Tarefa Auvo não solicitada para esta OS' : 'Reserva sem tarefa Auvo'}</p> : (
+                            ) : (
                               <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-xs text-destructive">
-                                  {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
+                                <p className={cn('text-xs', wantsPartialAuvoTask(batch, selected.flow_mode) ? 'text-destructive' : 'text-muted-foreground')}>
+                                  {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : wantsPartialAuvoTask(batch, selected.flow_mode) ? 'Sem tarefa Auvo vinculada' : 'Tarefa Auvo não solicitada na abertura'}
                                 </p>
-                                {batch.auxiliary_document_id && ['awaiting_checkout', 'confirmed'].includes(batch.status) && (
+                                {canRequestPartialAuvoTask(batch, selected) && (
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     className="h-6 px-2 text-xs"
-                                    disabled={retryingTaskId === batch.id}
+                                    disabled={!!retryingTaskId}
                                     onClick={() => handleRetryAuvoTask(batch.id)}
                                   >
                                     {retryingTaskId === batch.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                                    Gerar tarefa Auvo
+                                    Criar tarefa no Auvo
                                   </Button>
                                 )}
                               </div>

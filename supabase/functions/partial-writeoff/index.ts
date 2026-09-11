@@ -773,7 +773,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
   const { data: reservation, error: reserveError } = await service.rpc('partial_writeoff_reserve_batch_with_options', {
     p_operation_id: operationId,
     p_idempotency_key: idempotencyKey,
-    p_create_auvo_task: body.create_auvo_task === true,
+    p_create_auvo_task: body.create_auvo_task !== false,
     p_items: selectedWithStock.map(({ item, quantity, stockQuantity }) => ({
       item_id: item.id,
       quantity,

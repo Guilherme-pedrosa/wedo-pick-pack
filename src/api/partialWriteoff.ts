@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { OrderType } from './types';
 import { readPartialPurchaseOperations } from '../../supabase/functions/_shared/partialPurchaseOperations';
 import { invokePartialWriteoffClient } from './partialWriteoffClient';
+import { DEFAULT_CREATE_PARTIAL_AUVO_TASK } from '../../supabase/functions/_shared/partialAuvo';
 import type { ExecutionDocument } from './partialExecution';
 
 export type PartialWriteoffStatus =
@@ -210,7 +211,7 @@ export async function preparePartialBatch(
   operationId: string,
   items: Array<{ item_id: string; quantity: number }>,
   idempotencyKey: string = crypto.randomUUID(),
-  options: { createAuvoTask: boolean } = { createAuvoTask: false },
+  options: { createAuvoTask: boolean } = { createAuvoTask: DEFAULT_CREATE_PARTIAL_AUVO_TASK },
 ): Promise<PartialWriteoffOperation> {
   const data = await invoke<{ operation: PartialWriteoffOperation }>({
     action: 'prepare_batch',
@@ -301,12 +302,13 @@ export async function cancelPartialOperation(
   return data.operation;
 }
 
-/** Exclui definitivamente uma baixa parcial cancelada (sem retiradas e sem documentos válidos). */
+/** Solicita pelo histórico a tarefa de um lote existente, inclusive após optar por não criar na abertura. */
 export async function retryBatchAuvoTask(batchId: string): Promise<void> {
   const { createBatchAuvoTask } = await import('./partialWriteoffClient');
-  await createBatchAuvoTask(batchId);
+  await createBatchAuvoTask(batchId, undefined, { requestIfMissing: true });
 }
 
+/** Exclui definitivamente uma baixa parcial cancelada (sem retiradas e sem documentos válidos). */
 export async function deletePartialOperation(operationId: string): Promise<void> {
   await invoke<{ deleted: boolean }>({ action: 'delete_operation', operation_id: operationId });
 }

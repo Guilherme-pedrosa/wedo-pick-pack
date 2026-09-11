@@ -5,7 +5,7 @@ import { assertStockConflict, commitmentFor, fetchOsStockCommitments } from './o
 import { assertCheckoutStock } from './checkoutStockGuard';
 import { assertBudgetUnchanged, assertOperationQuantities } from './budgetIntegrity';
 import { assertStatusOnlyChange, writableDocument } from './partialConsolidation';
-import { wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
+import { canRequestPartialAuvoTask, wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -586,7 +586,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const { data: reservation, error: reserveError } = await cloud.rpc('partial_writeoff_reserve_batch_with_options', {
     p_operation_id: operationId,
     p_idempotency_key: idempotencyKey,
-    p_create_auvo_task: body.create_auvo_task === true,
+    p_create_auvo_task: body.create_auvo_task !== false,
     p_items: selectedWithStock.map(({ item, quantity, stockQuantity, physicalStock, externalCommitted }) => ({
       item_id: item.id,
       quantity,
@@ -717,12 +717,21 @@ async function finishPreparedBatch(batchId: string, body: any, auth: AuthContext
 }
 
 /** Cria a tarefa Auvo do lote via edge function (usa AUVO_API_KEY/TOKEN do servidor). */
-export async function createBatchAuvoTask(batchId: string, auvoCustomerId?: string): Promise<void> {
+export async function createBatchAuvoTask(batchId: string, auvoCustomerId?: string, options: { requestIfMissing?: boolean } = {}): Promise<void> {
   const { data: batch, error: batchError } = await cloud.from('partial_writeoff_batches').select('*').eq('id', batchId).single();
   if (batchError) throw batchError;
   if (batch.auvo_task_id) return;
-  if (!wantsPartialAuvoTask(batch, (await getOperationGraph(batch.operation_id)).flow_mode)) throw new Error('Este lote foi aberto sem solicitar tarefa Auvo.');
-  if (!['awaiting_checkout', 'confirmed'].includes(batch.status)) throw new Error('O lote não está disponível para criar tarefa Auvo.');
+  const operation = await getOperationGraph(batch.operation_id);
+  if (!options.requestIfMissing && !wantsPartialAuvoTask(batch, operation.flow_mode)) throw new Error('Este lote foi aberto sem solicitar tarefa Auvo.');
+  if (!canRequestPartialAuvoTask(batch, operation)) throw new Error('O lote não está disponível para criar tarefa Auvo.');
+  if (options.requestIfMissing) {
+    const currentBudget = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
+    assertBudgetUnchanged(operation.budget_snapshot, currentBudget);
+    assertOperationQuantities(operation.budget_snapshot, operation.items);
+    const { data: request, error: requestError } = await cloud.rpc('partial_writeoff_request_auvo_task', { p_batch_id: batchId });
+    if (requestError) throw new Error(requestError.message || 'Não foi possível registrar a solicitação Auvo.');
+    if (request?.auvo_task_id) return;
+  }
   const { data, error } = await supabase.functions.invoke('partial-writeoff', {
     body: { action: 'create_batch_task', batch_id: batchId, auvo_customer_id: auvoCustomerId },
   });

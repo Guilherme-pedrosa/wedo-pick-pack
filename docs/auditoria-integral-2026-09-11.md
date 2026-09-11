@@ -21,7 +21,7 @@ As alterações de notificação do usuário foram preservadas. Nenhuma mensagem
 
 ## Validação local
 
-- 228 testes, 32 arquivos, todos aprovados. Incluem concorrência/repetição, pedidos parcialmente baixados, falha de leitura do GC, pagamentos preservados, variações ausentes, troca de usuário, venda com estoque comprometido e produto no final da paginação.
+- 229 testes, 32 arquivos, todos aprovados. Incluem concorrência/repetição, pedidos parcialmente baixados, falha de leitura do GC, pagamentos preservados, variações ausentes, troca de usuário, venda com estoque comprometido, produto no final da paginação e cadastro removido confirmado por HTTP 404.
 - `npx tsc --noEmit -p tsconfig.app.json`: aprovado.
 - `npm run build`: aprovado. Persistem avisos de tamanho de bibliotecas carregadas somente em suas páginas.
 - Funções `partial-writeoff` e `sync-products`: compilação isolada aprovada.
@@ -44,4 +44,13 @@ Não foram criadas OS, vendas, tarefas Auvo ou movimentações físicas fictíci
 
 Esta revisão cobre os fluxos e falhas descritos acima, com testes de regressão e conferências de produção. Não equivale a uma garantia de ausência de qualquer defeito em todas as integrações ou a um teste de execução física de todos os processos.
 
-Publicação e verificações finais serão registradas abaixo após o retorno das plataformas.
+## Publicação e comprovação em produção
+
+- Código principal: `d4a3d98`; publicação manual das funções: `83b6a84`. Tratamento de cadastro removido: `1b6c5bb`, função publicada por `728be84`. O editor formatou os arquivos; a comparação do JavaScript compilado confirmou conteúdo executável idêntico ao validado localmente.
+- A interface pública passou a carregar páginas sob demanda (32 imports separados) e o controle de conferências por usuário. O endpoint da baixa parcial respondeu HTTP 200 com versão `2026-09-11-audit-v3`, questionário de venda 224444 e trava de criação ativa.
+- [Rotina de compras 34652929944](https://github.com/Guilherme-pedrosa/wedo-pick-pack/actions/runs/34652929944): **success**, 208.366 ms. Snapshot `02d2dd69-d8b5-44bd-8062-a01006395f6b`, publicado às 19:15:40: versão 3, **26 produtos a comprar, 27 cobertos por pedido, 24 documentos e 7 baixas parciais**, sem avisos. O número mudou em relação ao ensaio porque houve movimentação real durante a revisão. Cron antigo `compras-auto-scan-3h` continua desativado; execução do GitHub permanece a cada três horas.
+- Sincronização incremental `37aa6a43-355a-4638-88a2-04590c2d1db5`: **success**, HTTP 200, cerca de 36 segundos, **514 produtos atualizados e zero erros**.
+- O 515º identificador era `88006382`, CABO PP 3X2,5 MM, cadastro removido do GC (404). Histórico mostra sua inclusão na Caixa Refrigeração 3 em 31/08/2026. Apenas o índice local foi marcado inativo, com aviso na tela da caixa; **4 unidades e todos os vínculos físicos/históricos preservados**. Nenhuma correspondência com outro código foi presumida.
+- Checkout público carregou as 7 linhas da OS 10228. Nenhum item foi marcado; sessão de validação encerrada. Dashboard exibiu 26 necessidades de compra, um lote aguardando Checkout e uma reconciliação. A 6278 exibiu verde nas peças efetivamente baixadas. Compras concluiu sua atualização local às 19:25:15 com 26 itens e 7 baixas parciais incluídas. Caixas exibiu o aviso do cabo removido e a quantidade 4; Maletas carregou as 11 vinculadas; Etiquetas carregou seu seletor. Console das telas verificadas sem erros de execução. Bundle público final conferido: `/assets/index-D4hfPYyf.js`.
+
+As evidências completas de banco antes/depois, testes, build, respostas das funções e execução da varredura ficam em `outputs/pick-pack-evidence/`, fora do repositório público.

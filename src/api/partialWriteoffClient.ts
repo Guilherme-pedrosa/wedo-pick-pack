@@ -3,6 +3,8 @@ import { executionDocument, isExecutedStatus } from './partialExecution';
 import { consolidateExecutedOs } from './partialConsolidation';
 import { assertStockConflict, commitmentFor, fetchOsStockCommitments } from './osStockCommitments';
 import { assertCheckoutStock } from './checkoutStockGuard';
+import { assertBudgetUnchanged, assertOperationQuantities } from './budgetIntegrity';
+import { assertStatusOnlyChange, writableDocument } from './partialConsolidation';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -404,16 +406,7 @@ async function markBatchReconciliation(
 }
 
 function statusUpdatePayload(document: any, statusId: string, type: DocumentType): Record<string, any> {
-  const keys = [
-    'cliente_id', 'data', 'data_entrada', 'data_saida', 'valor_total', 'valor_frete',
-    'condicao_pagamento', 'produtos', 'servicos', 'equipamentos', 'atributos',
-    'pagamentos', 'vendedor_id', 'tecnico_id', 'centro_custo_id', 'usuario_id',
-    'observacoes', 'observacoes_interna', 'desconto_valor', 'desconto_tipo', 'tipo_desconto',
-  ];
-  const payload: Record<string, any> = { situacao_id: statusId };
-  for (const key of keys) {
-    if (document?.[key] !== undefined && document?.[key] !== null) payload[key] = document[key];
-  }
+  const payload: Record<string, any> = { ...writableDocument(document), situacao_id: statusId };
   if (type === 'venda') payload.tipo = document?.tipo || 'produto';
   if (!payload.data) payload.data = new Date().toISOString().slice(0, 10);
   if (!Array.isArray(payload.produtos)) payload.produtos = [];
@@ -430,6 +423,7 @@ async function updateDocumentStatus(type: DocumentType, id: string, statusId: st
   if (normalizeId(latest.situacao_id) === statusId) return latest;
   await gcRequest(path, 'PUT', statusUpdatePayload(latest, statusId, type));
   const confirmed = (await gcRequest(path))?.data;
+  assertStatusOnlyChange(latest, confirmed);
   if (normalizeId(confirmed?.situacao_id) !== statusId) throw new Error('STATUS_NOT_APPLIED');
   return confirmed;
 }
@@ -441,6 +435,8 @@ export function budgetStatusUpdatePayload(budget: Record<string, unknown>, statu
     'vendedor_id', 'tecnico_id', 'centro_custo_id', 'usuario_id',
     'observacoes', 'observacoes_interna', 'desconto_valor', 'desconto_tipo',
     'tipo_desconto', 'desconto_porcentagem',
+    'introducao', 'aos_cuidados_de', 'validade', 'previsao_entrega', 'enderecos', 'exibir_endereco',
+    'forma_pagamento_id', 'data_primeira_parcela', 'numero_parcelas', 'intervalo_dias', 'transportadora_id',
   ];
   const payload: Record<string, unknown> = { situacao_id: statusId };
   for (const key of keys) {
@@ -467,6 +463,8 @@ async function syncOriginalBudgetPartialStatus(
     try {
       const kind = operationSourceKind(operation) || 'servico';
       const latest = await fetchSource(budgetId, kind);
+      assertBudgetUnchanged(operation.budget_snapshot, latest);
+      assertOperationQuantities(operation.budget_snapshot, operation.items);
       if (normalizeId(latest.situacao_id) === PARTIAL_WRITEOFF_BUDGET_STATUS_ID) return true;
 
       await gcRequest(
@@ -475,6 +473,7 @@ async function syncOriginalBudgetPartialStatus(
         budgetStatusUpdatePayload(latest, PARTIAL_WRITEOFF_BUDGET_STATUS_ID),
       );
       const confirmed = await fetchSource(budgetId, kind);
+      assertStatusOnlyChange(latest, confirmed);
       if (normalizeId(confirmed.situacao_id) !== PARTIAL_WRITEOFF_BUDGET_STATUS_ID) {
         throw new Error('BUDGET_STATUS_NOT_APPLIED');
       }
@@ -486,6 +485,7 @@ async function syncOriginalBudgetPartialStatus(
       });
       return true;
     } catch (error) {
+      if (error instanceof Error && /referência|quantidades locais|troca de situação/i.test(error.message)) throw error;
       lastError = error;
       if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
     }
@@ -550,6 +550,9 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const requested: Array<{ item_id: string; quantity: number }> = Array.isArray(body.items) ? body.items : [];
   if (!operationId || !requested.length) throw new Error('EMPTY_BATCH');
   const operation = await getOperationGraph(operationId);
+  const freshBudget = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
+  assertBudgetUnchanged(operation.budget_snapshot, freshBudget);
+  assertOperationQuantities(operation.budget_snapshot, operation.items);
   if (operationSourceKind(operation) === 'venda') {
     const sale = await fetchSource(operationSourceId(operation), 'venda');
     if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');
@@ -629,14 +632,7 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   const settings = await getSettings();
   const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
   if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
-  // Igual ao Rastreador: busca o orçamento COMPLETO no GC (o snapshot local pode
-  // estar sem `atributos`), para preencher TAREFA OS/EXECUÇÃO, LOCAL e HORAS.
-  let freshBudget: Record<string, any> | undefined;
-  try {
-    freshBudget = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
-  } catch {
-    freshBudget = undefined;
-  }
+  // Documento integral lido e validado antes da reserva; sem fallback para cópia antiga.
   const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id, freshBudget);
 
   const path = operation.document_type === 'os' ? '/api/ordens_servicos' : '/api/vendas';
@@ -736,6 +732,9 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   if (batch.status === 'confirmed') return getOperationGraph(batch.operation_id);
   if (batch.status !== 'awaiting_checkout') throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
   const operation = await getOperationGraph(batch.operation_id);
+  const sourceBeforeCheckout = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
+  assertBudgetUnchanged(operation.budget_snapshot, sourceBeforeCheckout);
+  assertOperationQuantities(operation.budget_snapshot, operation.items);
   await syncOriginalBudgetPartialStatus(operation, batchId, auth);
   if (operationSourceKind(operation) === 'venda') {
     const sale = await fetchSource(operationSourceId(operation), 'venda');
@@ -942,6 +941,9 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
   }
   const sourceKind = operationSourceKind(operation);
   const existingSale = sourceKind === 'venda';
+  const currentSource = await fetchSource(operationSourceId(operation), sourceKind || 'servico');
+  assertBudgetUnchanged(operation.budget_snapshot, currentSource);
+  assertOperationQuantities(operation.budget_snapshot, operation.items);
   if (existingSale) {
     const sale = await fetchSource(operationSourceId(operation), 'venda');
     if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');

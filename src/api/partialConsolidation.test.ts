@@ -94,6 +94,22 @@ describe('consolidação integral com preservação do histórico', () => {
     expect(f.calls.filter(c => c === 'POST /api/ordens_servicos')).toHaveLength(1);
     expect(f.calls.filter(c => c === 'PUT /api/ordens_servicos/aux')).toHaveLength(1);
   });
+  it('preserva auxiliares quando a OS integral perde garantia ou condições financeiras', async () => {
+    for (const field of ['introducao', 'pagamentos']) {
+      const f = fixture();
+      f.budget[field] = field === 'introducao' ? 'Garantia original' : [{ pagamento: { valor: '250', data_vencimento: '2027-01-08' } }];
+      const gc = f.ports.gc;
+      f.ports.gc = async (path, method, payload) => {
+        const result = await gc(path, method, payload);
+        if (method === 'POST') delete f.docs.final[field];
+        return result;
+      };
+      await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow(field);
+      expect(f.aux.situacao_estoque).toBe('1');
+      expect(f.calls).not.toContain('PUT /api/ordens_servicos/aux');
+      expect(f.operation.definitive_document_id).toBe('final');
+    }
+  });
   it('recupera POST com resposta perdida pelo marcador e nunca repete a criação', async () => {
     const f = fixture(); f.ambiguousPost();
     await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('Timeout');

@@ -1,5 +1,6 @@
 import { appendUniqueNote, consolidationReference, executionDocument, isCancelledStatus, isExecutedStatus, requireExecutedDocuments, type GcRecord } from './partialExecution.ts';
 import type { ConsolidationOperation as PartialWriteoffOperation } from './partialExecution.ts';
+import { assertBudgetUnchanged, documentDifferences } from './budgetIntegrity.ts';
 
 export interface ConsolidationPorts<T extends PartialWriteoffOperation = PartialWriteoffOperation> {
   gc(path: string, method?: string, payload?: unknown): Promise<GcRecord>;
@@ -35,21 +36,8 @@ export function assertDefinitiveContents(source: GcRecord, actual: GcRecord): vo
 
 /** Uma troca de situação não autoriza perder os demais campos do documento. */
 export function assertStatusOnlyChange(source: GcRecord, actual: GcRecord): void {
-  const allowed = new Set(['situacao_id', 'nome_situacao', 'cor_situacao', 'situacao_estoque', 'situacao_financeiro', 'modificado_em', 'usuario_id', 'nome_usuario', 'valor_custo']);
-  const canonical = (value: any): any => {
-    if (Array.isArray(value)) return value.map(canonical);
-    // GC recalcula custo cadastral mesmo recebendo o custo anterior no PUT.
-    // Os snapshots completos retêm os custos anteriores; preços de venda continuam imutáveis.
-    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).filter(k => k !== 'valor_custo').sort().map(k => [k, canonical(value[k])]));
-    const text = String(value ?? '').trim();
-    return /^-?\d+(?:\.\d+)?$/.test(text) ? Number(text).toString() : text;
-  };
-  for (const key of Object.keys(source)) {
-    if (allowed.has(key) || key.startsWith('_partial_')) continue;
-    if (JSON.stringify(canonical(source[key])) !== JSON.stringify(canonical(actual?.[key]))) {
-      throw new Error(`A troca de situação alterou o campo ${key}. Conferência obrigatória; os dados anteriores foram preservados no histórico.`);
-    }
-  }
+  const differences = documentDifferences(source, actual);
+  if (differences.length) throw new Error(`A troca de situação alterou o campo ${differences[0]}. Conferência obrigatória; os dados anteriores foram preservados no histórico.`);
 }
 
 export function writableDocument(document: GcRecord): GcRecord {
@@ -168,7 +156,7 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
   requireReady(documents);
   const budget = (await ports.gc(`/api/orcamentos/${encodeURIComponent(operation.budget_id)}`)).data;
   if (!budget || String(budget.id) !== operation.budget_id) throw new Error('Não foi possível conferir o orçamento original.');
-  assertDefinitiveContents(operation.budget_snapshot, budget);
+  assertBudgetUnchanged(operation.budget_snapshot, budget);
   assertAuxiliaryCoverage(budget, auxiliaries);
   const statuses = (await ports.gc('/api/situacoes_ordens_servicos')).data;
   if (!Array.isArray(statuses)) throw new Error('Não foi possível conferir as situações de OS.');
@@ -202,8 +190,17 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
       definitive = { ...created };
       await save('created', definitive); // ID persistido antes de qualquer outra consulta/mutação.
       definitive = await readDocument(ports, String(created.id));
+      assertDefinitiveContents(budget, definitive);
+      assertStatusOnlyChange(payload, definitive);
     }
     assertDefinitiveContents(budget, definitive);
+    const expectedMetadata = writableDocument(budget);
+    delete expectedMetadata.atributos; // IDs próprios de OS, mapeados no payload de criação.
+    delete expectedMetadata.observacoes_interna; // Texto original mais o histórico das auxiliares.
+    assertStatusOnlyChange(expectedMetadata, definitive);
+    if (budget.observacoes_interna && !String(definitive.observacoes_interna || '').includes(String(budget.observacoes_interna))) {
+      throw new Error('A OS não preservou as observações internas do orçamento.');
+    }
     await save('created', definitive);
     if (String(definitive.situacao_estoque) !== '0' && !['finalizing', 'finalized'].includes(operation.consolidation_stage || '')) {
       throw new Error('A OS definitiva já movimenta estoque antes da compensação dos auxiliares.');
@@ -237,7 +234,7 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
       if (String(definitive.situacao_estoque) !== '0' || String(definitive.situacao_id) !== finalStatus) throw new Error('Transferência da reserva para a fila de Checkout não confirmada.');
     } else if (String(definitive.situacao_estoque) !== '1' || !isExecutedStatus(definitive.nome_situacao)) throw new Error('Baixa e execução definitivas não confirmadas no GestãoClick.');
     const latestBudget = (await ports.gc(`/api/orcamentos/${operation.budget_id}`)).data;
-    assertDefinitiveContents(budget, latestBudget);
+    assertBudgetUnchanged(budget, latestBudget);
     await ports.gc(`/api/orcamentos/${operation.budget_id}`, 'PUT', { ...writableDocument(latestBudget), situacao_id: '7109779' });
     const verifiedBudget = (await ports.gc(`/api/orcamentos/${operation.budget_id}`)).data;
     assertDefinitiveContents(budget, verifiedBudget);

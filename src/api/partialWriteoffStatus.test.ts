@@ -17,6 +17,10 @@ describe('situacao do orcamento apos baixa parcial', () => {
       servicos: [],
       pagamentos,
       desconto_valor: '5.00',
+      introducao: 'Garantia de 90 dias',
+      previsao_entrega: '2026-08-30',
+      data_primeira_parcela: '2027-01-08',
+      numero_parcelas: '1',
       nome_situacao: 'COMPRADO - AGUARDANDO CHEGADA',
     }, '9348312');
 
@@ -27,6 +31,10 @@ describe('situacao do orcamento apos baixa parcial', () => {
       produtos,
       pagamentos,
       desconto_valor: '5.00',
+      introducao: 'Garantia de 90 dias',
+      previsao_entrega: '2026-08-30',
+      data_primeira_parcela: '2027-01-08',
+      numero_parcelas: '1',
     });
     expect(payload).not.toHaveProperty('id');
     expect(payload).not.toHaveProperty('codigo');

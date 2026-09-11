@@ -38,3 +38,17 @@ A reserva global protege os fluxos deste aplicativo. Uma operação feita direta
 
 Validação: testes de aplicação, typecheck do projeto, build, checagem Deno e testes das funções SQL com PostgreSQL embarcado. A execução real do workflow confirmou que 4784, 5561 e 5332 continuam aguardando execução; não foi forçada uma execução técnica para testar a geração em produção.
 
+
+## Orçamento 6438 e integridade da referência
+
+A referência de abertura, em 18/08, continha uma cortina de 100 cm e total de R$ 9.896,00. O documento atual do GC, modificado em 28/08, contém três cortinas e total de R$ 9.900,00; a diferença monetária pequena decorre também do ajuste da linha INSUMOS. Não há evidência suficiente para atribuir a diferença de quantidade a uma escrita da IA.
+
+A reconciliação autorizada atualizou somente a cópia de controle e seus saldos originais: três cortinas de 100 cm, nenhuma baixada; duas de 150 cm, ambas já baixadas; serviço de instalação de 16 horas. As 64 unidades baixadas nas sete linhas anteriores e a OS 10098/Auvo 78609276 permaneceram intactas. O evento `budget_reference_reconciled` preserva a operação, itens e lote completos anteriores e o orçamento atual. Não foi necessário reescrever o orçamento no GC.
+
+Antes de reservar, confirmar Checkout ou consolidar, a aplicação relê o orçamento integral e compara a referência. Divergências em produtos, quantidades, serviços, preços, pagamentos, equipamentos, atributos, introdução ou observações bloqueiam a escrita. Também compara o total solicitado de cada produto com os saldos locais. Uma falha de leitura não usa a cópia antiga como alternativa.
+
+Trocas de situação incluem os campos comerciais antes omitidos, como introdução, previsão de entrega e condições de parcelamento. O retorno do GC é relido e comparado. IDs internos de linhas e custos recalculados pelo próprio GC não são confundidos com alteração de quantidade ou preço de venda. A criação da OS integral também valida esses campos antes de cancelar qualquer auxiliar.
+
+A auditoria adicional encontrou atualizações de compras, chegada de peças e detalhes “OK” nos orçamentos 5561 e 5332 em relação às referências antigas. Essas diferenças ficam sujeitas à conferência antes de uma futura consolidação; não foram apagadas ou sobrescritas para forçar equivalência. O 4784 passou integralmente na comparação com a referência preservada.
+
+Validação final: 101 testes de aplicação, typecheck, build e Deno passaram. A reconciliação SQL do 6438 foi testada com dados anteriores em PostgreSQL embarcado, incluindo preservação de baixas/tarefa e bloqueio de reaplicação. A tela publicada confirmou três cortinas de 100 cm solicitadas e pendentes e compromisso zero dos parafusos já retirados mostrados pelo usuário.

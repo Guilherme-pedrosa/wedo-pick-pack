@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
+import { assertRequestedAuvoTasksLinked, wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 
 const mock = vi.hoisted(() => ({
   batch: {} as any, flowMode: 'reservation',
@@ -61,6 +61,9 @@ describe('escolha de tarefa Auvo por OS parcial', () => {
     mock.batch.auvo_task_requested = true; mock.batch.status = 'cancelled';
     await expect(createBatchAuvoTask('batch')).rejects.toThrow('não está disponível');
     expect(mock.invoke).not.toHaveBeenCalled();
+  });
+  it('lote cancelado não deixa uma solicitação de tarefa pendente bloqueando a operação', () => {
+    expect(() => assertRequestedAuvoTasksLinked([{ status: 'cancelled', auvo_task_requested: true, auvo_task_id: null }])).not.toThrow();
   });
   it('preserva a interpretação dos lotes históricos sem escolha registrada', () => {
     expect(wantsPartialAuvoTask({ auvo_task_requested: null }, 'reservation')).toBe(false);

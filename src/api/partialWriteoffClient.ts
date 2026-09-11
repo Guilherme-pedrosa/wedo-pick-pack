@@ -707,7 +707,7 @@ async function finishPreparedBatch(batchId: string, body: any, auth: AuthContext
   }
   if (operation.flow_mode === 'reservation') {
     const reserved = await handleConfirmBatch({ batch_id: batchId }, auth);
-    const pendingTask = reserved.batches.some(b => b.confirmed_at && b.auvo_task_requested === true && !b.auvo_task_id);
+    const pendingTask = reserved.batches.some(b => b.confirmed_at && !['cancelled', 'failed'].includes(b.status) && b.auvo_task_requested === true && !b.auvo_task_id);
     if (!pendingTask && reserved.items.every(i => Number(i.withdrawn_quantity) === Number(i.original_quantity) && Number(i.reserved_quantity) === 0)) {
       return handleConsolidate({ operation_id: operation.id }, auth);
     }

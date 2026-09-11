@@ -383,6 +383,7 @@ export default function PartialWriteoffPage() {
       const cancelled = result.filter(item => item.state === 'cancelled').length;
       const changed = result.filter(item => item.state === 'status_changed').length;
       const errors = result.filter(item => item.state === 'error');
+      const pending = result.filter(item => item.state === 'pending_checkout');
       await refresh();
       if (missing || cancelled) {
         toast.error(`Auditoria: ${missing} documento(s) excluído(s) e ${cancelled} cancelado(s) no GestãoClick. Cancele os lotes para liberar as reservas.`, { duration: 10000 });
@@ -400,6 +401,8 @@ export default function PartialWriteoffPage() {
         await refresh();
       } else if (errors.length) {
         toast.error(errors.map(item => item.message).join('\n'), { duration: 10000 });
+      } else if (pending.length) {
+        toast.warning(`Baixa ainda não aplicada no GC: ${pending.map(item => `#${item.documentCode}`).join(', ')}. Use “Retomar no Checkout” no lote para concluir a conferência.`, { duration: 10000 });
       } else if (changed) {
         toast.warning(`Auditoria: ${changed} documento(s) com situação diferente da esperada.`);
       } else {
@@ -425,6 +428,11 @@ export default function PartialWriteoffPage() {
         return;
       }
       const divergent = result.filter(item => ['missing', 'cancelled', 'status_changed'].includes(item.state));
+      if (result.some(item => item.state === 'pending_checkout')) {
+        toast.warning('Há lotes sem baixa no GestãoClick. Retome esses lotes no Checkout antes de consolidar.', { duration: 10000 });
+        await refresh();
+        return;
+      }
       if (divergent.length) {
         toast.warning(`Atenção: ${divergent.map(item => `#${item.documentCode || item.documentId || item.sequence} (${item.state})`).join(', ')}`, { duration: 10000 });
       }
@@ -1087,9 +1095,9 @@ export default function PartialWriteoffPage() {
                         const audit = audits[batch.id];
                         const auditTone = audit?.state === 'ok'
                           ? 'text-emerald-700'
-                          : audit?.state === 'missing' || audit?.state === 'cancelled'
+                          : audit?.state === 'missing' || audit?.state === 'cancelled' || audit?.state === 'error'
                             ? 'text-red-700'
-                            : audit?.state === 'status_changed'
+                            : audit?.state === 'status_changed' || audit?.state === 'pending_checkout'
                               ? 'text-amber-700'
                               : 'text-muted-foreground';
                         return (
@@ -1130,10 +1138,18 @@ export default function PartialWriteoffPage() {
                                 {audit.state === 'ok' ? '✓ ' : audit.state === 'unchecked' ? '• ' : '⚠ '}{audit.message}
                               </p>
                             )}
+                            {batch.status === 'reconciliation_required' && !audit && (
+                              <p className="text-xs text-red-700">A confirmação anterior falhou: {batch.error_message || 'confira o documento no GC'}. A baixa precisa ser retomada no Checkout.</p>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? (selected.flow_mode === 'reservation' ? 'Reserva aplicada' : 'Baixa aplicada') : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
+                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'reconciliation_required' ? 'Confirmação pendente' : batch.status === 'confirmed' ? (selected.flow_mode === 'reservation' ? 'Reserva aplicada' : 'Baixa aplicada') : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
+                            {['awaiting_checkout', 'reconciliation_required'].includes(batch.status) && batch.auxiliary_document_id && (
+                              <Button variant="outline" size="sm" onClick={() => navigate(`/checkout?partialBatch=${encodeURIComponent(batch.id)}`)}>
+                                Retomar no Checkout
+                              </Button>
+                            )}
                             {!['confirmed', 'cancelled'].includes(batch.status) && (
                               <Button
                                 variant="outline"

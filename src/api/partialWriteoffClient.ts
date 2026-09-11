@@ -6,6 +6,7 @@ import { assertCheckoutStock } from './checkoutStockGuard';
 import { assertBudgetUnchanged, assertOperationQuantities } from './budgetIntegrity';
 import { assertStatusOnlyChange, writableDocument } from './partialConsolidation';
 import { canRequestPartialAuvoTask, wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
+import { budgetTechnicalHours, withMissingTechnicalHours } from '../../supabase/functions/_shared/technicalHours';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -319,7 +320,7 @@ function auxiliaryOsAttributes(operation: PartialWriteoffOperation, budgetOverri
   const budget = budgetOverride || operation.budget_snapshot || {};
   const sourceTaskId = budgetAttributeValue(budget, '73341', 'tarefa os');
   const localReparo = budgetAttributeValue(budget, '73350', 'local do reparo');
-  const horas = budgetAttributeValue(budget, '67350', 'horas');
+  const horas = budgetTechnicalHours(budget);
   return [
     { atributo: { atributo_id: '81831', conteudo: String(operation.budget_code || '-') } },
     { atributo: { atributo_id: '73343', conteudo: sourceTaskId || '-' } },
@@ -414,7 +415,7 @@ function statusUpdatePayload(document: any, statusId: string, type: DocumentType
   return payload;
 }
 
-async function updateDocumentStatus(type: DocumentType, id: string, statusId: string): Promise<any> {
+async function updateDocumentStatus(type: DocumentType, id: string, statusId: string, sourceBudget?: Record<string, any>): Promise<any> {
   if (!statusId) throw new Error(`PARTIAL_${type.toUpperCase()}_STATUS_NOT_CONFIGURED`);
   const path = type === 'os'
     ? `/api/ordens_servicos/${encodeURIComponent(id)}`
@@ -422,9 +423,10 @@ async function updateDocumentStatus(type: DocumentType, id: string, statusId: st
   const latest = (await gcRequest(path))?.data;
   if (!latest) throw new Error('AUXILIARY_DOCUMENT_NOT_FOUND');
   if (normalizeId(latest.situacao_id) === statusId) return latest;
-  await gcRequest(path, 'PUT', statusUpdatePayload(latest, statusId, type));
+  const expected = type === 'os' && sourceBudget ? withMissingTechnicalHours(latest, sourceBudget) : latest;
+  await gcRequest(path, 'PUT', statusUpdatePayload(expected, statusId, type));
   const confirmed = (await gcRequest(path))?.data;
-  assertStatusOnlyChange(latest, confirmed);
+  assertStatusOnlyChange(expected, confirmed);
   if (normalizeId(confirmed?.situacao_id) !== statusId) throw new Error('STATUS_NOT_APPLIED');
   return confirmed;
 }
@@ -802,7 +804,8 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   const settings = await getSettings();
   const stockStatus = settings[`${type}_stock_status_id`];
   try {
-    await updateDocumentStatus(type, String(batch.auxiliary_document_id), stockStatus);
+    const appliedDocument = await updateDocumentStatus(type, String(batch.auxiliary_document_id), stockStatus, sourceBeforeCheckout);
+    if (String(appliedDocument?.situacao_estoque) !== '1') throw new Error('O GestãoClick não confirmou a baixa de estoque. O lote continua pendente.');
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
       p_batch_id: batchId,
       p_success: true,
@@ -1143,7 +1146,7 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
 
   const { data: batches, error } = await cloud
     .from('partial_writeoff_batches' as any)
-    .select('id, sequence, status, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code')
+    .select('id, sequence, status, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, error_message')
     .eq('operation_id', operationId)
     .order('sequence', { ascending: true });
   if (error) throw new Error(error.message);
@@ -1217,6 +1220,9 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
           continue;
         }
         results.push({ ...enriched, batchStatus: 'confirmed', state: 'ok', message });
+      } else if (!debited && ['awaiting_checkout', 'reconciliation_required'].includes(base.batchStatus)) {
+        const previousError = batch.error_message ? ` Falha anterior: ${compact(batch.error_message)}.` : '';
+        results.push({ ...enriched, state: 'pending_checkout', message: `A baixa ainda não foi aplicada no GestãoClick ("${situacaoNome}"). Retome a OS/venda #${base.documentCode} no Checkout para concluir a conferência.${previousError}` });
       } else if (expected.length && !expected.includes(situacaoId) && !isExecutedStatus(situacaoNome)) {
         results.push({ ...enriched, state: 'status_changed', message: `Situação mudou no GestãoClick: "${situacaoNome}".` });
       } else {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 const m = vi.hoisted(() => {
   const saved=new Map<string,string>();
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(k:string)=>saved.get(k)??null,setItem:(k:string,v:string)=>saved.set(k,v),removeItem:(k:string)=>saved.delete(k)}});
@@ -37,9 +38,28 @@ beforeEach(() => {
   m.stockGuard.mockResolvedValue(order('normal','4559'));
 });
 afterEach(() => { cleanup(); clients.forEach(c=>c.clear()); clients=[]; });
-function show() { const client=new QueryClient({defaultOptions:{queries:{retry:false}}}); clients.push(client); render(<QueryClientProvider client={client}><CheckoutPage /></QueryClientProvider>); }
+function show(url='/checkout') { const client=new QueryClient({defaultOptions:{queries:{retry:false}}}); clients.push(client); render(<MemoryRouter initialEntries={[url]}><QueryClientProvider client={client}><CheckoutPage /></QueryClientProvider></MemoryRouter>); }
 
 describe('fila → itens → conferência do Checkout', () => {
+  it.each([false, true])('retoma apenas o lote do link da baixa parcial (mobile=%s)', async mobile => {
+    m.mobile = mobile; show('/checkout?partialBatch=batch');
+    await screen.findByText('Produto partial');
+    expect(m.getOS).toHaveBeenCalledExactlyOnceWith('partial');
+    expect(useCheckoutStore.getState().session?.partialWriteoff?.batchId).toBe('batch');
+    expect(m.stockGuard).not.toHaveBeenCalled();
+  });
+  it.each([false, true])('preserva outra conferência se cancelar a retomada pelo link (mobile=%s)', async mobile => {
+    m.mobile = mobile;
+    useCheckoutStore.getState().startSession('os', order('normal','4559'));
+    const item = useCheckoutStore.getState().session!.items[0];
+    useCheckoutStore.getState().confirmItem(item.id, 1);
+    show('/checkout?partialBatch=batch');
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(Array.from(dialog.querySelectorAll('button')).find(button => button.textContent === 'Cancelar')!);
+    expect(useCheckoutStore.getState().session?.refId).toBe('normal');
+    expect(useCheckoutStore.getState().session?.items[0].qtd_conferida).toBe(1);
+    expect(m.getOS).not.toHaveBeenCalled();
+  });
   it.each([false,true])('mostra os itens sem esperar códigos ou varredura global (mobile=%s)', async mobile => {
     m.mobile=mobile; const details=deferred<any>(); m.enrich.mockReturnValue(details.promise); show();
     fireEvent.click(await screen.findByText('OS #10226'));

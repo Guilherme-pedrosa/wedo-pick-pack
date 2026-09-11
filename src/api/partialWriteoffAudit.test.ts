@@ -74,6 +74,25 @@ describe('retomada do Checkout após reconciliação', () => {
     await expect(checkout()).rejects.toThrow('INSUFFICIENT_COMMITTED_STOCK');
     expect(mock.rpc).not.toHaveBeenCalled();
   });
+  it('reenvia HORAS TÉCNICAS faltante com as 8 horas da fonte em uma única baixa', async () => {
+    document.situacao_estoque = '0';
+    source.servicos = [{ servico: { nome_servico: 'HORA TECNICA A', quantidade: '8.0000' } }];
+    original.servicos = structuredClone(source.servicos);
+    try {
+      mock.invoke.mockImplementation(async (_name: string, { body }: any) => {
+        if (body.method === 'PUT') {
+          expect(body.path).toBe('/api/ordens_servicos/doc');
+          expect(body.payload.atributos).toEqual([{ atributo: { atributo_id: '73897', conteudo: '8' } }]);
+          expect(body.payload.servicos).toBeUndefined();
+          document = { ...document, ...body.payload, situacao_estoque: '1' };
+        }
+        return { data: { _proxy: { ok: true }, data: body.path === '/api/orcamentos/source' ? source : document }, error: null };
+      });
+      await checkout();
+      expect(mock.invoke.mock.calls.filter(call => call[1].body.method === 'PUT')).toHaveLength(1);
+      expect(mock.rpc.mock.calls.map(call => call[0])).toEqual(['partial_writeoff_retry_confirmation', 'partial_writeoff_finish_confirmation']);
+    } finally { original.servicos = []; }
+  });
 });
 const audit = async () => (await invokePartialWriteoffClient<{ audits: any[] }>({ action: 'audit_documents', operation_id: 'op' })).audits[0];
 
@@ -88,7 +107,10 @@ describe('confirmação local das baixas já aplicadas no GC', () => {
   });
   it('não confunde nome/situação de retirada com estoque efetivamente baixado', async () => {
     document.situacao_estoque = '0'; document.situacao_id = 'stock';
-    await audit(); expect(mock.rpc).not.toHaveBeenCalled();
+    batch.error_message = 'HORAS TÉCNICAS (#73897)';
+    expect(await audit()).toMatchObject({ state: 'pending_checkout', message: expect.stringContaining('HORAS TÉCNICAS') });
+    expect(mock.rpc).not.toHaveBeenCalled();
+    expect(mock.invoke.mock.calls.every(call => call[1].body.method === 'GET')).toBe(true);
   });
   it('não reconcilia um documento cancelado', async () => {
     document.situacao_id = 'cancel';

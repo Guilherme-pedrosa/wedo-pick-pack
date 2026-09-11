@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listOS, listVendas, listOSMultiStatus, listVendasMultiStatus, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict, BelowCostWarning } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
@@ -21,6 +22,12 @@ import { isCancelledStatus, isExecutedStatus } from '@/api/partialExecution';
 type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
 
 export default function OrderQueue() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedBatch = searchParams.get('partialBatch');
+  const openedBatchRef = useRef<string | null>(null);
+  const clearRequestedBatch = useCallback(() => {
+    setSearchParams(current => { const next = new URLSearchParams(current); next.delete('partialBatch'); return next; }, { replace: true });
+  }, [setSearchParams]);
   const [activeType, setActiveType] = useState<OrderType>('os');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
@@ -295,7 +302,29 @@ export default function OrderQueue() {
     if (!confirmSwitch) return;
     await loadAndStart(confirmSwitch.tipo, confirmSwitch.id, confirmSwitch.partialEntry);
     setConfirmSwitch(null);
-  }, [confirmSwitch, loadAndStart]);
+    if (requestedBatch) clearRequestedBatch();
+  }, [confirmSwitch, loadAndStart, requestedBatch, clearRequestedBatch]);
+
+  useEffect(() => {
+    if (!requestedBatch || !partialQueueQuery.isSuccess || openedBatchRef.current === requestedBatch) return;
+    openedBatchRef.current = requestedBatch;
+    const entry = partialQueue.find(item => item.batchId === requestedBatch);
+    if (!entry) {
+      toast.warning('Este lote não está mais aguardando Checkout. Atualize a baixa parcial para conferir a situação atual.');
+      clearRequestedBatch();
+      return;
+    }
+    setActiveType(entry.type);
+    if (session?.partialWriteoff?.batchId === requestedBatch && !session.concludedAt) {
+      clearRequestedBatch(); // Keep counts already scanned for this exact lot.
+    } else if (session && !session.concludedAt) {
+      setConfirmSwitch({ tipo: entry.type, id: entry.documentId, partialEntry: entry });
+    } else {
+      void loadAndStart(entry.type, entry.documentId, entry).finally(clearRequestedBatch);
+    }
+  }, [requestedBatch, partialQueueQuery.isSuccess, partialQueue, session, loadAndStart, clearRequestedBatch]);
+
+  const cancelSwitch = () => { setConfirmSwitch(null); if (requestedBatch) clearRequestedBatch(); };
 
   function getOrderBadge(order: GCOrdemServico | GCVenda) {
     if (session && session.refId === order.id && session.tipo === activeType && !session.concludedAt) {
@@ -637,7 +666,7 @@ export default function OrderQueue() {
       )}
 
       {/* Confirm switch dialog */}
-      <Dialog open={!!confirmSwitch} onOpenChange={() => setConfirmSwitch(null)}>
+      <Dialog open={!!confirmSwitch} onOpenChange={cancelSwitch}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Abandonar separação atual?</DialogTitle>
@@ -646,7 +675,7 @@ export default function OrderQueue() {
             Há uma separação em andamento para <strong>#{session?.codigo}</strong>. Deseja abandoná-la e iniciar esta?
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmSwitch(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={cancelSwitch}>Cancelar</Button>
             <Button onClick={handleConfirmSwitch}>Sim, iniciar nova</Button>
           </DialogFooter>
         </DialogContent>

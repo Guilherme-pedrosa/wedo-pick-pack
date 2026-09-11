@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import OrderQueue from '@/components/checkout/OrderQueue';
 import ConferencePanel from '@/components/checkout/ConferencePanel';
 import { useCheckoutStore } from '@/store/checkoutStore';
@@ -8,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ClipboardList } from 'lucide-react';
 
 export default function CheckoutPage() {
+  const [searchParams] = useSearchParams();
   const session = useCheckoutStore(s => s.session);
   const isMobile = useIsMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -16,7 +18,7 @@ export default function CheckoutPage() {
   if (isMobile) {
     return (
       <div className="flex flex-col h-screen-mobile bg-background">
-        {!session ? (
+        {!session || searchParams.has('partialBatch') ? (
           <OrderQueue />
         ) : (
           <>

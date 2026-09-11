@@ -264,7 +264,7 @@ export async function cancelPartialBatch(
   return data.operation;
 }
 
-export type PartialDocumentAuditState = 'ok' | 'missing' | 'cancelled' | 'status_changed' | 'unchecked' | 'error';
+export type PartialDocumentAuditState = 'ok' | 'missing' | 'cancelled' | 'status_changed' | 'unchecked' | 'error' | 'pending_checkout';
 
 export interface PartialDocumentAudit {
   batchId: string;

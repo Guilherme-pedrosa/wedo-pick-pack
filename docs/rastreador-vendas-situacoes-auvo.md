@@ -38,3 +38,11 @@ O Rastreador agora preserva o tipo vindo da coleção GC, apresenta “Gerar Ven
 Teste do 6668: dois produtos, uma unidade de cada, desconto R$ 1.731,18, frete R$ 350,00, total R$ 3.078,06; venda e formulário Auvo de produto; nenhuma OS; seis horas gratuitas preservadas no orçamento. Também há testes para orçamento de serviço sem linhas de serviço, falha/ambiguidade do catálogo, servidor antigo e duplicatas legítimas de linhas.
 
 Validação local: 161 testes, typecheck do projeto app e build. Na inspeção inicial, 6668 continuava aprovado aguardando compra e não havia registro de geração nos logs; nenhum documento ou tarefa foi criado como teste.
+
+## Ativação confirmada — 11/09/2026
+
+A correção foi sincronizada pelo GitHub no commit `48a91e6e303a055c55a51f8078ad602514839ab5`. O salvamento manual do arquivo da função pelo Code Editor do Lovable ativou a implantação e produziu o commit `171480b6a763d5f7c6131fccb9eaed6597667ace`, sem mensagem à IA. Esse salvamento acrescentou um comentário, formatou o arquivo e atualizou o lockfile; a comparação do código executável normalizado por esbuild confirmou equivalência com a correção validada.
+
+Após o salvamento, `node scripts/check-generation-rules.mjs` confirmou HTTP 200, `ready: true` e versão ativa `2026-09-11-budget-kind-v2`, incluindo os vínculos corretos de venda e Auvo. O frontend também foi publicado e seu bundle público conferido. Para futuras implantações, salvar manualmente a função no Code Editor é uma alternativa sem mensagem à IA; sempre confirmar a versão ativa com a consulta de leitura, pois apenas o push não comprova implantação.
+
+O usuário informou que a venda do orçamento 6668 já foi gerada manualmente. Nenhuma venda, OS ou tarefa Auvo foi criada ou alterada durante esta validação em produção.

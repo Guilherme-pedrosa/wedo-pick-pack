@@ -8,11 +8,16 @@ export function gcCompraUrl(id: string | number | undefined | null): string | nu
 }
 
 /** URL de edição de um Orçamento no GestãoClick (usa o ID interno). */
-export function gcOrcamentoUrl(id: string | number | undefined | null): string | null {
+export function gcOrcamentoUrl(
+  id: string | number | undefined | null,
+  kind?: 'produto' | 'servico',
+): string | null {
   const raw = String(id ?? '').trim();
   if (!raw) return null;
-  const retorno = encodeURIComponent('/pedidos/orcamentos/orcamentos_servicos');
-  return `https://gestaoclick.com/pedidos/orcamentos/orcamentos_servicos/editar/${raw}?retorno=${retorno}`;
+  const collection = kind === 'produto' ? 'orcamentos_produtos' : 'orcamentos_servicos';
+  const path = `/pedidos/orcamentos/${collection}`;
+  const retorno = encodeURIComponent(path);
+  return `https://gestaoclick.com${path}/editar/${raw}?retorno=${retorno}`;
 }
 
 

@@ -617,7 +617,7 @@ export default function RastreadorPage() {
         });
       }
 
-      toast.error(`Erro ao gerar OS: ${msg}`);
+      toast.error(`Erro ao gerar documento: ${msg}`);
     } finally {
       setGeneratingOS(false);
     }
@@ -787,9 +787,9 @@ export default function RastreadorPage() {
             }
             <div>
               <div className="flex items-center gap-2">
-                {gcOrcamentoUrl(entry.orcamento.id) ? (
+                {gcOrcamentoUrl(entry.orcamento.id, entry.orcamento.budget_kind) ? (
                   <a
-                    href={gcOrcamentoUrl(entry.orcamento.id)!}
+                    href={gcOrcamentoUrl(entry.orcamento.id, entry.orcamento.budget_kind)!}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-semibold text-sm underline hover:text-primary"
@@ -995,7 +995,7 @@ export default function RastreadorPage() {
           Gerado em {new Date(result.scannedAt).toLocaleString('pt-BR')} |
           {result.totalProntos} prontos de {result.totalOrcamentos} analisados
         </p>
-        {renderSection('✅ Prontos para virar OS', result.orcamentosProntos)}
+        {renderSection('✅ Prontos para gerar venda ou OS', result.orcamentosProntos)}
         {result.conflitos.length > 0 && (
           <div className="mb-6">
             <h2 className="text-base font-bold mb-2 border-b pb-1">⚠️ Conflitos de Estoque ({result.conflitos.length})</h2>
@@ -1095,7 +1095,7 @@ export default function RastreadorPage() {
           <h1 className="text-lg font-bold text-foreground">Rastreador de Orçamentos</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Selecione as situações e (opcionalmente) filtre por cliente para verificar quais orçamentos podem virar OS.
+          Selecione as situações e (opcionalmente) filtre por cliente para verificar quais orçamentos podem gerar venda ou OS.
         </p>
 
         <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -1326,7 +1326,7 @@ export default function RastreadorPage() {
               </Card>
               <Card className="p-3 text-center border-green-500/50 bg-green-500/5">
                 <p className="text-2xl font-bold text-green-600">{result.totalProntos}</p>
-                <p className="text-xs text-muted-foreground">Prontos para OS</p>
+                <p className="text-xs text-muted-foreground">Prontos para venda ou OS</p>
               </Card>
               <Card className="p-3 text-center border-amber-500/50 bg-amber-500/5">
                 <p className="text-2xl font-bold text-amber-600">

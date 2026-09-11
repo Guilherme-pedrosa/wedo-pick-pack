@@ -10,6 +10,13 @@ const corsHeaders = {
 const GC_API_URL = 'https://api.gestaoclick.com';
 const AUVO_API_URL = 'https://api.auvo.com.br/v2';
 
+// IDs conferidos nos cadastros GC e Auvo em 11/09/2026.
+const GENERATION_RULES = {
+  os: { budgetStatusId: '7109779', documentStatusId: '7063581', taskType: 180177, questionnaireId: 214757 },
+  venda: { budgetStatusId: '7706107', documentStatusId: '9303817', taskType: 200268, questionnaireId: 224444 },
+} as const;
+const GENERATION_RULES_VERSION = '2026-09-11-product-sales-v1';
+
 // ---------- helpers ----------
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -498,6 +505,12 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json();
+    // Inspeção sem criar documentos/tarefas: distingue código sincronizado de função implantada.
+    if (body.action === 'generation_rules') {
+      return new Response(JSON.stringify({ version: GENERATION_RULES_VERSION, rules: GENERATION_RULES }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     const {
       auvo_user_id,     // number - idUserFrom in Auvo
       gc_usuario_id,    // optional - GC user ID for attribution
@@ -626,6 +639,7 @@ Deno.serve(async (req: Request) => {
     const hasServiceLine = Array.isArray(orcamento.servicos) && orcamento.servicos.length > 0;
     const isServico = hasServiceLine || parseMoney(orcamento.valor_servicos) > 0;
     const docKind: 'os' | 'venda' = isServico ? 'os' : 'venda';
+    const generationRules = GENERATION_RULES[docKind];
 
 
     console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente} - tipo: ${docKind.toUpperCase()}`);
@@ -862,11 +876,11 @@ Deno.serve(async (req: Request) => {
     const auvoPayload: Record<string, unknown> = {
       // Venda de produto usa o tipo de atividade "Comercial - ENTREGA DA VENDAS" (200268).
       // Demais (OS de serviço) seguem com o tipo padrão.
-      taskType: docKind === 'venda' ? 200268 : 180177,
+      taskType: generationRules.taskType,
       idUserFrom: Number(auvo_user_id),
       orientation,
       priority: 2,
-      questionnaireId: 214757,
+      questionnaireId: generationRules.questionnaireId,
       // Clone address from orçamento only
       address: clientAddress,
       latitude: -23.55,
@@ -1011,7 +1025,7 @@ Deno.serve(async (req: Request) => {
         atributos,
         // Always: Centro de custo "OPERAÇÕES COZINHAS" + Situação "Pedido em Conferência"
         centro_custo_id: orcamento.centro_custo_id || '501357',
-        situacao_id: '7063581',
+        situacao_id: generationRules.documentStatusId,
       };
 
       // Preserve optional fields from orçamento when available
@@ -1076,8 +1090,9 @@ Deno.serve(async (req: Request) => {
         console.warn('[generate-os] ⚠️ Falha ao resolver atributos extras da venda:', e);
       }
 
-      // Situação "SEPARADO - AGUARDANDO ENTREGA / DESPACHO"
-      const VENDA_SITUACAO_ID = '8955109';
+      // Rastreador: a venda nasce aguardando separação. A consolidação das
+      // entregas parciais mantém a situação que já representa peças separadas.
+      const VENDA_SITUACAO_ID = partialDeliveries.length ? '8955109' : generationRules.documentStatusId;
 
       const vendaPayload: Record<string, any> = {
         tipo: 'produto',
@@ -1128,9 +1143,9 @@ Deno.serve(async (req: Request) => {
     }
 
     // ============================================
-    // STEP 6: Update orçamento status to "OS Gerada" (7109779)
+    // STEP 6: Vincula a situação do orçamento ao tipo de documento criado.
     // ============================================
-    const NEW_ORC_STATUS_ID = '7109779';
+    const NEW_ORC_STATUS_ID = generationRules.budgetStatusId;
     try {
       console.log(`[generate-os] Step 6: Updating orçamento #${orcamento.codigo} status to ${NEW_ORC_STATUS_ID}...`);
 

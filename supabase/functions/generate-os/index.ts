@@ -1,27 +1,29 @@
+// Generation follows the GC budget collection, including free technical service lines.
 import { installGcUsuarioId } from "../_shared/gc-user.ts";
-import { BUDGET_GENERATION_VERSION, readAuthoritativeBudget } from '../_shared/budgetKind.ts';
-import { assertBudgetUnchanged } from '../_shared/budgetIntegrity.ts';
-import { writableDocument } from '../_shared/partialConsolidation.ts';
+import { BUDGET_GENERATION_VERSION, readAuthoritativeBudget } from "../_shared/budgetKind.ts";
+import { assertBudgetUnchanged } from "../_shared/budgetIntegrity.ts";
+import { writableDocument } from "../_shared/partialConsolidation.ts";
 installGcUsuarioId();
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GC_API_URL = 'https://api.gestaoclick.com';
-const AUVO_API_URL = 'https://api.auvo.com.br/v2';
+const GC_API_URL = "https://api.gestaoclick.com";
+const AUVO_API_URL = "https://api.auvo.com.br/v2";
 
 // IDs conferidos nos cadastros GC e Auvo em 11/09/2026.
 const GENERATION_RULES = {
-  os: { budgetStatusId: '7109779', documentStatusId: '7063581', taskType: 180177, questionnaireId: 214757 },
-  venda: { budgetStatusId: '7706107', documentStatusId: '9303817', taskType: 200268, questionnaireId: 224444 },
+  os: { budgetStatusId: "7109779", documentStatusId: "7063581", taskType: 180177, questionnaireId: 214757 },
+  venda: { budgetStatusId: "7706107", documentStatusId: "9303817", taskType: 200268, questionnaireId: 224444 },
 } as const;
 const GENERATION_RULES_VERSION = BUDGET_GENERATION_VERSION;
 
 // ---------- helpers ----------
-const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Quantidades já entregues (reservadas ou retiradas) por baixa parcial deste orçamento.
@@ -31,8 +33,8 @@ async function fetchPartialDeliveredQuantities(budgetId: string): Promise<Map<st
   const result = new Map<string, number>();
   if (!budgetId) return result;
   try {
-    const url = Deno.env.get('SUPABASE_URL')!;
-    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const url = Deno.env.get("SUPABASE_URL")!;
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const query =
       `${url}/rest/v1/partial_writeoff_operations` +
       `?budget_id=in.(${encodeURIComponent(`"${budgetId}","venda:${budgetId}"`)})` +
@@ -40,15 +42,15 @@ async function fetchPartialDeliveredQuantities(budgetId: string): Promise<Map<st
       `&select=id,status,items:partial_writeoff_items(product_id,variation_id,reserved_quantity,withdrawn_quantity)`;
     const res = await fetch(query, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
     if (!res.ok) {
-      console.warn('[generate-os] Falha ao ler baixas parciais:', res.status, await res.text());
+      console.warn("[generate-os] Falha ao ler baixas parciais:", res.status, await res.text());
       return result;
     }
     const rows = await res.json();
     for (const op of Array.isArray(rows) ? rows : []) {
       for (const item of op?.items || []) {
-        const pid = String(item?.product_id ?? '').trim();
+        const pid = String(item?.product_id ?? "").trim();
         if (!pid) continue;
-        const vid = String(item?.variation_id ?? '').trim();
+        const vid = String(item?.variation_id ?? "").trim();
         const mapKey = vid ? `${pid}::${vid}` : pid;
         const qty = Math.max(Number(item?.withdrawn_quantity ?? 0), Number(item?.reserved_quantity ?? 0));
         if (!Number.isFinite(qty) || qty <= 0) continue;
@@ -56,16 +58,18 @@ async function fetchPartialDeliveredQuantities(budgetId: string): Promise<Map<st
       }
     }
   } catch (err) {
-    console.warn('[generate-os] Erro ao consultar baixas parciais:', err);
+    console.warn("[generate-os] Erro ao consultar baixas parciais:", err);
   }
   return result;
 }
 
-
 function compactApiMessage(value: unknown): string {
-  if (value == null) return '';
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
-  return text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (value == null) return "";
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractApiErrorMessage(payload: unknown): string {
@@ -74,11 +78,11 @@ function extractApiErrorMessage(payload: unknown): string {
 
   const collect = (value: unknown) => {
     if (value == null || seen.has(value)) return;
-    if (typeof value === 'object') seen.add(value);
+    if (typeof value === "object") seen.add(value);
 
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       const compact = compactApiMessage(value);
-      if (compact && compact !== '[object Object]') candidates.push(compact);
+      if (compact && compact !== "[object Object]") candidates.push(compact);
       return;
     }
 
@@ -87,11 +91,22 @@ function extractApiErrorMessage(payload: unknown): string {
       return;
     }
 
-    if (typeof value === 'object') {
+    if (typeof value === "object") {
       const obj = value as Record<string, unknown>;
       const preferredKeys = [
-        'message', 'mensagem', 'erro', 'error', 'errors', 'detail', 'details',
-        'description', 'descricao', 'data', 'result', 'raw', 'body',
+        "message",
+        "mensagem",
+        "erro",
+        "error",
+        "errors",
+        "detail",
+        "details",
+        "description",
+        "descricao",
+        "data",
+        "result",
+        "raw",
+        "body",
       ];
       for (const key of preferredKeys) collect(obj[key]);
       for (const [key, nested] of Object.entries(obj)) {
@@ -103,58 +118,62 @@ function extractApiErrorMessage(payload: unknown): string {
   collect(payload);
   const unique = Array.from(new Set(candidates)).filter((msg) => !/^\{\}$|^\[\]$/.test(msg));
   const meaningful = unique.filter((msg) => !/^bad request$/i.test(msg));
-  return (meaningful.length ? meaningful : unique).slice(0, 4).join(' | ');
+  return (meaningful.length ? meaningful : unique).slice(0, 4).join(" | ");
 }
 
 function friendlyErrorMessage(message: string): string {
-  const raw = String(message || '').trim();
+  const raw = String(message || "").trim();
   const compact = compactApiMessage(raw);
   const source = compact || raw;
 
   if (/Auvo/i.test(source) && /(?:502|503|504|Bad Gateway|invalid response|gateway|proxy)/i.test(source)) {
-    return 'O Auvo está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+    return "O Auvo está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.";
   }
   if (/GC|Gest[aã]oClick/i.test(source)) {
     if (/(?:401|403|unauthori|autoriz)/i.test(source)) {
-      return 'Sem autorização no GestãoClick. Verifique as credenciais da integração.';
+      return "Sem autorização no GestãoClick. Verifique as credenciais da integração.";
     }
     if (/(?:502|503|504|Bad Gateway|gateway|proxy)/i.test(source)) {
-      return 'O GestãoClick está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+      return "O GestãoClick está instável no momento. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.";
     }
   }
   if (/Auvo login failed/i.test(source)) {
-    return 'Não foi possível autenticar no Auvo. Verifique as credenciais da integração.';
+    return "Não foi possível autenticar no Auvo. Verifique as credenciais da integração.";
   }
   if (/Full response|<!DOCTYPE|<html|Server Error/i.test(raw)) {
-    return 'A integração retornou uma resposta inválida. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.';
+    return "A integração retornou uma resposta inválida. A OS/Venda NÃO foi gerada. Tente novamente em alguns instantes.";
   }
 
-  return source.slice(0, 500) || 'Erro desconhecido na geração. A OS/Venda NÃO foi gerada.';
+  return source.slice(0, 500) || "Erro desconhecido na geração. A OS/Venda NÃO foi gerada.";
 }
 
 async function gcRequest(path: string, method: string, body?: unknown) {
-  const GC_ACCESS_TOKEN = Deno.env.get('GC_ACCESS_TOKEN')!;
-  const GC_SECRET_TOKEN = Deno.env.get('GC_SECRET_TOKEN')!;
+  const GC_ACCESS_TOKEN = Deno.env.get("GC_ACCESS_TOKEN")!;
+  const GC_SECRET_TOKEN = Deno.env.get("GC_SECRET_TOKEN")!;
 
   const opts: RequestInit = {
     method,
     headers: {
-      'access-token': GC_ACCESS_TOKEN,
-      'secret-access-token': GC_SECRET_TOKEN,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
+      "access-token": GC_ACCESS_TOKEN,
+      "secret-access-token": GC_SECRET_TOKEN,
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
   };
-  if (body && (method === 'POST' || method === 'PUT')) {
+  if (body && (method === "POST" || method === "PUT")) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(`${GC_API_URL}${path}`, opts);
   const text = await res.text();
   let json: any;
-  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { raw: text };
+  }
   if (!res.ok && res.status !== 200) {
     const apiMsg = extractApiErrorMessage(json) || compactApiMessage(text);
-    const responseDetail = apiMsg || `sem detalhe no corpo da resposta (${res.statusText || 'sem statusText'})`;
+    const responseDetail = apiMsg || `sem detalhe no corpo da resposta (${res.statusText || "sem statusText"})`;
     console.error(`[gcRequest] ${method} ${path} HTTP ${res.status}: ${responseDetail.slice(0, 1200)}`);
     throw new Error(`GestãoClick ${method} ${path} retornou erro ${res.status}: ${responseDetail.slice(0, 800)}`);
   }
@@ -163,12 +182,12 @@ async function gcRequest(path: string, method: string, body?: unknown) {
 
 // ---------- Auvo Auth ----------
 async function auvoLogin(): Promise<string> {
-  const apiKey = Deno.env.get('AUVO_API_KEY');
-  const apiToken = Deno.env.get('AUVO_API_TOKEN');
-  if (!apiKey || !apiToken) throw new Error('Auvo credentials not configured');
+  const apiKey = Deno.env.get("AUVO_API_KEY");
+  const apiToken = Deno.env.get("AUVO_API_TOKEN");
+  if (!apiKey || !apiToken) throw new Error("Auvo credentials not configured");
 
   const url = `${AUVO_API_URL}/login/?apiKey=${encodeURIComponent(apiKey)}&apiToken=${encodeURIComponent(apiToken)}`;
-  const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+  const res = await fetch(url, { method: "GET", headers: { "Content-Type": "application/json" } });
   if (!res.ok) throw new Error(`Auvo login failed (${res.status})`);
   const data = await res.json();
   if (!data?.result?.accessToken) {
@@ -179,16 +198,20 @@ async function auvoLogin(): Promise<string> {
 
 async function auvoCreateTask(token: string, payload: Record<string, unknown>): Promise<any> {
   const res = await fetch(`${AUVO_API_URL}/tasks`, {
-    method: 'PUT',
+    method: "PUT",
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });
   const text = await res.text();
   let data: any;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
   if (!res.ok) {
     console.error(`[auvoCreateTask] HTTP ${res.status} body:`, text.slice(0, 1000));
     let friendly: string;
@@ -197,11 +220,11 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
     } else if (res.status === 401 || res.status === 403) {
       friendly = `Sem autorização no Auvo (${res.status}). Verifique as credenciais/token do Auvo.`;
     } else if (res.status === 400 || res.status === 422) {
-      const apiMsg = data?.messageError || data?.message || data?.error || (typeof data?.raw === 'string' ? '' : '');
-      friendly = `Auvo rejeitou os dados da tarefa (${res.status})${apiMsg ? `: ${String(apiMsg).slice(0, 200)}` : '.'} Revise cliente, técnico e tipo de atividade.`;
+      const apiMsg = data?.messageError || data?.message || data?.error || (typeof data?.raw === "string" ? "" : "");
+      friendly = `Auvo rejeitou os dados da tarefa (${res.status})${apiMsg ? `: ${String(apiMsg).slice(0, 200)}` : "."} Revise cliente, técnico e tipo de atividade.`;
     } else {
-      const apiMsg = data?.messageError || data?.message || data?.error || '';
-      friendly = `Falha ao criar tarefa no Auvo (${res.status})${apiMsg ? `: ${String(apiMsg).slice(0, 200)}` : '.'}`;
+      const apiMsg = data?.messageError || data?.message || data?.error || "";
+      friendly = `Falha ao criar tarefa no Auvo (${res.status})${apiMsg ? `: ${String(apiMsg).slice(0, 200)}` : "."}`;
     }
     throw new Error(friendly);
   }
@@ -211,16 +234,20 @@ async function auvoCreateTask(token: string, payload: Record<string, unknown>): 
 
 async function auvoGetTask(token: string, taskId: string | number): Promise<any> {
   const res = await fetch(`${AUVO_API_URL}/tasks/${taskId}`, {
-    method: 'GET',
+    method: "GET",
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     },
   });
 
   const text = await res.text();
   let data: any;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
 
   if (!res.ok) {
     throw new Error(`Auvo get task failed [${res.status}] for task ${taskId}: ${text.slice(0, 500)}`);
@@ -230,9 +257,9 @@ async function auvoGetTask(token: string, taskId: string | number): Promise<any>
 }
 
 function parseMoney(value: unknown): number {
-  const raw = String(value ?? '').trim();
+  const raw = String(value ?? "").trim();
   if (!raw) return 0;
-  const normalized = raw.includes(',') ? raw.replace(/\./g, '').replace(',', '.') : raw;
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -243,56 +270,60 @@ function formatMoney(value: number): string {
 
 // Preserve GC unit prices/costs at their original precision. Only document
 // totals and payments use cents; rounding unit prices changes the budget.
-const MONEY_FIELDS = ['valor_total', 'desconto_valor', 'valor_frete', 'valor'];
+const MONEY_FIELDS = ["valor_total", "desconto_valor", "valor_frete", "valor"];
 function round2Money(value: unknown): string {
   return formatMoney(parseMoney(value));
 }
 function normalizeLineMoney(line: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = { ...line };
   for (const f of MONEY_FIELDS) {
-    if (out[f] != null && String(out[f]).trim() !== '') out[f] = round2Money(out[f]);
+    if (out[f] != null && String(out[f]).trim() !== "") out[f] = round2Money(out[f]);
   }
   return out;
 }
-
 
 /**
  * Remove linhas duplicadas (mesmo produto/serviço, quantidade e valores).
  * Evita que o GC crie a OS/Venda com os itens repetidos.
  */
-function dedupeGCLines(items: any[] | undefined, key: 'produto' | 'servico'): any[] {
+function dedupeGCLines(items: any[] | undefined, key: "produto" | "servico"): any[] {
   if (!Array.isArray(items)) return [];
   const seen = new Set<string>();
   const out: any[] = [];
   for (const entry of items) {
-    const line = (entry && typeof entry === 'object' && entry[key]) ? entry[key] : entry;
-    if (!line || typeof line !== 'object') { out.push(entry); continue; }
+    const line = entry && typeof entry === "object" && entry[key] ? entry[key] : entry;
+    if (!line || typeof line !== "object") {
+      out.push(entry);
+      continue;
+    }
     const fp = [
-      line.produto_id ?? line.servico_id ?? '',
-      line.variacao_id ?? '',
-      line.nome_produto ?? line.nome_servico ?? '',
-      String(line.quantidade ?? ''),
-      String(line.valor_venda ?? line.valor ?? ''),
-      String(line.valor_total ?? ''),
-      String(line.desconto_valor ?? ''),
-    ].join('|');
+      line.produto_id ?? line.servico_id ?? "",
+      line.variacao_id ?? "",
+      line.nome_produto ?? line.nome_servico ?? "",
+      String(line.quantidade ?? ""),
+      String(line.valor_venda ?? line.valor ?? ""),
+      String(line.valor_total ?? ""),
+      String(line.desconto_valor ?? ""),
+    ].join("|");
     if (seen.has(fp)) continue;
     seen.add(fp);
     out.push(entry);
   }
   if (out.length !== items.length) {
-    console.warn(`[generate-os] ⚠️ ${items.length - out.length} linha(s) de ${key} duplicada(s) removida(s) do payload`);
+    console.warn(
+      `[generate-os] ⚠️ ${items.length - out.length} linha(s) de ${key} duplicada(s) removida(s) do payload`,
+    );
   }
   return out;
 }
 
-function normalizeGCLines(items: any[] | undefined, key: 'produto' | 'servico'): any[] {
+function normalizeGCLines(items: any[] | undefined, key: "produto" | "servico"): any[] {
   if (!Array.isArray(items)) return [];
   return items.map((entry) => {
     const line = getLinePayload(entry, key);
     if (!line) return entry;
     const normalized = normalizeLineMoney(line);
-    if (entry && typeof entry === 'object' && entry[key] && typeof entry[key] === 'object') {
+    if (entry && typeof entry === "object" && entry[key] && typeof entry[key] === "object") {
       return { ...entry, [key]: normalized };
     }
     return normalized;
@@ -301,7 +332,7 @@ function normalizeGCLines(items: any[] | undefined, key: 'produto' | 'servico'):
 function normalizeGCPayments(pagamentos: any[] | undefined): any[] {
   if (!Array.isArray(pagamentos)) return [];
   return pagamentos.map((p) => {
-    if (p?.pagamento && typeof p.pagamento === 'object') {
+    if (p?.pagamento && typeof p.pagamento === "object") {
       return { ...p, pagamento: { ...p.pagamento, valor: round2Money(p.pagamento.valor) } };
     }
     if (p?.valor != null) return { ...p, valor: round2Money(p.valor) };
@@ -310,11 +341,11 @@ function normalizeGCPayments(pagamentos: any[] | undefined): any[] {
 }
 function normalizeGCMoneyPayload<T extends Record<string, any>>(payload: T): T {
   const out: Record<string, any> = { ...payload };
-  if (out.produtos) out.produtos = normalizeGCLines(out.produtos, 'produto');
-  if (out.servicos) out.servicos = normalizeGCLines(out.servicos, 'servico');
+  if (out.produtos) out.produtos = normalizeGCLines(out.produtos, "produto");
+  if (out.servicos) out.servicos = normalizeGCLines(out.servicos, "servico");
   if (out.pagamentos) out.pagamentos = normalizeGCPayments(out.pagamentos);
-  for (const f of ['valor_total', 'valor_frete', 'desconto_valor']) {
-    if (out[f] != null && String(out[f]).trim() !== '') out[f] = round2Money(out[f]);
+  for (const f of ["valor_total", "valor_frete", "desconto_valor"]) {
+    if (out[f] != null && String(out[f]).trim() !== "") out[f] = round2Money(out[f]);
   }
   return out as T;
 }
@@ -325,7 +356,7 @@ function getPaymentValue(payment: any): number {
 }
 
 function setPaymentValue(payment: any, value: string): any {
-  if (payment?.pagamento && typeof payment.pagamento === 'object') {
+  if (payment?.pagamento && typeof payment.pagamento === "object") {
     return { ...payment, pagamento: { ...payment.pagamento, valor: value } };
   }
   return { ...payment, valor: value };
@@ -359,16 +390,16 @@ function normalizePaymentsToDeclaredTotal<T extends Record<string, any>>(payload
   return { ...payload, pagamentos: payments };
 }
 
-function getLinePayload(entry: any, key: 'produto' | 'servico'): Record<string, any> | null {
+function getLinePayload(entry: any, key: "produto" | "servico"): Record<string, any> | null {
   const line = entry?.[key] ?? entry;
-  return line && typeof line === 'object' ? line : null;
+  return line && typeof line === "object" ? line : null;
 }
 
 function computeGCDocumentLineTotalCents(payload: Record<string, any>): number | null {
   let total = 0;
   let hasLine = false;
 
-  const addLines = (items: any[] | undefined, key: 'produto' | 'servico') => {
+  const addLines = (items: any[] | undefined, key: "produto" | "servico") => {
     if (!Array.isArray(items)) return;
     for (const entry of items) {
       const line = getLinePayload(entry, key);
@@ -379,11 +410,11 @@ function computeGCDocumentLineTotalCents(payload: Record<string, any>): number |
       if (qty <= 0) continue;
 
       let lineTotal = qty * unit;
-      const discountType = String(line.tipo_desconto || 'R$').trim();
+      const discountType = String(line.tipo_desconto || "R$").trim();
       const fixedDiscount = parseMoney(line.desconto_valor);
       const percentDiscount = parseMoney(line.desconto_porcentagem);
 
-      if (discountType === '%' && percentDiscount > 0) {
+      if (discountType === "%" && percentDiscount > 0) {
         lineTotal = lineTotal * (1 - percentDiscount / 100);
       } else if (fixedDiscount > 0) {
         lineTotal -= fixedDiscount;
@@ -394,8 +425,8 @@ function computeGCDocumentLineTotalCents(payload: Record<string, any>): number |
     }
   };
 
-  addLines(payload.produtos, 'produto');
-  addLines(payload.servicos, 'servico');
+  addLines(payload.produtos, "produto");
+  addLines(payload.servicos, "servico");
 
   return hasLine ? Math.round(total * 100) : null;
 }
@@ -407,11 +438,11 @@ function applyGCRoundingDiscount<T extends Record<string, any>>(payload: T): T {
   const lineTotalCents = computeGCDocumentLineTotalCents(payload);
   if (lineTotalCents == null) return payload;
 
-  const headerDiscountType = String(payload.tipo_desconto || payload.desconto_tipo || 'R$').trim();
+  const headerDiscountType = String(payload.tipo_desconto || payload.desconto_tipo || "R$").trim();
   const headerDiscountCents = Math.round(parseMoney(payload.desconto_valor) * 100);
   const headerPercent = parseMoney(payload.desconto_porcentagem);
 
-  if (headerDiscountType === '%' && headerPercent > 0) return payload;
+  if (headerDiscountType === "%" && headerPercent > 0) return payload;
 
   const currentComputedCents = lineTotalCents - headerDiscountCents;
   const missingDiscountCents = currentComputedCents - declaredCents;
@@ -419,25 +450,30 @@ function applyGCRoundingDiscount<T extends Record<string, any>>(payload: T): T {
   if (missingDiscountCents <= 0 || missingDiscountCents > 100) return payload;
 
   const nextDiscount = formatMoney((headerDiscountCents + missingDiscountCents) / 100);
-  console.warn(`[generate-os] Ajuste financeiro GC: linhas=${formatMoney(lineTotalCents / 100)}, declarado=${formatMoney(declaredCents / 100)}, desconto_cabecalho=${nextDiscount}`);
+  console.warn(
+    `[generate-os] Ajuste financeiro GC: linhas=${formatMoney(lineTotalCents / 100)}, declarado=${formatMoney(declaredCents / 100)}, desconto_cabecalho=${nextDiscount}`,
+  );
 
   return {
     ...payload,
-    tipo_desconto: 'R$',
-    desconto_tipo: 'R$',
+    tipo_desconto: "R$",
+    desconto_tipo: "R$",
     desconto_valor: nextDiscount,
-    desconto_porcentagem: '0.00',
+    desconto_porcentagem: "0.00",
   };
 }
 
 // ---------- GC: Discover OS attribute IDs ----------
-interface AtributoMeta { id: string; nome: string }
+interface AtributoMeta {
+  id: string;
+  nome: string;
+}
 
 const normalize = (value: string) =>
-  (value || '')
+  (value || "")
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim();
 
 async function getOSAtributoIds(): Promise<{
@@ -447,7 +483,7 @@ async function getOSAtributoIds(): Promise<{
   localReparo: string | null;
   horasTecnicas: string | null;
 }> {
-  const res = await gcRequest('/api/atributos_ordens_servicos', 'GET');
+  const res = await gcRequest("/api/atributos_ordens_servicos", "GET");
   const list: AtributoMeta[] = res?.data || [];
 
   let numOrcamento: string | null = null;
@@ -457,21 +493,21 @@ async function getOSAtributoIds(): Promise<{
   let horasTecnicas: string | null = null;
 
   for (const a of list) {
-    const nome = normalize(a.nome || '');
+    const nome = normalize(a.nome || "");
 
-    if (!numOrcamento && (nome.includes('numero') && nome.includes('orcamento'))) {
+    if (!numOrcamento && nome.includes("numero") && nome.includes("orcamento")) {
       numOrcamento = a.id;
     }
-    if (!tarefaExecucao && nome.includes('tarefa') && nome.includes('execu')) {
+    if (!tarefaExecucao && nome.includes("tarefa") && nome.includes("execu")) {
       tarefaExecucao = a.id;
     }
-    if (!tarefaOs && (nome === 'tarefa os' || (nome.includes('tarefa') && nome.includes('os')))) {
+    if (!tarefaOs && (nome === "tarefa os" || (nome.includes("tarefa") && nome.includes("os")))) {
       tarefaOs = a.id;
     }
-    if (!localReparo && nome.includes('local') && nome.includes('reparo')) {
+    if (!localReparo && nome.includes("local") && nome.includes("reparo")) {
       localReparo = a.id;
     }
-    if (!horasTecnicas && nome.includes('horas') && nome.includes('tecnic')) {
+    if (!horasTecnicas && nome.includes("horas") && nome.includes("tecnic")) {
       horasTecnicas = a.id;
     }
   }
@@ -481,16 +517,16 @@ async function getOSAtributoIds(): Promise<{
 
 // ---------- GC: Discover Venda extra-field attribute IDs ----------
 async function getVendaAtributoIds(): Promise<{ tarefaEntrega: string | null; numOrcamento: string | null }> {
-  const res = await gcRequest('/api/atributos_vendas', 'GET');
+  const res = await gcRequest("/api/atributos_vendas", "GET");
   const list: AtributoMeta[] = res?.data || [];
   let tarefaEntrega: string | null = null;
   let numOrcamento: string | null = null;
   for (const a of list) {
-    const nome = normalize(a.nome || '');
-    if (!tarefaEntrega && nome.includes('tarefa') && nome.includes('entrega')) {
+    const nome = normalize(a.nome || "");
+    if (!tarefaEntrega && nome.includes("tarefa") && nome.includes("entrega")) {
       tarefaEntrega = a.id;
     }
-    if (!numOrcamento && nome.includes('numero') && nome.includes('orcamento')) {
+    if (!numOrcamento && nome.includes("numero") && nome.includes("orcamento")) {
       numOrcamento = a.id;
     }
   }
@@ -499,21 +535,22 @@ async function getVendaAtributoIds(): Promise<{ tarefaEntrega: string | null; nu
 
 // ---------- Main handler ----------
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const body = await req.json();
     // Inspeção sem criar documentos/tarefas: distingue código sincronizado de função implantada.
-    if (body.action === 'generation_rules') {
+    if (body.action === "generation_rules") {
       return new Response(JSON.stringify({ version: GENERATION_RULES_VERSION, rules: GENERATION_RULES }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const {
-      auvo_user_id,     // number - idUserFrom in Auvo
-      gc_usuario_id,    // optional - GC user ID for attribution
+      auvo_user_id, // number - idUserFrom in Auvo
+      gc_usuario_id, // optional - GC user ID for attribution
       auvo_customer_id, // optional - Auvo customer ID (when no source task to clone from)
       manual_equipamento, // optional - manual equipment text when not in orçamento
       partial_auxiliaries, // optional - entregas parciais já feitas (baixa parcial)
@@ -521,34 +558,35 @@ Deno.serve(async (req: Request) => {
     // Rastreio das entregas parciais: documento auxiliar + tarefa Auvo de cada lote.
     const partialDeliveries: Array<Record<string, any>> = Array.isArray(partial_auxiliaries) ? partial_auxiliaries : [];
     const partialSummaryLines = partialDeliveries.map((entry) => {
-      const doc = `${String(entry.document_type || '').toLowerCase() === 'venda' ? 'Venda' : 'OS'} #${entry.document_code || entry.document_id || '?'}`;
-      return `  • Entrega ${entry.sequence ?? '?'} — ${doc}${entry.auvo_task_id ? ` — Tarefa Auvo #${entry.auvo_task_id}` : ' — sem tarefa Auvo'}`;
+      const doc = `${String(entry.document_type || "").toLowerCase() === "venda" ? "Venda" : "OS"} #${entry.document_code || entry.document_id || "?"}`;
+      return `  • Entrega ${entry.sequence ?? "?"} — ${doc}${entry.auvo_task_id ? ` — Tarefa Auvo #${entry.auvo_task_id}` : " — sem tarefa Auvo"}`;
     });
     // IDs das tarefas Auvo já criadas nas entregas parciais. Precisam ficar
     // gravados no MESMO atributo do documento final (TAREFA EXECUÇÃO / TAREFA DE
     // ENTREGA) para que o sistema consiga enxergar que existe mais de uma tarefa
     // para o mesmo orçamento — sem isso o histórico das parciais se perde na
     // unificação.
-    const partialTaskIds = Array.from(new Set(
-      partialDeliveries
-        .map((entry) => String(entry.auvo_task_id ?? '').trim())
-        .filter((id) => id && id !== 'null' && id !== 'undefined')
-    ));
+    const partialTaskIds = Array.from(
+      new Set(
+        partialDeliveries
+          .map((entry) => String(entry.auvo_task_id ?? "").trim())
+          .filter((id) => id && id !== "null" && id !== "undefined"),
+      ),
+    );
     // Tarefa final SEMPRE primeiro (mantém compatibilidade com leitores que usam
     // só o primeiro número); as parciais seguem na sequência, separadas por vírgula.
     const buildTaskChain = (finalTaskId: string | number) => {
       const ids = [String(finalTaskId).trim(), ...partialTaskIds.filter((id) => id !== String(finalTaskId).trim())];
-      return ids.filter(Boolean).join(', ');
+      return ids.filter(Boolean).join(", ");
     };
-
 
     let orcamento = body.orcamento; // GCOrcamento object from frontend
 
     if (!orcamento || !auvo_user_id) {
-      return new Response(
-        JSON.stringify({ error: 'Missing orcamento or auvo_user_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: "Missing orcamento or auvo_user_id" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // ============================================
@@ -560,9 +598,9 @@ Deno.serve(async (req: Request) => {
     // pedido" ends up higher than the parcelas → "valor das parcelas, faltando X".
     // Fetching the full orçamento gives us the priced lines GC expects.
     // ============================================
-    const source = await readAuthoritativeBudget(path => gcRequest(path, 'GET'), String(orcamento.id || ''));
+    const source = await readAuthoritativeBudget((path) => gcRequest(path, "GET"), String(orcamento.id || ""));
     if (body.budget_kind && body.budget_kind !== source.kind) {
-      throw new Error('O tipo do orçamento mudou no GC. Atualize o Rastreador antes de gerar.');
+      throw new Error("O tipo do orçamento mudou no GC. Atualize o Rastreador antes de gerar.");
     }
     orcamento = { ...orcamento, ...source.budget };
     const docKind = source.documentKind;
@@ -580,20 +618,24 @@ Deno.serve(async (req: Request) => {
     // Quando vem da consolidação (partial_auxiliaries presente), NÃO deduzir:
     // a consolidação já compensa cancelando os auxiliares no GC; deduzir aqui de novo
     // zeraria o documento definitivo.
-    const alreadyDelivered = partialDeliveries.length > 0
-      ? new Map<string, number>()
-      : await fetchPartialDeliveredQuantities(String(orcamento.id));
+    const alreadyDelivered =
+      partialDeliveries.length > 0
+        ? new Map<string, number>()
+        : await fetchPartialDeliveredQuantities(String(orcamento.id));
     const deductionNotes: string[] = [];
     if (alreadyDelivered.size) {
       const remaining: any[] = [];
       for (const line of orcamento.produtos || []) {
         const prod = line?.produto || line;
-        const pid = String(prod?.produto_id ?? '').trim();
-        const vid = String(prod?.variacao_id ?? '').trim();
+        const pid = String(prod?.produto_id ?? "").trim();
+        const vid = String(prod?.variacao_id ?? "").trim();
         const key = vid ? `${pid}::${vid}` : pid;
         const originalQty = parseMoney(prod?.quantidade);
         const delivered = alreadyDelivered.get(key) || 0;
-        if (delivered <= 0 || originalQty <= 0) { remaining.push(line); continue; }
+        if (delivered <= 0 || originalQty <= 0) {
+          remaining.push(line);
+          continue;
+        }
         const consume = Math.min(delivered, originalQty);
         alreadyDelivered.set(key, delivered - consume);
         const newQty = Number((originalQty - consume).toFixed(4));
@@ -604,11 +646,11 @@ Deno.serve(async (req: Request) => {
         }
         const ratio = newQty / originalQty;
         const scaled = { ...prod, quantidade: String(newQty) };
-        for (const field of ['valor_total', 'desconto_valor'] as const) {
+        for (const field of ["valor_total", "desconto_valor"] as const) {
           const raw = (prod as any)?.[field];
-          if (raw != null && String(raw).trim() !== '') {
-            const isPct = String((prod as any)?.desconto_tipo || '').toUpperCase() === 'P';
-            if (field === 'desconto_valor' && isPct) continue;
+          if (raw != null && String(raw).trim() !== "") {
+            const isPct = String((prod as any)?.desconto_tipo || "").toUpperCase() === "P";
+            if (field === "desconto_valor" && isPct) continue;
             (scaled as any)[field] = (parseMoney(raw) * ratio).toFixed(2);
           }
         }
@@ -619,40 +661,47 @@ Deno.serve(async (req: Request) => {
       // O total do orçamento não vale mais: deixe o GC recalcular pelas linhas.
       delete orcamento.valor_total;
       delete orcamento.pagamentos;
-      console.log(`[generate-os] Baixa parcial: ${deductionNotes.length} linha(s) ajustada(s); produtos restantes=${orcamento.produtos.length}`);
+      console.log(
+        `[generate-os] Baixa parcial: ${deductionNotes.length} linha(s) ajustada(s); produtos restantes=${orcamento.produtos.length}`,
+      );
     }
-
-
 
     // The authoritative GC budget collection determines the destination.
     // Product budgets may contain free technical hours and still generate sales.
-    const isServico = docKind === 'os';
+    const isServico = docKind === "os";
     const generationRules = GENERATION_RULES[docKind];
 
-
-    console.log(`[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente} - tipo: ${docKind.toUpperCase()}`);
+    console.log(
+      `[generate-os] Starting for ORC #${orcamento.codigo} - client: ${orcamento.nome_cliente} - tipo: ${docKind.toUpperCase()}`,
+    );
 
     // ============================================
     // GUARD: Check for existing successful generation
     // ============================================
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const preservedResponse = await fetch(`${SUPABASE_URL}/rest/v1/preserved_auvo_tasks?budget_id=eq.${encodeURIComponent(orcamento.id)}&select=task_id`, {
-      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
-    });
-    if (!preservedResponse.ok) throw new Error('Não foi possível conferir tarefas Auvo preservadas.');
+    const preservedResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/preserved_auvo_tasks?budget_id=eq.${encodeURIComponent(orcamento.id)}&select=task_id`,
+      {
+        headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+      },
+    );
+    if (!preservedResponse.ok) throw new Error("Não foi possível conferir tarefas Auvo preservadas.");
     const preserved = await preservedResponse.json();
-    if (preserved.length) throw new Error(`Há tarefa Auvo preservada de uma tentativa anterior: ${preserved.map((r: any) => r.task_id).join(', ')}. Reconcilie o vínculo antes de gerar outra.`);
+    if (preserved.length)
+      throw new Error(
+        `Há tarefa Auvo preservada de uma tentativa anterior: ${preserved.map((r: any) => r.task_id).join(", ")}. Reconcilie o vínculo antes de gerar outra.`,
+      );
 
     const checkRes = await fetch(
       `${SUPABASE_URL}/rest/v1/os_generation_logs?orcamento_id=eq.${encodeURIComponent(orcamento.id)}&success=eq.true&select=id,os_id,os_codigo,auvo_task_id,operator_name,created_at&order=created_at.desc&limit=1`,
       {
         headers: {
-          'apikey': SUPABASE_SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         },
-      }
+      },
     );
     const existingLogs = await checkRes.json();
 
@@ -666,57 +715,58 @@ Deno.serve(async (req: Request) => {
         stillExists = false;
         for (const path of [`/api/ordens_servicos/${prev.os_id}`, `/api/vendas/${prev.os_id}`]) {
           try {
-            const doc = await gcRequest(path, 'GET');
+            const doc = await gcRequest(path, "GET");
             const found = doc?.data ?? doc?.item ?? null;
-            if (found && (found.id || found.codigo)) { stillExists = true; break; }
-          } catch (_e) { /* não encontrado / sem permissão => segue */ }
+            if (found && (found.id || found.codigo)) {
+              stillExists = true;
+              break;
+            }
+          } catch (_e) {
+            /* não encontrado / sem permissão => segue */
+          }
         }
       }
 
       if (stillExists) {
-        const msg = `OS já gerada para este orçamento! OS #${prev.os_codigo || '?'} / Auvo #${prev.auvo_task_id || '?'} por ${prev.operator_name || 'operador'} em ${new Date(prev.created_at).toLocaleString('pt-BR')}`;
+        const msg = `OS já gerada para este orçamento! OS #${prev.os_codigo || "?"} / Auvo #${prev.auvo_task_id || "?"} por ${prev.operator_name || "operador"} em ${new Date(prev.created_at).toLocaleString("pt-BR")}`;
         console.warn(`[generate-os] BLOCKED duplicate: ${msg}`);
-        return new Response(
-          JSON.stringify({ error: msg, duplicate: true, existing: prev }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: msg, duplicate: true, existing: prev }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
-      console.warn(`[generate-os] Documento anterior (OS #${prev.os_codigo}) não existe mais no GC — liberando nova geração`);
+      console.warn(
+        `[generate-os] Documento anterior (OS #${prev.os_codigo}) não existe mais no GC — liberando nova geração`,
+      );
       // Marca o log antigo como inválido para não bloquear novamente
       await fetch(`${SUPABASE_URL}/rest/v1/os_generation_logs?id=eq.${prev.id}`, {
-        method: 'PATCH',
+        method: "PATCH",
         headers: {
-          'apikey': SUPABASE_SERVICE_ROLE_KEY,
-          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=minimal',
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
         },
         body: JSON.stringify({
           success: false,
-          error_message: 'Documento apagado no GestãoClick (validado na geração)',
+          error_message: "Documento apagado no GestãoClick (validado na geração)",
         }),
       }).catch(() => {});
     }
-    console.log('[generate-os] No previous generation found, proceeding...');
-
+    console.log("[generate-os] No previous generation found, proceeding...");
 
     // ============================================
     // STEP 1: Login to Auvo
     // ============================================
-    console.log('[generate-os] Step 1: Auvo login...');
+    console.log("[generate-os] Step 1: Auvo login...");
 
     const auvoToken = await auvoLogin();
-    console.log('[generate-os] Auvo login OK');
+    console.log("[generate-os] Auvo login OK");
 
     // Use address directly from orçamento — clone, don't fetch
-    const addressParts = [
-      orcamento.endereco,
-      orcamento.cidade,
-      orcamento.estado,
-      orcamento.cep,
-    ].filter(Boolean);
-    const clientAddress = addressParts.length > 0 ? addressParts.join(', ') : orcamento.nome_cliente;
+    const addressParts = [orcamento.endereco, orcamento.cidade, orcamento.estado, orcamento.cep].filter(Boolean);
+    const clientAddress = addressParts.length > 0 ? addressParts.join(", ") : orcamento.nome_cliente;
     console.log(`[generate-os] Client address (from orçamento): ${clientAddress}`);
 
     // ============================================
@@ -724,28 +774,28 @@ Deno.serve(async (req: Request) => {
     // ============================================
     const brl = (value: unknown): string => {
       const n = parseMoney(value);
-      if (n <= 0) return '';
-      return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      if (n <= 0) return "";
+      return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     };
     const qtyLabel = (value: unknown): string => {
       const q = parseMoney(value);
-      if (!Number.isFinite(q) || q <= 0) return '1';
-      return q.toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+      if (!Number.isFinite(q) || q <= 0) return "1";
+      return q.toLocaleString("pt-BR", { maximumFractionDigits: 4 });
     };
     const priceSuffix = (line: any, qty: unknown): string => {
       const unitVal = parseMoney(line?.valor_venda ?? line?.valor_unitario ?? line?.valor);
       const unit = brl(unitVal);
       const q = parseMoney(qty || 1);
-      const totalVal = parseMoney(line?.valor_total) || (unitVal * q);
+      const totalVal = parseMoney(line?.valor_total) || unitVal * q;
       const total = brl(totalVal);
-      if (!unit && !total) return '';
+      if (!unit && !total) return "";
       if (unit && total && Math.abs(unitVal - totalVal) > 0.01) return ` — Valor: ${unit} un. (Total: ${total})`;
       return ` — Valor: ${unit || total}`;
     };
 
     const prodLines: string[] = [];
     if (orcamento.produtos?.length) {
-      prodLines.push('PRODUTOS:');
+      prodLines.push("PRODUTOS:");
       for (const p of orcamento.produtos) {
         const prod = p.produto || p;
         const qty = prod.quantidade || prod.qtd_necessaria || 1;
@@ -753,21 +803,22 @@ Deno.serve(async (req: Request) => {
       }
     }
     if (orcamento.servicos?.length) {
-      prodLines.push('');
-      prodLines.push('SERVIÇOS:');
+      prodLines.push("");
+      prodLines.push("SERVIÇOS:");
       for (const s of orcamento.servicos) {
         const svc = s.servico || s;
         const qty = svc.quantidade || 1;
-        prodLines.push(`  • ${svc.nome_servico || svc.nome || 'Serviço'} — Qtd: ${qtyLabel(qty)}${priceSuffix(svc, qty)}`);
+        prodLines.push(
+          `  • ${svc.nome_servico || svc.nome || "Serviço"} — Qtd: ${qtyLabel(qty)}${priceSuffix(svc, qty)}`,
+        );
       }
     }
 
-
     // Equipment info — check atributos first (campo extra "Equipamento"), then equipamentos array, then manual input
-    let equipText = '';
+    let equipText = "";
     if (orcamento.atributos?.length) {
-      const eqAttr = orcamento.atributos.find((a: any) =>
-        (a.atributo?.descricao || '').toLowerCase() === 'equipamento'
+      const eqAttr = orcamento.atributos.find(
+        (a: any) => (a.atributo?.descricao || "").toLowerCase() === "equipamento",
       );
       if (eqAttr?.atributo?.conteudo) equipText = eqAttr.atributo.conteudo;
     }
@@ -775,7 +826,7 @@ Deno.serve(async (req: Request) => {
       const equip = orcamento.equipamentos?.[0]?.equipamento;
       if (equip) {
         const parts = [equip.equipamento, equip.marca, equip.modelo].filter(Boolean);
-        equipText = parts.join(' · ');
+        equipText = parts.join(" · ");
       }
     }
     if (!equipText && manual_equipamento) {
@@ -786,45 +837,47 @@ Deno.serve(async (req: Request) => {
     const orientationParts = [
       `OS ref. Orçamento #${orcamento.codigo}`,
       `Cliente: ${orcamento.nome_cliente}`,
-      equipText ? `Equipamento: ${equipText}` : '',
-      '',
+      equipText ? `Equipamento: ${equipText}` : "",
+      "",
       ...prodLines,
-      ...(partialSummaryLines.length ? ['', '🔁 ENTREGAS PARCIAIS JÁ REALIZADAS:', ...partialSummaryLines] : []),
-      ...(deductionNotes.length ? ['', '⚠️ QUANTIDADES JÁ ENTREGUES (DESCONTADAS DESTA OS):', ...deductionNotes] : []),
+      ...(partialSummaryLines.length ? ["", "🔁 ENTREGAS PARCIAIS JÁ REALIZADAS:", ...partialSummaryLines] : []),
+      ...(deductionNotes.length ? ["", "⚠️ QUANTIDADES JÁ ENTREGUES (DESCONTADAS DESTA OS):", ...deductionNotes] : []),
     ].filter(Boolean);
-    const orientation = orientationParts.join('\n');
+    const orientation = orientationParts.join("\n");
     const partialNote = [
-      partialSummaryLines.length ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join('\n')}` : '',
-      deductionNotes.length ? `Quantidades descontadas por baixa parcial:\n${deductionNotes.join('\n')}` : '',
-    ].filter(Boolean).join('\n');
-
-
+      partialSummaryLines.length
+        ? `Entregas parciais agrupadas nesta OS/Venda:\n${partialSummaryLines.join("\n")}`
+        : "",
+      deductionNotes.length ? `Quantidades descontadas por baixa parcial:\n${deductionNotes.join("\n")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const readOrcAttrByIdOrName = (targetId: string, nameIncludes: string): string => {
-      if (!orcamento.atributos?.length) return '';
+      if (!orcamento.atributos?.length) return "";
       for (const a of orcamento.atributos) {
         const attr = a?.atributo || a;
-        const attrId = String(attr?.atributo_id || attr?.id || '');
-        const attrName = normalize(String(attr?.descricao || ''));
+        const attrId = String(attr?.atributo_id || attr?.id || "");
+        const attrName = normalize(String(attr?.descricao || ""));
         if (attrId === targetId || attrName.includes(normalize(nameIncludes))) {
-          return String(attr?.conteudo ?? '').trim();
+          return String(attr?.conteudo ?? "").trim();
         }
       }
-      return '';
+      return "";
     };
 
     // Clone references from orçamento attributes
-    const sourceTaskOsId = readOrcAttrByIdOrName('73341', 'tarefa os');
-    const idEquipamentoRaw = readOrcAttrByIdOrName('88695', 'id equipamento');
+    const sourceTaskOsId = readOrcAttrByIdOrName("73341", "tarefa os");
+    const idEquipamentoRaw = readOrcAttrByIdOrName("88695", "id equipamento");
 
     const INT32_MAX = 2147483647;
     const allEquipIds = Array.from(
       new Set(
-        String(idEquipamentoRaw || '')
+        String(idEquipamentoRaw || "")
           .split(/[^0-9]+/)
           .map((v) => Number(v))
-          .filter((n) => Number.isFinite(n) && n > 0)
-      )
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
     );
     const oversizedEquipIds = allEquipIds.filter((n) => n > INT32_MAX);
     const equipmentIdsFromOrcamento = allEquipIds.filter((n) => n <= INT32_MAX);
@@ -851,7 +904,9 @@ Deno.serve(async (req: Request) => {
           clonedEquipmentIds = parsedSourceEquipmentIds.filter((n: number) => n <= INT32_MAX);
         }
 
-        console.log(`[generate-os] Cloned source tarefa OS ${sourceTaskOsId}: customerId=${clonedCustomerId ?? 0}, equipments=${clonedEquipmentIds.length}`);
+        console.log(
+          `[generate-os] Cloned source tarefa OS ${sourceTaskOsId}: customerId=${clonedCustomerId ?? 0}, equipments=${clonedEquipmentIds.length}`,
+        );
       } catch (e) {
         console.warn(`[generate-os] Could not clone from source tarefa OS ${sourceTaskOsId}:`, e);
       }
@@ -860,7 +915,7 @@ Deno.serve(async (req: Request) => {
     // ============================================
     // STEP 3: Create Auvo task
     // ============================================
-    console.log('[generate-os] Step 2: Creating Auvo task...');
+    console.log("[generate-os] Step 2: Creating Auvo task...");
     const auvoPayload: Record<string, unknown> = {
       // Venda de produto usa o tipo de atividade "Comercial - ENTREGA DA VENDAS" (200268).
       // Demais (OS de serviço) seguem com o tipo padrão.
@@ -882,22 +937,26 @@ Deno.serve(async (req: Request) => {
     } else if (auvo_customer_id && Number.isFinite(Number(auvo_customer_id)) && Number(auvo_customer_id) > 0) {
       resolvedCustomerId = Number(auvo_customer_id);
       console.log(`[generate-os] Using frontend-provided auvo_customer_id: ${auvo_customer_id}`);
-    } else if (orcamento.auvo_customer_id && Number.isFinite(Number(orcamento.auvo_customer_id)) && Number(orcamento.auvo_customer_id) > 0) {
+    } else if (
+      orcamento.auvo_customer_id &&
+      Number.isFinite(Number(orcamento.auvo_customer_id)) &&
+      Number(orcamento.auvo_customer_id) > 0
+    ) {
       resolvedCustomerId = Number(orcamento.auvo_customer_id);
     }
 
     if (!resolvedCustomerId) {
       return new Response(
-        JSON.stringify({ error: 'Cliente Auvo obrigatório: não foi possível identificar um cliente válido para esta OS.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: "Cliente Auvo obrigatório: não foi possível identificar um cliente válido para esta OS.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     auvoPayload.customerId = resolvedCustomerId;
 
-    const equipmentsToSend = equipmentIdsFromOrcamento.length > 0
-      ? equipmentIdsFromOrcamento
-      : clonedEquipmentIds;
+    const equipmentsToSend = equipmentIdsFromOrcamento.length > 0 ? equipmentIdsFromOrcamento : clonedEquipmentIds;
 
     if (equipmentsToSend.length > 0) {
       auvoPayload.equipmentsId = equipmentsToSend;
@@ -919,18 +978,22 @@ Deno.serve(async (req: Request) => {
 
     const warnings: string[] = [];
     if (oversizedEquipIds.length > 0) {
-      console.warn(`[generate-os] Equipamento(s) fora do limite Int32 filtrado(s) antes do envio ao Auvo: ${Array.from(new Set(oversizedEquipIds)).join(', ')}`);
+      console.warn(
+        `[generate-os] Equipamento(s) fora do limite Int32 filtrado(s) antes do envio ao Auvo: ${Array.from(new Set(oversizedEquipIds)).join(", ")}`,
+      );
     }
     if (equipmentsToSend.length === 0) {
       const warnMsg = sourceTaskOsId
         ? `Tarefa OS de origem (${sourceTaskOsId}) não possui equipamento vinculado no Auvo. Tarefa criada SEM equipamento.`
-        : 'Nenhuma tarefa OS de origem encontrada no orçamento. Tarefa criada SEM equipamento.';
+        : "Nenhuma tarefa OS de origem encontrada no orçamento. Tarefa criada SEM equipamento.";
       warnings.push(warnMsg);
       console.warn(`[generate-os] ⚠️ ${warnMsg}`);
     }
 
     if (!auvoTaskId) {
-      throw new Error(`Auvo task creation returned no taskID. Full response: ${JSON.stringify(auvoResult).slice(0, 500)}`);
+      throw new Error(
+        `Auvo task creation returned no taskID. Full response: ${JSON.stringify(auvoResult).slice(0, 500)}`,
+      );
     }
 
     await wait(500); // small pause between APIs
@@ -945,190 +1008,225 @@ Deno.serve(async (req: Request) => {
     let osCodigo: string | undefined;
 
     try {
-    if (isServico) {
-      // ----- OS (orçamento de serviço) -----
-      console.log('[generate-os] Step 3: Discovering OS attribute IDs...');
-      const attrIds = await getOSAtributoIds();
-      console.log(`[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}, tarefaOS=${attrIds.tarefaOs}, localReparo=${attrIds.localReparo}, horasTecnicas=${attrIds.horasTecnicas}`);
+      if (isServico) {
+        // ----- OS (orçamento de serviço) -----
+        console.log("[generate-os] Step 3: Discovering OS attribute IDs...");
+        const attrIds = await getOSAtributoIds();
+        console.log(
+          `[generate-os] Attr IDs: numOrc=${attrIds.numOrcamento}, tarefaExec=${attrIds.tarefaExecucao}, tarefaOS=${attrIds.tarefaOs}, localReparo=${attrIds.localReparo}, horasTecnicas=${attrIds.horasTecnicas}`,
+        );
 
-      console.log('[generate-os] Step 4: Creating GC OS...');
+        console.log("[generate-os] Step 4: Creating GC OS...");
 
-      // ⚠️ Não copiar os atributos do orçamento verbatim: os IDs de atributo do
-      // orçamento (ex.: 66890, 73341, 73350, 67350, 87361, 87362, 88695) NÃO existem
-      // no registro de atributos de OS (que usa IDs próprios: 81831, 73343, 73344,
-      // 68658, 73897, 66889, 66902, 68156, 76731, 87055). Enviar IDs desconhecidos
-      // faz o GC responder 400 Bad Request. Iniciar vazio e preencher via upsertAttr
-      // com os IDs corretos de OS (descobertos em getOSAtributoIds).
-      const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+        // ⚠️ Não copiar os atributos do orçamento verbatim: os IDs de atributo do
+        // orçamento (ex.: 66890, 73341, 73350, 67350, 87361, 87362, 88695) NÃO existem
+        // no registro de atributos de OS (que usa IDs próprios: 81831, 73343, 73344,
+        // 68658, 73897, 66889, 66902, 68156, 76731, 87055). Enviar IDs desconhecidos
+        // faz o GC responder 400 Bad Request. Iniciar vazio e preencher via upsertAttr
+        // com os IDs corretos de OS (descobertos em getOSAtributoIds).
+        const atributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
 
-
-      // Override only the two required link attributes
-      const upsertAttr = (atributo_id: string | null, conteudo: string) => {
-        if (!atributo_id) return;
-        const idx = atributos.findIndex((a) => a.atributo.atributo_id === atributo_id);
-        if (idx >= 0) {
-          atributos[idx] = { atributo: { atributo_id, conteudo } };
-        } else {
-          atributos.push({ atributo: { atributo_id, conteudo } });
-        }
-      };
-
-      upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
-      upsertAttr(attrIds.tarefaExecucao, buildTaskChain(auvoTaskId));
-
-      // Map orçamento attribute values to OS mandatory attribute IDs
-      // Orçamento attrs have different IDs than OS attrs, so we find by name/content
-      const findOrcAttrValue = (orcAttrId: string): string => {
-        if (!orcamento.atributos?.length) return '';
-        const found = orcamento.atributos.find((a: any) => {
-          const attr = a?.atributo || a;
-          return String(attr?.atributo_id || attr?.id) === orcAttrId;
-        });
-        if (found) {
-          const attr = found?.atributo || found;
-          return String(attr?.conteudo ?? '');
-        }
-        return '';
-      };
-
-      // OS mandatory attr IDs (from GC) ← orçamento attr IDs
-      // 73341 = Tarefa OS, 73350 = Local do Reparo, 67350 = Horas Técnicas
-      const ORC_TAREFA_OS = '73341';
-      const ORC_LOCAL_REPARO = '73350';
-      const ORC_HORAS_TECNICAS = '67350';
-
-      upsertAttr(attrIds.tarefaOs, findOrcAttrValue(ORC_TAREFA_OS) || String(auvoTaskId));
-      upsertAttr(attrIds.localReparo, findOrcAttrValue(ORC_LOCAL_REPARO));
-      upsertAttr(attrIds.horasTecnicas, findOrcAttrValue(ORC_HORAS_TECNICAS));
-
-      // Copy OS payload from orçamento as-is (to preserve values)
-      const osPayload: Record<string, any> = {
-        cliente_id: orcamento.cliente_id,
-        data: orcamento.data || new Date().toISOString().split('T')[0],
-        valor_frete: orcamento.valor_frete ?? '0.00',
-        condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
-        produtos: orcamento.produtos || [],
-        servicos: orcamento.servicos || [],
-        equipamentos: orcamento.equipamentos || [],
-        atributos,
-        // Always: Centro de custo "OPERAÇÕES COZINHAS" + Situação "Pedido em Conferência"
-        centro_custo_id: orcamento.centro_custo_id || '501357',
-        situacao_id: generationRules.documentStatusId,
-      };
-
-      // Preserve optional fields from orçamento when available
-      if (orcamento.vendedor_id) osPayload.vendedor_id = orcamento.vendedor_id;
-      if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
-      if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
-      if (partialNote) {
-        osPayload.observacoes_interna = [osPayload.observacoes_interna, partialNote].filter(Boolean).join('\n');
-      }
-
-      if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
-      if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
-      // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
-      osPayload.usuario_id = '1320473';
-      // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
-      if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
-        osPayload.desconto_valor = orcamento.desconto_valor;
-      }
-      if (orcamento.tipo_desconto) osPayload.tipo_desconto = orcamento.tipo_desconto;
-      if (orcamento.desconto_tipo) osPayload.desconto_tipo = orcamento.desconto_tipo;
-
-      console.log(`[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? 'n/a'}`);
-
-      gcResult = await gcRequest('/api/ordens_servicos', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(osPayload))));
-      osId = gcResult?.data?.id;
-      osCodigo = gcResult?.data?.codigo;
-      console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
-    } else {
-      // ----- VENDA (orçamento de produto) -----
-      console.log('[generate-os] Step 4: Creating GC Venda...');
-
-      // Do not copy orçamento attributes into venda: each GC document type has its
-      // own attribute registry. Sending orçamento attribute IDs in a venda can also
-      // produce 400 Bad Request. Only send venda-specific attributes discovered below.
-      const vendaAtributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
-
-      // Insert the Auvo task number into the venda "TAREFA DE ENTREGA" custom field
-      // and the orçamento code into the "NÚMERO DO ORÇAMENTO" custom field.
-      try {
-        const vendaAttrIds = await getVendaAtributoIds();
-        const upsertVendaAttr = (attrId: string | null, conteudo: string) => {
-          if (!attrId) return;
-          const idx = vendaAtributos.findIndex((a) => a.atributo.atributo_id === attrId);
-          const entry = { atributo: { atributo_id: attrId, conteudo } };
-          if (idx >= 0) vendaAtributos[idx] = entry;
-          else vendaAtributos.push(entry);
+        // Override only the two required link attributes
+        const upsertAttr = (atributo_id: string | null, conteudo: string) => {
+          if (!atributo_id) return;
+          const idx = atributos.findIndex((a) => a.atributo.atributo_id === atributo_id);
+          if (idx >= 0) {
+            atributos[idx] = { atributo: { atributo_id, conteudo } };
+          } else {
+            atributos.push({ atributo: { atributo_id, conteudo } });
+          }
         };
-        if (vendaAttrIds.tarefaEntrega) {
-          upsertVendaAttr(vendaAttrIds.tarefaEntrega, buildTaskChain(auvoTaskId));
-          console.log(`[generate-os] Venda TAREFA DE ENTREGA (attr ${vendaAttrIds.tarefaEntrega}) = ${buildTaskChain(auvoTaskId)}`);
 
-        } else {
-          console.warn('[generate-os] ⚠️ Atributo "TAREFA DE ENTREGA" não encontrado nos atributos de venda.');
+        upsertAttr(attrIds.numOrcamento, String(orcamento.codigo));
+        upsertAttr(attrIds.tarefaExecucao, buildTaskChain(auvoTaskId));
+
+        // Map orçamento attribute values to OS mandatory attribute IDs
+        // Orçamento attrs have different IDs than OS attrs, so we find by name/content
+        const findOrcAttrValue = (orcAttrId: string): string => {
+          if (!orcamento.atributos?.length) return "";
+          const found = orcamento.atributos.find((a: any) => {
+            const attr = a?.atributo || a;
+            return String(attr?.atributo_id || attr?.id) === orcAttrId;
+          });
+          if (found) {
+            const attr = found?.atributo || found;
+            return String(attr?.conteudo ?? "");
+          }
+          return "";
+        };
+
+        // OS mandatory attr IDs (from GC) ← orçamento attr IDs
+        // 73341 = Tarefa OS, 73350 = Local do Reparo, 67350 = Horas Técnicas
+        const ORC_TAREFA_OS = "73341";
+        const ORC_LOCAL_REPARO = "73350";
+        const ORC_HORAS_TECNICAS = "67350";
+
+        upsertAttr(attrIds.tarefaOs, findOrcAttrValue(ORC_TAREFA_OS) || String(auvoTaskId));
+        upsertAttr(attrIds.localReparo, findOrcAttrValue(ORC_LOCAL_REPARO));
+        upsertAttr(attrIds.horasTecnicas, findOrcAttrValue(ORC_HORAS_TECNICAS));
+
+        // Copy OS payload from orçamento as-is (to preserve values)
+        const osPayload: Record<string, any> = {
+          cliente_id: orcamento.cliente_id,
+          data: orcamento.data || new Date().toISOString().split("T")[0],
+          valor_frete: orcamento.valor_frete ?? "0.00",
+          condicao_pagamento: orcamento.condicao_pagamento || "a_vista",
+          produtos: orcamento.produtos || [],
+          servicos: orcamento.servicos || [],
+          equipamentos: orcamento.equipamentos || [],
+          atributos,
+          // Always: Centro de custo "OPERAÇÕES COZINHAS" + Situação "Pedido em Conferência"
+          centro_custo_id: orcamento.centro_custo_id || "501357",
+          situacao_id: generationRules.documentStatusId,
+        };
+
+        // Preserve optional fields from orçamento when available
+        if (orcamento.vendedor_id) osPayload.vendedor_id = orcamento.vendedor_id;
+        if (orcamento.observacoes) osPayload.observacoes = orcamento.observacoes;
+        if (orcamento.observacoes_interna) osPayload.observacoes_interna = orcamento.observacoes_interna;
+        if (partialNote) {
+          osPayload.observacoes_interna = [osPayload.observacoes_interna, partialNote].filter(Boolean).join("\n");
         }
-        if (vendaAttrIds.numOrcamento) {
-          upsertVendaAttr(vendaAttrIds.numOrcamento, String(orcamento.codigo));
-          console.log(`[generate-os] Venda NÚMERO DO ORÇAMENTO (attr ${vendaAttrIds.numOrcamento}) = ${orcamento.codigo}`);
-        } else {
-          console.warn('[generate-os] ⚠️ Atributo "NÚMERO DO ORÇAMENTO" não encontrado nos atributos de venda.');
+
+        if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
+        if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
+        // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
+        osPayload.usuario_id = "1320473";
+        // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
+        if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== "") {
+          osPayload.desconto_valor = orcamento.desconto_valor;
         }
-      } catch (e) {
-        console.warn('[generate-os] ⚠️ Falha ao resolver atributos extras da venda:', e);
+        if (orcamento.tipo_desconto) osPayload.tipo_desconto = orcamento.tipo_desconto;
+        if (orcamento.desconto_tipo) osPayload.desconto_tipo = orcamento.desconto_tipo;
+
+        console.log(
+          `[generate-os] Copy mode payload: produtos=${(osPayload.produtos || []).length}, servicos=${(osPayload.servicos || []).length}, atributos=${atributos.length}, valor_total=${osPayload.valor_total ?? "n/a"}`,
+        );
+
+        gcResult = await gcRequest(
+          "/api/ordens_servicos",
+          "POST",
+          normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(osPayload))),
+        );
+        osId = gcResult?.data?.id;
+        osCodigo = gcResult?.data?.codigo;
+        console.log(`[generate-os] GC OS created: id=${osId}, codigo=${osCodigo}`);
+      } else {
+        // ----- VENDA (orçamento de produto) -----
+        console.log("[generate-os] Step 4: Creating GC Venda...");
+
+        // Do not copy orçamento attributes into venda: each GC document type has its
+        // own attribute registry. Sending orçamento attribute IDs in a venda can also
+        // produce 400 Bad Request. Only send venda-specific attributes discovered below.
+        const vendaAtributos: Array<{ atributo: { atributo_id: string; conteudo: string } }> = [];
+
+        // Insert the Auvo task number into the venda "TAREFA DE ENTREGA" custom field
+        // and the orçamento code into the "NÚMERO DO ORÇAMENTO" custom field.
+        try {
+          const vendaAttrIds = await getVendaAtributoIds();
+          const upsertVendaAttr = (attrId: string | null, conteudo: string) => {
+            if (!attrId) return;
+            const idx = vendaAtributos.findIndex((a) => a.atributo.atributo_id === attrId);
+            const entry = { atributo: { atributo_id: attrId, conteudo } };
+            if (idx >= 0) vendaAtributos[idx] = entry;
+            else vendaAtributos.push(entry);
+          };
+          if (vendaAttrIds.tarefaEntrega) {
+            upsertVendaAttr(vendaAttrIds.tarefaEntrega, buildTaskChain(auvoTaskId));
+            console.log(
+              `[generate-os] Venda TAREFA DE ENTREGA (attr ${vendaAttrIds.tarefaEntrega}) = ${buildTaskChain(auvoTaskId)}`,
+            );
+          } else {
+            console.warn('[generate-os] ⚠️ Atributo "TAREFA DE ENTREGA" não encontrado nos atributos de venda.');
+          }
+          if (vendaAttrIds.numOrcamento) {
+            upsertVendaAttr(vendaAttrIds.numOrcamento, String(orcamento.codigo));
+            console.log(
+              `[generate-os] Venda NÚMERO DO ORÇAMENTO (attr ${vendaAttrIds.numOrcamento}) = ${orcamento.codigo}`,
+            );
+          } else {
+            console.warn('[generate-os] ⚠️ Atributo "NÚMERO DO ORÇAMENTO" não encontrado nos atributos de venda.');
+          }
+        } catch (e) {
+          console.warn("[generate-os] ⚠️ Falha ao resolver atributos extras da venda:", e);
+        }
+
+        // Rastreador: a venda nasce aguardando separação. A consolidação das
+        // entregas parciais mantém a situação que já representa peças separadas.
+        const VENDA_SITUACAO_ID = partialDeliveries.length ? "8955109" : generationRules.documentStatusId;
+
+        const vendaPayload: Record<string, any> = {
+          tipo: "produto",
+          cliente_id: orcamento.cliente_id,
+          data: orcamento.data || new Date().toISOString().split("T")[0],
+          valor_frete: orcamento.valor_frete ?? "0.00",
+          condicao_pagamento: orcamento.condicao_pagamento || "a_vista",
+          produtos: orcamento.produtos || [],
+          centro_custo_id: orcamento.centro_custo_id || "501357",
+          situacao_id: VENDA_SITUACAO_ID,
+        };
+        for (const field of [
+          "introducao",
+          "aos_cuidados_de",
+          "validade",
+          "previsao_entrega",
+          "enderecos",
+          "exibir_endereco",
+          "transportadora_id",
+        ]) {
+          if (orcamento[field] != null) vendaPayload[field] = orcamento[field];
+        }
+        if (vendaAtributos.length) vendaPayload.atributos = vendaAtributos;
+        if (orcamento.vendedor_id) vendaPayload.vendedor_id = orcamento.vendedor_id;
+        if (orcamento.observacoes) vendaPayload.observacoes = orcamento.observacoes;
+        if (orcamento.observacoes_interna) vendaPayload.observacoes_interna = orcamento.observacoes_interna;
+        if (partialNote) {
+          vendaPayload.observacoes_interna = [vendaPayload.observacoes_interna, partialNote].filter(Boolean).join("\n");
+        }
+
+        if (orcamento.valor_total) vendaPayload.valor_total = orcamento.valor_total;
+        if (orcamento.pagamentos?.length) vendaPayload.pagamentos = orcamento.pagamentos;
+        // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
+        vendaPayload.usuario_id = "1320473";
+        // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
+        if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== "") {
+          vendaPayload.desconto_valor = orcamento.desconto_valor;
+        }
+        if (orcamento.tipo_desconto) vendaPayload.tipo_desconto = orcamento.tipo_desconto;
+        if (orcamento.desconto_tipo) vendaPayload.desconto_tipo = orcamento.desconto_tipo;
+
+        console.log(
+          `[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? "n/a"}, desconto=${vendaPayload.desconto_valor ?? "0"} (${vendaPayload.desconto_tipo ?? "n/a"}), situacao=${VENDA_SITUACAO_ID}`,
+        );
+
+        gcResult = await gcRequest(
+          "/api/vendas",
+          "POST",
+          normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(vendaPayload))),
+        );
+        osId = gcResult?.data?.id;
+        osCodigo = gcResult?.data?.codigo;
+        console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);
       }
-
-      // Rastreador: a venda nasce aguardando separação. A consolidação das
-      // entregas parciais mantém a situação que já representa peças separadas.
-      const VENDA_SITUACAO_ID = partialDeliveries.length ? '8955109' : generationRules.documentStatusId;
-
-      const vendaPayload: Record<string, any> = {
-        tipo: 'produto',
-        cliente_id: orcamento.cliente_id,
-        data: orcamento.data || new Date().toISOString().split('T')[0],
-        valor_frete: orcamento.valor_frete ?? '0.00',
-        condicao_pagamento: orcamento.condicao_pagamento || 'a_vista',
-        produtos: orcamento.produtos || [],
-        centro_custo_id: orcamento.centro_custo_id || '501357',
-        situacao_id: VENDA_SITUACAO_ID,
-      };
-      for (const field of ['introducao', 'aos_cuidados_de', 'validade', 'previsao_entrega', 'enderecos', 'exibir_endereco', 'transportadora_id']) {
-        if (orcamento[field] != null) vendaPayload[field] = orcamento[field];
-      }
-      if (vendaAtributos.length) vendaPayload.atributos = vendaAtributos;
-      if (orcamento.vendedor_id) vendaPayload.vendedor_id = orcamento.vendedor_id;
-      if (orcamento.observacoes) vendaPayload.observacoes = orcamento.observacoes;
-      if (orcamento.observacoes_interna) vendaPayload.observacoes_interna = orcamento.observacoes_interna;
-      if (partialNote) {
-        vendaPayload.observacoes_interna = [vendaPayload.observacoes_interna, partialNote].filter(Boolean).join('\n');
-      }
-
-      if (orcamento.valor_total) vendaPayload.valor_total = orcamento.valor_total;
-      if (orcamento.pagamentos?.length) vendaPayload.pagamentos = orcamento.pagamentos;
-      // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
-      vendaPayload.usuario_id = '1320473';
-      // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
-      if (orcamento.desconto_valor != null && String(orcamento.desconto_valor).trim() !== '') {
-        vendaPayload.desconto_valor = orcamento.desconto_valor;
-      }
-      if (orcamento.tipo_desconto) vendaPayload.tipo_desconto = orcamento.tipo_desconto;
-      if (orcamento.desconto_tipo) vendaPayload.desconto_tipo = orcamento.desconto_tipo;
-
-      console.log(`[generate-os] Venda payload: produtos=${(vendaPayload.produtos || []).length}, valor_total=${vendaPayload.valor_total ?? 'n/a'}, desconto=${vendaPayload.desconto_valor ?? '0'} (${vendaPayload.desconto_tipo ?? 'n/a'}), situacao=${VENDA_SITUACAO_ID}`);
-
-      gcResult = await gcRequest('/api/vendas', 'POST', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(vendaPayload))));
-      osId = gcResult?.data?.id;
-      osCodigo = gcResult?.data?.codigo;
-      console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);
-    }
     } catch (gcErr) {
       // A tarefa e seu histórico permanecem no Auvo mesmo quando o GC falha.
       if (auvoTaskId) {
         const saved = await fetch(`${SUPABASE_URL}/rest/v1/preserved_auvo_tasks`, {
-          method: 'POST', headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
-          body: JSON.stringify({ budget_id: String(orcamento.id), task_id: String(auvoTaskId), error_message: String(gcErr) }),
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates",
+          },
+          body: JSON.stringify({
+            budget_id: String(orcamento.id),
+            task_id: String(auvoTaskId),
+            error_message: String(gcErr),
+          }),
         });
-        if (!saved.ok) console.error(`Falha ao registrar vínculo preservado: orçamento ${orcamento.id}, tarefa Auvo ${auvoTaskId}`);
+        if (!saved.ok)
+          console.error(`Falha ao registrar vínculo preservado: orçamento ${orcamento.id}, tarefa Auvo ${auvoTaskId}`);
       }
       throw new Error(`Falha no GC; tarefa Auvo #${auvoTaskId} preservada. ${String(gcErr)}`);
     }
@@ -1140,26 +1238,27 @@ Deno.serve(async (req: Request) => {
     try {
       console.log(`[generate-os] Step 6: Updating orçamento #${orcamento.codigo} status to ${NEW_ORC_STATUS_ID}...`);
 
-      const latestOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, 'GET');
+      const latestOrc = await gcRequest(`/api/orcamentos/${orcamento.id}`, "GET");
       const orcForUpdate = latestOrc?.data;
-      if (!orcForUpdate || String(orcForUpdate.id) !== String(orcamento.id)) throw new Error('Não foi possível reler o orçamento antes de atualizar a situação.');
+      if (!orcForUpdate || String(orcForUpdate.id) !== String(orcamento.id))
+        throw new Error("Não foi possível reler o orçamento antes de atualizar a situação.");
       assertBudgetUnchanged(source.budget, orcForUpdate);
 
       const orcUpdatePayload: Record<string, any> = {
         ...writableDocument(orcForUpdate),
         cliente_id: orcForUpdate.cliente_id,
-        data: orcForUpdate.data || new Date().toISOString().split('T')[0],
+        data: orcForUpdate.data || new Date().toISOString().split("T")[0],
         situacao_id: NEW_ORC_STATUS_ID,
         valor_total: formatMoney(parseMoney(orcForUpdate.valor_total)),
-        valor_frete: formatMoney(parseMoney(orcForUpdate.valor_frete ?? '0.00')),
-        condicao_pagamento: orcForUpdate.condicao_pagamento || 'a_vista',
+        valor_frete: formatMoney(parseMoney(orcForUpdate.valor_frete ?? "0.00")),
+        condicao_pagamento: orcForUpdate.condicao_pagamento || "a_vista",
         produtos: orcForUpdate.produtos || [],
         servicos: orcForUpdate.servicos || [],
         atributos: orcForUpdate.atributos || [],
         equipamentos: orcForUpdate.equipamentos || [],
       };
       // Preserve header-level discount on the orçamento status update
-      if (orcForUpdate.desconto_valor != null && String(orcForUpdate.desconto_valor).trim() !== '') {
+      if (orcForUpdate.desconto_valor != null && String(orcForUpdate.desconto_valor).trim() !== "") {
         orcUpdatePayload.desconto_valor = orcForUpdate.desconto_valor;
       }
       if (orcForUpdate.desconto_tipo) orcUpdatePayload.desconto_tipo = orcForUpdate.desconto_tipo;
@@ -1169,9 +1268,13 @@ Deno.serve(async (req: Request) => {
       if (orcForUpdate.observacoes) orcUpdatePayload.observacoes = orcForUpdate.observacoes;
       if (orcForUpdate.observacoes_interna) orcUpdatePayload.observacoes_interna = orcForUpdate.observacoes_interna;
       // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
-      orcUpdatePayload.usuario_id = '1320473';
+      orcUpdatePayload.usuario_id = "1320473";
 
-      await gcRequest(`/api/orcamentos/${orcamento.id}`, 'PUT', normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(orcUpdatePayload))));
+      await gcRequest(
+        `/api/orcamentos/${orcamento.id}`,
+        "PUT",
+        normalizePaymentsToDeclaredTotal(applyGCRoundingDiscount(normalizeGCMoneyPayload(orcUpdatePayload))),
+      );
       console.log(`[generate-os] Orçamento #${orcamento.codigo} status updated to ${NEW_ORC_STATUS_ID}`);
     } catch (orcErr) {
       const orcMsg = orcErr instanceof Error ? orcErr.message : String(orcErr);
@@ -1190,15 +1293,15 @@ Deno.serve(async (req: Request) => {
         warnings: warnings.length > 0 ? warnings : undefined,
         gc_response: gcResult?.data,
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
-    const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+    const rawMessage = error instanceof Error ? error.message : "Unknown error";
     const message = friendlyErrorMessage(rawMessage);
-    console.error('[generate-os] Error:', message);
-    return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error("[generate-os] Error:", message);
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

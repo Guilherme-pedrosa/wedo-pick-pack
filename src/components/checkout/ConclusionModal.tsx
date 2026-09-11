@@ -7,6 +7,7 @@ import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from 
 import { GCOrdemServico, GCVenda, PickingItem } from '@/api/types';
 import { createSeparation, snapshotPickingItems } from '@/api/separations';
 import { confirmPartialBatch } from '@/api/partialWriteoff';
+import { assertCheckoutStock } from '@/api/checkoutStockGuard';
 import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -101,7 +102,8 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         targetStatusName = 'Baixa parcial aplicada (somente estoque)';
         targetStatusId = `partial:${session.partialWriteoff!.batchId}`;
       } else if (session.tipo === 'os') {
-        await updateOSStatus(session.refId, session.rawOrder as GCOrdemServico, effectiveStatus, config.operatorName, config.gcUsuarioId);
+        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder);
+        await updateOSStatus(session.refId, freshOrder as GCOrdemServico, effectiveStatus, config.operatorName, config.gcUsuarioId);
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;
       } else {

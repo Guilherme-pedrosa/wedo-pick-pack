@@ -36,11 +36,11 @@ verify_jwt = false
 [functions.push-watcher]
 verify_jwt = false
 
-[functions.inventory-consumption-daily]
-verify_jwt = false
-
 [functions.partial-writeoff]
 verify_jwt = false
 
 [functions.partial-writeoff-balances]
+verify_jwt = false
+
+[functions.partial-execution-worker]
 verify_jwt = false

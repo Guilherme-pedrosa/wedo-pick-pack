@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   auditPartialDocuments,
+  checkPartialExecution,
   cancelPartialBatch,
   deletePartialOperation,
   forceCancelPartialOperation,
@@ -23,6 +24,7 @@ import {
   unlockPartialReconciliation,
 } from '@/api/partialWriteoff';
 import { checkDocumentExists } from '@/api/gcDocumentValidation';
+import { commitmentFor, fetchOsStockCommitments } from '@/api/osStockCommitments';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -163,6 +165,20 @@ export default function PartialWriteoffPage() {
   const operations = operationsQuery.data || [];
   const selected = operations.find(operation => operation.id === selectedId) || null;
 
+  const executionQuery = useQuery({
+    queryKey: ['partial-writeoff-execution', selected?.id],
+    queryFn: async () => {
+      const checked = await checkPartialExecution(selected!.id);
+      queryClient.setQueryData<PartialWriteoffOperation[]>(['partial-writeoff-operations'], previous =>
+        previous?.map(op => op.id === checked.id ? checked : op));
+      return checked;
+    },
+    enabled: !!selected && selected.document_type === 'os' && ['awaiting_execution', 'ready_to_consolidate'].includes(selected.status),
+    refetchInterval: 60000,
+    staleTime: 45000,
+    retry: false,
+  });
+
   useEffect(() => {
     if (!selectedId && operations.length > 0) {
       const firstActive = operations.find(operation => !['completed', 'cancelled'].includes(operation.status));
@@ -212,6 +228,14 @@ export default function PartialWriteoffPage() {
     enabled: !!selected && (selected.items || []).length > 0,
     staleTime: 15000,
   });
+
+  const commitmentsQuery = useQuery({
+    queryKey: ['os-stock-commitments'], queryFn: fetchOsStockCommitments,
+    enabled: !!selected && !['completed', 'cancelled'].includes(selected.status),
+    staleTime: 30000, retry: false,
+  });
+  const externalFor = (item: PartialWriteoffOperation['items'][number]) =>
+    commitmentFor(commitmentsQuery.data || [], item.product_id, stockVariationId(item) || '');
 
   const missingCodeIds = useMemo(
     () => (selected?.items || []).filter(item => !String(item.product_code || '').trim()).map(item => item.product_id),
@@ -413,7 +437,7 @@ export default function PartialWriteoffPage() {
 
     const rows = selected.items.map(item => {
       const stock = stockQuery.data?.[item.id];
-      const availability = getPartialStockAvailability(item, stock);
+      const availability = getPartialStockAvailability(item, stock, externalFor(item));
       return [
         item.product_name,
         productCodeFor(item),
@@ -422,7 +446,7 @@ export default function PartialWriteoffPage() {
         item.reserved_quantity,
         item.pending_purchase_quantity,
         stock ?? 0,
-        item.global_reserved_quantity,
+        availability.globallyCommitted,
         availability.availableStock
       ];
     });
@@ -454,6 +478,8 @@ export default function PartialWriteoffPage() {
       if (result.error) throw result.error;
       const stockResult = await stockQuery.refetch();
       if (stockResult.error) throw stockResult.error;
+      const commitmentsResult = await commitmentsQuery.refetch();
+      if (commitmentsResult.error) throw commitmentsResult.error;
       if (!stockResult.data) throw new Error('O GestãoClick não retornou os saldos dos produtos.');
 
       const values = Object.values(stockResult.data);
@@ -582,7 +608,7 @@ export default function PartialWriteoffPage() {
           <AlertTriangle className="h-4 w-4 text-amber-700" />
           <AlertTitle>Fluxo isolado e rastreável</AlertTitle>
           <AlertDescription>
-            Os auxiliares movimentam somente estoque. Não geram financeiro, comissão, serviços, Auvo nem uma nova demanda em Compras.
+            Os auxiliares movimentam estoque e mantêm as tarefas Auvo de cada execução. Após a última execução, a OS integral reúne o orçamento e referencia todo o histórico.
           </AlertDescription>
         </Alert>
 
@@ -849,7 +875,7 @@ export default function PartialWriteoffPage() {
 
                 {selected.items.some(item => {
                   const stock = stockQuery.data?.[item.id];
-                  return stock !== undefined && getPartialStockAvailability(item, stock).overcommitted;
+                  return stock !== undefined && getPartialStockAvailability(item, stock, externalFor(item)).overcommitted;
                 }) && (
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
@@ -878,10 +904,11 @@ export default function PartialWriteoffPage() {
                     <tbody>
                       {selected.items.map(item => {
                         const stock = stockQuery.data?.[item.id];
-                        const availability = getPartialStockAvailability(item, stock);
+                        const external = externalFor(item);
+                        const availability = getPartialStockAvailability(item, stock, external);
                         const overcommitted = stock !== undefined && availability.overcommitted;
                         const max = availability.maxReservable;
-                        const disabled = max <= 0 || !['awaiting_separation', 'partial_separation', 'awaiting_balance'].includes(selected.status);
+                        const disabled = max <= 0 || !commitmentsQuery.data || !!commitmentsQuery.error || !['awaiting_separation', 'partial_separation', 'awaiting_balance'].includes(selected.status);
                         const isFullyWithdrawn = Number(item.withdrawn_quantity) >= Number(item.original_quantity);
                         const notWithdrawn = !isFullyWithdrawn;
 
@@ -907,16 +934,21 @@ export default function PartialWriteoffPage() {
                                   ? <span className="font-medium text-destructive">Erro</span>
                                   : fmtQty(stock)}
                             </td>
-                            <td className={`px-3 py-2 text-right ${Number(item.global_reserved_quantity) > 0 ? 'font-medium text-amber-700' : ''}`}>
-                              {Number(item.global_reserved_quantity) > 0 ? (
+                            <td className={`px-3 py-2 text-right ${availability.globallyCommitted > 0 ? 'font-medium text-amber-700' : ''}`}>
+                              {commitmentsQuery.isLoading ? 'Consultando OS…' : commitmentsQuery.error ? <span className="text-red-700">Erro na consulta</span> : availability.globallyCommitted > 0 ? (
                                 <Popover>
                                   <PopoverTrigger asChild>
                                     <button type="button" className="underline decoration-dotted underline-offset-4">
-                                      {fmtQty(item.global_reserved_quantity)}
+                                      {fmtQty(availability.globallyCommitted)}
                                     </button>
                                   </PopoverTrigger>
                                   <PopoverContent align="end" className="w-80 text-left">
                                     <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Reservado nestas OS/Vendas</p>
+                                    {external.sources.map((source, index) => <div key={`${source.osId}-${index}`} className="border-t py-2 text-sm">
+                                      <p className="font-medium">OS #{source.code} · {fmtQty(source.quantity)} unidade(s)</p>
+                                      <p className="text-xs">{source.client} · {source.status}</p>
+                                      {source.debited && <p className="text-xs text-muted-foreground">Já descontada do estoque do GC; não é subtraída novamente.</p>}
+                                    </div>)}
                                     {(sourcesQuery.data || [])
                                       .filter(source => source.product_id === item.product_id && (source.variation_id || '') === (item.variation_id || ''))
                                       .map(source => (
@@ -936,20 +968,20 @@ export default function PartialWriteoffPage() {
                                     {!sourcesQuery.isLoading &&
                                       (sourcesQuery.data || []).filter(
                                         source => source.product_id === item.product_id && (source.variation_id || '') === (item.variation_id || ''),
-                                      ).length === 0 && (
+                                      ).length === 0 && external.sources.length === 0 && (
                                         <p className="text-sm text-muted-foreground">Nenhuma reserva ativa encontrada.</p>
                                       )}
                                   </PopoverContent>
                                 </Popover>
                               ) : (
-                                fmtQty(item.global_reserved_quantity)
+                                fmtQty(availability.globallyCommitted)
                               )}
                             </td>
 
                             <td className={`px-3 py-2 text-right font-semibold ${overcommitted ? 'text-red-700' : 'text-green-700'}`}>
-                              {stockQuery.isFetching
+                              {stockQuery.isFetching || commitmentsQuery.isLoading
                                 ? '…'
-                                : stockQuery.isError
+                                : stockQuery.isError || commitmentsQuery.isError
                                   ? <span className="text-destructive">Indisponível</span>
                                   : fmtQty(availability.availableStock)}
                             </td>
@@ -979,7 +1011,7 @@ export default function PartialWriteoffPage() {
                       <p className="font-medium">Criar o próximo lote</p>
                       <p className="text-sm text-muted-foreground">O documento auxiliar aparecerá no Checkout e só movimentará estoque depois da conferência completa.</p>
                     </div>
-                    <Button onClick={handlePrepare} disabled={preparing || requestedItems.length === 0 || stockQuery.isLoading}>
+                    <Button onClick={handlePrepare} disabled={preparing || requestedItems.length === 0 || stockQuery.isLoading || !commitmentsQuery.data || commitmentsQuery.isError}>
                       {preparing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
                       Enviar ao Checkout
                     </Button>
@@ -1054,7 +1086,7 @@ export default function PartialWriteoffPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
+                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
                             {!['confirmed', 'cancelled'].includes(batch.status) && (
                               <Button
                                 variant="outline"
@@ -1085,6 +1117,13 @@ export default function PartialWriteoffPage() {
                       As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua
                       vinculada ao orçamento #{selected.budget_code}. A conciliação final permanece
                       bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.
+                      {(selected.execution_documents || []).filter(d => !d.executed).map(d => (
+                        <p key={d.documentId} className="mt-2">OS #{d.documentCode}: {d.statusName}</p>
+                      ))}
+                      {executionQuery.error && <p className="mt-2 text-red-700">Falha na consulta: {friendlyError(executionQuery.error)} A consolidação continua bloqueada.</p>}
+                      <Button variant="outline" className="mt-3" disabled={executionQuery.isFetching} onClick={() => executionQuery.refetch()}>
+                        {executionQuery.isFetching && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Verificar última execução
+                      </Button>
                     </AlertDescription>
                   </Alert>
                 )}
@@ -1098,11 +1137,11 @@ export default function PartialWriteoffPage() {
                         <p className="text-sm text-muted-foreground">
                           {operationIsExistingSale(selected)
                             ? 'Agora os auxiliares serão compensados e a venda original receberá a baixa definitiva de estoque, mantendo o financeiro que já existe.'
-                            : 'Agora os auxiliares serão compensados e o documento definitivo completo será gerado com Auvo, serviços, financeiro e comissão normais.'}
+                            : 'As execuções foram conferidas. A OS integral será criada com as tarefas Auvo existentes; depois os auxiliares serão compensados e receberão a referência da OS definitiva.'}
                         </p>
                       </div>
                     </div>
-                    {!operationIsExistingSale(selected) && (
+                    {!operationIsExistingSale(selected) && selected.document_type !== 'os' && (
                       <div className="grid gap-2 sm:grid-cols-2">
                         <Input value={auvoCustomerId} onChange={event => setAuvoCustomerId(event.target.value)} placeholder="ID cliente Auvo (se necessário)" />
                         <Input value={manualEquipment} onChange={event => setManualEquipment(event.target.value)} placeholder="Equipamento manual (opcional)" />

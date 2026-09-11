@@ -1,4 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
+import { executionDocument, isExecutedStatus } from './partialExecution';
+import { consolidateExecutedOs } from './partialConsolidation';
+import { assertStockConflict, commitmentFor, fetchOsStockCommitments } from './osStockCommitments';
+import { assertCheckoutStock } from './checkoutStockGuard';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -560,24 +564,30 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
     return { item, quantity };
   });
 
+  const commitments = await fetchOsStockCommitments();
   const selectedWithStock = [];
   for (const { item, quantity } of selected) {
     const detail = unwrapProductDetail(await gcRequest(`/api/produtos/${encodeURIComponent(item.product_id)}`));
     const lineSnapshot = item.line_snapshot as { produto?: { possui_variacao?: unknown } } | undefined;
     const hasVariation = String(lineSnapshot?.produto?.possui_variacao ?? '').trim() === '1';
     const stock = currentStock(detail, item.variation_id, hasVariation);
-    if (quantity > stock) throw new Error(`INSUFFICIENT_STOCK:${item.product_name}:${stock}`);
-    selectedWithStock.push({ item, quantity, stockQuantity: stock });
+    const variation = hasVariation ? item.variation_id : '';
+    const external = commitmentFor(commitments, item.product_id, variation);
+    assertStockConflict(stock, quantity, Number(item.global_reserved_quantity || 0), commitments, item.product_id, variation);
+    selectedWithStock.push({ item, quantity, physicalStock: stock, externalCommitted: external.outstanding,
+      stockQuantity: Math.max(0, stock - external.outstanding) });
   }
 
   const idempotencyKey = String(body.idempotency_key || crypto.randomUUID());
   const { data: reservation, error: reserveError } = await cloud.rpc('partial_writeoff_reserve_batch', {
     p_operation_id: operationId,
     p_idempotency_key: idempotencyKey,
-    p_items: selectedWithStock.map(({ item, quantity, stockQuantity }) => ({
+    p_items: selectedWithStock.map(({ item, quantity, stockQuantity, physicalStock, externalCommitted }) => ({
       item_id: item.id,
       quantity,
       stock_quantity: stockQuantity,
+      physical_stock_quantity: physicalStock,
+      external_os_commitment: externalCommitted,
     })),
     p_actor_id: auth.id,
     p_actor_name: auth.name,
@@ -738,6 +748,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   if (!sameQuantities(quantityMap(expectedLines), quantityMap(currentDocument?.produtos || []))) {
     throw new Error('AUXILIARY_ITEMS_CHANGED');
   }
+  if (type === 'os') await assertCheckoutStock(String(batch.auxiliary_document_id), currentDocument, batchId);
 
   const { data: claim, error: claimError } = await cloud.rpc('partial_writeoff_claim_confirmation', {
     p_batch_id: batchId,
@@ -750,8 +761,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   const currentStatus = normalizeId(currentDocument?.situacao_id);
   // O documento pode ter sido baixado por fora (ex.: handoff "Retirada pelo técnico").
   // Nesse caso o estoque já saiu no GestãoClick e reenviar o PUT só geraria erro.
-  const alreadyDebited = !!currentStatus
-    && (currentStatus === normalizeId(stockStatus) || currentStatus === TECHNICIAN_WITHDRAWAL_STATUS_ID);
+  const alreadyDebited = String(currentDocument?.situacao_estoque) === '1';
   if (alreadyDebited) {
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
       p_batch_id: batchId,
@@ -779,7 +789,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     try {
       const latest = (await gcRequest(path))?.data;
       const latestStatus = normalizeId(latest?.situacao_id);
-      applied = latestStatus === normalizeId(stockStatus) || latestStatus === TECHNICIAN_WITHDRAWAL_STATUS_ID;
+      applied = String(latest?.situacao_estoque) === '1' && sameQuantities(quantityMap(expectedLines), quantityMap(latest?.produtos || []));
     } catch { /* keep false */ }
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
       p_batch_id: batchId,
@@ -889,6 +899,10 @@ async function findReusableDefinitiveDocument(
 async function handleUnlockReconciliation(body: any, auth: AuthContext): Promise<PartialWriteoffOperation> {
   const operationId = String(body.operation_id || '');
   if (!operationId) throw new Error('OPERATION_ID_REQUIRED');
+  const operation = await getOperationGraph(operationId);
+  if (operation.document_type === 'os' && operation.items.every(i => Number(i.withdrawn_quantity) === Number(i.original_quantity) && Number(i.reserved_quantity) === 0)) {
+    return handleConsolidate(body, auth);
+  }
   const { error } = await cloud.rpc('partial_writeoff_unlock_reconciliation', {
     p_operation_id: operationId,
     p_actor_id: auth.id,
@@ -903,14 +917,23 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
   const operationId = String(body.operation_id || '');
   const operation = await getOperationGraph(operationId);
   if (operation.status === 'completed') return operation;
+  if (operation.document_type === 'os') {
+    return consolidateExecutedOs(operation, {
+      gc: gcRequest,
+      rpc: async (name, payload) => {
+        const { data, error } = await cloud.rpc(name, payload);
+        if (error) throw new Error(error.message);
+        return data;
+      },
+      reload: () => getOperationGraph(operationId),
+      settings: getSettings,
+    });
+  }
   const sourceKind = operationSourceKind(operation);
   const existingSale = sourceKind === 'venda';
   if (existingSale) {
     const sale = await fetchSource(operationSourceId(operation), 'venda');
     if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');
-  }
-  if (operation.document_type === 'os' && !auth.profile.default_os_conclusion_status) {
-    throw new Error('CONFIGURE_OS_CONCLUSION_STATUS');
   }
   if (!existingSale && !auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
 
@@ -999,9 +1022,6 @@ async function handleConsolidate(body: any, auth: AuthContext): Promise<PartialW
       }
       generated.partial_auxiliaries = partialAuxiliaries;
 
-      if (operation.document_type === 'os') {
-        await updateDocumentStatus('os', String(generated.os_id), String(auth.profile.default_os_conclusion_status));
-      }
     }
 
   } catch (error) {
@@ -1138,7 +1158,7 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
       const cancelId = normalizeId(settings[`${type}_cancel_status_id`]);
       const waitingId = normalizeId(settings[`${type}_waiting_status_id`]);
       const stockId = normalizeId(settings[`${type}_stock_status_id`]);
-      const expected = [waitingId, stockId, TECHNICIAN_WITHDRAWAL_STATUS_ID].filter(Boolean);
+      const expected = [waitingId, stockId, TECHNICIAN_WITHDRAWAL_STATUS_ID, '7063705'].filter(Boolean);
 
       const enriched = { ...base, situacaoId, situacaoNome, documentCode: String(document.codigo || base.documentCode || '') };
       const debited = situacaoId === stockId || situacaoId === TECHNICIAN_WITHDRAWAL_STATUS_ID;
@@ -1166,7 +1186,7 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
           message = `Estoque já baixado no GestãoClick ("${situacaoNome}"), mas a confirmação local falhou: ${compact(syncError)}`;
         }
         results.push({ ...enriched, state: 'ok', message });
-      } else if (expected.length && !expected.includes(situacaoId)) {
+      } else if (expected.length && !expected.includes(situacaoId) && !isExecutedStatus(situacaoNome)) {
         results.push({ ...enriched, state: 'status_changed', message: `Situação mudou no GestãoClick: "${situacaoNome}".` });
       } else {
         results.push({ ...enriched, state: 'ok', message: `Documento existe e está em "${situacaoNome}".` });
@@ -1189,6 +1209,20 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
 export async function invokePartialWriteoffClient<T>(body: Record<string, unknown>): Promise<T> {
   const auth = await authenticate();
   const action = String(body.action || '');
+
+  if (action === 'check_execution') {
+    const operation = await getOperationGraph(String(body.operation_id || ''));
+    if (operation.document_type !== 'os' || !['awaiting_execution', 'ready_to_consolidate'].includes(operation.status)) return { operation } as T;
+    const documents = [];
+    for (const batch of operation.batches.filter(b => b.confirmed_at && b.auxiliary_document_id)) {
+      const document = (await gcRequest(`/api/ordens_servicos/${encodeURIComponent(batch.auxiliary_document_id!)}`)).data;
+      if (String(document?.id) !== batch.auxiliary_document_id) throw new Error('Documento auxiliar inconsistente.');
+      documents.push(executionDocument(batch.id, document));
+    }
+    const { error } = await cloud.rpc('partial_writeoff_record_execution', { p_operation_id: operation.id, p_documents: documents });
+    if (error) throw new Error(error.message);
+    return { operation: await getOperationGraph(operation.id) } as T;
+  }
 
 
   if (action === 'search_budgets') {

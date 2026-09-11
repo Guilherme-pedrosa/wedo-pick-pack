@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle, ChevronDown, Filter, PackageMinus } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterDocumentsBySituationIds } from '@/api/situationScopes';
+import { assertCheckoutStock } from '@/api/checkoutStockGuard';
 
 type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
 
@@ -245,6 +246,7 @@ export default function OrderQueue() {
       const enrichedProdutos = await enrichOrderProducts(order.produtos);
       order.produtos = enrichedProdutos;
       const linkedPartial = partialEntry ?? await findPartialBatchByDocument(tipo, id);
+      if (tipo === 'os') await assertCheckoutStock(id, undefined, linkedPartial?.batchId);
       startSession(tipo, order, linkedPartial ? {
         operationId: linkedPartial.operationId,
         batchId: linkedPartial.batchId,
@@ -252,7 +254,7 @@ export default function OrderQueue() {
         marker: linkedPartial.marker,
       } : undefined);
     } catch (err) {
-      toast.error('Erro ao carregar pedido');
+      toast.error(err instanceof Error ? err.message : 'Erro ao carregar pedido', { duration: 12000 });
     } finally {
       setLoading(false);
     }

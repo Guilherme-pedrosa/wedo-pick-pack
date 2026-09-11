@@ -219,31 +219,6 @@ async function auvoGetTask(token: string, taskId: string | number): Promise<any>
   return data;
 }
 
-// Best-effort deletion of an Auvo task. Used to roll back the activity that was
-// created before the GestãoClick document, so failed attempts don't leave
-// orphan activities ("tanto de atividade pra mesma OS").
-async function auvoDeleteTask(token: string, taskId: string | number): Promise<boolean> {
-  try {
-    const res = await fetch(`${AUVO_API_URL}/tasks/${taskId}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      console.warn(`[generate-os] ⚠️ Could not delete orphan Auvo task ${taskId} [${res.status}]: ${text.slice(0, 300)}`);
-      return false;
-    }
-    console.log(`[generate-os] Rolled back orphan Auvo task ${taskId}`);
-    return true;
-  } catch (e) {
-    console.warn(`[generate-os] ⚠️ Error deleting orphan Auvo task ${taskId}:`, e);
-    return false;
-  }
-}
-
 function parseMoney(value: unknown): number {
   const raw = String(value ?? '').trim();
   if (!raw) return 0;
@@ -660,6 +635,13 @@ Deno.serve(async (req: Request) => {
     // ============================================
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    const preservedResponse = await fetch(`${SUPABASE_URL}/rest/v1/preserved_auvo_tasks?budget_id=eq.${encodeURIComponent(orcamento.id)}&select=task_id`, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+    });
+    if (!preservedResponse.ok) throw new Error('Não foi possível conferir tarefas Auvo preservadas.');
+    const preserved = await preservedResponse.json();
+    if (preserved.length) throw new Error(`Há tarefa Auvo preservada de uma tentativa anterior: ${preserved.map((r: any) => r.task_id).join(', ')}. Reconcilie o vínculo antes de gerar outra.`);
 
     const checkRes = await fetch(
       `${SUPABASE_URL}/rest/v1/os_generation_logs?orcamento_id=eq.${encodeURIComponent(orcamento.id)}&success=eq.true&select=id,os_id,os_codigo,auvo_task_id,operator_name,created_at&order=created_at.desc&limit=1`,
@@ -1134,12 +1116,15 @@ Deno.serve(async (req: Request) => {
       console.log(`[generate-os] GC Venda created: id=${osId}, codigo=${osCodigo}`);
     }
     } catch (gcErr) {
-      // The Auvo activity was created before this step. Roll it back so a failed
-      // GestãoClick submission does not leave an orphan activity behind.
+      // A tarefa e seu histórico permanecem no Auvo mesmo quando o GC falha.
       if (auvoTaskId) {
-        await auvoDeleteTask(auvoToken, auvoTaskId);
+        const saved = await fetch(`${SUPABASE_URL}/rest/v1/preserved_auvo_tasks`, {
+          method: 'POST', headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({ budget_id: String(orcamento.id), task_id: String(auvoTaskId), error_message: String(gcErr) }),
+        });
+        if (!saved.ok) console.error(`Falha ao registrar vínculo preservado: orçamento ${orcamento.id}, tarefa Auvo ${auvoTaskId}`);
       }
-      throw gcErr;
+      throw new Error(`Falha no GC; tarefa Auvo #${auvoTaskId} preservada. ${String(gcErr)}`);
     }
 
     // ============================================

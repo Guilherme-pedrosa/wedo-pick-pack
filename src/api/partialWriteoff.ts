@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { OrderType } from './types';
 import { invokePartialWriteoffClient } from './partialWriteoffClient';
+import type { ExecutionDocument } from './partialExecution';
 
 export type PartialWriteoffStatus =
   | 'awaiting_separation'
@@ -43,16 +44,19 @@ export interface PartialStockAvailability {
 export function getPartialStockAvailability(
   item: Pick<PartialWriteoffItem, 'available_to_reserve_quantity' | 'global_reserved_quantity'>,
   currentStock: number | null | undefined,
+  external?: { quantity: number; outstanding: number },
 ): PartialStockAvailability {
   const physicalStock = Math.max(0, Number(currentStock ?? 0));
-  const globallyCommitted = Math.max(0, Number(item.global_reserved_quantity || 0));
-  const availableStock = Math.max(0, physicalStock - globallyCommitted);
+  const localCommitted = Math.max(0, Number(item.global_reserved_quantity || 0));
+  const globallyCommitted = localCommitted + (external?.quantity || 0);
+  const unDebited = localCommitted + (external?.outstanding || 0);
+  const availableStock = Math.max(0, physicalStock - unDebited);
   return {
     physicalStock,
     globallyCommitted,
     availableStock,
     maxReservable: Math.max(0, Math.min(Number(item.available_to_reserve_quantity || 0), availableStock)),
-    overcommitted: globallyCommitted > physicalStock,
+    overcommitted: unDebited > physicalStock,
   };
 }
 
@@ -90,6 +94,9 @@ export interface PartialWriteoffOperation {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  execution_verified_at?: string | null;
+  execution_documents?: ExecutionDocument[];
+  consolidation_stage?: string | null;
   items: PartialWriteoffItem[];
   batches: PartialWriteoffBatch[];
 }
@@ -149,6 +156,11 @@ export async function openPartialOperation(
 
 export async function getPartialOperation(operationId: string): Promise<PartialWriteoffOperation> {
   const data = await invoke<{ operation: PartialWriteoffOperation }>({ action: 'get_operation', operation_id: operationId });
+  return data.operation;
+}
+
+export async function checkPartialExecution(operationId: string): Promise<PartialWriteoffOperation> {
+  const data = await invoke<{ operation: PartialWriteoffOperation }>({ action: 'check_execution', operation_id: operationId });
   return data.operation;
 }
 

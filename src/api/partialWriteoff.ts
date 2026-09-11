@@ -356,10 +356,11 @@ export async function findPartialBatchByDocument(type: OrderType, documentId: st
       .select('id, operation_id, marker, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, created_at, status, partial_writeoff_operations(budget_code, client_name)')
       .eq('auxiliary_document_type', type)
       .eq('auxiliary_document_id', documentId)
-      .eq('status', 'awaiting_checkout')
+      .in('status', ['awaiting_checkout', 'reconciliation_required'])
       .maybeSingle();
     const { data, error } = await query;
-    if (error || !data) return null;
+    if (error) throw error;
+    if (!data) return null;
     return {
       batchId: data.id,
       operationId: data.operation_id,
@@ -372,7 +373,7 @@ export async function findPartialBatchByDocument(type: OrderType, documentId: st
       createdAt: data.created_at,
     };
   } catch {
-    return null;
+    throw new Error('Não foi possível conferir o vínculo de baixa parcial deste pedido. Tente novamente.');
   }
 }
 

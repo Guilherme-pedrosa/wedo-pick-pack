@@ -13,9 +13,12 @@ interface CheckoutConfig {
 
 interface CheckoutStore {
   session: PickingSession | null;
+  productMetadataLoading: boolean;
+  metadataRequestId: string | null;
   concludedSessions: string[];
   config: CheckoutConfig;
-  startSession: (tipo: OrderType, order: Order, partialWriteoff?: PickingSession['partialWriteoff']) => void;
+  startSession: (tipo: OrderType, order: Order, partialWriteoff?: PickingSession['partialWriteoff']) => string;
+  applyProductMetadata: (requestId: string, products?: Order['produtos']) => void;
   confirmItem: (itemId: string, qtd?: number) => void;
   concludeSession: () => void;
   cancelSession: () => void;
@@ -49,6 +52,8 @@ export const useCheckoutStore = create<CheckoutStore>()(
   persist(
     (set) => ({
       session: null,
+      productMetadataLoading: false,
+      metadataRequestId: null,
       concludedSessions: [],
       config: {
         osStatusToShow: [],
@@ -82,7 +87,26 @@ export const useCheckoutStore = create<CheckoutStore>()(
           startedAt: new Date().toISOString(),
           partialWriteoff,
         };
-        set({ session });
+        const metadataRequestId = crypto.randomUUID();
+        set({ session, productMetadataLoading: true, metadataRequestId });
+        return metadataRequestId;
+      },
+      applyProductMetadata: (requestId, products) => {
+        set(state => {
+          if (!state.session || state.metadataRequestId !== requestId) return state;
+          const items = state.session.items.map((item, index) => {
+            const product = products?.[index]?.produto;
+            if (!product || product.produto_id !== item.produto_id || product.variacao_id !== item.variacao_id) return item;
+            return { ...item,
+              codigo_produto: product.codigo_produto || item.codigo_produto,
+              codigo_barras: product.codigo_barras || item.codigo_barras,
+              localizacao_fisica: product.localizacao_fisica || item.localizacao_fisica,
+              localizacao_rational: product.localizacao_rational || item.localizacao_rational,
+            };
+          });
+          // Preserve scanned quantities, item IDs and the original GC document.
+          return { session: { ...state.session, items }, productMetadataLoading: false, metadataRequestId: null };
+        });
       },
       confirmItem: (itemId, qtd = 1) => {
         set((state) => {
@@ -119,7 +143,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
           };
         });
       },
-      cancelSession: () => set({ session: null }),
+      cancelSession: () => set({ session: null, productMetadataLoading: false, metadataRequestId: null }),
       setConfig: (partial) => {
         set((state) => ({
           config: { ...state.config, ...partial },

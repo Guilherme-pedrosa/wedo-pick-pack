@@ -1294,9 +1294,9 @@ interface GCProductDetail {
   atributos?: Array<{ atributo: GCProductExtraField }>;
 }
 
-async function getProductDetail(produtoId: string): Promise<GCProductDetail | null> {
+async function getProductDetail(produtoId: string, forceFresh = false): Promise<GCProductDetail | null> {
   try {
-    const res = await apiRequest<{ data: GCProductDetail }>(`/api/produtos/${produtoId}`);
+    const res = await apiRequest<{ data: GCProductDetail }>(`/api/produtos/${produtoId}${forceFresh ? `?cache_bust=${Date.now()}` : ''}`);
     return res.data;
   } catch {
     return null;
@@ -1304,7 +1304,8 @@ async function getProductDetail(produtoId: string): Promise<GCProductDetail | nu
 }
 
 export async function enrichOrderProducts(
-  produtos: Array<{ produto: GCProdutoItem }>
+  produtos: Array<{ produto: GCProdutoItem }>,
+  options?: { checkStock?: boolean; onStockWarning?: (message: string) => void },
 ): Promise<Array<{ produto: GCProdutoItem }>> {
   if (isUsingMock() || !produtos?.length) return produtos;
 
@@ -1315,10 +1316,26 @@ export async function enrichOrderProducts(
   const detailMap = new Map<string, GCProductDetail>();
   for (let i = 0; i < uniqueIds.length; i += 3) {
     const batch = uniqueIds.slice(i, i + 3);
-    const results = await Promise.all(batch.map(id => getProductDetail(id)));
+    const results = await Promise.all(batch.map(id => getProductDetail(id, options?.checkStock)));
     results.forEach(d => { if (d) detailMap.set(d.id, d); });
     if (i + 3 < uniqueIds.length) {
       await new Promise(r => setTimeout(r, 1100)); // respect rate limit
+    }
+  }
+
+  if (options?.checkStock) {
+    const requested = new Map<string, { product: GCProdutoItem; variation?: string; quantity: number }>();
+    for (const { produto } of produtos) {
+      if (String((produto as any).movimenta_estoque ?? '1') === '0') continue;
+      const variation = String((produto as any).possui_variacao ?? '') === '0' ? undefined : produto.variacao_id || undefined;
+      const key = `${produto.produto_id}::${variation || ''}`;
+      requested.set(key, { product: produto, variation, quantity: Number(produto.quantidade) + (requested.get(key)?.quantity || 0) });
+    }
+    for (const { product, variation, quantity } of requested.values()) {
+      const detail = detailMap.get(product.produto_id);
+      const stock = detail ? parseProductStockResponse({ data: detail }, product.produto_id, variation) : null;
+      if (!stock) options.onStockWarning?.(`Saldo não consultado: ${product.nome_produto}.`);
+      else if (quantity > stock.estoque) options.onStockWarning?.(`Estoque físico insuficiente: ${product.nome_produto} — solicitado ${quantity}, saldo GC ${stock.estoque}.`);
     }
   }
 

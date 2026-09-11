@@ -13,10 +13,10 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle, ChevronDown, Filter, PackageMinus } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight, ClipboardList, ShoppingCart, PackageSearch, ArrowUpDown, AlertTriangle, ChevronDown, Filter, PackageMinus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { filterDocumentsBySituationIds } from '@/api/situationScopes';
-import { assertCheckoutStock } from '@/api/checkoutStockGuard';
+import { isCancelledStatus, isExecutedStatus } from '@/api/partialExecution';
 
 type SortField = 'codigo' | 'cliente' | 'data' | 'valor';
 
@@ -26,7 +26,7 @@ export default function OrderQueue() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [confirmSwitch, setConfirmSwitch] = useState<{ tipo: OrderType; id: string } | null>(null);
+  const [confirmSwitch, setConfirmSwitch] = useState<{ tipo: OrderType; id: string; partialEntry?: PartialCheckoutEntry } | null>(null);
   const [loading, setLoading] = useState(false);
   const [stockScanning, setStockScanning] = useState(false);
   const [stockProgress, setStockProgress] = useState({ checked: 0, total: 0 });
@@ -41,7 +41,7 @@ export default function OrderQueue() {
   const queryClient = useQueryClient();
   const session = useCheckoutStore(s => s.session);
   const startSession = useCheckoutStore(s => s.startSession);
-  const cancelSession = useCheckoutStore(s => s.cancelSession);
+  const applyProductMetadata = useCheckoutStore(s => s.applyProductMetadata);
   const config = useCheckoutStore(s => s.config);
 
   // Fetch valid (non-invalidated) separated order IDs from DB
@@ -242,23 +242,41 @@ export default function OrderQueue() {
   const loadAndStart = useCallback(async (tipo: OrderType, id: string, partialEntry?: PartialCheckoutEntry | null) => {
     setLoading(true);
     try {
-      const order = tipo === 'os' ? await getOS(id) : await getVenda(id);
-      const enrichedProdutos = await enrichOrderProducts(order.produtos);
-      order.produtos = enrichedProdutos;
-      const linkedPartial = partialEntry ?? await findPartialBatchByDocument(tipo, id);
-      if (tipo === 'os') await assertCheckoutStock(id, undefined, linkedPartial?.batchId);
-      startSession(tipo, order, linkedPartial ? {
+      const [order, linkedPartial] = await Promise.all([
+        tipo === 'os' ? getOS(id) : getVenda(id),
+        partialEntry ? Promise.resolve(partialEntry) : findPartialBatchByDocument(tipo, id),
+      ]);
+      if (tipo === 'os' && (isCancelledStatus(order.nome_situacao) || isExecutedStatus(order.nome_situacao))) {
+        throw new Error('Esta OS foi cancelada ou já executada. Atualize a fila antes de conferir.');
+      }
+      // Show the actual document first. The full stock guard still runs at
+      // confirmation (ConclusionModal / confirmPartialBatch), before any debit.
+      const metadataRequestId = startSession(tipo, order, linkedPartial ? {
         operationId: linkedPartial.operationId,
         batchId: linkedPartial.batchId,
         budgetCode: linkedPartial.budgetCode,
         marker: linkedPartial.marker,
       } : undefined);
+      void enrichOrderProducts(order.produtos, {
+        checkStock: String((order as any).situacao_estoque) !== '1',
+        onStockWarning: message => {
+          if (useCheckoutStore.getState().metadataRequestId === metadataRequestId) toast.warning(message, { duration: 10000 });
+        },
+      }).then(
+        products => applyProductMetadata(metadataRequestId, products),
+        () => {
+          if (useCheckoutStore.getState().metadataRequestId === metadataRequestId) {
+            applyProductMetadata(metadataRequestId);
+            toast.warning('Itens carregados, mas não foi possível completar os códigos e localizações.');
+          }
+        },
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erro ao carregar pedido', { duration: 12000 });
     } finally {
       setLoading(false);
     }
-  }, [startSession]);
+  }, [startSession, applyProductMetadata]);
 
   const handleOrderClick = useCallback(async (tipo: OrderType, id: string) => {
     // Block already-separated orders
@@ -275,10 +293,9 @@ export default function OrderQueue() {
 
   const handleConfirmSwitch = useCallback(async () => {
     if (!confirmSwitch) return;
-    cancelSession();
-    await loadAndStart(confirmSwitch.tipo, confirmSwitch.id);
+    await loadAndStart(confirmSwitch.tipo, confirmSwitch.id, confirmSwitch.partialEntry);
     setConfirmSwitch(null);
-  }, [confirmSwitch, cancelSession, loadAndStart]);
+  }, [confirmSwitch, loadAndStart]);
 
   function getOrderBadge(order: GCOrdemServico | GCVenda) {
     if (session && session.refId === order.id && session.tipo === activeType && !session.concludedAt) {
@@ -516,6 +533,7 @@ export default function OrderQueue() {
 
       {/* Order list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {loading && <div role="status" className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando itens do pedido…</div>}
         {partialForType.length > 0 && (
           <div className="mb-3 space-y-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-amber-800">
@@ -530,7 +548,7 @@ export default function OrderQueue() {
                   className={`p-3 cursor-pointer border-l-4 border-l-amber-500 bg-amber-50/70 hover:shadow-md ${isActive ? 'ring-2 ring-amber-400' : ''} ${loading ? 'pointer-events-none opacity-50' : ''}`}
                   onClick={() => {
                     if (session && session.refId !== entry.documentId && !session.concludedAt) {
-                      setConfirmSwitch({ tipo: entry.type, id: entry.documentId });
+                      setConfirmSwitch({ tipo: entry.type, id: entry.documentId, partialEntry: entry });
                       return;
                     }
                     void loadAndStart(entry.type, entry.documentId, entry);

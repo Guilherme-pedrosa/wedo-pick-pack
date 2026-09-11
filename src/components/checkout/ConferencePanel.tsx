@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
-import { PackageCheck, Scan, Clock, X, Printer, Camera } from 'lucide-react';
+import { PackageCheck, Scan, Clock, X, Printer, Camera, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ItemsTable from './ItemsTable';
 import ConclusionModal, { ReceiptData } from './ConclusionModal';
@@ -18,6 +18,7 @@ const BarcodeScannerModal = lazy(() => import('./BarcodeScannerModal'));
 
 export default function ConferencePanel() {
   const session = useCheckoutStore(s => s.session);
+  const productMetadataLoading = useCheckoutStore(s => s.productMetadataLoading);
   const confirmItem = useCheckoutStore(s => s.confirmItem);
   const cancelSession = useCheckoutStore(s => s.cancelSession);
   const config = useCheckoutStore(s => s.config);
@@ -85,6 +86,10 @@ export default function ConferencePanel() {
 
     const match = matchItemByCode(code, session.items);
     if (!match) {
+      if (productMetadataLoading) {
+        toast.info('Carregando códigos dos produtos. Aguarde um instante e leia novamente.');
+        return false;
+      }
       setFeedback({ type: 'error', msg: 'Código não encontrado nesta OS/Venda' });
       toast.error('Código não encontrado nesta OS/Venda');
       return false;
@@ -111,7 +116,7 @@ export default function ConferencePanel() {
         return true;
       }
     }
-  }, [session, confirmItem]);
+  }, [session, confirmItem, productMetadataLoading]);
 
   const parseScanQty = useCallback((value: string) => {
     const raw = String(value ?? '').trim();
@@ -332,6 +337,7 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
       </div>
 
       {/* Scan zone — desktop: coletor/scanner USB · mobile: câmera */}
+      {productMetadataLoading && <div role="status" className="flex items-center gap-2 px-4 pt-3 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Conferindo os produtos deste pedido: estoque, códigos e localizações…</div>}
       <div className="border-2 border-secondary bg-secondary/10 mx-3 md:mx-4 mt-3 md:mt-4 rounded-lg p-3">
         <div className="flex flex-col gap-2">
           <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">

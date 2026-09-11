@@ -23,6 +23,17 @@ describe('compromissos globais de estoque', () => {
     expect(commitmentFor(rows, 'p', 'v')).toMatchObject({ quantity: 1, outstanding: 0 });
     expect(() => assertStockConflict(1, 1, 0, rows, 'p', 'v')).not.toThrow();
   });
+  it('exclui as OS já executadas do CIGAM da quantidade e da lista, mesmo sem baixa GC', () => {
+    for (const debited of ['0', '1']) {
+      const rows = [
+        ...pendingOsLines(os('8370', 'IMP CIGAM FATURADO TOTAL', debited)),
+        ...pendingOsLines(os('8318', 'FINANCEIRO SEPARADO / BAIXA CIGAM', debited)),
+        ...pendingOsLines(os('10137', 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO', '0')),
+      ];
+      expect(commitmentFor(rows, 'p', 'v')).toMatchObject({ quantity: 1, outstanding: 1 });
+      expect(rows.map(r => r.code)).toEqual(['10137']);
+    }
+  });
   it('separa variações e considera reserva local ainda não debitada', () => {
     const rows = pendingOsLines(os('100', undefined, '0', 'v2'));
     expect(commitmentFor(rows, 'p', 'v').quantity).toBe(0);

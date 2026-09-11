@@ -14,7 +14,14 @@ export function normalizedStatus(value: unknown): string {
 }
 
 export function isExecutedStatus(value: unknown): boolean {
-  return /^EXECUTAD[AO]\b/.test(normalizedStatus(value));
+  const status = normalizedStatus(value);
+  // Situações históricas do GC que também significam serviço já executado.
+  // Conferência, retirada e espera por execução continuam comprometendo estoque.
+  return /^EXECUTAD[AO]\b/.test(status) || [
+    'CHAMADO FECHADO - FATURADO',
+    'IMP CIGAM FATURADO TOTAL',
+    'FINANCEIRO SEPARADO / BAIXA CIGAM',
+  ].includes(status);
 }
 
 export function isCancelledStatus(value: unknown): boolean {

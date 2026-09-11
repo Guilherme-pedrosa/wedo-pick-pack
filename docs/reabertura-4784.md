@@ -1,5 +1,7 @@
 # Reabertura do orçamento 4784
 
+Atualização: a reabertura foi aplicada em produção. A continuidade do fluxo e sua automação estão documentadas em [baixa-parcial-fluxos.md](baixa-parcial-fluxos.md). O texto abaixo descreve o escopo histórico da primeira migração.
+
 Base: `8977242dfe912550fd265675e6495eb3e9bd4274`.
 
 Esta alteração reabre a operação como `awaiting_execution`. Não implementa a

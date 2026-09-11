@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { isCancelledStatus, isExecutedStatus, normalizedStatus, type GcRecord } from './partialExecution';
+import { isCancelledStatus, isExecutedStatus, type GcRecord } from './partialExecution';
 
 export interface OsStockCommitment {
   osId: string; code: string; client: string; status: string;
@@ -7,7 +7,7 @@ export interface OsStockCommitment {
 }
 const id = (v: unknown) => ['0', 'null', 'undefined'].includes(String(v)) ? '' : String(v ?? '').trim();
 const number = (v: unknown) => Number(String(v ?? '').includes(',') ? String(v).replace(/\./g, '').replace(',', '.') : v);
-const closed = (os: GcRecord) => isCancelledStatus(os.nome_situacao) || isExecutedStatus(os.nome_situacao) || normalizedStatus(os.nome_situacao) === 'CHAMADO FECHADO - FATURADO';
+const closed = (os: GcRecord) => isCancelledStatus(os.nome_situacao) || isExecutedStatus(os.nome_situacao);
 
 export function pendingOsLines(os: GcRecord): OsStockCommitment[] {
   if (closed(os)) return [];

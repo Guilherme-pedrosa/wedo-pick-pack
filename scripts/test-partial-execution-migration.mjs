@@ -12,6 +12,7 @@ try {
   await db.exec(read('20260316153930_4a7303ae-9d9e-40b0-80f3-e80f1fbd8af5.sql').split('ALTER TABLE public.os_generation_logs')[0]);
   await db.exec(read('20260911183000_partial_execution_consolidation.sql'));
   await db.exec(read('20260911200000_reservation_only.sql'));
+  await db.exec(read('20260911210000_historical_executed_statuses.sql'));
   const op='11111111-1111-4111-8111-111111111111';
   const batch='22222222-2222-4222-8222-222222222222';
   await db.query(`INSERT INTO partial_writeoff_operations(id,budget_id,budget_code,client_id,client_name,document_type,status,budget_snapshot,flow_mode)
@@ -30,10 +31,10 @@ try {
   await assert.rejects(check([doc,doc]),/EXECUTION_DOCUMENT_MISMATCH/);
   await check([{...doc,executed:true}]); // Nome do estado ainda não prova execução.
   await assert.rejects(claim(),/OPERATION_NOT_CONSOLIDATABLE/);
-  await check([{...doc,executed:true,statusName:'EXECUTADO - AGUARDANDO PAGAMENTO'}]);
+  await check([{...doc,executed:true,statusName:'FINANCEIRO SEPARADO / BAIXA CIGAM'}]);
   await db.exec(`UPDATE partial_writeoff_operations SET execution_verified_at=now()-interval '2 minutes'`);
   await assert.rejects(claim(),/EXECUTION_CHECK_REQUIRED/);
-  await check([{...doc,executed:true,statusName:'EXECUTADO - AGUARDANDO PAGAMENTO'}]);
+  await check([{...doc,executed:true,statusName:'FINANCEIRO SEPARADO / BAIXA CIGAM'}]);
   await claim();
   await assert.rejects(claim(),/OPERATION_NOT_CONSOLIDATABLE:consolidating/);
   await db.query("SELECT partial_writeoff_checkpoint($1,'created','new-os','10139','{}')",[op]);
@@ -65,3 +66,4 @@ try {
   console.error(error.message, error.detail || '');
   process.exitCode = 1;
 } finally { await db.close(); }
+

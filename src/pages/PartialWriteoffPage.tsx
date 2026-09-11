@@ -955,7 +955,6 @@ export default function PartialWriteoffPage() {
                                     {external.sources.map((source, index) => <div key={`${source.osId}-${index}`} className="border-t py-2 text-sm">
                                       <p className="font-medium">OS #{source.code} · {fmtQty(source.quantity)} unidade(s)</p>
                                       <p className="text-xs">{source.client} · {source.status}</p>
-                                      {source.debited && <p className="text-xs text-muted-foreground">Já descontada do estoque do GC; não é subtraída novamente.</p>}
                                     </div>)}
                                     {(sourcesQuery.data || [])
                                       .filter(source => source.product_id === item.product_id && (source.variation_id || '') === (item.variation_id || ''))

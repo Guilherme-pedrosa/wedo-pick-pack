@@ -14,11 +14,13 @@ Ao completar as peças de uma OS, a reserva é transferida para uma OS integral 
 
 ## Compromisso de estoque
 
-Todas as páginas de OS são consultadas. OS executadas e canceladas são excluídas, inclusive as situações históricas IMP CIGAM FATURADO TOTAL, FINANCEIRO SEPARADO / BAIXA CIGAM e CHAMADO FECHADO - FATURADO. As 12 OS executadas mostradas pelo usuário foram verificadas fora do resultado. As demais peças são associadas exclusivamente por produto e variação do GC. Linhas avulsas sem produto cadastrado não são associadas por nome.
+Todas as páginas de OS são consultadas. Só comprometem estoque as situações AGUARDANDO COMPRA DE PEÇAS, AGUARDANDO CHEGADA DE PEÇAS, AGUARDANDO FABRICAÇÃO, PEDIDO EM CONFERENCIA, SERVICO AGUARDANDO EXECUCAO e PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO, desde que `situacao_estoque=0`. A lista foi indicada expressamente pelo usuário.
 
-O compromisso aparece com OS, quantidade e situação. Movimentações já debitadas no GC são exibidas, mas não descontadas novamente do saldo físico. Reservas locais sem baixa também são consideradas. A consulta é repetida antes de reservar e antes de concluir o Checkout; consulta incompleta bloqueia a ação.
+Qualquer OS que já movimentou estoque fica fora da quantidade e do popover, inclusive retirada pelo técnico ou pedido conferido aguardando execução com estoque já baixado. As situações executadas do CIGAM também ficam fora. Peças são associadas por produto e variação do GC; linhas avulsas sem produto cadastrado não são associadas por nome.
 
-Validação real: 3.057 OS em 31 páginas; 65 OS não executadas com 291 linhas de produtos cadastrados, das quais 56 ainda não debitadas. É um retrato da consulta, não um número fixo.
+Reservas locais ainda sem baixa são consideradas. A consulta é repetida antes de reservar e antes de concluir o Checkout; consulta incompleta bloqueia a ação.
+
+Validação real: 3.057 OS em 31 páginas; cinco OS nas situações autorizadas e ainda sem baixa, com 43 linhas de produtos. Nenhuma das 16 OS apontadas nas imagens aparece no compromisso. É um retrato da consulta, não um número fixo.
 
 ## Automação
 

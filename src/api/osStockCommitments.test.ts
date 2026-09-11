@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
-import { assertStockConflict, commitmentFor, pendingOsLines, readAllOsCommitments } from './osStockCommitments';
+import { assertStockConflict, commitmentFor, pendingOsLines, readAllOsCommitments, STOCK_COMMITMENT_STATUSES } from './osStockCommitments';
 
 const os = (id: string, status = 'PEDIDO EM CONFERENCIA', debited = '0', variation = 'v') => ({
   id, codigo: id, nome_cliente: 'Cliente', nome_situacao: status, situacao_estoque: debited,
@@ -12,16 +12,22 @@ describe('compromissos globais de estoque', () => {
     expect(() => assertStockConflict(1, 1, 0, rows, 'p', 'v', '100')).toThrow('#200');
     expect(() => assertStockConflict(2, 1, 0, rows, 'p', 'v', '100')).not.toThrow();
   });
-  it('não conta executadas ou canceladas, mas conta NÃO EXECUTADO', () => {
+  it('não conta executadas, canceladas ou situações fora das seis autorizadas', () => {
     expect(pendingOsLines(os('100', 'EXECUTADO - AGUARDANDO PAGAMENTO'))).toEqual([]);
     expect(pendingOsLines(os('100', 'Cancelada - Uso em OS'))).toEqual([]);
     expect(pendingOsLines(os('8883', 'CHAMADO FECHADO - FATURADO'))).toEqual([]);
-    expect(pendingOsLines(os('100', 'NÃO EXECUTADO'))).toHaveLength(1);
+    expect(pendingOsLines(os('100', 'NÃO EXECUTADO'))).toEqual([]);
+    expect(pendingOsLines(os('100', 'RETIRADA PELO TECNICO', '0'))).toEqual([]);
   });
-  it('mostra a OS aguardando execução já baixada sem descontar duas vezes do saldo do GC', () => {
-    const rows = pendingOsLines(os('100', 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO', '1'));
-    expect(commitmentFor(rows, 'p', 'v')).toMatchObject({ quantity: 1, outstanding: 0 });
-    expect(() => assertStockConflict(1, 1, 0, rows, 'p', 'v')).not.toThrow();
+  it('considera somente as seis situações indicadas e nenhuma OS que já baixou estoque', () => {
+    expect(STOCK_COMMITMENT_STATUSES.size).toBe(6);
+    for (const status of STOCK_COMMITMENT_STATUSES) {
+      expect(pendingOsLines(os('100', status, '0'))).toHaveLength(1);
+      const rows = pendingOsLines(os('100', status, '1'));
+      expect(commitmentFor(rows, 'p', 'v')).toEqual({ sources: [], quantity: 0, outstanding: 0 });
+    }
+    for (const code of ['10213', '10179', '10098']) expect(pendingOsLines(os(code, 'RETIRADA PELO TECNICO', '1'))).toEqual([]);
+    expect(pendingOsLines(os('9618', 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO', '1'))).toEqual([]);
   });
   it('exclui as OS já executadas do CIGAM da quantidade e da lista, mesmo sem baixa GC', () => {
     for (const debited of ['0', '1']) {

@@ -78,6 +78,7 @@ export interface PartialWriteoffBatch {
 }
 
 export interface PartialWriteoffOperation {
+  flow_mode?: 'partial_execution' | 'reservation';
   id: string;
   budget_id: string;
   budget_code: string;

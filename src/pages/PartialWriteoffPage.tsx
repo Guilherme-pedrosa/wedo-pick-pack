@@ -65,6 +65,14 @@ const statusLabels: Record<string, string> = {
   reconciliation_required: 'Reconciliação necessária',
 };
 
+function operationStatusLabel(operation: PartialWriteoffOperation) {
+  if (operation.flow_mode === 'reservation') {
+    if (['awaiting_execution', 'ready_to_consolidate'].includes(operation.status)) return 'Reserva completa — preparando OS';
+    if (operation.status === 'completed') return 'Reserva transferida para a OS';
+  }
+  return statusLabels[operation.status] || operation.status;
+}
+
 function fmtQty(value: number | string | null | undefined) {
   return Number(value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 6 });
 }
@@ -402,7 +410,7 @@ export default function PartialWriteoffPage() {
         toast.warning(`Atenção: ${divergent.map(item => `#${item.documentCode || item.documentId || item.sequence} (${item.state})`).join(', ')}`, { duration: 10000 });
       }
       const operation = await unlockPartialReconciliation(selected.id);
-      toast.success(`Consolidação retomada. Novo status: ${statusLabels[operation.status] || operation.status}.`);
+      toast.success(`Consolidação retomada. Novo status: ${operationStatusLabel(operation)}.`);
       await refresh();
     } catch (error) {
       toast.error(friendlyError(error));
@@ -552,7 +560,7 @@ export default function PartialWriteoffPage() {
       await preparePartialBatch(selected.id, requestedItems, batchRequestKey.current as string);
       batchRequestKey.current = null;
       await refresh();
-      toast.success('Documento auxiliar criado. O lote já está na fila do Checkout.');
+      toast.success(selected.flow_mode === 'reservation' ? 'Reserva aplicada no GC. Ao completar todas as peças, a OS integral é liberada para Checkout.' : 'Documento auxiliar criado. O lote já está na fila do Checkout.');
       navigate('/checkout');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -755,7 +763,7 @@ export default function PartialWriteoffPage() {
                   >
                     <div className="flex items-center justify-between gap-2 pr-7">
                       <span className="font-semibold">#{operation.budget_code}</span>
-                      <Badge variant="outline" className={statusClass(operation.status)}>{statusLabels[operation.status] || operation.status}</Badge>
+                      <Badge variant="outline" className={statusClass(operation.status)}>{operationStatusLabel(operation)}</Badge>
                     </div>
                     <p className="mt-1 truncate text-sm">{operation.client_name}</p>
                     <p className="text-xs text-muted-foreground">{operation.document_type === 'os' ? 'Ordem de Serviço' : 'Venda'} · {fmtDate(operation.updated_at)}</p>
@@ -813,7 +821,7 @@ export default function PartialWriteoffPage() {
                       <Download className="h-4 w-4" />
                       Exportar
                     </Button>
-                    <Badge variant="outline" className={statusClass(selected.status)}>{statusLabels[selected.status] || selected.status}</Badge>
+                    <Badge variant="outline" className={statusClass(selected.status)}>{operationStatusLabel(selected)}</Badge>
                     {selected.status !== 'cancelled' && selected.status !== 'completed' && (
                       <Button
                         variant="outline"
@@ -892,7 +900,7 @@ export default function PartialWriteoffPage() {
                       <tr>
                         <th className="px-3 py-2 text-left">Produto</th>
                         <th className="px-3 py-2 text-right">Solicitado</th>
-                        <th className="px-3 py-2 text-right">Já retirado</th>
+                        <th className="px-3 py-2 text-right">{selected.flow_mode === 'reservation' ? 'Reservado no GC' : 'Já retirado'}</th>
                         <th className="px-3 py-2 text-right">Reservado nesta OS</th>
                         <th className="px-3 py-2 text-right">Pendente</th>
                         <th className="px-3 py-2 text-right">Saldo físico GC</th>
@@ -1009,11 +1017,11 @@ export default function PartialWriteoffPage() {
                   <div className="flex flex-col items-start justify-between gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center">
                     <div>
                       <p className="font-medium">Criar o próximo lote</p>
-                      <p className="text-sm text-muted-foreground">O documento auxiliar aparecerá no Checkout e só movimentará estoque depois da conferência completa.</p>
+                      <p className="text-sm text-muted-foreground">{selected.flow_mode === 'reservation' ? 'A reserva retira as peças da disponibilidade no GC, sem tarefa Auvo nem execução. Com todas as peças reservadas, a OS integral entra no Checkout.' : 'O documento auxiliar aparecerá no Checkout e só movimentará estoque depois da conferência completa.'}</p>
                     </div>
                     <Button onClick={handlePrepare} disabled={preparing || requestedItems.length === 0 || stockQuery.isLoading || !commitmentsQuery.data || commitmentsQuery.isError}>
                       {preparing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
-                      Enviar ao Checkout
+                      {selected.flow_mode === 'reservation' ? 'Reservar peças' : 'Enviar ao Checkout'}
                     </Button>
                   </div>
                 )}
@@ -1059,7 +1067,7 @@ export default function PartialWriteoffPage() {
                               >
                                 Tarefa Auvo #{batch.auvo_task_id}
                               </a>
-                            ) : (
+                            ) : selected.flow_mode === 'reservation' ? <p className="text-xs text-muted-foreground">Reserva sem tarefa Auvo e sem execução</p> : (
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-xs text-destructive">
                                   {batch.auvo_task_error ? `Tarefa Auvo não criada: ${batch.auvo_task_error}` : 'Sem tarefa Auvo vinculada'}
@@ -1086,7 +1094,7 @@ export default function PartialWriteoffPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? 'Baixa aplicada' : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
+                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'confirmed' ? (selected.flow_mode === 'reservation' ? 'Reserva aplicada' : 'Baixa aplicada') : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
                             {!['confirmed', 'cancelled'].includes(batch.status) && (
                               <Button
                                 variant="outline"
@@ -1112,17 +1120,15 @@ export default function PartialWriteoffPage() {
                 {selected.status === 'awaiting_execution' && (
                   <Alert className="border-amber-200 bg-amber-50">
                     <ClipboardCheck className="h-4 w-4" />
-                    <AlertTitle>Todas as baixas realizadas — aguardando última execução</AlertTitle>
+                    <AlertTitle>{selected.flow_mode === 'reservation' ? 'Reserva completa — preparando OS integral' : 'Todas as baixas realizadas — aguardando última execução'}</AlertTitle>
                     <AlertDescription>
-                      As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua
-                      vinculada ao orçamento #{selected.budget_code}. A conciliação final permanece
-                      bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.
-                      {(selected.execution_documents || []).filter(d => !d.executed).map(d => (
+                      {selected.flow_mode === 'reservation' ? 'As peças estão reservadas no GC. A rotina confere a reserva integral e transfere o compromisso para a OS de Checkout, sem criar tarefa Auvo ou execução.' : `As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua vinculada ao orçamento #${selected.budget_code}. A conciliação final permanece bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.`}
+                      {(selected.execution_documents || []).filter(d => selected.flow_mode === 'reservation' ? !d.stockApplied : !d.executed).map(d => (
                         <p key={d.documentId} className="mt-2">OS #{d.documentCode}: {d.statusName}</p>
                       ))}
                       {executionQuery.error && <p className="mt-2 text-red-700">Falha na consulta: {friendlyError(executionQuery.error)} A consolidação continua bloqueada.</p>}
                       <Button variant="outline" className="mt-3" disabled={executionQuery.isFetching} onClick={() => executionQuery.refetch()}>
-                        {executionQuery.isFetching && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Verificar última execução
+                        {executionQuery.isFetching && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{selected.flow_mode === 'reservation' ? 'Verificar reservas' : 'Verificar última execução'}
                       </Button>
                     </AlertDescription>
                   </Alert>
@@ -1133,9 +1139,9 @@ export default function PartialWriteoffPage() {
                     <div className="flex items-start gap-2">
                       <CheckCircle2 className="mt-0.5 h-5 w-5 text-blue-700" />
                       <div>
-                        <p className="font-semibold">Todas as peças foram retiradas</p>
+                        <p className="font-semibold">{selected.flow_mode === 'reservation' ? 'Todas as peças estão reservadas' : 'Todas as peças foram retiradas'}</p>
                         <p className="text-sm text-muted-foreground">
-                          {operationIsExistingSale(selected)
+                          {selected.flow_mode === 'reservation' ? 'A OS integral entra na fila de Checkout antes de liberar os auxiliares, mantendo as peças comprometidas para este orçamento.' : operationIsExistingSale(selected)
                             ? 'Agora os auxiliares serão compensados e a venda original receberá a baixa definitiva de estoque, mantendo o financeiro que já existe.'
                             : 'As execuções foram conferidas. A OS integral será criada com as tarefas Auvo existentes; depois os auxiliares serão compensados e receberão a referência da OS definitiva.'}
                         </p>

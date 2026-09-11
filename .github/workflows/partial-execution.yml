@@ -1,0 +1,23 @@
+name: Conferir execuções e consolidar baixas parciais
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '2-57/5 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: partial-execution-production
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Conferir GC e consolidar documentos elegíveis
+        run: node scripts/partial-execution-worker.mjs
+        env:
+          PARTIAL_EXECUTION_TOKEN: ${{ secrets.PARTIAL_EXECUTION_TOKEN }}

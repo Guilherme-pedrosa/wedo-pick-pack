@@ -694,6 +694,14 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
 
   await syncOriginalBudgetPartialStatus(operation, batchId, auth);
 
+  if (operation.flow_mode === 'reservation') {
+    const reserved = await handleConfirmBatch({ batch_id: batchId }, auth);
+    if (reserved.items.every(i => Number(i.withdrawn_quantity) === Number(i.original_quantity) && Number(i.reserved_quantity) === 0)) {
+      return handleConsolidate({ operation_id: operationId }, auth);
+    }
+    return reserved;
+  }
+
   // Tarefa Auvo da entrega parcial: roda no servidor (credenciais Auvo são secretas).
   // Falha aqui NÃO invalida o lote — fica registrado o aviso para nova tentativa.
   try {
@@ -706,6 +714,9 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
 
 /** Cria a tarefa Auvo do lote via edge function (usa AUVO_API_KEY/TOKEN do servidor). */
 export async function createBatchAuvoTask(batchId: string, auvoCustomerId?: string): Promise<void> {
+  const { data: batch, error: batchError } = await cloud.from('partial_writeoff_batches').select('operation_id').eq('id', batchId).single();
+  if (batchError) throw batchError;
+  if ((await getOperationGraph(batch.operation_id)).flow_mode === 'reservation') throw new Error('Reserva de peças não cria tarefa Auvo.');
   const { data, error } = await supabase.functions.invoke('partial-writeoff', {
     body: { action: 'create_batch_task', batch_id: batchId, auvo_customer_id: auvoCustomerId },
   });
@@ -748,7 +759,7 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   if (!sameQuantities(quantityMap(expectedLines), quantityMap(currentDocument?.produtos || []))) {
     throw new Error('AUXILIARY_ITEMS_CHANGED');
   }
-  if (type === 'os') await assertCheckoutStock(String(batch.auxiliary_document_id), currentDocument, batchId);
+  if (type === 'os' && String(currentDocument?.situacao_estoque) !== '1') await assertCheckoutStock(String(batch.auxiliary_document_id), currentDocument, batchId);
 
   const { data: claim, error: claimError } = await cloud.rpc('partial_writeoff_claim_confirmation', {
     p_batch_id: batchId,

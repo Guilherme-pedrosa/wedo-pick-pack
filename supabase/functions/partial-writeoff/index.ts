@@ -1145,6 +1145,7 @@ async function handleCreateBatchTask(body: any, auth: AuthContext) {
   if (!auth.profile.auvo_user_id) throw new Error('CONFIGURE_AUVO_USER_ID');
 
   const operation = await getOperationGraph(String(batch.operation_id));
+  if (operation.flow_mode === 'reservation') throw new Error('Reserva não cria tarefa Auvo.');
   const { data: batchItems, error: itemsError } = await service
     .from('partial_writeoff_batch_items')
     .select('quantity, partial_writeoff_items(*)')

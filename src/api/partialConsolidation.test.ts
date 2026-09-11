@@ -19,7 +19,7 @@ function fixture() {
   let ambiguousPost = false;
   let corruptCreated = false;
   const ports: ConsolidationPorts = {
-    reload: async () => structuredClone(operation), settings: async () => ({ os_waiting_status_id: 'waiting', os_cancel_status_id: 'cancel' }),
+    reload: async () => structuredClone(operation), settings: async () => ({ os_waiting_status_id: 'waiting', os_cancel_status_id: 'cancel', os_stock_status_id: 'reserve' }),
     rpc: async (name, p) => {
       calls.push(name);
       if (name === 'partial_writeoff_historical_tasks') return ['30'];
@@ -33,7 +33,7 @@ function fixture() {
     },
     gc: async (path, method = 'GET', payload: any) => {
       calls.push(`${method} ${path}`);
-      if (path === '/api/situacoes_ordens_servicos') return { data: [{ id: 'executed', nome: aux.nome_situacao }] };
+      if (path === '/api/situacoes_ordens_servicos') return { data: [{ id: 'executed', nome: 'EXECUTADO' }, { id: 'waiting', nome: 'PEDIDO EM CONFERENCIA' }, { id: 'reserve', nome: 'Baixa pra reserva de peças - Aguardando Compra' }] };
       if (path === '/api/atributos_ordens_servicos') return { data: [] };
       if (path === '/api/orcamentos/b') {
         if (method === 'PUT') Object.assign(budget, payload);
@@ -107,5 +107,18 @@ describe('consolidação integral com preservação do histórico', () => {
     const payload = definitivePayload(f.operation, f.budget, [f.aux], [], 'waiting');
     expect(payload.servicos).toEqual(f.budget.servicos);
     expect(payload.observacoes_interna).toContain('Observação original');
+  });
+  it('transfere reserva completa para uma única OS de Checkout sem criar tarefa nem registrar execução', async () => {
+    const f=fixture();f.operation.flow_mode='reservation';f.operation.batches[0].auvo_task_id=null;
+    f.aux.situacao_id='reserve';f.aux.nome_situacao='Baixa pra reserva de peças - Aguardando Compra';
+    const originalRpc=f.ports.rpc;f.ports.rpc=(name,p)=>name==='partial_writeoff_historical_tasks'?Promise.resolve([]):originalRpc(name,p);
+    const result=await consolidateExecutedOs(f.operation,f.ports);
+    expect(result.status).toBe('completed');
+    expect(f.docs.final.situacao_id).toBe('waiting');
+    expect(f.docs.final.situacao_estoque).toBe('0');
+    expect(f.operation.execution_documents?.[0].executed).toBe(false);
+    expect(f.docs.final.atributos.some((a:any)=>a.atributo.atributo_id==='73344')).toBe(false);
+    expect(f.calls.filter(c=>c==='POST /api/ordens_servicos')).toHaveLength(1);
+    expect(f.calls.indexOf('POST /api/ordens_servicos')).toBeLessThan(f.calls.indexOf('PUT /api/ordens_servicos/aux'));
   });
 });

@@ -1,6 +1,7 @@
 export type GcRecord = Record<string, any>;
 
 export interface ConsolidationOperation {
+  flow_mode?: 'partial_execution' | 'reservation';
   id: string; budget_id: string; budget_code: string; status: string;
   budget_snapshot: GcRecord;
   definitive_document_id: string | null; definitive_document_code: string | null;

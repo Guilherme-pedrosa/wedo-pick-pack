@@ -42,6 +42,7 @@ import ReturnsSummaryCard from '@/components/dashboard/ReturnsSummaryCard';
 import PartialStockOpportunitiesCard from '@/components/dashboard/PartialStockOpportunitiesCard';
 import { getPartialStockOpportunities } from '@/api/partialStockOpportunities';
 import { fetchOsStockCommitments } from '@/api/osStockCommitments';
+import { purchaseSnapshotStale } from '../../supabase/functions/_shared/purchaseFreshness';
 
 type AlertLevel = 'critical' | 'warning' | 'info';
 
@@ -259,6 +260,13 @@ function buildAttentionItems(
   integrationError: boolean,
 ): AttentionItem[] {
   const items: AttentionItem[] = [];
+  if (purchaseSnapshotStale(cloud.purchases?.scannedAt)) {
+    items.push({ id: 'purchase-scan-stale', level: 'critical', title: 'Lista automática de compras desatualizada',
+      description: cloud.purchases?.scannedAt
+        ? `Última varredura concluída em ${formatDateTime(cloud.purchases.scannedAt)}. Atualize a lista antes de comprar.`
+        : 'Ainda não há uma varredura de compras concluída. As necessidades não estão confirmadas.',
+      href: '/compras', action: 'Atualizar lista de compras' });
+  }
 
   if (cloud.sync.stalledIncrementals.length > 0) {
     items.push({

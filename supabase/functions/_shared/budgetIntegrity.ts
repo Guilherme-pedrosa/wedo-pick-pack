@@ -27,7 +27,13 @@ export function documentDifferences(source: GcRecord, actual: GcRecord): string[
         if (operational.has(key) || key.startsWith('_partial_') || (path && key === 'id')) continue;
         visit(expected[key], received?.[key], path ? `${path}.${key}` : key);
       }
-    } else if (scalar(expected) !== scalar(received)) differences.push(path);
+    } else {
+      // O GC normaliza desconto vazio para zero depois de salvar. Isso não muda
+      // o valor comercial; descontos não nulos continuam protegidos.
+      const discount = /(?:^|\.)(desconto_valor|desconto_porcentagem)$/.test(path);
+      const canonical = (v: unknown) => discount && String(v ?? '').trim() === '' ? '0' : scalar(v);
+      if (canonical(expected) !== canonical(received)) differences.push(path);
+    }
   };
   visit(source, actual, '');
   return differences;

@@ -9,6 +9,11 @@ const budget = () => ({ id: '6438', cliente_id: 'cliente', valor_total: '9900.00
   servicos: [{ servico: { servico_id: 'instalacao', quantidade: '16.0000', valor_venda: '155.0000' } }] });
 
 describe('preservação integral do orçamento', () => {
+  it('aceita desconto vazio normalizado para zero, mas bloqueia desconto real e preço apagado', () => {
+    expect(documentDifferences({ desconto_valor: '', desconto_porcentagem: null }, { desconto_valor: '0.0000', desconto_porcentagem: 0 })).toEqual([]);
+    expect(documentDifferences({ desconto_valor: '' }, { desconto_valor: '1' })).toEqual(['desconto_valor']);
+    expect(documentDifferences({ valor_venda: '' }, { valor_venda: 0 })).toEqual(['valor_venda']);
+  });
   it('bloqueia quantidade reduzida de 3 para 1 mesmo com total monetário igual', () => {
     const source = budget(), changed = budget(); changed.produtos[0].produto.quantidade = '1';
     expect(() => assertBudgetUnchanged(source, changed)).toThrow('produtos[0].produto.quantidade');

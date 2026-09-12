@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
 import { getOS, getVenda, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
+import { auditPartialDocuments } from '@/api/partialWriteoff';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -463,6 +464,7 @@ function SeparationCard({
   stockRegression?: boolean;
 }) {
   const isReturn = sep.invalidated && sep.invalidated_reason?.startsWith('DEVOLUÇÃO:');
+  const queryClient = useQueryClient();
   const isInvalid = sep.invalidated && !isReturn;
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
@@ -512,14 +514,12 @@ function SeparationCard({
 
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
-        if (order) {
-          await updateOSStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
-        }
+        if (!order) throw new Error('OS não encontrada no GC. A devolução não foi registrada.');
+        await updateOSStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
       } else {
         const order = await getVenda(sep.order_id);
-        if (order) {
-          await updateVendaStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
-        }
+        if (!order) throw new Error('Venda não encontrada no GC. A devolução não foi registrada.');
+        await updateVendaStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
       }
 
       if (returnMotivo === 'agenda') {
@@ -547,6 +547,16 @@ function SeparationCard({
         const reason = `DEVOLUÇÃO: ${fullReason}`;
         const ok = await invalidateSeparation(sep.id, reason);
         if (ok) {
+          const { data: partials, error: partialError } = await supabase.from('partial_writeoff_batches')
+            .select('operation_id').eq('auxiliary_document_id', sep.order_id).eq('auxiliary_document_type', sep.order_type);
+          if (partialError) throw new Error('Devolução registrada; não foi possível sincronizar o saldo da baixa parcial. Audite o documento na baixa parcial.');
+          for (const operationId of new Set((partials || []).map(b => b.operation_id))) {
+            const audits = await auditPartialDocuments(operationId);
+            const failed = audits.find(a => a.state === 'error');
+            if (failed) throw new Error(`Devolução registrada; saldo parcial pendente: ${failed.message}`);
+          }
+          queryClient.invalidateQueries({ queryKey: ['partial-writeoff-operations'] });
+          queryClient.invalidateQueries({ queryKey: ['operations-dashboard'] });
           toast.success('Devolução registrada e status alterado no GC');
           setReturnDialogOpen(false);
           setReturnReason('');

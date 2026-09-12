@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { scanPurchases, BUDGET_STATUS_NAMES, PURCHASE_STATUS_NAMES } from '../supabase/functions/_shared/purchaseScan.ts';
 import { normalizedStatus } from '../supabase/functions/_shared/partialExecution.ts';
+import { purchaseScanDue } from '../supabase/functions/_shared/purchaseFreshness.ts';
 
 const env = Object.fromEntries(readFileSync(new URL('../.env', import.meta.url), 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l)).map(l => {
   const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1).replace(/^["']|["']$/g, '')];
@@ -33,6 +34,13 @@ const statuses = async (path, names) => {
   return ids;
 };
 const started = Date.now();
+if (process.env.PURCHASE_SCAN_FORCE !== 'true' && !process.argv.includes('--dry-run')) {
+  const status = await api('status');
+  if (!purchaseScanDue(status.last_success_at)) {
+    console.log(`Lista atual: última varredura ${status.last_success_at}. Nenhuma consulta ao GC necessária.`);
+    process.exit(0);
+  }
+}
 const budgetIds = await statuses('/api/situacoes_orcamentos?limite=100', BUDGET_STATUS_NAMES);
 const purchaseIds = await statuses('/api/situacoes_compras?limite=100', PURCHASE_STATUS_NAMES);
 let revision;

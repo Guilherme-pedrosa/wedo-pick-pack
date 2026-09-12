@@ -1194,6 +1194,24 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
       const enriched = { ...base, situacaoId, situacaoNome, documentCode: String(document.codigo || base.documentCode || '') };
       const debited = String(document.situacao_estoque) === '1';
 
+      if (base.batchStatus === 'confirmed') {
+        const { data: entries, error: entriesError } = await cloud.from('partial_writeoff_batch_items')
+          .select('quantity, partial_writeoff_items(*)').eq('batch_id', batch.id);
+        if (entriesError) throw entriesError;
+        const expectedLines = (entries || []).map((entry: any) => selectedLine(entry.partial_writeoff_items.line_snapshot, Number(entry.quantity)));
+        if (!debited || !sameQuantities(quantityMap(expectedLines), quantityMap(document.produtos || []))) {
+          // A OS pode ter sido corrigida depois de uma devolução. Só desfaz o
+          // saldo local com comprovante de devolução; esta RPC não escreve no GC.
+          const { data: returned, error: returnError } = await cloud.rpc('partial_writeoff_reconcile_return', {
+            p_batch_id: batch.id, p_gc_document: document,
+          });
+          if (returnError) throw new Error(`Quantidades da OS/venda diferem da baixa registrada: ${returnError.message}. Confira a devolução antes de continuar.`);
+          results.push({ ...enriched, batchStatus: returned?.batch_status || base.batchStatus, state: 'ok',
+            message: `Devolução conferida no GC: ${returned?.returned_quantity || 0} unidade(s) voltaram ao saldo pendente da baixa parcial.` });
+          continue;
+        }
+      }
+
       if (cancelId && situacaoId === cancelId) {
         results.push({ ...enriched, state: 'cancelled', message: `Documento cancelado no GestãoClick ("${situacaoNome}").` });
       } else if (debited && ['awaiting_checkout', 'reconciliation_required'].includes(base.batchStatus)) {

@@ -120,6 +120,18 @@ describe('confirmação local das baixas já aplicadas no GC', () => {
   it('não registra novamente lotes já confirmados', async () => {
     batch.status = 'confirmed'; await audit(); expect(mock.rpc).not.toHaveBeenCalled();
   });
+  it('reconcilia peças devolvidas de lote confirmado sem reenviar baixa ao GC', async () => {
+    batch.status = 'confirmed'; document.produtos = [];
+    mock.rpc.mockResolvedValue({ data: { returned_quantity: 2, batch_status: 'confirmed' }, error: null });
+    expect(await audit()).toMatchObject({ state: 'ok', message: expect.stringContaining('2 unidade(s) voltaram') });
+    expect(mock.rpc).toHaveBeenCalledExactlyOnceWith('partial_writeoff_reconcile_return', { p_batch_id: 'batch', p_gc_document: document });
+    expect(mock.invoke.mock.calls.every(c => c[1].body.method === 'GET')).toBe(true);
+  });
+  it('não afirma sucesso para lote confirmado alterado sem comprovante de devolução', async () => {
+    batch.status = 'confirmed'; document.produtos = [];
+    mock.rpc.mockResolvedValue({ data: null, error: { message: 'RETURN_RECEIPT_REQUIRED' } });
+    expect(await audit()).toMatchObject({ state: 'error', message: expect.stringContaining('RETURN_RECEIPT_REQUIRED') });
+  });
   it('bloqueia divergência no orçamento original antes de confirmar saldos', async () => {
     source.produtos[0].produto.quantidade = '3';
     expect(await audit()).toMatchObject({ state: 'error' });

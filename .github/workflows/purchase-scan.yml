@@ -2,7 +2,9 @@ name: Atualizar compras incluindo saldos de baixas parciais
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */3 * * *'
+    # Verifica a cada hora fora do pico; o worker só varre se o último sucesso
+    # tiver pelo menos 3h. Uma janela perdida não espera outras três horas.
+    - cron: '17 * * * *'
 permissions:
   contents: read
 concurrency:
@@ -21,3 +23,4 @@ jobs:
         run: node scripts/purchase-scan-worker.mjs
         env:
           PARTIAL_EXECUTION_TOKEN: ${{ secrets.PARTIAL_EXECUTION_TOKEN }}
+          PURCHASE_SCAN_FORCE: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}

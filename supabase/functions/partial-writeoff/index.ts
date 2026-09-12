@@ -1,5 +1,6 @@
 import { GC_API_USER_ID, installGcUsuarioId } from "../_shared/gc-user.ts";
 import { wantsPartialAuvoTask } from "../_shared/partialAuvo.ts";
+import { resolvePartialCustomer } from "../_shared/partialCustomer.ts";
 import { budgetTechnicalHours } from "../_shared/technicalHours.ts";
 import { assertBudgetUnchanged, assertOperationQuantities } from "../_shared/budgetIntegrity.ts";
 import { assertStatusOnlyChange, writableDocument } from "../_shared/partialConsolidation.ts";
@@ -383,7 +384,14 @@ async function createPartialAuvoTask(
   }
 
   if (!Number.isFinite(customerId) || customerId <= 0) {
-    throw new Error("Cliente Auvo não identificado para a tarefa parcial");
+    customerId = await resolvePartialCustomer(String(operation.client_id), {
+      customer: async id => (await gcRequest(`/api/clientes/${encodeURIComponent(id)}`)).data,
+      lookup: async cnpj => {
+        const { data, error } = await service.functions.invoke('auvo-lookup-customer', { body: { action: 'search-by-cnpj', cnpj } });
+        if (error || data?.error || !Array.isArray(data?.customers)) throw new Error('Não foi possível conferir o cliente no Auvo. Tente novamente.');
+        return data.customers;
+      },
+    });
   }
 
   const equipText = budgetEquipmentText(budget);
@@ -1409,7 +1417,7 @@ Deno.serve(async (req: Request) => {
     const action = String(body?.action || "");
     if (action === "rules")
       return json({
-        version: "2026-09-11-audit-v3",
+        version: "2026-09-12-audit-v4",
         saleQuestionnaire: 224444,
         taskCreationLock: true,
         legacyMutationsDisabled: true,

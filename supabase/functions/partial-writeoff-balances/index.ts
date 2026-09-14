@@ -1,3 +1,4 @@
+// Balance sync: confirmed withdrawal and execution statuses (2026-09-14).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import {
   normalizeBudgetReference,
@@ -50,26 +51,30 @@ Deno.serve(async (req) => {
     const budgets = sanitizeBudgets(body?.budgets);
     if (budgets.length === 0) return json({ ok: true, balances: [], unmatched: [] });
 
-    const service = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { persistSession: false, autoRefreshToken: false } },
-    );
+    const service = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
     const ids = [...new Set(budgets.map((budget) => budget.id).filter(Boolean))];
     const codes = [...new Set(budgets.map((budget) => budget.code).filter(Boolean))];
 
     const queries = [];
     if (ids.length > 0) {
-      queries.push(service.from("partial_writeoff_operations")
-        .select("id,budget_id,budget_code,status,updated_at")
-        .in("budget_id", ids)
-        .order("updated_at", { ascending: false }));
+      queries.push(
+        service
+          .from("partial_writeoff_operations")
+          .select("id,budget_id,budget_code,status,updated_at")
+          .in("budget_id", ids)
+          .order("updated_at", { ascending: false }),
+      );
     }
     if (codes.length > 0) {
-      queries.push(service.from("partial_writeoff_operations")
-        .select("id,budget_id,budget_code,status,updated_at")
-        .in("budget_code", codes)
-        .order("updated_at", { ascending: false }));
+      queries.push(
+        service
+          .from("partial_writeoff_operations")
+          .select("id,budget_id,budget_code,status,updated_at")
+          .in("budget_code", codes)
+          .order("updated_at", { ascending: false }),
+      );
     }
 
     const queryResults = await Promise.all(queries);
@@ -78,7 +83,8 @@ Deno.serve(async (req) => {
 
     const operationsById = new Map<string, PartialBalanceOperation>();
     for (const result of queryResults) {
-      for (const operation of (result.data ?? []) as PartialBalanceOperation[]) operationsById.set(operation.id, operation);
+      for (const operation of (result.data ?? []) as PartialBalanceOperation[])
+        operationsById.set(operation.id, operation);
     }
     const operations = newestBalanceOperationByBudget([...operationsById.values()]);
     const operationIds = operations.map((operation) => operation.id);
@@ -88,7 +94,9 @@ Deno.serve(async (req) => {
       itemRows = await readAllBalanceRows(async (from, to) => {
         const { data, error } = await service
           .from("partial_writeoff_item_balances")
-          .select("operation_id,line_key,product_id,variation_id,product_name,product_code,unit,original_quantity,withdrawn_quantity,pending_purchase_quantity")
+          .select(
+            "operation_id,line_key,product_id,variation_id,product_name,product_code,unit,original_quantity,withdrawn_quantity,pending_purchase_quantity",
+          )
           .in("operation_id", operationIds)
           .order("operation_id")
           .order("line_key")
@@ -114,8 +122,8 @@ Deno.serve(async (req) => {
     }));
     const matchedIds = new Set(balances.map((balance) => balance.budget_id).filter(Boolean));
     const matchedCodes = new Set(balances.map((balance) => balance.budget_code).filter(Boolean));
-    const unmatched = budgets.filter((budget) =>
-      !(budget.id && matchedIds.has(budget.id)) && !(budget.code && matchedCodes.has(budget.code))
+    const unmatched = budgets.filter(
+      (budget) => !(budget.id && matchedIds.has(budget.id)) && !(budget.code && matchedCodes.has(budget.code)),
     );
 
     console.log(`[partial-writeoff-balances] ${balances.length}/${budgets.length} orçamento(s) localizado(s)`);

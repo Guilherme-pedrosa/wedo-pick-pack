@@ -23,14 +23,21 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
   const payload = options?.body ? JSON.parse(options.body) : undefined;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController();
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), GC_PROXY_TIMEOUT_MS);
+        timeout = setTimeout(() => {
+          // End this browser request before starting another attempt. A race
+          // alone leaves the old fetch running and duplicates traffic to GC.
+          controller.abort();
+          reject(new Error('REQUEST_TIMEOUT'));
+        }, GC_PROXY_TIMEOUT_MS);
       });
 
       const invokePromise = supabase.functions.invoke('gc-proxy', {
         body: { path, method, payload },
+        signal: controller.signal,
       });
 
       const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
@@ -38,7 +45,7 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
 
       if (error) {
         const msg = error.message || 'Erro de conexão com o servidor';
-        if (msg.includes('Failed to fetch')) throw new Error('NETWORK_ERROR');
+        if (error.name === 'FunctionsFetchError' || /Failed to fetch|Failed to send/i.test(msg)) throw new Error('NETWORK_ERROR');
         throw new Error(msg);
       }
 
@@ -72,7 +79,7 @@ async function apiRequest<T>(path: string, options?: { method?: string; body?: s
 
       return response as T;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'UNKNOWN_ERROR';
+      const message = controller.signal.aborted ? 'REQUEST_TIMEOUT' : err instanceof Error ? err.message : 'UNKNOWN_ERROR';
       const retryable = isGet && (message === 'REQUEST_TIMEOUT' || message === 'NETWORK_ERROR' || message === 'RATE_LIMIT');
 
       if (retryable && attempt < maxAttempts - 1) {
@@ -371,32 +378,25 @@ export async function getProductStock(
   variacaoId?: string,
   options?: { forceFresh?: boolean },
 ): Promise<ProductStockInfo | null> {
-  const MAX_ATTEMPTS = 3;
-  let lastErr: unknown = null;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    try {
-      const res = await apiRequest<{
-        data: {
-          id: string;
-          estoque: string | number;
-          valor_custo?: string | number;
-          variacoes?: Array<{ variacao: { id: string | number; estoque: string | number } }>;
-        };
-      }>(`/api/produtos/${produtoId}${options?.forceFresh ? `?cache_bust=${Date.now()}-${attempt}` : ''}`);
+  // apiRequest already owns the retry budget. Retrying it here turned three
+  // failed GETs into nine and could hold a single product for three minutes.
+  try {
+    const res = await apiRequest<{
+      data: {
+        id: string;
+        estoque: string | number;
+        valor_custo?: string | number;
+        variacoes?: Array<{ variacao: { id: string | number; estoque: string | number } }>;
+      };
+    }>(`/api/produtos/${produtoId}${options?.forceFresh ? `?cache_bust=${Date.now()}` : ''}`);
 
-      const parsed = parseProductStockResponse(res, produtoId, variacaoId);
-      if (!parsed) throw new Error('EMPTY_RESPONSE');
-      return parsed;
-    } catch (err) {
-      lastErr = err;
-      const msg = err instanceof Error ? err.message : String(err);
-      const retryable = /Failed to send|NETWORK|TIMEOUT|RATE_LIMIT|fetch/i.test(msg);
-      if (!retryable || attempt === MAX_ATTEMPTS - 1) break;
-      await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
-    }
+    const parsed = parseProductStockResponse(res, produtoId, variacaoId);
+    if (!parsed) throw new Error('EMPTY_RESPONSE');
+    return parsed;
+  } catch (err) {
+    console.warn(`[STOCK] Failed to fetch stock for product ${produtoId}:`, err instanceof Error ? err.message : err);
+    return null;
   }
-  console.warn(`[STOCK] Failed to fetch stock for product ${produtoId}:`, lastErr instanceof Error ? lastErr.message : lastErr);
-  return null;
 }
 
 /** Check stock for a list of orders. Returns Set of order IDs that have full stock + conflicts. */
@@ -596,11 +596,19 @@ interface GCProductDetail {
   atributos?: Array<{ atributo: GCProductExtraField }>;
 }
 
+function productLookupId(value: unknown): string {
+  const id = String(value ?? '').trim();
+  return ['', '0', 'null', 'undefined'].includes(id.toLowerCase()) ? '' : id;
+}
+
 async function getProductDetail(produtoId: string, forceFresh = false): Promise<GCProductDetail | null> {
+  const requestedId = productLookupId(produtoId);
+  // A missing product ID must never turn a detail lookup into a catalog GET.
+  if (!requestedId) return null;
   try {
-    const res = await apiRequest<{ data: GCProductDetail & { Produto?: GCProductDetail; produto?: GCProductDetail } }>(`/api/produtos/${produtoId}${forceFresh ? `?cache_bust=${Date.now()}` : ''}`);
+    const res = await apiRequest<{ data: GCProductDetail & { Produto?: GCProductDetail; produto?: GCProductDetail } }>(`/api/produtos/${encodeURIComponent(requestedId)}${forceFresh ? `?cache_bust=${Date.now()}` : ''}`);
     const detail = res.data?.Produto || res.data?.produto || res.data;
-    return detail && String(detail.id) === produtoId ? detail : null;
+    return detail && !Array.isArray(detail) && String(detail.id) === requestedId ? detail : null;
   } catch {
     return null;
   }
@@ -608,19 +616,29 @@ async function getProductDetail(produtoId: string, forceFresh = false): Promise<
 
 export async function enrichOrderProducts(
   produtos: Array<{ produto: GCProdutoItem }>,
-  options?: { checkStock?: boolean; onStockWarning?: (message: string) => void },
+  options?: {
+    checkStock?: boolean;
+    onStockWarning?: (message: string) => void;
+    onProgress?: (products: Array<{ produto: GCProdutoItem }>) => void;
+  },
 ): Promise<Array<{ produto: GCProdutoItem }>> {
   if (isUsingMock() || !produtos?.length) return produtos;
 
   // Deduplicate produto_ids
-  const uniqueIds = [...new Set(produtos.map(p => p.produto.produto_id))];
+  const uniqueIds = [...new Set(produtos.map(p => productLookupId(p.produto.produto_id)).filter(Boolean))];
   
   // Fetch product details in batches of 3 (respect API rate limit of 3 req/s)
   const detailMap = new Map<string, GCProductDetail>();
   for (let i = 0; i < uniqueIds.length; i += 3) {
     const batch = uniqueIds.slice(i, i + 3);
-    const results = await Promise.all(batch.map(id => getProductDetail(id, options?.checkStock)));
-    results.forEach(d => { if (d) detailMap.set(d.id, d); });
+    await Promise.all(batch.map(async id => {
+      const detail = await getProductDetail(id, options?.checkStock);
+      if (!detail) return;
+      detailMap.set(id, detail);
+      // Make each code/location usable as soon as it arrives. A slower product
+      // must not hold back the products already loaded in this same batch.
+      options?.onProgress?.(withLoadedDetails());
+    }));
     if (i + 3 < uniqueIds.length) {
       await new Promise(r => setTimeout(r, 1100)); // respect rate limit
     }
@@ -635,66 +653,70 @@ export async function enrichOrderProducts(
       requested.set(key, { product: produto, variation, quantity: Number(produto.quantidade) + (requested.get(key)?.quantity || 0) });
     }
     for (const { product, variation, quantity } of requested.values()) {
-      const detail = detailMap.get(product.produto_id);
+      const detail = detailMap.get(productLookupId(product.produto_id));
       const stock = detail ? parseProductStockResponse({ data: detail }, product.produto_id, variation) : null;
       if (!stock) options.onStockWarning?.(`Saldo não consultado: ${product.nome_produto}.`);
       else if (quantity > stock.estoque) options.onStockWarning?.(`Estoque físico insuficiente: ${product.nome_produto} — solicitado ${quantity}, saldo GC ${stock.estoque}.`);
     }
   }
 
-  return produtos.map(({ produto }) => {
-    const detail = detailMap.get(produto.produto_id);
-    if (!detail) return { produto };
+  return withLoadedDetails();
 
-    // Find variation code if applicable
-    let codigoBarras = detail.codigo_barra || '';
-    const codigoProduto = detail.codigo_interno || '';
+  function withLoadedDetails() {
+    return produtos.map(({ produto }) => {
+      const detail = detailMap.get(productLookupId(produto.produto_id));
+      if (!detail) return { produto };
 
-    if (produto.variacao_id && detail.variacoes) {
-      const variacao = detail.variacoes.map((v: any) => v.variacao || v).find(v => String(v.id) === produto.variacao_id);
-      if (variacao?.codigo) {
-        if (!codigoBarras) codigoBarras = '';
+      // Find variation code if applicable
+      let codigoBarras = detail.codigo_barra || '';
+      const codigoProduto = detail.codigo_interno || '';
+
+      if (produto.variacao_id && detail.variacoes) {
+        const variacao = detail.variacoes.map((v: any) => v.variacao || v).find(v => String(v.id) === produto.variacao_id);
+        if (variacao?.codigo) {
+          if (!codigoBarras) codigoBarras = '';
+        }
       }
-    }
 
-    // Extract location fields from atributos (API returns atributos with nested atributo objects)
-    let localizacao_fisica = '';
-    let localizacao_rational = '';
+      // Extract location fields from atributos (API returns atributos with nested atributo objects)
+      let localizacao_fisica = '';
+      let localizacao_rational = '';
     
-    // Try atributos first (actual API format)
-    if (detail.atributos && Array.isArray(detail.atributos)) {
-      for (const item of detail.atributos) {
-        const campo: GCProductExtraField = 'atributo' in item ? item.atributo : item as any;
-        const desc = (campo.descricao || '').toLowerCase().trim();
-        if (desc.includes('localização física') || desc.includes('localizacao fisica')) {
-          localizacao_fisica = campo.conteudo || '';
-        } else if (desc.includes('localização rational') || desc.includes('localizacao rational')) {
-          localizacao_rational = campo.conteudo || '';
+      // Try atributos first (actual API format)
+      if (detail.atributos && Array.isArray(detail.atributos)) {
+        for (const item of detail.atributos) {
+          const campo: GCProductExtraField = 'atributo' in item ? item.atributo : item as any;
+          const desc = (campo.descricao || '').toLowerCase().trim();
+          if (desc.includes('localização física') || desc.includes('localizacao fisica')) {
+            localizacao_fisica = campo.conteudo || '';
+          } else if (desc.includes('localização rational') || desc.includes('localizacao rational')) {
+            localizacao_rational = campo.conteudo || '';
+          }
         }
       }
-    }
-    // Fallback to campos_extras if present
-    if (!localizacao_fisica && !localizacao_rational && detail.campos_extras && Array.isArray(detail.campos_extras)) {
-      for (const campo of detail.campos_extras) {
-        const desc = (campo.descricao || '').toLowerCase().trim();
-        if (desc.includes('localização física') || desc.includes('localizacao fisica')) {
-          localizacao_fisica = campo.conteudo || '';
-        } else if (desc.includes('localização rational') || desc.includes('localizacao rational')) {
-          localizacao_rational = campo.conteudo || '';
+      // Fallback to campos_extras if present
+      if (!localizacao_fisica && !localizacao_rational && detail.campos_extras && Array.isArray(detail.campos_extras)) {
+        for (const campo of detail.campos_extras) {
+          const desc = (campo.descricao || '').toLowerCase().trim();
+          if (desc.includes('localização física') || desc.includes('localizacao fisica')) {
+            localizacao_fisica = campo.conteudo || '';
+          } else if (desc.includes('localização rational') || desc.includes('localizacao rational')) {
+            localizacao_rational = campo.conteudo || '';
+          }
         }
       }
-    }
 
-    return {
-      produto: {
-        ...produto,
-        codigo_produto: codigoProduto,
-        codigo_barras: codigoBarras,
-        localizacao_fisica: localizacao_fisica || undefined,
-        localizacao_rational: localizacao_rational || undefined,
-      },
-    };
-  });
+      return {
+        produto: {
+          ...produto,
+          codigo_produto: codigoProduto,
+          codigo_barras: codigoBarras,
+          localizacao_fisica: localizacao_fisica || undefined,
+          localizacao_rational: localizacao_rational || undefined,
+        },
+      };
+    });
+  }
 }
 
 /** Fetch GC internal product codes (codigo_interno) for a list of product ids, respecting rate limits. */

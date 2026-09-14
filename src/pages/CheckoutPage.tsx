@@ -4,11 +4,13 @@ import OrderQueue from '@/components/checkout/OrderQueue';
 import ConferencePanel from '@/components/checkout/ConferencePanel';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useRestoredCheckoutMetadata } from '@/hooks/useRestoredCheckoutMetadata';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ClipboardList } from 'lucide-react';
 
 export default function CheckoutPage() {
+  useRestoredCheckoutMetadata();
   const [searchParams] = useSearchParams();
   const session = useCheckoutStore(s => s.session);
   const isMobile = useIsMobile();

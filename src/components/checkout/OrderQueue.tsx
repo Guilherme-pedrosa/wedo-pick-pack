@@ -259,6 +259,7 @@ export default function OrderQueue() {
         marker: linkedPartial.marker,
       } : undefined);
       void enrichOrderProducts(order.produtos, {
+        onProgress: products => applyProductMetadata(metadataRequestId, products, false),
         checkStock: String((order as any).situacao_estoque) !== '1',
         onStockWarning: message => {
           if (useCheckoutStore.getState().metadataRequestId === metadataRequestId) toast.warning(message, { duration: 10000 });

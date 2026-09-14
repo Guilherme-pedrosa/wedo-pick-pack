@@ -334,20 +334,31 @@ export async function forceDeletePartialOperation(operationId: string): Promise<
 
 
 export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]> {
-  const operations = await listPartialOperations();
-  return operations.filter(operation => !['completed', 'cancelled', 'consolidating'].includes(operation.status)).flatMap((operation) => operation.batches
-    .filter((batch) => ['awaiting_checkout', 'reconciliation_required'].includes(batch.status) && batch.auxiliary_document_id)
-    .map((batch) => ({
-      batchId: batch.id,
-      operationId: operation.id,
-      budgetCode: operation.budget_code,
-      marker: batch.marker,
-      type: batch.auxiliary_document_type,
-      documentId: String(batch.auxiliary_document_id),
-      documentCode: String(batch.auxiliary_document_code || ''),
-      clientName: operation.client_name,
-      createdAt: batch.created_at,
-    })));
+  // A fila não precisa de snapshots de orçamentos, saldos e histórico de todos
+  // os lotes. Evita esse tráfego em segundo plano enquanto o operador abre peças.
+  const entries: PartialCheckoutEntry[] = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase.from('partial_writeoff_batches')
+      .select('id, operation_id, marker, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, created_at, partial_writeoff_operations!inner(budget_code, client_name, status)')
+      .in('status', ['awaiting_checkout', 'reconciliation_required'])
+      .not('auxiliary_document_id', 'is', null)
+      .not('partial_writeoff_operations.status', 'in', '(completed,cancelled,consolidating)')
+      .order('created_at', { ascending: false }).order('id')
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(`Não foi possível carregar os lotes do Checkout: ${error.message}`);
+    for (const batch of data || []) {
+      const operation = batch.partial_writeoff_operations;
+      if (!operation || !batch.auxiliary_document_id) continue;
+      entries.push({
+        batchId: batch.id, operationId: batch.operation_id, budgetCode: operation.budget_code,
+        marker: batch.marker, type: batch.auxiliary_document_type as OrderType,
+        documentId: String(batch.auxiliary_document_id), documentCode: String(batch.auxiliary_document_code || ''),
+        clientName: operation.client_name, createdAt: batch.created_at,
+      });
+    }
+    if (!data || data.length < pageSize) return entries;
+  }
 }
 
 export async function findPartialBatchByDocument(type: OrderType, documentId: string): Promise<PartialCheckoutEntry | null> {

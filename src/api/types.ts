@@ -96,6 +96,7 @@ export interface PickingItem {
 
 export interface PickingSession {
   operatorUserId?: string;
+  productMetadataPending?: boolean;
   gcConfirmation?: { targetStatusId: string; targetStatusName: string; concludedAt: string };
   tipo: OrderType;
   refId: string;

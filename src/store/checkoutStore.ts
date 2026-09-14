@@ -20,7 +20,8 @@ interface CheckoutStore {
   concludedSessions: string[];
   config: CheckoutConfig;
   startSession: (tipo: OrderType, order: Order, partialWriteoff?: PickingSession['partialWriteoff']) => string;
-  applyProductMetadata: (requestId: string, products?: Order['produtos']) => void;
+  resumeProductMetadata: () => string | null;
+  applyProductMetadata: (requestId: string, products?: Order['produtos'], complete?: boolean) => void;
   confirmItem: (itemId: string, qtd?: number) => void;
   concludeSession: () => void;
   recordGCConfirmation: (confirmation: NonNullable<PickingSession['gcConfirmation']>) => void;
@@ -81,6 +82,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
 
         const session: PickingSession = {
           operatorUserId: get().config.operatorUserId,
+          productMetadataPending: true,
           tipo,
           refId: order.id,
           codigo: order.codigo,
@@ -98,7 +100,16 @@ export const useCheckoutStore = create<CheckoutStore>()(
         set({ session, productMetadataLoading: true, metadataRequestId });
         return metadataRequestId;
       },
-      applyProductMetadata: (requestId, products) => {
+      resumeProductMetadata: () => {
+        const { session, metadataRequestId } = get();
+        if (!session || session.concludedAt || session.gcConfirmation || metadataRequestId || session.productMetadataPending === false) return null;
+        // Old persisted sessions have no marker. Refresh their metadata once;
+        // claiming the request synchronously also prevents StrictMode repeats.
+        const requestId = crypto.randomUUID();
+        set({ session: { ...session, productMetadataPending: true }, productMetadataLoading: true, metadataRequestId: requestId });
+        return requestId;
+      },
+      applyProductMetadata: (requestId, products, complete = true) => {
         set(state => {
           if (!state.session || state.metadataRequestId !== requestId) return state;
           const items = state.session.items.map((item, index) => {
@@ -112,7 +123,7 @@ export const useCheckoutStore = create<CheckoutStore>()(
             };
           });
           // Preserve scanned quantities, item IDs and the original GC document.
-          return { session: { ...state.session, items }, productMetadataLoading: false, metadataRequestId: null };
+          return { session: { ...state.session, items, productMetadataPending: !complete }, productMetadataLoading: !complete, metadataRequestId: complete ? null : requestId };
         });
       },
       confirmItem: (itemId, qtd = 1) => {

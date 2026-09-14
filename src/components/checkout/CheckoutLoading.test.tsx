@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import type { GCProdutoItem } from '@/api/types';
 const m = vi.hoisted(() => {
   const saved=new Map<string,string>();
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(k:string)=>saved.get(k)??null,setItem:(k:string,v:string)=>saved.set(k,v),removeItem:(k:string)=>saved.delete(k)}});
@@ -116,6 +117,34 @@ describe('fila → itens → conferência do Checkout', () => {
     expect(useCheckoutStore.getState().session?.items[0]).toMatchObject({id:item.id,qtd_total:3,qtd_conferida:1,codigo_barras:'789000',localizacao_fisica:'PR-13 A1'});
     expect(useCheckoutStore.getState().session?.rawOrder.produtos[0].produto.quantidade).toBe(3);
     expect(useCheckoutStore.getState().productMetadataLoading).toBe(false);
+  });
+  it.each([false, true])('permite conferir uma peça já carregada enquanto outra consulta demora (mobile=%s)', async mobile => {
+    m.mobile = mobile;
+    const original = { ...order('normal', '4559'), produtos: [product('fast', 2), product('slow', 3)] };
+    m.getOS.mockResolvedValue(original);
+    const details = deferred<any>();
+    let progress!: (products: Array<{ produto: GCProdutoItem }>) => void;
+    m.enrich.mockImplementation((_products, options) => { progress = options.onProgress; return details.promise; });
+    show(); fireEvent.click(await screen.findByText('#4559'));
+    await screen.findByText('Produto fast');
+    const initial = useCheckoutStore.getState().session!;
+    act(() => progress([{ produto: { ...product('fast', 999).produto, codigo_barras: 'BAR-fast', localizacao_fisica: 'A1' } }, product('slow', 999)]));
+    expect(screen.getByText('BAR-fast')).toBeInTheDocument();
+    expect(useCheckoutStore.getState().productMetadataLoading).toBe(true);
+    act(() => useCheckoutStore.getState().confirmItem(initial.items[0].id, 1));
+    await act(async () => details.resolve([
+      { produto: { ...product('fast', 999).produto, codigo_barras: 'BAR-fast' } },
+      { produto: { ...product('slow', 999).produto, codigo_barras: 'BAR-slow' } },
+    ]));
+    const completed = useCheckoutStore.getState().session!;
+    expect(completed.items.map(item => [item.id, item.qtd_total, item.qtd_conferida])).toEqual([
+      [initial.items[0].id, 2, 1], [initial.items[1].id, 3, 0],
+    ]);
+    expect(completed.rawOrder).toEqual(original);
+    expect(useCheckoutStore.getState().productMetadataLoading).toBe(false);
+    expect(m.getOS).toHaveBeenCalledExactlyOnceWith('normal');
+    expect(m.stockGuard).not.toHaveBeenCalled();
+    expect(m.updateOS).not.toHaveBeenCalled();
   });
   it('preserva o vínculo do lote ao trocar uma OS comum por baixa parcial e ignora metadados antigos', async () => {
     const oldDetails=deferred<any>(); m.enrich.mockImplementation(products=>products[0].produto.produto_id==='normal'?oldDetails.promise:Promise.resolve(products)); show();

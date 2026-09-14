@@ -43,6 +43,9 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const recordGCConfirmation = useCheckoutStore(s => s.recordGCConfirmation);
   const queryClient = useQueryClient();
   const isPartialWriteoff = !!session?.partialWriteoff;
+  const isPartialExecution = isPartialWriteoff && session?.tipo === 'os' && session.partialWriteoff?.flowMode !== 'reservation';
+  const needsPartialRevalidation = isPartialWriteoff && session?.gcConfirmation?.targetStatusId.startsWith('partial:');
+  const hasGCConfirmation = !!session?.gcConfirmation && !needsPartialRevalidation;
 
   const configuredDefaultStatus = session?.tipo === 'os'
     ? config.defaultOSConclusionStatus
@@ -98,13 +101,14 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
     try {
       let targetStatusName: string;
       let targetStatusId: string;
-      if (session.gcConfirmation) {
+      if (hasGCConfirmation) {
         targetStatusName = session.gcConfirmation.targetStatusName;
         targetStatusId = session.gcConfirmation.targetStatusId;
       } else if (isPartialWriteoff) {
-        await confirmPartialBatch(session.partialWriteoff!.batchId);
-        targetStatusName = 'Baixa parcial aplicada (somente estoque)';
-        targetStatusId = `partial:${session.partialWriteoff!.batchId}`;
+        const operation = await confirmPartialBatch(session.partialWriteoff!.batchId);
+        if (!operation.checkout_confirmation) throw new Error('A situação final no GC não foi confirmada. Retome o lote para conferir.');
+        targetStatusName = operation.checkout_confirmation.statusName;
+        targetStatusId = operation.checkout_confirmation.statusId;
       } else if (session.tipo === 'os') {
         const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder);
         await updateOSStatus(session.refId, freshOrder as GCOrdemServico, effectiveStatus, config.operatorName, config.gcUsuarioId);
@@ -235,7 +239,8 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           </div>
           <p>Itens conferidos: <strong>{confirmedCount} de {totalCount}</strong></p>
           <p>Tempo de separação: <strong>{elapsed()}</strong></p>
-          {session.gcConfirmation && <p className="text-amber-700">GC já confirmado. Falta salvar o histórico da separação.</p>}
+          {hasGCConfirmation && <p className="text-amber-700">GC já confirmado. Falta salvar o histórico da separação.</p>}
+          {needsPartialRevalidation && <p className="text-amber-700">Baixa do lote registrada. Falta conferir a situação atual no GC antes de salvar o histórico.</p>}
           {forced && unconfirmed > 0 && (
             <div className="flex items-center gap-2 text-amber-700 bg-amber-50 rounded p-2 mt-2">
               <AlertTriangle className="h-4 w-4" />
@@ -248,8 +253,10 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           <div className="space-y-2">
             <label className="text-sm font-medium">Movimento no GestãoClick:</label>
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
-              <strong>Baixa parcial — somente estoque.</strong><br />
-              Esta confirmação movimenta somente estoque. A tarefa Auvo, quando solicitada, fica vinculada ao lote.
+              <strong>{isPartialExecution ? 'Entrega parcial — aguardando execução.' : 'Reserva parcial de peças.'}</strong><br />
+              {isPartialExecution
+                ? 'Confirma as peças deste lote e encaminha a OS para a situação de aguardando execução configurada no Checkout. A execução será verificada depois pelo fluxo normal da OS.'
+                : 'Confirma a reserva deste lote com a situação de estoque configurada para baixa parcial.'}
             </div>
           </div>
         ) : hasDefault ? (
@@ -311,7 +318,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
             className="bg-success text-success-foreground hover:bg-success/90"
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {session.gcConfirmation ? 'Salvar histórico pendente' : '✓ Confirmar e Atualizar'}
+            {hasGCConfirmation ? 'Salvar histórico pendente' : '✓ Confirmar e Atualizar'}
           </Button>
         </DialogFooter>
       </DialogContent>

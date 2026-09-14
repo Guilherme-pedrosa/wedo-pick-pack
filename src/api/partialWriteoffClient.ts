@@ -8,6 +8,7 @@ import { assertBudgetUnchanged, assertOperationQuantities } from './budgetIntegr
 import { assertStatusOnlyChange, writableDocument } from './partialConsolidation';
 import { canRequestPartialAuvoTask, wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 import { budgetTechnicalHours, withMissingTechnicalHours } from '../../supabase/functions/_shared/technicalHours';
+import { applyPartialCheckoutStatus, partialCheckoutAwaitingHandoff, partialCheckoutConfirmation, partialCheckoutTarget, validatePartialCheckoutDocument } from '../../supabase/functions/_shared/partialCheckout';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -752,13 +753,13 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     .eq('id', batchId)
     .single();
   if (batchError || !batch) throw new Error('BATCH_NOT_FOUND');
-  if (batch.status === 'confirmed') return getOperationGraph(batch.operation_id);
-  if (!['awaiting_checkout', 'reconciliation_required'].includes(batch.status)) throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
+  if (!['awaiting_checkout', 'reconciliation_required', 'confirmed'].includes(batch.status)) throw new Error(`BATCH_NOT_CONFIRMABLE:${batch.status}`);
   const operation = await getOperationGraph(batch.operation_id);
+  if (['cancelled', 'completed', 'consolidating'].includes(operation.status) || operation.definitive_document_id) throw new Error('OPERATION_NOT_CONFIRMABLE');
   const sourceBeforeCheckout = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
   assertBudgetUnchanged(operation.budget_snapshot, sourceBeforeCheckout);
   assertOperationQuantities(operation.budget_snapshot, operation.items);
-  await syncOriginalBudgetPartialStatus(operation, batchId, auth);
+  if (batch.status !== 'confirmed') await syncOriginalBudgetPartialStatus(operation, batchId, auth);
   if (operationSourceKind(operation) === 'venda') {
     const sale = await fetchSource(operationSourceId(operation), 'venda');
     if (!isSaleEligibleForPartialWriteoff(sale)) throw new Error('SALE_ALREADY_MOVED_STOCK');
@@ -777,18 +778,47 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
   const path = type === 'os'
     ? `/api/ordens_servicos/${encodeURIComponent(batch.auxiliary_document_id)}`
     : `/api/vendas/${encodeURIComponent(batch.auxiliary_document_id)}`;
-  const currentDocument = (await gcRequest(path))?.data;
-  if (!sameQuantities(quantityMap(expectedLines), quantityMap(currentDocument?.produtos || []))) {
-    throw new Error('AUXILIARY_ITEMS_CHANGED');
-  }
+  const settings = await getSettings();
+  const policy = { type, flowMode: operation.flow_mode, waitingStatusId: settings[`${type}_waiting_status_id`],
+    stockStatusId: settings[`${type}_stock_status_id`], cancelStatusId: settings[`${type}_cancel_status_id`],
+    conclusionStatusId: auth.profile.default_os_conclusion_status };
+  let statuses: any[] | undefined;
+  const getStatuses = async () => {
+    if (!statuses) {
+      const response = await gcRequest('/api/situacoes_ordens_servicos');
+      if (!Array.isArray(response?.data)) throw new Error('Não foi possível consultar as situações de OS no GC.');
+      statuses = response.data as any[];
+    }
+    return statuses;
+  };
+  const read = async () => (await gcRequest(path))?.data;
+  const validate = (document: any) => {
+    validatePartialCheckoutDocument(document, policy);
+    if (!operation.client_id || !batch.marker || String(document.codigo) !== String(batch.auxiliary_document_code) ||
+        String(document.cliente_id) !== String(operation.client_id) ||
+        !`${document.observacoes || ''} ${document.observacoes_interna || ''}`.includes(batch.marker)) throw new Error('GC_DOCUMENT_IDENTITY_CHANGED');
+    if (String(document.id) !== String(batch.auxiliary_document_id) ||
+        !sameQuantities(quantityMap(expectedLines), quantityMap(document.produtos || []))) throw new Error('AUXILIARY_ITEMS_CHANGED');
+  };
+  const currentDocument = await read();
+  validate(currentDocument);
+  if (batch.status === 'confirmed' && String(currentDocument.situacao_estoque) !== '1') throw new Error('Lote já confirmado com estoque divergente no GC. Audite o documento.');
+  await partialCheckoutTarget(currentDocument, policy, getStatuses);
+  const applyStatus = (alreadyConfirmed: boolean) => applyPartialCheckoutStatus({ policy, read, getStatuses, validate,
+    prepare: document => type === 'os' ? withMissingTechnicalHours(document, sourceBeforeCheckout) : document,
+    put: (document, target) => gcRequest(path, 'PUT', statusUpdatePayload(document, target, type)), alreadyConfirmed });
+  const result = async (document: any) => ({ ...(await getOperationGraph(batch.operation_id)), checkout_confirmation: partialCheckoutConfirmation(document) });
   if (String(currentDocument?.situacao_estoque) !== '1') await assertCheckoutStock(String(batch.auxiliary_document_id), currentDocument, batchId, type);
 
   if (String(currentDocument?.situacao_estoque) === '1') {
-    const reconciled = await cloud.rpc('partial_writeoff_reconcile_gc_debit', {
-      p_batch_id: batchId, p_gc_document: currentDocument, p_source_budget: sourceBeforeCheckout,
-    });
-    if (reconciled.error) throw reconciled.error;
-    return getOperationGraph(batch.operation_id);
+    const appliedDocument = await applyStatus(true);
+    if (batch.status !== 'confirmed') {
+      const reconciled = await cloud.rpc('partial_writeoff_reconcile_gc_debit', {
+        p_batch_id: batchId, p_gc_document: appliedDocument, p_source_budget: sourceBeforeCheckout,
+      });
+      if (reconciled.error) throw reconciled.error;
+    }
+    return result(appliedDocument);
   }
 
   const { data: claim, error: claimError } = await cloud.rpc(batch.status === 'reconciliation_required'
@@ -796,13 +826,11 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     p_batch_id: batchId,
   });
   if (claimError) throw claimError;
-  if (claim === 'confirmed') return getOperationGraph(batch.operation_id);
+  if (claim === 'confirmed') return result(await applyStatus(true));
 
-  const settings = await getSettings();
-  const stockStatus = settings[`${type}_stock_status_id`];
+  let appliedDocument: any;
   try {
-    const appliedDocument = await updateDocumentStatus(type, String(batch.auxiliary_document_id), stockStatus, sourceBeforeCheckout);
-    if (String(appliedDocument?.situacao_estoque) !== '1') throw new Error('O GestãoClick não confirmou a baixa de estoque. O lote continua pendente.');
+    appliedDocument = await applyStatus(false);
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
       p_batch_id: batchId,
       p_success: true,
@@ -816,20 +844,22 @@ async function handleConfirmBatch(body: any, auth: AuthContext): Promise<Partial
     let applied = false;
     try {
       const latest = (await gcRequest(path))?.data;
+      validate(latest);
       assertStatusOnlyChange(type === 'os' ? withMissingTechnicalHours(currentDocument, sourceBeforeCheckout) : currentDocument, latest);
       applied = String(latest?.situacao_estoque) === '1' && sameQuantities(quantityMap(expectedLines), quantityMap(latest?.produtos || []));
     } catch { /* keep false */ }
     const { error: finishError } = await cloud.rpc('partial_writeoff_finish_confirmation', {
       p_batch_id: batchId,
-      p_success: applied,
-      p_error_message: applied ? null : message,
+      p_success: false,
+      p_error_message: applied ? `Estoque já baixado no GC; retome o encaminhamento da OS. ${message}` : message,
       p_actor_id: auth.id,
       p_actor_name: auth.name,
     });
-    if (finishError || !applied) throw new Error(applied ? compact(finishError) || message : message);
+    // Mantenha o lote na fila. A retomada reconhece estoque=1 e só conclui o encaminhamento/saldo.
+    throw new Error(finishError ? compact(finishError) || message : message);
   }
 
-  return getOperationGraph(batch.operation_id);
+  return result(appliedDocument);
 }
 
 async function compensateAuxiliaries(batches: any[], settings: Record<string, string>): Promise<boolean> {
@@ -1212,7 +1242,18 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
         }
       }
 
-      if (cancelId && situacaoId === cancelId) {
+      if (type === 'os' && debited && [waitingId, stockId].filter(Boolean).includes(situacaoId) &&
+          ['confirmed', 'awaiting_checkout', 'reconciliation_required'].includes(base.batchStatus)) {
+        const operation = await getOperationGraph(operationId);
+        if (!['completed', 'cancelled', 'consolidating'].includes(operation.status) && !operation.definitive_document_id &&
+            partialCheckoutAwaitingHandoff(document, { type, flowMode: operation.flow_mode,
+              waitingStatusId: waitingId, stockStatusId: stockId, cancelStatusId: cancelId })) {
+          results.push({ ...enriched, state: 'pending_checkout', message: 'Estoque já baixado no GC. Retome este lote no Checkout para encaminhar a OS para execução, sem repetir a baixa.' });
+          continue;
+        }
+      }
+
+      if ((cancelId && situacaoId === cancelId) || isCancelledStatus(situacaoNome)) {
         results.push({ ...enriched, state: 'cancelled', message: `Documento cancelado no GestãoClick ("${situacaoNome}").` });
       } else if (debited && ['awaiting_checkout', 'reconciliation_required'].includes(base.batchStatus)) {
         // Estoque já saiu no ERP (checkout/handoff feito por fora): confirma o lote
@@ -1220,6 +1261,14 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
         let message = `Estoque já baixado no GestãoClick ("${situacaoNome}"). Lote confirmado automaticamente.`;
         try {
           const operation = await getOperationGraph(operationId);
+          if (type === 'os' && operation.flow_mode !== 'reservation') {
+            if (!waitingId || !stockId) throw new Error('Não foi possível conferir as situações de checkout parcial.');
+            if (partialCheckoutAwaitingHandoff(document, { type, flowMode: operation.flow_mode,
+              waitingStatusId: waitingId, stockStatusId: stockId, cancelStatusId: cancelId })) {
+              results.push({ ...enriched, state: 'pending_checkout', message: 'Estoque já baixado no GC. Retome o lote no Checkout para encaminhar a OS para execução e confirmar o saldo local.' });
+              continue;
+            }
+          }
           const source = await fetchSource(operationSourceId(operation), operationSourceKind(operation) || 'servico');
           assertBudgetUnchanged(operation.budget_snapshot, source);
           assertOperationQuantities(operation.budget_snapshot, operation.items);

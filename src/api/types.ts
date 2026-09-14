@@ -111,6 +111,7 @@ export interface PickingSession {
   startedAt: string;
   concludedAt?: string;
   partialWriteoff?: {
+    flowMode?: 'partial_execution' | 'reservation';
     operationId: string;
     batchId: string;
     budgetCode: string;

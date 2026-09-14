@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listOS, listVendas, listOSMultiStatus, listVendasMultiStatus, getOS, getVenda, getStatusOS, getStatusVendas, enrichOrderProducts, checkStockForOrders, StockConflict, BelowCostWarning } from '@/api/gestaoclick';
 import { getValidSeparatedOrderIds } from '@/api/separations';
-import { findPartialBatchByDocument, getPartialCheckoutQueue, PartialCheckoutEntry } from '@/api/partialWriteoff';
+import { findPartialBatchByDocument, getPartialCheckoutEntry, getPartialCheckoutQueue, PartialCheckoutEntry } from '@/api/partialWriteoff';
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { OrderType, GCOrdemServico, GCVenda } from '@/api/types';
 import { Card } from '@/components/ui/card';
@@ -69,6 +69,13 @@ export default function OrderQueue() {
     refetchOnWindowFocus: true,
   });
   const partialQueue = partialQueueQuery.data || [];
+  const requestedEntryQuery = useQuery({
+    queryKey: ['partial-checkout-entry', requestedBatch],
+    queryFn: () => getPartialCheckoutEntry(requestedBatch!),
+    enabled: !!requestedBatch,
+    staleTime: 0,
+    retry: false,
+  });
   const partialForType = partialQueue.filter(entry => entry.type === activeType);
   const partialDocumentIds = useMemo(
     () => new Set(partialQueue.map(entry => `${entry.type}:${entry.documentId}`)),
@@ -254,6 +261,7 @@ export default function OrderQueue() {
       // confirmation (ConclusionModal / confirmPartialBatch), before any debit.
       const metadataRequestId = startSession(tipo, order, linkedPartial ? {
         operationId: linkedPartial.operationId,
+        flowMode: linkedPartial.flowMode,
         batchId: linkedPartial.batchId,
         budgetCode: linkedPartial.budgetCode,
         marker: linkedPartial.marker,
@@ -304,9 +312,11 @@ export default function OrderQueue() {
   useEffect(() => {
     if (!requestedBatch || !partialQueueQuery.isSuccess || openedBatchRef.current === requestedBatch) return;
     openedBatchRef.current = requestedBatch;
-    const entry = partialQueue.find(item => item.batchId === requestedBatch);
+    const entry = partialQueue.find(item => item.batchId === requestedBatch) || requestedEntryQuery.data;
+    if (!entry && !requestedEntryQuery.isFetched) { openedBatchRef.current = null; return; }
     if (!entry) {
-      toast.warning('Este lote não está mais aguardando Checkout. Atualize a baixa parcial para conferir a situação atual.');
+      if (requestedEntryQuery.error) toast.error(requestedEntryQuery.error.message);
+      else toast.warning('Este lote não está mais aguardando Checkout. Atualize a baixa parcial para conferir a situação atual.');
       clearRequestedBatch();
       return;
     }
@@ -318,7 +328,7 @@ export default function OrderQueue() {
     } else {
       void loadAndStart(entry.type, entry.documentId, entry).finally(clearRequestedBatch);
     }
-  }, [requestedBatch, partialQueueQuery.isSuccess, partialQueue, session, loadAndStart, clearRequestedBatch]);
+  }, [requestedBatch, partialQueueQuery.isSuccess, partialQueue, requestedEntryQuery.data, requestedEntryQuery.isFetched, requestedEntryQuery.error, session, loadAndStart, clearRequestedBatch]);
 
   const cancelSwitch = () => { setConfirmSwitch(null); if (requestedBatch) clearRequestedBatch(); };
 

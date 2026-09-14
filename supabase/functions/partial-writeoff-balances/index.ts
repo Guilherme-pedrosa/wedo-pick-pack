@@ -1,7 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.98.0";
 import {
   normalizeBudgetReference,
+  newestBalanceOperationByBudget,
   pendingItemsFromBalanceRows,
+  readAllBalanceRows,
+  type PartialBalanceOperation,
   type PartialWriteoffBalanceRow,
 } from "../_shared/partial-writeoff-balances.ts";
 
@@ -11,23 +14,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ACTIVE_STATUSES = [
-  "awaiting_separation",
-  "partial_separation",
-  "awaiting_balance",
-  "ready_to_consolidate",
-  "consolidating",
-  "reconciliation_required",
-];
-
 type BudgetReference = { id: string; code: string };
-type OperationRow = {
-  id: string;
-  budget_id: string;
-  budget_code: string;
-  status: string;
-  updated_at: string;
-};
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -46,20 +33,6 @@ function sanitizeBudgets(value: unknown): BudgetReference[] {
     unique.set(`${id}::${code}`, { id, code });
   }
   return [...unique.values()];
-}
-
-function newestOperationByBudget(operations: OperationRow[]): OperationRow[] {
-  const sorted = [...operations].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
-  const seenIds = new Set<string>();
-  const seenCodes = new Set<string>();
-  return sorted.filter((operation) => {
-    const id = normalizeBudgetReference(operation.budget_id);
-    const code = normalizeBudgetReference(operation.budget_code);
-    if ((id && seenIds.has(id)) || (code && seenCodes.has(code))) return false;
-    if (id) seenIds.add(id);
-    if (code) seenCodes.add(code);
-    return true;
-  });
 }
 
 Deno.serve(async (req) => {
@@ -90,34 +63,39 @@ Deno.serve(async (req) => {
       queries.push(service.from("partial_writeoff_operations")
         .select("id,budget_id,budget_code,status,updated_at")
         .in("budget_id", ids)
-        .in("status", ACTIVE_STATUSES));
+        .order("updated_at", { ascending: false }));
     }
     if (codes.length > 0) {
       queries.push(service.from("partial_writeoff_operations")
         .select("id,budget_id,budget_code,status,updated_at")
         .in("budget_code", codes)
-        .in("status", ACTIVE_STATUSES));
+        .order("updated_at", { ascending: false }));
     }
 
     const queryResults = await Promise.all(queries);
     const firstError = queryResults.find((result) => result.error)?.error;
     if (firstError) throw firstError;
 
-    const operationsById = new Map<string, OperationRow>();
+    const operationsById = new Map<string, PartialBalanceOperation>();
     for (const result of queryResults) {
-      for (const operation of (result.data ?? []) as OperationRow[]) operationsById.set(operation.id, operation);
+      for (const operation of (result.data ?? []) as PartialBalanceOperation[]) operationsById.set(operation.id, operation);
     }
-    const operations = newestOperationByBudget([...operationsById.values()]);
+    const operations = newestBalanceOperationByBudget([...operationsById.values()]);
     const operationIds = operations.map((operation) => operation.id);
 
     let itemRows: PartialWriteoffBalanceRow[] = [];
     if (operationIds.length > 0) {
-      const { data, error } = await service
-        .from("partial_writeoff_item_balances")
-        .select("operation_id,line_key,product_id,variation_id,product_name,product_code,unit,original_quantity,withdrawn_quantity,pending_purchase_quantity")
-        .in("operation_id", operationIds);
-      if (error) throw error;
-      itemRows = (data ?? []) as PartialWriteoffBalanceRow[];
+      itemRows = await readAllBalanceRows(async (from, to) => {
+        const { data, error } = await service
+          .from("partial_writeoff_item_balances")
+          .select("operation_id,line_key,product_id,variation_id,product_name,product_code,unit,original_quantity,withdrawn_quantity,pending_purchase_quantity")
+          .in("operation_id", operationIds)
+          .order("operation_id")
+          .order("line_key")
+          .range(from, to);
+        if (error) throw error;
+        return (data ?? []) as PartialWriteoffBalanceRow[];
+      });
     }
 
     const itemsByOperation = new Map<string, PartialWriteoffBalanceRow[]>();

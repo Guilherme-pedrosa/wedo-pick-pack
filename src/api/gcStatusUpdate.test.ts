@@ -20,7 +20,9 @@ describe('troca de situação sem alterar o documento comercial', () => {
       }
       return { data: structuredClone(current) };
     });
-    await changeDocumentStatus(request, type, '10', old, 'done', 'Operador');
+    const confirmed = await changeDocumentStatus(request, type, '10', old, 'done', 'Operador');
+    expect(confirmed).toEqual(current);
+    expect(confirmed.situacao_id).toBe('done');
     expect(sent.produtos[0]).toMatchObject({ quantidade: '3', valor_venda: '33.333333', valor_total: '100.00' });
     expect(sent.pagamentos).toEqual(document().pagamentos);
     expect(sent).toMatchObject({ atributos: document().atributos, equipamentos: document().equipamentos,

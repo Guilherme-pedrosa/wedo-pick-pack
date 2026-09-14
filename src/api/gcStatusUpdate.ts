@@ -5,8 +5,8 @@ type Request = (path: string, options?: { method?: string; body?: string }) => P
 
 /** O documento recém-lido é a referência. Não redistribuir parcelas, arredondar
  * preços, recuperar campos apagados de um cache antigo nem repetir um PUT incerto. */
-export async function changeDocumentStatus(request: Request, type: 'os' | 'venda', id: string,
-  expected: GcRecord, status: string, operator?: string, customNote?: string): Promise<void> {
+export async function changeDocumentStatus<T extends GcRecord>(request: Request, type: 'os' | 'venda', id: string,
+  expected: T, status: string, operator?: string, customNote?: string): Promise<T> {
   const path = `/api/${type === 'os' ? 'ordens_servicos' : 'vendas'}/${encodeURIComponent(id)}`;
   const current = (await request(path))?.data;
   if (!current || String(current.id) !== id) throw new Error('Não foi possível conferir o documento atual no GestãoClick. Nenhuma atualização enviada.');
@@ -34,7 +34,7 @@ export async function changeDocumentStatus(request: Request, type: 'os' | 'venda
     const verified = (await request(path))?.data;
     if (!verified || String(verified.id) !== id) throw new Error('Atualização enviada, mas o documento não pôde ser conferido no GestãoClick. Consulte o pedido antes de tentar novamente.');
     assertStatusOnlyChange(reference, verified);
-    if (String(verified.situacao_id) === String(status)) return;
+    if (String(verified.situacao_id) === String(status)) return verified as T;
     if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 900));
   }
   throw new Error('STATUS_NOT_APPLIED');

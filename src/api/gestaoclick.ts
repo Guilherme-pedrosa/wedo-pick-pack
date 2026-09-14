@@ -257,14 +257,14 @@ export async function getStatusVendas(): Promise<GCSituacao[]> {
 }
 
 // --- UPDATE STATUS ---
-export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, _gcUsuarioId?: string, customNote?: string): Promise<void> {
-  if (isUsingMock()) { await mockDelay(); return; }
-  await changeDocumentStatus(apiRequest, 'os', id, rawOrder, newStatusId, operatorName, customNote);
+export async function updateOSStatus(id: string, rawOrder: GCOrdemServico, newStatusId: string, operatorName?: string, _gcUsuarioId?: string, customNote?: string): Promise<GCOrdemServico> {
+  if (isUsingMock()) { await mockDelay(); return { ...rawOrder, situacao_id: newStatusId, nome_situacao: MOCK_STATUS_OS.find(s => s.id === newStatusId)?.nome || newStatusId }; }
+  return changeDocumentStatus(apiRequest, 'os', id, rawOrder, newStatusId, operatorName, customNote);
 }
 
-export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string, _gcUsuarioId?: string, customNote?: string): Promise<void> {
-  if (isUsingMock()) { await mockDelay(); return; }
-  await changeDocumentStatus(apiRequest, 'venda', id, rawOrder, newStatusId, operatorName, customNote);
+export async function updateVendaStatus(id: string, rawOrder: GCVenda, newStatusId: string, operatorName?: string, _gcUsuarioId?: string, customNote?: string): Promise<GCVenda> {
+  if (isUsingMock()) { await mockDelay(); return { ...rawOrder, situacao_id: newStatusId, nome_situacao: MOCK_STATUS_VENDA.find(s => s.id === newStatusId)?.nome || newStatusId }; }
+  return changeDocumentStatus(apiRequest, 'venda', id, rawOrder, newStatusId, operatorName, customNote);
 }
 
 export interface ProductStockInfo {

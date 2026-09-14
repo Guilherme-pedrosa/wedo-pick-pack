@@ -247,11 +247,23 @@ export async function invalidateSeparation(id: string, reason: string): Promise<
   return true;
 }
 
+/** Impede que uma tela antiga devolva ou substitua um vínculo já alterado. */
+export async function assertSeparationAssignmentCurrent(expected: SeparationRecord): Promise<void> {
+  const { data, error } = await supabase.from('separations')
+    .select('order_id, order_type, technician_gc_id, invalidated').eq('id', expected.id).maybeSingle();
+  if (error || !data) throw new Error('Não foi possível conferir o vínculo atual da separação. Atualize a tela.');
+  if (data.invalidated || data.order_id !== expected.order_id || data.order_type !== expected.order_type
+    || data.technician_gc_id !== expected.technician_gc_id) {
+    throw new Error('Esta separação foi alterada por outra pessoa. Atualize a tela antes de continuar.');
+  }
+}
+
 export async function linkTechnicianToSeparation(
   id: string,
   technicianGcId: string | null,
   technicianName: string | null,
   items?: SeparationItemSnapshot[],
+  expectedTechnicianGcId?: string | null,
 ): Promise<boolean> {
   const update: {
     technician_gc_id: string | null;
@@ -263,11 +275,16 @@ export async function linkTechnicianToSeparation(
   };
   if (items && items.length > 0) update.items = items as unknown as Json;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('separations')
     .update(update)
-    .eq('id', id)
-    .select('id');
+    .eq('id', id).eq('invalidated', false);
+  if (expectedTechnicianGcId !== undefined) {
+    query = expectedTechnicianGcId === null
+      ? query.is('technician_gc_id', null)
+      : query.eq('technician_gc_id', expectedTechnicianGcId);
+  }
+  const { data, error } = await query.select('id');
 
   if (error) {
     console.error('Error linking technician to separation:', error);

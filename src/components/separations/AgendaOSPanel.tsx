@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 
 import {
   classifyAgendaRow,
+  hasConfirmedTechnicianCustody,
   datePart,
   GC_REPAIR_LOCATION_ATTRIBUTE_ID,
   getExecutionTaskIds,
@@ -54,6 +55,7 @@ import {
   type SeparationRecord,
 } from '@/api/separations';
 import { assignSeparationToTechnician } from '@/api/separationAssignment';
+import { cacheConfirmedAgendaOrder } from '@/api/separationStatusCache';
 import type { GCOrdemServico } from '@/api/types';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -377,8 +379,8 @@ export default function AgendaOSPanel() {
       const matchesSituation = !excludedSituations.has(String(os.situacao_id));
       const matchesSeparation = separationFilter === 'all'
         || (separationFilter === 'pending' && !separation)
-        || (separationFilter === 'separated' && !!separation && !separation.technician_name)
-        || (separationFilter === 'linked' && !!separation?.technician_name);
+        || (separationFilter === 'separated' && !!separation && !hasConfirmedTechnicianCustody(row))
+        || (separationFilter === 'linked' && hasConfirmedTechnicianCustody(row));
       const executionStatus = normalizeFilterText(task ? taskStatus(task) : '');
       const matchesExecution = matchesExecutionFilters(executionFilters, executionStatus, !!task);
       const repairLocation = normalizeFilterText(
@@ -455,9 +457,9 @@ export default function AgendaOSPanel() {
     available: rows.filter((row) => row.bucket === 'available' && (
       !isResolvingExecutionTasks || !!row.task
     )).length,
-    separated: rows.filter((row) => !!row.separation && !row.separation.technician_name).length,
+    separated: rows.filter((row) => !!row.separation && !hasConfirmedTechnicianCustody(row)).length,
     linked: rows.reduce((total, row) => (
-      row.separation?.technician_name
+      hasConfirmedTechnicianCustody(row)
         ? total + (separatedQuantity(row.items) || row.separation.items_confirmed || row.separation.items_total)
         : total
     ), 0),
@@ -617,13 +619,14 @@ export default function AgendaOSPanel() {
         technician,
         items: assignmentRow.items,
         auvoTaskId: assignmentRow.task?.task_id || assignmentRow.taskIds[0] || null,
+        onStatusConfirmed: (order) => cacheConfirmedAgendaOrder(queryClient, order),
       });
-      await queryClient.invalidateQueries({ queryKey: ['separations'] });
       toast.success(`${separatedQuantity(assignmentRow.items)} peça(s) da OS #${assignmentRow.os.codigo} vinculada(s) a ${technician.name}.`);
       setAssignmentRow(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Erro ao vincular as peças');
     } finally {
+      void queryClient.invalidateQueries({ queryKey: ['separations'] });
       setSavingAssignment(false);
     }
   };
@@ -910,7 +913,7 @@ export default function AgendaOSPanel() {
           {viewMode === 'calendar' ? (
             <CalendarView 
               rows={filteredRows}
-              selectedEvent={selectedCalendarEvent}
+              selectedEvent={rows.find(row => row.os.id === selectedCalendarEvent?.os.id) || null}
               onSelectEvent={setSelectedCalendarEvent}
               onCloseDetail={() => setSelectedCalendarEvent(null)}
               renderDetail={(row) => (
@@ -1145,7 +1148,7 @@ function AgendaRowContent({
   isResolvingExecutionTasks: boolean;
   referencedTaskIds: Set<string>;
 }) {
-  const linked = !!row.separation?.technician_name;
+  const linked = hasConfirmedTechnicianCustody(row);
   const awaitingTask = isResolvingExecutionTasks && row.taskIds.length > 0 && !row.task;
   
   const hasArrival = row.items.some(item => 
@@ -1187,6 +1190,12 @@ function AgendaRowContent({
                   <CheckCircle2 className="mr-1 h-3 w-3" /> Peças com {row.separation?.technician_name}
                 </Badge>
                )}
+              {!linked && row.separation?.technician_name && (
+                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800"
+                  title="O vínculo registrado não corresponde à situação de retirada no GC. Confira a devolução ou a nova retirada.">
+                  Vínculo a conferir: {row.separation.technician_name}
+                </Badge>
+              )}
               {hasArrival && (
                 <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 animate-pulse">
                   <Clock className="mr-1 h-3 w-3" /> Previsão de peças
@@ -1242,7 +1251,7 @@ function AgendaRowContent({
         </div>
       </div>
 
-      {expanded && row.items.length > 0 && <ItemsPanel items={row.items} technicianName={row.separation?.technician_name || null} />}
+      {expanded && row.items.length > 0 && <ItemsPanel items={row.items} technicianName={linked ? row.separation?.technician_name || null : null} />}
     </Card>
   );
 }

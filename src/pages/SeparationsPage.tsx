@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, SeparationRecord, SeparationFilters } from '@/api/separations';
+import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, assertSeparationAssignmentCurrent, SeparationRecord, SeparationFilters } from '@/api/separations';
+import { returnSeparationForAgenda } from '@/api/separationReturn';
+import { cacheConfirmedAgendaOrder, mergeSeparationStatuses } from '@/api/separationStatusCache';
 import { getOS, getVenda, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
 import { auditPartialDocuments } from '@/api/partialWriteoff';
 import { Card } from '@/components/ui/card';
@@ -14,7 +16,7 @@ import { RefreshCw, CheckCircle2, XCircle, AlertTriangle, PackageCheck, Loader2,
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { PickingItem, GCProdutoItem } from '@/api/types';
+import { PickingItem, GCProdutoItem, Order } from '@/api/types';
 import SeparationReceipt, { extractServiceLocation } from '@/components/checkout/SeparationReceipt';
 import SeparationHistoryDialog from '@/components/separations/SeparationHistoryDialog';
 import { trackGcStatusChanges } from '@/api/gcStatusTracker';
@@ -115,6 +117,7 @@ export default function SeparationsPage({ defaultTab }: { defaultTab?: 'agenda' 
   }, [validSeparations, liveStatuses, computeStockRegression]);
 
   const fetchLiveStatusesAndSync = useCallback(async (opts?: { showToast?: boolean; recentOnly?: boolean }) => {
+    const startedAt = Date.now();
     let active = separations.filter(s => !s.invalidated);
 
     // Automatic refresh only checks the last 24h for speed; older records need manual refresh
@@ -215,7 +218,7 @@ export default function SeparationsPage({ defaultTab }: { defaultTab?: 'agenda' 
       }
     }
 
-    setLiveStatuses(prev => ({ ...prev, ...liveResults }));
+    setLiveStatuses(prev => mergeSeparationStatuses(prev, liveResults, startedAt));
     setFetchingLive(false);
     setSyncing(false);
 
@@ -396,6 +399,11 @@ export default function SeparationsPage({ defaultTab }: { defaultTab?: 'agenda' 
                 formatDateTime={formatDateTime}
                 formatDuration={formatDuration}
                 onUpdated={() => refetch()}
+                onStatusConfirmed={(order) => setLiveStatuses(previous => ({
+                  ...previous,
+                  ...Object.fromEntries(separations.filter(s => s.order_id === order.id && s.order_type === sep.order_type)
+                    .map(s => [s.id, { situacao_id: order.situacao_id, nome_situacao: order.nome_situacao, fetchedAt: new Date().toISOString() }])),
+                }))}
                 liveStatus={liveStatuses[sep.id] || undefined}
                 stockRegression={computeStockRegression(sep, liveStatuses[sep.id])}
               />
@@ -452,6 +460,7 @@ function SeparationCard({
   formatDateTime,
   formatDuration,
   onUpdated,
+  onStatusConfirmed,
   liveStatus,
   stockRegression = false,
 }: {
@@ -460,6 +469,7 @@ function SeparationCard({
   formatDateTime: (iso: string) => string;
   formatDuration: (start: string, end: string) => string;
   onUpdated: () => void;
+  onStatusConfirmed: (order: Order) => void;
   liveStatus?: { nome_situacao: string; situacao_id: string; fetchedAt: string };
   stockRegression?: boolean;
 }) {
@@ -490,6 +500,11 @@ function SeparationCard({
   const [returning, setReturning] = useState(false);
   const [returnTermAccepted, setReturnTermAccepted] = useState(false);
 
+  const recordConfirmedStatus = async (order: Order) => {
+    onStatusConfirmed(order);
+    if (sep.order_type === 'os') await cacheConfirmedAgendaOrder(queryClient, order);
+  };
+
   const DEVOLUCAO_AGENDA_STATUS_ID = '7063705'; // Pedido conferido aguardando execução
   const DEVOLUCAO_PECA_STATUS_ID = '8928768';   // Ag correção
 
@@ -512,37 +527,27 @@ function SeparationCard({
         gcUsuarioId = prof?.gc_usuario_id || undefined;
       }
 
-      if (sep.order_type === 'os') {
-        const order = await getOS(sep.order_id);
-        if (!order) throw new Error('OS não encontrada no GC. A devolução não foi registrada.');
-        await updateOSStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
-      } else {
-        const order = await getVenda(sep.order_id);
-        if (!order) throw new Error('Venda não encontrada no GC. A devolução não foi registrada.');
-        await updateVendaStatus(sep.order_id, order, statusId, undefined, gcUsuarioId);
-      }
-
       if (returnMotivo === 'agenda') {
-        // Agenda: separation stays valid, just log the status change
-        await logSystemAction({
-          module: 'separations',
-          action: 'devolucao_agenda',
-          entityType: sep.order_type,
-          entityId: sep.order_id,
-          entityName: `${sep.order_type === 'os' ? 'OS' : 'Venda'} #${sep.order_code}`,
-          details: {
-            motivo: fullReason,
-            novo_status_id: statusId,
-            client_name: sep.client_name,
-            separation_id: sep.id,
-          },
-        });
-        toast.success('Status alterado no GC — separação mantida');
+        await returnSeparationForAgenda({ separation: sep, reason: fullReason, gcUsuarioId, onStatusConfirmed: recordConfirmedStatus });
+        toast.success('Devolução confirmada no GC. Vínculo encerrado e separação mantida para nova retirada.');
         setReturnDialogOpen(false);
         setReturnReason('');
         setReturnMotivo('');
         onUpdated();
+        return;
+      }
+
+      if (sep.order_type === 'os') {
+        const order = await getOS(sep.order_id);
+        if (!order) throw new Error('OS não encontrada no GC. A devolução não foi registrada.');
+        await recordConfirmedStatus(await updateOSStatus(sep.order_id, order, statusId, undefined, gcUsuarioId));
       } else {
+        const order = await getVenda(sep.order_id);
+        if (!order) throw new Error('Venda não encontrada no GC. A devolução não foi registrada.');
+        await recordConfirmedStatus(await updateVendaStatus(sep.order_id, order, statusId, undefined, gcUsuarioId));
+      }
+
+      {
         // Peça incorreta: invalidate the separation
         const reason = `DEVOLUÇÃO: ${fullReason}`;
         const ok = await invalidateSeparation(sep.id, reason);
@@ -570,6 +575,7 @@ function SeparationCard({
       console.error('Error processing return:', err);
       toast.error(`Erro ao processar devolução: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     } finally {
+      void queryClient.invalidateQueries({ queryKey: ['separations'] });
       setReturning(false);
     }
   };
@@ -593,6 +599,7 @@ function SeparationCard({
   const handleLinkTechnician = async (tech: { gc_id: string; name: string } | null) => {
     setLinking(true);
     try {
+      await assertSeparationAssignmentCurrent(sep);
       // Get current operator (name + GC usuario_id) for attribution
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       let gcUsuarioId: string | undefined;
@@ -620,13 +627,15 @@ function SeparationCard({
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
         const nextStatusId = tech ? RETIRADA_TECNICO_STATUS_ID : sep.target_status_id;
-        await updateOSStatus(sep.order_id, order, nextStatusId, undefined, gcUsuarioId, gcNote);
+        await recordConfirmedStatus(await updateOSStatus(sep.order_id, order, nextStatusId, undefined, gcUsuarioId, gcNote));
       }
 
       const ok = await linkTechnicianToSeparation(
         sep.id,
         tech?.gc_id || null,
-        tech?.name || null
+        tech?.name || null,
+        undefined,
+        sep.technician_gc_id,
       );
 
       if (!ok) {
@@ -674,6 +683,7 @@ function SeparationCard({
       console.error('Error linking technician:', err);
       toast.error(`Não foi possível ${tech ? 'vincular' : 'desvincular'} técnico: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
     } finally {
+      void queryClient.invalidateQueries({ queryKey: ['separations'] });
       setLinking(false);
     }
   };
@@ -1037,6 +1047,7 @@ function SeparationCard({
                   <div>
                     <p className="font-medium text-foreground">Agenda (não deu tempo)</p>
                     <p className="text-muted-foreground">Volta para "Pedido conferido aguardando execução"</p>
+                    <p className="text-muted-foreground">Encerra o vínculo com o técnico e mantém as peças conferidas para nova retirada.</p>
                   </div>
                 </button>
                 <button

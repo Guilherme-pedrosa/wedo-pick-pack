@@ -1,11 +1,13 @@
 import { getOS, updateOSStatus } from '@/api/gestaoclick';
 import {
   linkTechnicianToSeparation,
+  assertSeparationAssignmentCurrent,
   type SeparationItemSnapshot,
   type SeparationRecord,
 } from '@/api/separations';
 import { supabase } from '@/integrations/supabase/client';
 import { logSystemAction } from '@/lib/systemLog';
+import type { GCOrdemServico } from './types';
 
 const RETIRADA_TECNICO_STATUS_ID = '7684665';
 
@@ -24,6 +26,7 @@ export async function assignSeparationToTechnician(input: {
   technician: AssignmentTechnician;
   items: SeparationItemSnapshot[];
   auvoTaskId?: string | null;
+  onStatusConfirmed?: (order: GCOrdemServico) => void | Promise<void>;
 }): Promise<void> {
   const { separation, technician, items, auvoTaskId } = input;
   if (separation.order_type !== 'os') {
@@ -36,6 +39,7 @@ export async function assignSeparationToTechnician(input: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('AUTH_REQUIRED');
   if (separation.invalidated) throw new Error('Esta separação foi invalidada. Atualize antes de vincular o técnico.');
+  await assertSeparationAssignmentCurrent(separation);
   let gcUsuarioId: string | undefined;
   let operatorName = separation.operator_name || 'Operador';
   if (user) {
@@ -65,7 +69,7 @@ export async function assignSeparationToTechnician(input: {
   ].filter(Boolean).join(' | ');
 
   const order = await getOS(separation.order_id);
-  await updateOSStatus(
+  const confirmed = await updateOSStatus(
     separation.order_id,
     order,
     RETIRADA_TECNICO_STATUS_ID,
@@ -73,12 +77,14 @@ export async function assignSeparationToTechnician(input: {
     gcUsuarioId,
     gcNote,
   );
+  await input.onStatusConfirmed?.(confirmed);
 
   const linked = await linkTechnicianToSeparation(
     separation.id,
     technician.gc_id,
     technician.name,
     items,
+    separation.technician_gc_id,
   );
   if (!linked) {
     throw new Error('O status mudou no GC, mas o vínculo das peças não foi salvo');

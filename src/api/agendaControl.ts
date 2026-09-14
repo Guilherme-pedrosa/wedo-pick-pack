@@ -11,6 +11,11 @@ export interface AgendaOsRow {
   items: SeparationItemSnapshot[];
 }
 
+export function hasConfirmedTechnicianCustody(row: Pick<AgendaOsRow, 'os' | 'separation'>): boolean {
+  return !!row.separation?.technician_name && !row.separation.invalidated
+    && String(row.os.situacao_id) === '7684665';
+}
+
 export const GC_EXECUTION_TASK_ATTRIBUTE_ID = '73344';
 export const GC_REPAIR_LOCATION_ATTRIBUTE_ID = '68658';
 

@@ -242,10 +242,9 @@ const TechniciansPage = () => {
       }
     }
 
-    // Mantém apenas separações cuja situação atual no GC seja EXATAMENTE
-    // "Retirada pelo técnico" (7684665). Qualquer outra situação significa que
-    // a OS saiu do técnico → desvincula no banco. Se a verificação falhou
-    // (sem status), preserva por segurança.
+    // Esta leitura apenas filtra a tela. Abrir o cadastro nunca deve apagar
+    // vínculos: a consulta pode terminar depois de uma nova retirada.
+    // A devolução explícita encerra a custódia e registra o técnico no histórico.
     const RETIRADA_TECNICO_STATUS_ID = "7684665";
     const idsToUnlink: string[] = [];
     for (const sep of allSeps) {
@@ -254,22 +253,6 @@ const TechniciansPage = () => {
       if (!liveStatus) continue;
       if (liveStatus !== RETIRADA_TECNICO_STATUS_ID) {
         idsToUnlink.push(sep.id);
-      }
-    }
-
-    if (idsToUnlink.length > 0) {
-      try {
-        const { error: unlinkErr } = await supabase
-          .from("separations")
-          .update({ technician_gc_id: null, technician_name: null })
-          .in("id", idsToUnlink);
-        if (unlinkErr) {
-          console.warn("[Technicians] Falha ao desvincular separações executadas", unlinkErr);
-        } else {
-          console.log(`[Technicians] ${idsToUnlink.length} separação(ões) desvinculada(s) (status mudou)`);
-        }
-      } catch (e) {
-        console.warn("[Technicians] Erro ao desvincular separações", e);
       }
     }
 

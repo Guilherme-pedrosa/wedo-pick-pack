@@ -11,6 +11,55 @@ export type PartialWriteoffBalanceRow = {
   pending_purchase_quantity: number | string | null;
 };
 
+/** Saldo material continua consultável depois da retirada e da execução. */
+export const PARTIAL_BALANCE_OPERATION_STATUSES = [
+  "awaiting_separation",
+  "partial_separation",
+  "awaiting_balance",
+  "awaiting_execution",
+  "ready_to_consolidate",
+  "consolidating",
+  "completed",
+  "reconciliation_required",
+];
+
+export type PartialBalanceOperation = {
+  id: string;
+  budget_id: string;
+  budget_code: string;
+  status: string;
+  updated_at: string;
+};
+
+export function newestBalanceOperationByBudget(operations: PartialBalanceOperation[]): PartialBalanceOperation[] {
+  const sorted = [...operations]
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+  const seenIds = new Set<string>();
+  const seenCodes = new Set<string>();
+  return sorted.filter(operation => {
+    const id = normalizeBudgetReference(operation.budget_id);
+    const code = normalizeBudgetReference(operation.budget_code);
+    if ((id && seenIds.has(id)) || (code && seenCodes.has(code))) return false;
+    if (id) seenIds.add(id);
+    if (code) seenCodes.add(code);
+    // Uma operação posterior cancelada não reabre o saldo de um ciclo anterior.
+    return PARTIAL_BALANCE_OPERATION_STATUSES.includes(operation.status);
+  });
+}
+
+/** Uma página incompleta não pode ser interpretada como saldo zerado. */
+export async function readAllBalanceRows(
+  fetchPage: (from: number, to: number) => Promise<PartialWriteoffBalanceRow[]>,
+  pageSize = 1000,
+): Promise<PartialWriteoffBalanceRow[]> {
+  const rows: PartialWriteoffBalanceRow[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const page = await fetchPage(from, from + pageSize - 1);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 export type PendingPartialWriteoffItem = {
   line_key: string;
   product_id: string;

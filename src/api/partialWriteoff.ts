@@ -81,6 +81,7 @@ export interface PartialWriteoffBatch {
 }
 
 export interface PartialWriteoffOperation {
+  checkout_confirmation?: { statusId: string; statusName: string };
   flow_mode?: 'partial_execution' | 'reservation';
   id: string;
   budget_id: string;
@@ -119,6 +120,7 @@ export interface PartialBudgetSearchResult {
 }
 
 export interface PartialCheckoutEntry {
+  flowMode?: 'partial_execution' | 'reservation';
   batchId: string;
   operationId: string;
   budgetCode: string;
@@ -340,7 +342,7 @@ export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]>
   const pageSize = 500;
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase.from('partial_writeoff_batches')
-      .select('id, operation_id, marker, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, created_at, partial_writeoff_operations!inner(budget_code, client_name, status)')
+      .select('id, operation_id, marker, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, created_at, partial_writeoff_operations!inner(budget_code, client_name, status, flow_mode)')
       .in('status', ['awaiting_checkout', 'reconciliation_required'])
       .not('auxiliary_document_id', 'is', null)
       .not('partial_writeoff_operations.status', 'in', '(completed,cancelled,consolidating)')
@@ -352,6 +354,7 @@ export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]>
       if (!operation || !batch.auxiliary_document_id) continue;
       entries.push({
         batchId: batch.id, operationId: batch.operation_id, budgetCode: operation.budget_code,
+        flowMode: operation.flow_mode as PartialCheckoutEntry['flowMode'],
         marker: batch.marker, type: batch.auxiliary_document_type as OrderType,
         documentId: String(batch.auxiliary_document_id), documentCode: String(batch.auxiliary_document_code || ''),
         clientName: operation.client_name, createdAt: batch.created_at,
@@ -364,7 +367,7 @@ export async function getPartialCheckoutQueue(): Promise<PartialCheckoutEntry[]>
 export async function findPartialBatchByDocument(type: OrderType, documentId: string): Promise<PartialCheckoutEntry | null> {
   try {
     const query = (supabase.from('partial_writeoff_batches' as any) as any)
-      .select('id, operation_id, marker, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, created_at, status, partial_writeoff_operations(budget_code, client_name)')
+      .select('id, operation_id, marker, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, created_at, status, partial_writeoff_operations(budget_code, client_name, flow_mode)')
       .eq('auxiliary_document_type', type)
       .eq('auxiliary_document_id', documentId)
       .in('status', ['awaiting_checkout', 'reconciliation_required'])
@@ -375,6 +378,7 @@ export async function findPartialBatchByDocument(type: OrderType, documentId: st
     return {
       batchId: data.id,
       operationId: data.operation_id,
+      flowMode: data.partial_writeoff_operations?.flow_mode,
       budgetCode: data.partial_writeoff_operations?.budget_code || '',
       marker: data.marker,
       type: data.auxiliary_document_type,
@@ -386,6 +390,23 @@ export async function findPartialBatchByDocument(type: OrderType, documentId: st
   } catch {
     throw new Error('Não foi possível conferir o vínculo de baixa parcial deste pedido. Tente novamente.');
   }
+}
+
+/** Um link da auditoria pode retomar o encaminhamento de um lote com saldo já confirmado. */
+export async function getPartialCheckoutEntry(batchId: string): Promise<PartialCheckoutEntry | null> {
+  const { data, error } = await supabase.from('partial_writeoff_batches')
+    .select('id, operation_id, marker, auxiliary_document_type, auxiliary_document_id, auxiliary_document_code, created_at, partial_writeoff_operations!inner(budget_code, client_name, status, flow_mode, definitive_document_id)')
+    .eq('id', batchId).in('status', ['awaiting_checkout', 'reconciliation_required', 'confirmed'])
+    .not('partial_writeoff_operations.status', 'in', '(completed,cancelled,consolidating)')
+    .is('partial_writeoff_operations.definitive_document_id', null).maybeSingle();
+  if (error) throw new Error(`Não foi possível conferir o lote do Checkout: ${error.message}`);
+  if (!data?.auxiliary_document_id || !data.partial_writeoff_operations) return null;
+  const operation = data.partial_writeoff_operations;
+  return { batchId: data.id, operationId: data.operation_id, marker: data.marker,
+    type: data.auxiliary_document_type as OrderType, documentId: data.auxiliary_document_id,
+    documentCode: data.auxiliary_document_code || '', createdAt: data.created_at,
+    budgetCode: operation.budget_code, clientName: operation.client_name,
+    flowMode: operation.flow_mode as PartialCheckoutEntry['flowMode'] };
 }
 
 export interface ActivePartialDemand {

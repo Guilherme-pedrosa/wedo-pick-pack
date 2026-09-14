@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   auditPartialDocuments,
   checkPartialExecution,
+  confirmPartialBatch,
   cancelPartialBatch,
   deletePartialOperation,
   forceCancelPartialOperation,
@@ -154,6 +155,7 @@ export default function PartialWriteoffPage() {
   const [cancelling, setCancelling] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
+  const [retryingCheckoutId, setRetryingCheckoutId] = useState<string | null>(null);
   const [createAuvoTask, setCreateAuvoTask] = useState(DEFAULT_CREATE_PARTIAL_AUVO_TASK);
   const [cancellingBatchId, setCancellingBatchId] = useState<string | null>(null);
   const [auditing, setAuditing] = useState(false);
@@ -313,6 +315,22 @@ export default function PartialWriteoffPage() {
   }
 
 
+  async function handleCheckoutHandoff(batchId: string) {
+    if (!selected || retryingCheckoutId || !selected.batches.some(batch => batch.id === batchId && batch.status === 'confirmed')) return;
+    setRetryingCheckoutId(batchId);
+    try {
+      const operation = await confirmPartialBatch(batchId);
+      const confirmation = operation.checkout_confirmation;
+      if (!confirmation) throw new Error('A situação atual da OS não foi confirmada. Tente novamente.');
+      setAudits(previous => previous[batchId] ? { ...previous, [batchId]: { ...previous[batchId],
+        state: 'ok', situacaoId: confirmation.statusId, situacaoNome: confirmation.statusName,
+        message: `OS em ${confirmation.statusName}. Baixa já confirmada preservada.` } } : previous);
+      toast.success(`OS em ${confirmation.statusName}.`);
+      await refresh();
+    } catch (error) { toast.error(friendlyError(error)); }
+    finally { setRetryingCheckoutId(null); }
+  }
+
   async function handleDeleteOperation(operation: PartialWriteoffOperation) {
     if (deletingId) return;
     if (!window.confirm(`Excluir definitivamente a baixa parcial do #${operation.budget_code}? Esse registro sai do histórico e os consumos de estoque dos documentos auxiliares são removidos. Documentos já criados no GestãoClick precisam ser tratados manualmente lá.`)) return;
@@ -405,7 +423,7 @@ export default function PartialWriteoffPage() {
       } else if (errors.length) {
         toast.error(errors.map(item => item.message).join('\n'), { duration: 10000 });
       } else if (pending.length) {
-        toast.warning(`Baixa ainda não aplicada no GC: ${pending.map(item => `#${item.documentCode}`).join(', ')}. Use “Retomar no Checkout” no lote para concluir a conferência.`, { duration: 10000 });
+        toast.warning(`Conferência ou encaminhamento pendente: ${pending.map(item => `#${item.documentCode}`).join(', ')}. Use a ação indicada em cada lote para concluir.`, { duration: 10000 });
       } else if (changed) {
         toast.warning(`Auditoria: ${changed} documento(s) com situação diferente da esperada.`);
       } else {
@@ -434,7 +452,11 @@ export default function PartialWriteoffPage() {
       const pending = result.filter(item => item.state === 'pending_checkout').sort((a, b) => a.sequence - b.sequence);
       if (pending.length) {
         const next = pending[0];
-        toast.info(`${next.type === 'os' ? 'OS' : 'Venda'} #${next.documentCode} ainda sem baixa. Abrindo a conferência deste lote no Checkout.`);
+        if (next.batchStatus === 'confirmed') {
+          await handleCheckoutHandoff(next.batchId);
+          return;
+        }
+        toast.info(`${next.type === 'os' ? 'OS' : 'Venda'} #${next.documentCode} com Checkout pendente. Abrindo este lote para retomar a confirmação.`);
         navigate(`/checkout?partialBatch=${encodeURIComponent(next.batchId)}`);
         return;
       }
@@ -1159,7 +1181,12 @@ export default function PartialWriteoffPage() {
 
                           <div className="flex items-center gap-2">
                             <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'reconciliation_required' ? 'Confirmação pendente' : batch.status === 'confirmed' ? (selected.flow_mode === 'reservation' ? 'Reserva aplicada' : 'Baixa aplicada') : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
-                            {['awaiting_checkout', 'reconciliation_required'].includes(batch.status) && batch.auxiliary_document_id && (
+                            {batch.status === 'confirmed' && audit?.state === 'pending_checkout' && batch.auxiliary_document_id ? (
+                              <Button variant="outline" size="sm" disabled={!!retryingCheckoutId} onClick={() => handleCheckoutHandoff(batch.id)}>
+                                {retryingCheckoutId === batch.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Encaminhar OS
+                              </Button>
+                            ) : ['awaiting_checkout', 'reconciliation_required'].includes(batch.status) && batch.auxiliary_document_id && (
                               <Button variant="outline" size="sm" onClick={() => navigate(`/checkout?partialBatch=${encodeURIComponent(batch.id)}`)}>
                                 Retomar no Checkout
                               </Button>

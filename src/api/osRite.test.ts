@@ -5,6 +5,7 @@ import { NORMAL_OS_CREATION_STATUS_ID, partialAuxiliaryCreationStatus } from '..
 import { technicianReleaseStatus } from './technicianRelease';
 
 const read = (rel: string) => fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
+const AGUARDANDO_EXECUCAO = { id: '7063705', name: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' };
 
 describe('rito da OS de baixa parcial — mesma situação de qualquer OS', () => {
   it('OS auxiliar nasce em PEDIDO EM CONFERÊNCIA (7063581), igual ao generate-os, ignorando settings e flow_mode', () => {
@@ -31,24 +32,33 @@ describe('rito da OS de baixa parcial — mesma situação de qualquer OS', () =
     expect(consolidation).not.toMatch(/definitivePayload\([^)]*settings\.os_waiting_status_id/);
   });
 
-  it('a edge antiga continua bloqueada para mover documentos (rito legado com 7347355 não pode voltar)', () => {
+  it('a edge antiga continua bloqueada para mover documentos, e o consolidate legado recusa OS', () => {
     const edge = read('supabase/functions/partial-writeoff/index.ts');
     expect(edge).toMatch(/\["open_operation", "prepare_batch", "confirm_batch", "consolidate"\]\.includes\(action\)/);
+    const consolidate = edge.slice(edge.indexOf('async function handleConsolidate('));
+    expect(consolidate.slice(0, 600)).toMatch(/document_type === "os"\) throw new Error\("OS_CONSOLIDATION_VIA_WORKER"\)/);
   });
 });
 
-describe('desvincular técnico devolve a OS a uma situação do rito', () => {
-  it('mantém o alvo do Checkout quando ele é uma situação de OS de aguardando execução', () => {
+describe('desvincular técnico devolve a OS a uma situação de espera do rito', () => {
+  it('mantém o alvo do Checkout quando ele é uma situação de OS de "aguardando"', () => {
     expect(technicianReleaseStatus({ order_type: 'os', target_status_id: '7063705', target_status_name: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' }))
-      .toEqual({ id: '7063705', name: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' });
+      .toEqual(AGUARDANDO_EXECUCAO);
     expect(technicianReleaseStatus({ order_type: 'os', target_status_id: '7213493', target_status_name: 'SERVIÇO AGUARDANDO EXECUÇÃO' }).id).toBe('7213493');
+    expect(technicianReleaseStatus({ order_type: 'os', target_status_id: '7748831', target_status_name: '' }).id).toBe('7748831');
   });
 
-  it('marcador interno de baixa parcial, situação de venda (7347355) ou retirada caem em PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO', () => {
+  it('marcador interno, situação de venda (7347355), retirada ou vazio caem em PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO', () => {
     for (const target of ['partial:38914c7f-5932-4799-9a02-c2dd602ff2ef', '7347355', '7684665', '', undefined]) {
       expect(technicianReleaseStatus({ order_type: 'os', target_status_id: target, target_status_name: 'Baixa parcial aplicada (somente estoque)' }))
-        .toEqual({ id: '7063705', name: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' });
+        .toEqual(AGUARDANDO_EXECUCAO);
     }
+  });
+
+  it('situação de OS que não é de espera (EXECUTADO, EM ROTA, sem nome conhecido) também cai no aguardando execução', () => {
+    expect(technicianReleaseStatus({ order_type: 'os', target_status_id: '7116099', target_status_name: 'EXECUTADO – AG. NEGOCIAÇÃO' })).toEqual(AGUARDANDO_EXECUCAO);
+    expect(technicianReleaseStatus({ order_type: 'os', target_status_id: '8219136', target_status_name: 'EM ROTA' })).toEqual(AGUARDANDO_EXECUCAO);
+    expect(technicianReleaseStatus({ order_type: 'os', target_status_id: '7340613', target_status_name: 'CANCELADO' })).toEqual(AGUARDANDO_EXECUCAO);
   });
 
   it('venda não é tocada: volta ao alvo gravado', () => {

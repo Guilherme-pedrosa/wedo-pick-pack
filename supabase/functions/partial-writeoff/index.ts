@@ -1212,6 +1212,9 @@ async function handleConsolidate(body: any, auth: AuthContext) {
   const operationId = String(body.operation_id || "");
   const operation = await getOperationGraph(operationId);
   if (operation.status === "completed") return operation;
+  // OS parcial consolida somente por consolidateExecutedOs (cliente/worker), no rito normal da OS.
+  // O fluxo abaixo é o legado de venda/reserva e nunca pode mover uma OS para os_stock_status_id.
+  if (operation.document_type === "os") throw new Error("OS_CONSOLIDATION_VIA_WORKER");
   if (operation.document_type === "os" && !auth.profile.default_os_conclusion_status) {
     throw new Error("CONFIGURE_OS_CONCLUSION_STATUS");
   }

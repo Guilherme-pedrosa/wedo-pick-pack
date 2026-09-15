@@ -631,6 +631,15 @@ function SeparationCard({
         const order = await getOS(sep.order_id);
         const nextStatusId = tech ? RETIRADA_TECNICO_STATUS_ID : release.id;
         await recordConfirmedStatus(await updateOSStatus(sep.order_id, order, nextStatusId, undefined, gcUsuarioId, gcNote));
+        // O alvo gravado passa a ser a situação de espera efetiva, para o card, a regressão de estoque
+        // e a checagem de "voltou ao status anterior" baterem com o que está no GC.
+        if (!tech && release.id !== String(sep.target_status_id || '')) {
+          const { error: targetError } = await supabase
+            .from('separations')
+            .update({ target_status_id: release.id, target_status_name: release.name })
+            .eq('id', sep.id);
+          if (targetError) console.error('Erro ao atualizar alvo da separação:', targetError);
+        }
       }
 
       const ok = await linkTechnicianToSeparation(

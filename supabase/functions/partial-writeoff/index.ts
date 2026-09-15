@@ -2,7 +2,8 @@ import { GC_API_USER_ID, installGcUsuarioId } from "../_shared/gc-user.ts";
 import { wantsPartialAuvoTask } from "../_shared/partialAuvo.ts";
 import { resolvePartialCustomer } from "../_shared/partialCustomer.ts";
 import { budgetTechnicalHours, withMissingTechnicalHours } from "../_shared/technicalHours.ts";
-import { applyPartialCheckoutStatus, NORMAL_OS_CREATION_STATUS_ID, partialCheckoutConfirmation, partialCheckoutTarget, validatePartialCheckoutDocument } from "../_shared/partialCheckout.ts";
+import { applyPartialCheckoutStatus, partialCheckoutConfirmation, partialCheckoutTarget, validatePartialCheckoutDocument } from "../_shared/partialCheckout.ts";
+import { partialAuxiliaryCreationStatus } from "../_shared/osRite.ts";
 import { assertBudgetUnchanged, assertOperationQuantities } from "../_shared/budgetIntegrity.ts";
 import { assertStatusOnlyChange, writableDocument } from "../_shared/partialConsolidation.ts";
 installGcUsuarioId();
@@ -956,10 +957,8 @@ async function handlePrepareBatch(body: any, auth: AuthContext) {
   if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
 
   const settings = await getSettings();
-  const waitingStatus = operation.document_type === 'os'
-    ? NORMAL_OS_CREATION_STATUS_ID
-    : settings.venda_waiting_status_id;
-  if (!waitingStatus) throw new Error("PARTIAL_STATUS_NOT_CONFIGURED");
+  // OS auxiliar nasce no rito de qualquer OS (7063581); venda usa a situação configurada.
+  const waitingStatus = partialAuxiliaryCreationStatus(operation.document_type, settings);
   const payload = await auxiliaryPayload(operation, selected, waitingStatus, batch.marker);
   const path = operation.document_type === "os" ? "/api/ordens_servicos" : "/api/vendas";
 

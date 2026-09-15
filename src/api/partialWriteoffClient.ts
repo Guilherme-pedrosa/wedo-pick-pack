@@ -9,6 +9,7 @@ import { assertStatusOnlyChange, writableDocument } from './partialConsolidation
 import { canRequestPartialAuvoTask, wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 import { budgetTechnicalHours, withMissingTechnicalHours } from '../../supabase/functions/_shared/technicalHours';
 import { applyPartialCheckoutStatus, NORMAL_OS_CREATION_STATUS_ID, partialCheckoutAwaitingHandoff, partialCheckoutConfirmation, partialCheckoutTarget, validatePartialCheckoutDocument } from '../../supabase/functions/_shared/partialCheckout';
+import { partialAuxiliaryCreationStatus } from '../../supabase/functions/_shared/osRite';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -626,10 +627,8 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
 
   const settings = await getSettings();
-  const waitingStatus = operation.document_type === 'os'
-    ? NORMAL_OS_CREATION_STATUS_ID
-    : settings.venda_waiting_status_id;
-  if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
+  // OS auxiliar nasce no rito de qualquer OS (7063581); venda usa a situação configurada.
+  const waitingStatus = partialAuxiliaryCreationStatus(operation.document_type, settings);
   // Documento integral lido e validado antes da reserva; sem fallback para cópia antiga.
   const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id, freshBudget);
 

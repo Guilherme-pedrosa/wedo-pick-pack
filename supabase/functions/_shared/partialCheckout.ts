@@ -1,9 +1,10 @@
 import { isCancelledStatus, isExecutedStatus, normalizedStatus } from './partialExecution.ts';
 import { assertStatusOnlyChange } from './partialConsolidation.ts';
+import { NORMAL_OS_CREATION_STATUS_ID } from './osRite.ts';
 
 type Document = Record<string, any>;
-/** PEDIDO EM CONFERENCIA, a mesma situação usada por generate-os para uma OS nova. */
-export const NORMAL_OS_CREATION_STATUS_ID = '7063581';
+/** PEDIDO EM CONFERENCIA, a mesma situação usada por generate-os para uma OS nova (ver osRite.ts). */
+export { NORMAL_OS_CREATION_STATUS_ID };
 export interface PartialCheckoutPolicy {
   type: 'os' | 'venda';
   flowMode?: 'partial_execution' | 'reservation';

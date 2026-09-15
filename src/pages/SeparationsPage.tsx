@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSeparations, invalidateSeparation, linkTechnicianToSeparation, assertSeparationAssignmentCurrent, SeparationRecord, SeparationFilters } from '@/api/separations';
+import { technicianReleaseStatus } from '@/api/technicianRelease';
 import { returnSeparationForAgenda } from '@/api/separationReturn';
 import { cacheConfirmedAgendaOrder, mergeSeparationStatuses } from '@/api/separationStatusCache';
 import { getOS, getVenda, updateOSStatus, updateVendaStatus } from '@/api/gestaoclick';
@@ -616,17 +617,19 @@ function SeparationCard({
 
       const previousTechName = sep.technician_name;
       const previousTechGcId = sep.technician_gc_id;
+      // Ao desvincular, a OS volta a uma situação do rito (nunca marcador interno nem situação de venda).
+      const release = technicianReleaseStatus(sep);
 
       // Detailed note written into the GC observations for traceability
       const gcNote = tech
         ? `Técnico vinculado: ${tech.name} (ID ${tech.gc_id})${previousTechName ? ` — anterior: ${previousTechName}` : ''} | Status: RETIRADA PELO TÉCNICO | por ${operatorName}`
-        : `Técnico DESVINCULADO${previousTechName ? `: ${previousTechName} (ID ${previousTechGcId || '—'})` : ''} | Status revertido para "${sep.target_status_name}" | por ${operatorName}`;
+        : `Técnico DESVINCULADO${previousTechName ? `: ${previousTechName} (ID ${previousTechGcId || '—'})` : ''} | Status revertido para "${release.name || release.id}" | por ${operatorName}`;
 
       // IMPORTANT: for OS, status in GC must be updated BEFORE persisting local technician link
       // so we never keep a local technician linked with stale status.
       if (sep.order_type === 'os') {
         const order = await getOS(sep.order_id);
-        const nextStatusId = tech ? RETIRADA_TECNICO_STATUS_ID : sep.target_status_id;
+        const nextStatusId = tech ? RETIRADA_TECNICO_STATUS_ID : release.id;
         await recordConfirmedStatus(await updateOSStatus(sep.order_id, order, nextStatusId, undefined, gcUsuarioId, gcNote));
       }
 
@@ -662,8 +665,8 @@ function SeparationCard({
           technician_gc_id: tech?.gc_id || null,
           previous_technician_name: previousTechName || null,
           previous_technician_gc_id: previousTechGcId || null,
-          new_status: tech ? 'RETIRADA PELO TÉCNICO' : sep.target_status_name,
-          new_status_id: tech ? RETIRADA_TECNICO_STATUS_ID : sep.target_status_id,
+          new_status: tech ? 'RETIRADA PELO TÉCNICO' : release.name,
+          new_status_id: tech ? RETIRADA_TECNICO_STATUS_ID : release.id,
         },
       });
 
@@ -671,7 +674,7 @@ function SeparationCard({
         if (tech) {
           toast.success(`Técnico "${tech.name}" vinculado e status alterado para "Retirada pelo técnico"`);
         } else {
-          toast.success(`Técnico desvinculado e status revertido para "${sep.target_status_name}"`);
+          toast.success(`Técnico desvinculado e status revertido para "${release.name || release.id}"`);
         }
       } else {
         toast.success(tech ? `Técnico "${tech.name}" vinculado` : 'Técnico desvinculado');

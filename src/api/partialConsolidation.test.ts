@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assertDefinitiveContents, consolidateExecutedOs, definitivePayload, type ConsolidationPorts } from './partialConsolidation';
 import type { PartialWriteoffOperation } from './partialWriteoff';
+import { NORMAL_OS_CREATION_STATUS_ID } from '../../supabase/functions/_shared/osRite';
 
 function fixture() {
   const budget: any = { id: 'b', codigo: '4784', cliente_id: 'c', valor_total: '250.00',
@@ -187,5 +188,23 @@ describe('consolidação integral com preservação do histórico', () => {
     expect(f.aux.situacao_estoque).toBe('1');
     expect(f.docs.final.situacao_estoque).toBe('0');
     expect(f.operation.status).toBe('reconciliation_required');
+  });
+});
+
+
+describe('rito da OS definitiva', () => {
+  it('cria a OS definitiva em PEDIDO EM CONFERÊNCIA (7063581) mesmo com os_waiting_status_id diferente', async () => {
+    const f = fixture();
+    const gc = f.ports.gc;
+    let posted: any;
+    f.ports.gc = async (path, method = 'GET', payload) => {
+      if (method === 'POST' && path === '/api/ordens_servicos') posted = payload;
+      return gc(path, method, payload);
+    };
+    const originalRpc = f.ports.rpc;
+    f.ports.rpc = (name, p) => name === 'partial_writeoff_historical_tasks' ? Promise.resolve([]) : originalRpc(name, p);
+    await consolidateExecutedOs(f.operation, f.ports);
+    expect(posted.situacao_id).toBe(NORMAL_OS_CREATION_STATUS_ID);
+    expect(posted.situacao_id).not.toBe('waiting');
   });
 });

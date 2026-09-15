@@ -43,7 +43,8 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const recordGCConfirmation = useCheckoutStore(s => s.recordGCConfirmation);
   const queryClient = useQueryClient();
   const isPartialWriteoff = !!session?.partialWriteoff;
-  const isPartialExecution = isPartialWriteoff && session?.tipo === 'os' && session.partialWriteoff?.flowMode !== 'reservation';
+  // Toda OS de baixa parcial segue o rito de execução (inclusive operações legadas em modo de reserva).
+  const isPartialExecution = isPartialWriteoff && session?.tipo === 'os';
   const needsPartialRevalidation = isPartialWriteoff && session?.gcConfirmation?.targetStatusId.startsWith('partial:');
   const hasGCConfirmation = !!session?.gcConfirmation && !needsPartialRevalidation;
 

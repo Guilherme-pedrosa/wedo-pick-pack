@@ -3,6 +3,7 @@ import type { ConsolidationOperation as PartialWriteoffOperation } from './parti
 import { assertBudgetUnchanged, documentDifferences } from './budgetIntegrity.ts';
 import { assertRequestedAuvoTasksLinked, wantsPartialAuvoTask } from './partialAuvo.ts';
 import { budgetTechnicalHours } from './technicalHours.ts';
+import { NORMAL_OS_CREATION_STATUS_ID } from './osRite.ts';
 
 export interface ConsolidationPorts<T extends PartialWriteoffOperation = PartialWriteoffOperation> {
   gc(path: string, method?: string, payload?: unknown): Promise<GcRecord>;
@@ -185,7 +186,9 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
       const attrs = (await ports.gc('/api/atributos_ordens_servicos')).data;
       if (!Array.isArray(attrs)) throw new Error('Não foi possível consultar os atributos da OS.');
       const history = await ports.rpc('partial_writeoff_historical_tasks', { p_operation_id: operation.id });
-      const payload = definitivePayload(operation, budget, auxiliaries, attrs, settings.os_waiting_status_id, history || []);
+      // A OS definitiva nasce como qualquer OS: PEDIDO EM CONFERÊNCIA, pela constante do rito e
+      // não pela tabela de settings (os_waiting_status_id é legado, só de detecção).
+      const payload = definitivePayload(operation, budget, auxiliaries, attrs, NORMAL_OS_CREATION_STATUS_ID, history || []);
       await save('creating');
       const created = (await ports.gc('/api/ordens_servicos', 'POST', payload)).data;
       if (!created?.id) throw new Error('O GC não confirmou o ID da OS criada.');

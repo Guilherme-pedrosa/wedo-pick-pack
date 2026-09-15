@@ -8,7 +8,7 @@ import { assertBudgetUnchanged, assertOperationQuantities } from './budgetIntegr
 import { assertStatusOnlyChange, writableDocument } from './partialConsolidation';
 import { canRequestPartialAuvoTask, wantsPartialAuvoTask } from '../../supabase/functions/_shared/partialAuvo';
 import { budgetTechnicalHours, withMissingTechnicalHours } from '../../supabase/functions/_shared/technicalHours';
-import { applyPartialCheckoutStatus, partialCheckoutAwaitingHandoff, partialCheckoutConfirmation, partialCheckoutTarget, validatePartialCheckoutDocument } from '../../supabase/functions/_shared/partialCheckout';
+import { applyPartialCheckoutStatus, NORMAL_OS_CREATION_STATUS_ID, partialCheckoutAwaitingHandoff, partialCheckoutConfirmation, partialCheckoutTarget, validatePartialCheckoutDocument } from '../../supabase/functions/_shared/partialCheckout';
 import type {
   PartialBudgetSearchResult,
   PartialWriteoffOperation,
@@ -626,7 +626,9 @@ async function handlePrepareBatch(body: any, auth: AuthContext): Promise<Partial
   if (existingReservation) throw new Error(`BATCH_NOT_REUSABLE:${batch.status}`);
 
   const settings = await getSettings();
-  const waitingStatus = settings[`${operation.document_type}_waiting_status_id`];
+  const waitingStatus = operation.document_type === 'os'
+    ? NORMAL_OS_CREATION_STATUS_ID
+    : settings.venda_waiting_status_id;
   if (!waitingStatus) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
   // Documento integral lido e validado antes da reserva; sem fallback para cópia antiga.
   const payload = auxiliaryPayload(operation, selected, waitingStatus, batch.marker, auth.profile.gc_usuario_id, freshBudget);
@@ -699,7 +701,8 @@ async function finishPreparedBatch(batchId: string, body: any, auth: AuthContext
     }
     operation = await getOperationGraph(operation.id);
   }
-  if (operation.flow_mode === 'reservation') {
+  // Toda OS nova aguarda conferência no Checkout, inclusive operações legadas de reserva.
+  if (operation.document_type === 'venda' && operation.flow_mode === 'reservation') {
     const reserved = await handleConfirmBatch({ batch_id: batchId }, auth);
     const pendingTask = reserved.batches.some(b => b.confirmed_at && !['cancelled', 'failed'].includes(b.status) && b.auvo_task_requested === true && !b.auvo_task_id);
     if (!pendingTask && reserved.items.every(i => Number(i.withdrawn_quantity) === Number(i.original_quantity) && Number(i.reserved_quantity) === 0)) {
@@ -1219,7 +1222,8 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
       const cancelId = normalizeId(settings[`${type}_cancel_status_id`]);
       const waitingId = normalizeId(settings[`${type}_waiting_status_id`]);
       const stockId = normalizeId(settings[`${type}_stock_status_id`]);
-      const expected = [waitingId, stockId, TECHNICIAN_WITHDRAWAL_STATUS_ID, '7063705'].filter(Boolean);
+      const expected = [waitingId, stockId, TECHNICIAN_WITHDRAWAL_STATUS_ID, '7063705',
+        ...(type === 'os' ? [NORMAL_OS_CREATION_STATUS_ID] : [])].filter(Boolean);
 
       const enriched = { ...base, situacaoId, situacaoNome, documentCode: String(document.codigo || base.documentCode || '') };
       const debited = String(document.situacao_estoque) === '1';
@@ -1242,7 +1246,7 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
         }
       }
 
-      if (type === 'os' && debited && [waitingId, stockId].filter(Boolean).includes(situacaoId) &&
+      if (type === 'os' && debited && [NORMAL_OS_CREATION_STATUS_ID, waitingId, stockId].filter(Boolean).includes(situacaoId) &&
           ['confirmed', 'awaiting_checkout', 'reconciliation_required'].includes(base.batchStatus)) {
         const operation = await getOperationGraph(operationId);
         if (!['completed', 'cancelled', 'consolidating'].includes(operation.status) && !operation.definitive_document_id &&
@@ -1261,7 +1265,7 @@ async function handleAuditDocuments(body: any): Promise<any[]> {
         let message = `Estoque já baixado no GestãoClick ("${situacaoNome}"). Lote confirmado automaticamente.`;
         try {
           const operation = await getOperationGraph(operationId);
-          if (type === 'os' && operation.flow_mode !== 'reservation') {
+          if (type === 'os') {
             if (!waitingId || !stockId) throw new Error('Não foi possível conferir as situações de checkout parcial.');
             if (partialCheckoutAwaitingHandoff(document, { type, flowMode: operation.flow_mode,
               waitingStatusId: waitingId, stockStatusId: stockId, cancelStatusId: cancelId })) {

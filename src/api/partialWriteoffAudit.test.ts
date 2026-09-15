@@ -37,6 +37,7 @@ beforeEach(() => {
   mock.invoke.mockImplementation(async (name: string, { body }: any) => {
     expect(name).toBe('gc-proxy');
     expect(body.method).toBe('GET');
+    if (body.path === '/api/situacoes_ordens_servicos') return { data: { _proxy: { ok: true }, data: [{ id: 'ready', nome: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' }] }, error: null };
     const data = body.path === '/api/ordens_servicos/doc' ? document : body.path === '/api/orcamentos/source' ? source : undefined;
     if (!data) throw new Error(`Unexpected GET ${body.path}`);
     return { data: { _proxy: { ok: true }, data }, error: null };
@@ -52,9 +53,11 @@ describe('retomada do Checkout após reconciliação', () => {
   });
   it('retoma a mesma OS após erro, relê os campos atuais e aplica uma única alteração de situação', async () => {
     document.situacao_estoque = '0';
+    document.situacao_id = 'waiting';
     document.atributos = [{ atributo: { atributo_id: '73897', conteudo: '26' } }];
     mock.rpc.mockImplementation(async (name: string) => ({ data: name === 'partial_writeoff_retry_confirmation' ? 'confirming' : 'awaiting_balance', error: null }));
     mock.invoke.mockImplementation(async (_name: string, { body }: any) => {
+      if (body.path === '/api/situacoes_ordens_servicos') return { data: { _proxy: { ok: true }, data: [{ id: 'ready', nome: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' }] }, error: null };
       if (body.method === 'PUT') {
         expect(body.path).toBe('/api/ordens_servicos/doc');
         expect(body.payload.atributos[0].atributo.conteudo).toBe('26');
@@ -71,16 +74,19 @@ describe('retomada do Checkout após reconciliação', () => {
   });
   it('mantém a trava de estoque antes de reivindicar a retomada', async () => {
     document.situacao_estoque = '0';
+    document.situacao_id = 'waiting';
     mock.stockGuard.mockRejectedValue(new Error('INSUFFICIENT_COMMITTED_STOCK'));
     await expect(checkout()).rejects.toThrow('INSUFFICIENT_COMMITTED_STOCK');
     expect(mock.rpc).not.toHaveBeenCalled();
   });
   it('reenvia HORAS TÉCNICAS faltante com as 8 horas da fonte em uma única baixa', async () => {
     document.situacao_estoque = '0';
+    document.situacao_id = 'waiting';
     source.servicos = [{ servico: { nome_servico: 'HORA TECNICA A', quantidade: '8.0000' } }];
     original.servicos = structuredClone(source.servicos);
     try {
       mock.invoke.mockImplementation(async (_name: string, { body }: any) => {
+        if (body.path === '/api/situacoes_ordens_servicos') return { data: { _proxy: { ok: true }, data: [{ id: 'ready', nome: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' }] }, error: null };
         if (body.method === 'PUT') {
           expect(body.path).toBe('/api/ordens_servicos/doc');
           expect(body.payload.atributos).toEqual([{ atributo: { atributo_id: '73897', conteudo: '8' } }]);
@@ -97,9 +103,9 @@ describe('retomada do Checkout após reconciliação', () => {
 });
 const audit = async () => (await invokePartialWriteoffClient<{ audits: any[] }>({ action: 'audit_documents', operation_id: 'op' })).audits[0];
 
-describe('checkout de execução parcial no runtime ativo', () => {
+describe.each(['partial_execution', 'reservation'])('checkout de OS no runtime ativo (%s)', mode => {
   beforeEach(() => {
-    flowMode = 'partial_execution';
+    flowMode = mode;
     document = { ...document, situacao_id: 'waiting', nome_situacao: 'PEDIDO EM CONFERENCIA', situacao_estoque: '0', atributos: [{ atributo: { atributo_id: '73897', conteudo: '26' } }, { atributo: { atributo_id: '73344', conteudo: '79346292' } }] };
     mock.invoke.mockImplementation(async (_name: string, { body }: any) => {
       if (body.path === '/api/situacoes_ordens_servicos') return { data: { _proxy: { ok: true }, data: [{ id: 'ready', nome: 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO' }] }, error: null };

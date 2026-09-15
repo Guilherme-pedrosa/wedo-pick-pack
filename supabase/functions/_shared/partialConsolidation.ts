@@ -1,7 +1,7 @@
 import { appendUniqueNote, consolidationReference, executionDocument, isCancelledStatus, isExecutedStatus, requireExecutedDocuments, type GcRecord } from './partialExecution.ts';
 import type { ConsolidationOperation as PartialWriteoffOperation } from './partialExecution.ts';
 import { assertBudgetUnchanged, documentDifferences } from './budgetIntegrity.ts';
-import { assertRequestedAuvoTasksLinked } from './partialAuvo.ts';
+import { assertRequestedAuvoTasksLinked, wantsPartialAuvoTask } from './partialAuvo.ts';
 import { budgetTechnicalHours } from './technicalHours.ts';
 
 export interface ConsolidationPorts<T extends PartialWriteoffOperation = PartialWriteoffOperation> {
@@ -73,7 +73,7 @@ export function definitivePayload(operation: PartialWriteoffOperation, budget: G
   attributes: GcRecord[], waitingStatus: string, historicTasks: string[] = []): GcRecord {
   const taskIds = [...new Set([...operation.batches.map(b => b.auvo_task_id || ''), ...historicTasks].filter(Boolean))];
   assertRequestedAuvoTasksLinked(operation.batches.filter(b => b.confirmed_at));
-  if (!taskIds.length && operation.flow_mode !== 'reservation' && operation.batches.some(b => b.confirmed_at && b.auvo_task_requested !== false)) throw new Error('As tarefas Auvo das execuções precisam estar vinculadas antes de consolidar.');
+  if (!taskIds.length && operation.batches.some(b => b.confirmed_at && wantsPartialAuvoTask(b, operation.flow_mode))) throw new Error('As tarefas Auvo das execuções precisam estar vinculadas antes de consolidar.');
   const normalize = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const sourceAttributes = (budget.atributos || []).map((a: GcRecord) => unwrap(a, 'atributo'));
   const mapped: GcRecord[] = [];
@@ -134,7 +134,6 @@ async function findCreatedDocument(ports: ConsolidationPorts, marker: string): P
 export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(initial: T, ports: ConsolidationPorts<T>): Promise<T> {
   let operation = initial;
   if (operation.status === 'completed') return operation;
-  const reservationOnly = operation.flow_mode === 'reservation';
   const settings = await ports.settings();
   const marker = `PP-CONSOLIDACAO-${operation.id}`;
   const batches = operation.batches.filter(b => b.confirmed_at && b.auxiliary_document_id);
@@ -150,22 +149,20 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
     const reference = operation.definitive_document_code && consolidationReference(operation.budget_code, operation.definitive_document_code);
     if (isCancelledStatus(doc.nome_situacao) && reference && String(doc.observacoes_interna || '').includes(reference)) {
       const previous = proof.find(p => p.documentId === String(doc.id));
-      if (previous?.stockApplied && (previous.executed || reservationOnly && previous.statusId === settings.os_stock_status_id)) return previous;
+      if (previous?.stockApplied && previous.executed) return previous;
     }
     return executionDocument(batches[i].id, doc);
   });
-  const requireReady = (docs: typeof documents) => {
-    if (!reservationOnly) return requireExecutedDocuments(docs);
-    if (!docs.length || docs.some(d => !d.stockApplied || d.statusId !== settings.os_stock_status_id)) throw new Error('A reserva de todas as peças ainda não foi confirmada no GC.');
-  };
-  requireReady(documents);
+  // Toda OS parcial segue o mesmo rito, inclusive operações com o modo legado
+  // "reservation". Estoque baixado ou peças conferidas não provam execução.
+  requireExecutedDocuments(documents);
   const budget = (await ports.gc(`/api/orcamentos/${encodeURIComponent(operation.budget_id)}`)).data;
   if (!budget || String(budget.id) !== operation.budget_id) throw new Error('Não foi possível conferir o orçamento original.');
   assertBudgetUnchanged(operation.budget_snapshot, budget);
   assertAuxiliaryCoverage(budget, auxiliaries);
   const statuses = (await ports.gc('/api/situacoes_ordens_servicos')).data;
   if (!Array.isArray(statuses)) throw new Error('Não foi possível conferir as situações de OS.');
-  const finalStatus = reservationOnly ? settings.os_waiting_status_id : documents[documents.length - 1].statusId;
+  const finalStatus = documents[documents.length - 1].statusId;
   if (!statuses.some(s => String(s.id) === finalStatus)) throw new Error('Situação da última execução não está disponível.');
   await ports.rpc('partial_writeoff_record_execution', { p_operation_id: operation.id, p_documents: documents });
   const claim = await ports.rpc('partial_writeoff_claim_consolidation', { p_operation_id: operation.id });
@@ -217,7 +214,7 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
         if (String(current.situacao_estoque) !== '0' || !String(current.observacoes_interna || '').includes(reference)) throw new Error(`OS #${current.codigo} cancelada fora desta consolidação.`);
         continue;
       }
-      requireReady([executionDocument(batch.id, current)]);
+      requireExecutedDocuments([executionDocument(batch.id, current)]);
       const payload = { ...writableDocument(current), situacao_id: settings.os_cancel_status_id,
         observacoes_interna: appendUniqueNote(current.observacoes_interna, reference) };
       await ports.gc(`/api/ordens_servicos/${current.id}`, 'PUT', payload);
@@ -228,16 +225,14 @@ export async function consolidateExecutedOs<T extends PartialWriteoffOperation>(
     }
     await save('finalizing', definitive);
     definitive = await readDocument(ports, String(definitive.id));
-    if (!reservationOnly && String(definitive.situacao_estoque) !== '1') {
+    if (String(definitive.situacao_estoque) !== '1') {
       const beforeStatus = definitive;
       await ports.gc(`/api/ordens_servicos/${definitive.id}`, 'PUT', { ...writableDocument(definitive), situacao_id: finalStatus });
       definitive = await readDocument(ports, String(definitive.id));
       assertStatusOnlyChange(beforeStatus, definitive);
     }
     assertDefinitiveContents(budget, definitive);
-    if (reservationOnly) {
-      if (String(definitive.situacao_estoque) !== '0' || String(definitive.situacao_id) !== finalStatus) throw new Error('Transferência da reserva para a fila de Checkout não confirmada.');
-    } else if (String(definitive.situacao_estoque) !== '1' || !isExecutedStatus(definitive.nome_situacao)) throw new Error('Baixa e execução definitivas não confirmadas no GestãoClick.');
+    if (String(definitive.situacao_estoque) !== '1' || !isExecutedStatus(definitive.nome_situacao)) throw new Error('Baixa e execução definitivas não confirmadas no GestãoClick.');
     const latestBudget = (await ports.gc(`/api/orcamentos/${operation.budget_id}`)).data;
     assertBudgetUnchanged(budget, latestBudget);
     await ports.gc(`/api/orcamentos/${operation.budget_id}`, 'PUT', { ...writableDocument(latestBudget), situacao_id: '7109779' });

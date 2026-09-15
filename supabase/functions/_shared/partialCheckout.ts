@@ -2,6 +2,8 @@ import { isCancelledStatus, isExecutedStatus, normalizedStatus } from './partial
 import { assertStatusOnlyChange } from './partialConsolidation.ts';
 
 type Document = Record<string, any>;
+/** PEDIDO EM CONFERENCIA, a mesma situação usada por generate-os para uma OS nova. */
+export const NORMAL_OS_CREATION_STATUS_ID = '7063581';
 export interface PartialCheckoutPolicy {
   type: 'os' | 'venda';
   flowMode?: 'partial_execution' | 'reservation';
@@ -19,8 +21,8 @@ export function partialCheckoutConfirmation(document: Document): PartialCheckout
 }
 
 export function partialCheckoutAwaitingHandoff(document: Document, policy: PartialCheckoutPolicy): boolean {
-  return policy.type === 'os' && policy.flowMode !== 'reservation' &&
-    [policy.waitingStatusId, policy.stockStatusId].filter(Boolean).includes(String(document.situacao_id)) &&
+  return policy.type === 'os' &&
+    [NORMAL_OS_CREATION_STATUS_ID, policy.waitingStatusId, policy.stockStatusId].filter(Boolean).includes(String(document.situacao_id)) &&
     !isExecutedStatus(document.nome_situacao) && !/RETIRAD|FATURAD/.test(normalizedStatus(document.nome_situacao));
 }
 
@@ -40,7 +42,7 @@ export async function partialCheckoutTarget(
   validatePartialCheckoutDocument(document, policy);
   const current = String(document.situacao_id);
   const stockApplied = String(document.situacao_estoque) === '1';
-  if (policy.type !== 'os' || policy.flowMode === 'reservation') {
+  if (policy.type !== 'os') {
     if (stockApplied) return current;
     if (!policy.stockStatusId) throw new Error('PARTIAL_STATUS_NOT_CONFIGURED');
     return policy.stockStatusId;

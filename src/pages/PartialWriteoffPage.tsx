@@ -69,8 +69,12 @@ const statusLabels: Record<string, string> = {
   reconciliation_required: 'Reconciliação necessária',
 };
 
+function usesReservationPresentation(operation: PartialWriteoffOperation) {
+  return operation.document_type !== 'os' && operation.flow_mode === 'reservation';
+}
+
 function operationStatusLabel(operation: PartialWriteoffOperation) {
-  if (operation.flow_mode === 'reservation') {
+  if (usesReservationPresentation(operation)) {
     if (['awaiting_execution', 'ready_to_consolidate'].includes(operation.status)) return 'Reserva completa — preparando OS';
     if (operation.status === 'completed') return 'Reserva transferida para a OS';
   }
@@ -626,7 +630,7 @@ export default function PartialWriteoffPage() {
         toast.warning('OS criada. A tarefa Auvo solicitada está pendente; confira o aviso no histórico.', { duration: 10000 });
         return;
       }
-      toast.success(selected.flow_mode === 'reservation' ? 'Reserva aplicada no GC. Ao completar todas as peças, a OS integral é liberada para Checkout.' : 'Documento auxiliar criado. O lote já está na fila do Checkout.');
+      toast.success(usesReservationPresentation(selected) ? 'Reserva aplicada no GC. Ao completar todas as peças, a OS integral é liberada para Checkout.' : 'Documento auxiliar criado. O lote já está na fila do Checkout.');
       navigate('/checkout');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -969,7 +973,7 @@ export default function PartialWriteoffPage() {
                       <tr>
                         <th className="px-3 py-2 text-left">Produto</th>
                         <th className="px-3 py-2 text-right">Solicitado</th>
-                        <th className="px-3 py-2 text-right">{selected.flow_mode === 'reservation' ? 'Reservado no GC' : 'Já retirado'}</th>
+                        <th className="px-3 py-2 text-right">{usesReservationPresentation(selected) ? 'Reservado no GC' : 'Já retirado'}</th>
                         <th className="px-3 py-2 text-right">Reservado nesta OS</th>
                         <th className="px-3 py-2 text-right">Pendente</th>
                         <th className="px-3 py-2 text-right">Saldo físico GC</th>
@@ -1084,7 +1088,7 @@ export default function PartialWriteoffPage() {
                   <div className="flex flex-col items-start justify-between gap-3 rounded-lg border bg-muted/30 p-4 sm:flex-row sm:items-center">
                     <div>
                       <p className="font-medium">Criar o próximo lote</p>
-                      <p className="text-sm text-muted-foreground">{selected.flow_mode === 'reservation' ? 'A reserva retira as peças da disponibilidade no GC. Com todas as peças reservadas, a OS integral entra no Checkout.' : 'O documento auxiliar aparecerá no Checkout e só movimentará estoque depois da conferência completa.'}</p>
+                      <p className="text-sm text-muted-foreground">{usesReservationPresentation(selected) ? 'A reserva retira as peças da disponibilidade no GC. Com todas as peças reservadas, a OS integral entra no Checkout.' : 'O documento auxiliar aparecerá no Checkout e só movimentará estoque depois da conferência completa.'}</p>
                       {selected.document_type === 'os' && (
                         <div className="mt-3 space-y-1">
                           <label htmlFor="partial-create-auvo-task" className="flex items-center gap-2 text-sm font-medium">
@@ -1098,7 +1102,7 @@ export default function PartialWriteoffPage() {
                     </div>
                     <Button onClick={handlePrepare} disabled={preparing || requestedItems.length === 0 || stockQuery.isLoading || !commitmentsQuery.data || commitmentsQuery.isError}>
                       {preparing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
-                      {selected.flow_mode === 'reservation' ? 'Reservar peças' : 'Enviar ao Checkout'}
+                      {usesReservationPresentation(selected) ? 'Reservar peças' : 'Enviar ao Checkout'}
                     </Button>
                   </div>
                 )}
@@ -1180,7 +1184,7 @@ export default function PartialWriteoffPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'reconciliation_required' ? 'Confirmação pendente' : batch.status === 'confirmed' ? (selected.flow_mode === 'reservation' ? 'Reserva aplicada' : 'Baixa aplicada') : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
+                            <Badge variant="outline">{batch.status === 'awaiting_checkout' ? 'Aguardando Checkout' : batch.status === 'reconciliation_required' ? 'Confirmação pendente' : batch.status === 'confirmed' ? (usesReservationPresentation(selected) ? 'Reserva aplicada' : 'Baixa aplicada') : batch.status === 'consolidated' ? `Consolidado na OS #${selected.definitive_document_code}` : batch.status === 'cancelled' ? 'Cancelado' : batch.status}</Badge>
                             {batch.status === 'confirmed' && audit?.state === 'pending_checkout' && batch.auxiliary_document_id ? (
                               <Button variant="outline" size="sm" disabled={!!retryingCheckoutId} onClick={() => handleCheckoutHandoff(batch.id)}>
                                 {retryingCheckoutId === batch.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1216,15 +1220,15 @@ export default function PartialWriteoffPage() {
                 {selected.status === 'awaiting_execution' && (
                   <Alert className="border-amber-200 bg-amber-50">
                     <ClipboardCheck className="h-4 w-4" />
-                    <AlertTitle>{selected.flow_mode === 'reservation' ? 'Reserva completa — preparando OS integral' : 'Todas as baixas realizadas — aguardando última execução'}</AlertTitle>
+                    <AlertTitle>{usesReservationPresentation(selected) ? 'Reserva completa — preparando OS integral' : 'Todas as baixas realizadas — aguardando última execução'}</AlertTitle>
                     <AlertDescription>
-                      {selected.flow_mode === 'reservation' ? 'As peças estão reservadas no GC. A rotina confere a reserva integral e transfere o compromisso para a OS de Checkout, preservando as tarefas Auvo solicitadas nos lotes.' : `As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua vinculada ao orçamento #${selected.budget_code}. A conciliação final permanece bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.`}
-                      {(selected.execution_documents || []).filter(d => selected.flow_mode === 'reservation' ? !d.stockApplied : !d.executed).map(d => (
+                      {usesReservationPresentation(selected) ? 'As peças estão reservadas no GC. A rotina confere a reserva integral e transfere o compromisso para a OS de Checkout, preservando as tarefas Auvo solicitadas nos lotes.' : `As quantidades baixadas e as tarefas Auvo estão preservadas. A operação continua vinculada ao orçamento #${selected.budget_code}. A conciliação final permanece bloqueada até a verificação da execução das OS e das movimentações no GestãoClick.`}
+                      {(selected.execution_documents || []).filter(d => usesReservationPresentation(selected) ? !d.stockApplied : !d.executed || !d.stockApplied).map(d => (
                         <p key={d.documentId} className="mt-2">OS #{d.documentCode}: {d.statusName}</p>
                       ))}
                       {executionQuery.error && <p className="mt-2 text-red-700">Falha na consulta: {friendlyError(executionQuery.error)} A consolidação continua bloqueada.</p>}
                       <Button variant="outline" className="mt-3" disabled={executionQuery.isFetching} onClick={() => executionQuery.refetch()}>
-                        {executionQuery.isFetching && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{selected.flow_mode === 'reservation' ? 'Verificar reservas' : 'Verificar última execução'}
+                        {executionQuery.isFetching && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{usesReservationPresentation(selected) ? 'Verificar reservas' : 'Verificar última execução'}
                       </Button>
                     </AlertDescription>
                   </Alert>
@@ -1235,9 +1239,9 @@ export default function PartialWriteoffPage() {
                     <div className="flex items-start gap-2">
                       <CheckCircle2 className="mt-0.5 h-5 w-5 text-blue-700" />
                       <div>
-                        <p className="font-semibold">{selected.flow_mode === 'reservation' ? 'Todas as peças estão reservadas' : 'Todas as peças foram retiradas'}</p>
+                        <p className="font-semibold">{usesReservationPresentation(selected) ? 'Todas as peças estão reservadas' : 'Todas as peças foram retiradas'}</p>
                         <p className="text-sm text-muted-foreground">
-                          {selected.flow_mode === 'reservation' ? 'A OS integral entra na fila de Checkout antes de liberar os auxiliares, mantendo as peças comprometidas para este orçamento.' : operationIsExistingSale(selected)
+                          {usesReservationPresentation(selected) ? 'A OS integral entra na fila de Checkout antes de liberar os auxiliares, mantendo as peças comprometidas para este orçamento.' : operationIsExistingSale(selected)
                             ? 'Agora os auxiliares serão compensados e a venda original receberá a baixa definitiva de estoque, mantendo o financeiro que já existe.'
                             : 'As execuções foram conferidas. A OS integral será criada com as tarefas Auvo existentes; depois os auxiliares serão compensados e receberão a referência da OS definitiva.'}
                         </p>

@@ -61,14 +61,18 @@ function fixture() {
 }
 
 describe('consolidação integral com preservação do histórico', () => {
-  it('consolida execuções com dispensa explícita de tarefas preservando o orçamento', async () => {
-    const f = fixture(); f.operation.batches[0].auvo_task_id = null; f.operation.batches[0].auvo_task_requested = false;
+  it.each(['reservation', 'partial_execution'] as const)('consolida execuções em %s com dispensa explícita de tarefas preservando o orçamento', async flow => {
+    const f = fixture(); f.operation.flow_mode = flow; f.operation.batches[0].auvo_task_id = null; f.operation.batches[0].auvo_task_requested = false;
     const originalRpc = f.ports.rpc;
     f.ports.rpc = (name,p) => name === 'partial_writeoff_historical_tasks' ? Promise.resolve([]) : originalRpc(name,p);
     await consolidateExecutedOs(f.operation, f.ports);
     expect(f.docs.final.produtos).toEqual(f.budget.produtos);
     expect(f.docs.final.servicos).toEqual(f.budget.servicos);
     expect(f.docs.final.observacoes_interna).toContain('sem solicitação');
+    expect(f.operation.status).toBe('completed');
+    expect(f.docs.final.situacao_id).toBe('executed');
+    expect(f.docs.final.situacao_estoque).toBe('1');
+    expect(f.operation.execution_documents?.[0].executed).toBe(true);
   });
   it.each(['reservation', 'partial_execution'] as const)('bloqueia consolidação antes de qualquer chamada quando tarefa solicitada está pendente em %s', async flow => {
     const f = fixture(); f.operation.flow_mode = flow;
@@ -76,12 +80,12 @@ describe('consolidação integral com preservação do histórico', () => {
     await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('tarefa Auvo solicitada');
     expect(f.calls).toEqual([]);
   });
-  it('preserva tarefa solicitada na transferência de reserva para a OS integral', async () => {
+  it('preserva a tarefa de uma operação legada somente depois da execução comprovada', async () => {
     const f = fixture(); f.operation.flow_mode = 'reservation'; f.operation.batches[0].auvo_task_requested = true;
-    f.aux.situacao_id = 'reserve'; f.aux.nome_situacao = 'Baixa pra reserva de peças - Aguardando Compra';
     await consolidateExecutedOs(f.operation, f.ports);
     expect(f.docs.final.atributos.find((a:any) => a.atributo.atributo_id === '73344').atributo.conteudo).toContain('20');
-    expect(f.docs.final.situacao_estoque).toBe('0');
+    expect(f.docs.final.situacao_estoque).toBe('1');
+    expect(f.docs.final.situacao_id).toBe('executed');
   });
   it('cria a integral antes de cancelar auxiliares e mantém todas as tarefas sem chamar Auvo', async () => {
     const f = fixture();
@@ -95,10 +99,22 @@ describe('consolidação integral com preservação do histórico', () => {
     expect(f.docs.aux.situacao_estoque).toBe('0');
     expect(f.docs.final.produtos).toEqual(f.budget.produtos);
   });
-  it('não faz nenhuma escrita se uma OS ainda não foi executada', async () => {
-    const f = fixture(); f.aux.nome_situacao = 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO';
-    await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('Aguardando execução');
-    expect(f.calls.every(c => c.startsWith('GET '))).toBe(true);
+  it.each(['reservation', 'partial_execution'] as const)('não cancela auxiliares nem retorna estoque em %s enquanto aguarda execução ou baixa', async flow => {
+    for (const [status, stock] of [
+      ['PEDIDO EM CONFERENCIA', '0'],
+      ['PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO', '1'],
+      ['RETIRADA PELO TECNICO', '1'],
+      ['Baixa pra reserva de peças - Aguardando Compra', '1'],
+      ['EXECUTADO - AGUARDANDO NEGOCIAÇÃO FINANCEIRA', '0'],
+    ]) {
+      const f = fixture(); f.operation.flow_mode = flow;
+      f.aux.nome_situacao = status; f.aux.situacao_estoque = stock;
+      const before = structuredClone(f.aux);
+      await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('Aguardando execução');
+      expect(f.calls.every(c => c.startsWith('GET '))).toBe(true);
+      expect(f.aux).toEqual(before);
+      expect(f.docs.final).toBeUndefined();
+    }
   });
   it('não cancela os auxiliares se a OS criada perdeu produtos', async () => {
     const f = fixture(); f.corruptCreated();
@@ -107,8 +123,8 @@ describe('consolidação integral com preservação do histórico', () => {
     expect(f.operation.definitive_document_id).toBe('final');
     expect(f.operation.status).toBe('reconciliation_required');
   });
-  it('retoma depois de falha ao finalizar sem criar outra OS nem cancelar duas vezes', async () => {
-    const f = fixture(); f.failFinal();
+  it.each(['reservation', 'partial_execution'] as const)('retoma %s depois de falha ao finalizar sem criar outra OS nem cancelar duas vezes', async flow => {
+    const f = fixture(); f.operation.flow_mode = flow; f.failFinal();
     await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('Falha de API');
     expect(f.operation.definitive_document_id).toBe('final');
     await consolidateExecutedOs(structuredClone(f.operation), f.ports);
@@ -146,17 +162,30 @@ describe('consolidação integral com preservação do histórico', () => {
     expect(payload.servicos).toEqual(f.budget.servicos);
     expect(payload.observacoes_interna).toContain('Observação original');
   });
-  it('transfere reserva completa para uma única OS de Checkout sem criar tarefa nem registrar execução', async () => {
-    const f=fixture();f.operation.flow_mode='reservation';f.operation.batches[0].auvo_task_id=null;
-    f.aux.situacao_id='reserve';f.aux.nome_situacao='Baixa pra reserva de peças - Aguardando Compra';
-    const originalRpc=f.ports.rpc;f.ports.rpc=(name,p)=>name==='partial_writeoff_historical_tasks'?Promise.resolve([]):originalRpc(name,p);
-    const result=await consolidateExecutedOs(f.operation,f.ports);
-    expect(result.status).toBe('completed');
-    expect(f.docs.final.situacao_id).toBe('waiting');
+  it('não aceita comprovante legado de reserva para retomar auxiliar já cancelado sem execução', async () => {
+    const f = fixture(); f.operation.flow_mode = 'reservation';
+    f.operation.definitive_document_id = 'final'; f.operation.definitive_document_code = '10139';
+    f.operation.execution_documents = [{ batchId: 'batch', documentId: 'aux', documentCode: '10034',
+      statusId: 'reserve', statusName: 'Baixa pra reserva de peças - Aguardando Compra', executed: false, stockApplied: true }];
+    f.aux.nome_situacao = 'Cancelada - Uso em OS'; f.aux.situacao_estoque = '0';
+    f.aux.observacoes_interna = 'Baixa parcial do orçamento #4784 finalizada na OS #10139. Histórico e tarefas Auvo preservados e referenciados na OS definitiva.';
+    await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('Aguardando execução');
+    expect(f.calls.every(c => c.startsWith('GET '))).toBe(true);
+  });
+  it('reconfere a execução imediatamente antes de cancelar cada auxiliar de operação legada', async () => {
+    const f = fixture(); f.operation.flow_mode = 'reservation';
+    const gc = f.ports.gc;
+    let auxiliaryReads = 0;
+    f.ports.gc = async (path, method, payload) => {
+      if (path === '/api/ordens_servicos/aux' && (!method || method === 'GET') && ++auxiliaryReads === 2) {
+        f.aux.nome_situacao = 'PEDIDO CONFERIDO AGUARDANDO EXECUÇÃO';
+      }
+      return gc(path, method, payload);
+    };
+    await expect(consolidateExecutedOs(f.operation, f.ports)).rejects.toThrow('Aguardando execução');
+    expect(f.calls).not.toContain('PUT /api/ordens_servicos/aux');
+    expect(f.aux.situacao_estoque).toBe('1');
     expect(f.docs.final.situacao_estoque).toBe('0');
-    expect(f.operation.execution_documents?.[0].executed).toBe(false);
-    expect(f.docs.final.atributos.some((a:any)=>a.atributo.atributo_id==='73344')).toBe(false);
-    expect(f.calls.filter(c=>c==='POST /api/ordens_servicos')).toHaveLength(1);
-    expect(f.calls.indexOf('POST /api/ordens_servicos')).toBeLessThan(f.calls.indexOf('PUT /api/ordens_servicos/aux'));
+    expect(f.operation.status).toBe('reconciliation_required');
   });
 });

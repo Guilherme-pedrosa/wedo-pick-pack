@@ -998,19 +998,35 @@ Deno.serve(async (req: Request) => {
       auvoPayload.equipmentsId = equipmentsToSend;
     }
 
-    console.log(`[generate-os] Auvo payload: ${JSON.stringify(auvoPayload).slice(0, 500)}`);
-    const auvoResult = await auvoCreateTask(auvoToken, auvoPayload);
+    // Reaproveita a tarefa preservada quando ela ainda existe no Auvo.
+    let reusedTaskId: string | null = null;
+    if (preservedTaskId) {
+      try {
+        await auvoGetTask(auvoToken, preservedTaskId);
+        reusedTaskId = preservedTaskId;
+        console.log(`[generate-os] Reaproveitando tarefa Auvo preservada #${preservedTaskId}`);
+      } catch (e) {
+        console.warn(`[generate-os] Tarefa preservada #${preservedTaskId} não existe mais no Auvo: ${String(e)}`);
+        await clearPreservedTasks();
+      }
+    }
 
-    // Resilient taskID extraction: result can be object, array, or nested
-    const auvoTaskId =
-      auvoResult?.result?.taskID ??
-      auvoResult?.result?.[0]?.taskID ??
-      (Array.isArray(auvoResult) ? auvoResult[0]?.taskID : null) ??
-      auvoResult?.taskID ??
-      null;
+    let auvoTaskId: string | number | null = reusedTaskId;
+    if (!auvoTaskId) {
+      console.log(`[generate-os] Auvo payload: ${JSON.stringify(auvoPayload).slice(0, 500)}`);
+      const auvoResult = await auvoCreateTask(auvoToken, auvoPayload);
 
-    console.log(`[generate-os] Auvo full response: ${JSON.stringify(auvoResult).slice(0, 500)}`);
-    console.log(`[generate-os] Auvo task created: ID=${auvoTaskId}`);
+      // Resilient taskID extraction: result can be object, array, or nested
+      auvoTaskId =
+        auvoResult?.result?.taskID ??
+        auvoResult?.result?.[0]?.taskID ??
+        (Array.isArray(auvoResult) ? auvoResult[0]?.taskID : null) ??
+        auvoResult?.taskID ??
+        null;
+
+      console.log(`[generate-os] Auvo full response: ${JSON.stringify(auvoResult).slice(0, 500)}`);
+      console.log(`[generate-os] Auvo task created: ID=${auvoTaskId}`);
+    }
 
     const warnings: string[] = [];
     if (oversizedEquipIds.length > 0) {

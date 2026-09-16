@@ -1087,7 +1087,11 @@ export default function RastreadorPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] bg-background no-print-content">
+    // Altura natural: a rolagem é da página (main do AppLayout). O antigo
+    // h-[calc(100vh-3.5rem)] ignorava o padding do main e criava rolagem
+    // dupla — a lista sobrava num quadradinho e o pessoal reduzia o zoom
+    // do navegador para enxergar.
+    <div className="flex flex-col bg-background no-print-content">
       {/* Top controls */}
       <div className="bg-card border-b border-border p-4 space-y-3">
         <div className="flex items-center gap-2">
@@ -1308,7 +1312,7 @@ export default function RastreadorPage() {
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="p-4">
         {!result && !scanning && (
           <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-2">
             <Search className="h-10 w-10 opacity-30" />
@@ -1342,7 +1346,8 @@ export default function RastreadorPage() {
               )}
             </div>
 
-            <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b border-border flex flex-wrap items-center justify-between gap-2">
+            {/* top-14 = altura do AppLayoutHeader sticky; top-0 sumia embaixo dele. */}
+            <div className="sticky top-14 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur border-b border-border flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

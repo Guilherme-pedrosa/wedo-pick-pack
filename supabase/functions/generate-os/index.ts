@@ -329,6 +329,33 @@ function normalizeGCLines(items: any[] | undefined, key: "produto" | "servico"):
     return normalized;
   });
 }
+// Versão publicada — sonda de deploy (aparece no 400 de payload incompleto).
+const GENERATE_OS_VERSION = "2026-09-16-plano-contas-v1";
+
+// Plano de contas obrigatório no financeiro do documento definitivo (regra
+// do Guilherme, 16/09/2026): OS = "Execução de Serviços Aprovados",
+// venda = "2.1.1 · Vendas de produtos". O GC aceita o plano por PARCELA
+// (pagamentos[].pagamento.plano_contas_id) — sem isso as parcelas nascem sem
+// classificação e a apuração financeira sai furada.
+const PLANO_CONTAS_OS = "27867720";
+const PLANO_CONTAS_VENDA = "27867718";
+
+function applyPlanoContas(pagamentos: any[] | undefined, planoContasId: string): any[] | undefined {
+  if (!Array.isArray(pagamentos) || pagamentos.length === 0) return pagamentos;
+  return pagamentos.map((entry) => {
+    if (entry?.pagamento && typeof entry.pagamento === "object") {
+      // Remove nome_plano_conta herdado do orçamento para não conflitar com o id forçado.
+      const { nome_plano_conta: _n, ...rest } = entry.pagamento;
+      return { ...entry, pagamento: { ...rest, plano_contas_id: planoContasId } };
+    }
+    if (entry && typeof entry === "object") {
+      const { nome_plano_conta: _n, ...rest } = entry;
+      return { ...rest, plano_contas_id: planoContasId };
+    }
+    return entry;
+  });
+}
+
 function normalizeGCPayments(pagamentos: any[] | undefined): any[] {
   if (!Array.isArray(pagamentos)) return [];
   return pagamentos.map((p) => {
@@ -583,7 +610,7 @@ Deno.serve(async (req: Request) => {
     let orcamento = body.orcamento; // GCOrcamento object from frontend
 
     if (!orcamento || !auvo_user_id) {
-      return new Response(JSON.stringify({ error: "Missing orcamento or auvo_user_id" }), {
+      return new Response(JSON.stringify({ error: "Missing orcamento or auvo_user_id", version: GENERATE_OS_VERSION }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -1089,7 +1116,7 @@ Deno.serve(async (req: Request) => {
         }
 
         if (orcamento.valor_total) osPayload.valor_total = orcamento.valor_total;
-        if (orcamento.pagamentos?.length) osPayload.pagamentos = orcamento.pagamentos;
+        if (orcamento.pagamentos?.length) osPayload.pagamentos = applyPlanoContas(orcamento.pagamentos, PLANO_CONTAS_OS);
         // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
         osPayload.usuario_id = "1320473";
         // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)
@@ -1185,7 +1212,7 @@ Deno.serve(async (req: Request) => {
         }
 
         if (orcamento.valor_total) vendaPayload.valor_total = orcamento.valor_total;
-        if (orcamento.pagamentos?.length) vendaPayload.pagamentos = orcamento.pagamentos;
+        if (orcamento.pagamentos?.length) vendaPayload.pagamentos = applyPlanoContas(orcamento.pagamentos, PLANO_CONTAS_VENDA);
         // Sempre atribui ao usuário API do GC (guilherme.pedrosa@outlook.com), não ao humano logado
         vendaPayload.usuario_id = "1320473";
         // Preserve header-level discount (GC recalcula total ignorando desconto se não vier no payload)

@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
       // List all users with profiles and roles
       const { data: profiles, error } = await supabaseAdmin
         .from('profiles')
-        .select('id, name, gc_usuario_id, created_at');
+        .select('id, name, gc_usuario_id, auvo_user_id, created_at');
 
       if (error) throw error;
 
@@ -92,7 +92,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'create') {
-      const { email, password, name, role, gc_usuario_id } = body;
+      const { email, password, name, role, gc_usuario_id, auvo_user_id } = body;
 
       if (!email || !password || !name) {
         return new Response(JSON.stringify({ error: 'email, password, and name are required' }), {
@@ -111,9 +111,12 @@ Deno.serve(async (req: Request) => {
 
       if (createError) throw createError;
 
-      // Update profile with gc_usuario_id if provided
-      if (gc_usuario_id && newUser.user) {
-        await supabaseAdmin.from('profiles').update({ gc_usuario_id }).eq('id', newUser.user.id);
+      // Update profile with gc_usuario_id / auvo_user_id if provided
+      if ((gc_usuario_id || auvo_user_id) && newUser.user) {
+        const createProfileUpdate: Record<string, unknown> = {};
+        if (gc_usuario_id) createProfileUpdate.gc_usuario_id = gc_usuario_id;
+        if (auvo_user_id) createProfileUpdate.auvo_user_id = auvo_user_id;
+        await supabaseAdmin.from('profiles').update(createProfileUpdate).eq('id', newUser.user.id);
       }
 
       // Assign role
@@ -130,7 +133,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'update') {
-      const { userId, name, gc_usuario_id, email, password } = body;
+      const { userId, name, gc_usuario_id, auvo_user_id, email, password } = body;
       if (!userId) {
         return new Response(JSON.stringify({ error: 'userId is required' }), {
           status: 400,
@@ -142,8 +145,10 @@ Deno.serve(async (req: Request) => {
       const profileUpdate: Record<string, unknown> = {};
       if (name !== undefined) profileUpdate.name = name;
       if (gc_usuario_id !== undefined) profileUpdate.gc_usuario_id = gc_usuario_id || null;
+      if (auvo_user_id !== undefined) profileUpdate.auvo_user_id = auvo_user_id || null;
       if (Object.keys(profileUpdate).length > 0) {
-        await supabaseAdmin.from('profiles').update(profileUpdate).eq('id', userId);
+        const { error: profileErr } = await supabaseAdmin.from('profiles').update(profileUpdate).eq('id', userId);
+        if (profileErr) throw profileErr;
       }
 
       // Update auth email/password if provided

@@ -18,6 +18,7 @@ interface UserEntry {
   email: string;
   roles: string[];
   gc_usuario_id: string | null;
+  auvo_user_id: string | null;
   created_at: string;
 }
 
@@ -30,6 +31,7 @@ export default function AdminUsersPage() {
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<string>('user');
   const [newGcId, setNewGcId] = useState('');
+  const [newAuvoId, setNewAuvoId] = useState('');
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -40,6 +42,7 @@ export default function AdminUsersPage() {
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editGcId, setEditGcId] = useState('');
+  const [editAuvoId, setEditAuvoId] = useState('');
   const [saving, setSaving] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -75,7 +78,7 @@ export default function AdminUsersPage() {
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('admin-users', {
-        body: { action: 'create', email: newEmail, password: newPassword, name: newName, role: newRole, gc_usuario_id: newGcId || undefined },
+        body: { action: 'create', email: newEmail, password: newPassword, name: newName, role: newRole, gc_usuario_id: newGcId || undefined, auvo_user_id: newAuvoId || undefined },
       });
       if (error) throw error;
       if (data.error) throw new Error(data.error);
@@ -134,6 +137,7 @@ export default function AdminUsersPage() {
     setEditName(u.name);
     setEditEmail(u.email);
     setEditGcId(u.gc_usuario_id || '');
+    setEditAuvoId(u.auvo_user_id || '');
     setEditPassword('');
     setEditOpen(true);
   };
@@ -146,6 +150,7 @@ export default function AdminUsersPage() {
       if (editName !== editUser.name) body.name = editName;
       if (editEmail !== editUser.email) body.email = editEmail;
       if (editGcId !== (editUser.gc_usuario_id || '')) body.gc_usuario_id = editGcId;
+      if (editAuvoId !== (editUser.auvo_user_id || '')) body.auvo_user_id = editAuvoId;
       if (editPassword) body.password = editPassword;
 
       const { data, error } = await supabase.functions.invoke('admin-users', { body });
@@ -193,8 +198,15 @@ export default function AdminUsersPage() {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">{u.email}</p>
-                  {u.gc_usuario_id && (
-                    <p className="text-xs text-muted-foreground">GC ID: {u.gc_usuario_id}</p>
+                  {(u.gc_usuario_id || u.auvo_user_id) && (
+                    <p className="text-xs text-muted-foreground">
+                      {u.gc_usuario_id && <>GC ID: {u.gc_usuario_id}</>}
+                      {u.gc_usuario_id && u.auvo_user_id && <> · </>}
+                      {u.auvo_user_id && <>Auvo ID: {u.auvo_user_id}</>}
+                    </p>
+                  )}
+                  {!u.auvo_user_id && (
+                    <p className="text-xs font-medium text-amber-600">Sem ID Auvo — não consegue gerar OS</p>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -278,6 +290,11 @@ export default function AdminUsersPage() {
               <Input value={newGcId} onChange={e => setNewGcId(e.target.value)} placeholder="Ex: 1028512 (GET /api/usuarios)" />
               <p className="text-xs text-muted-foreground">ID do usuário no GC para atribuir mudanças de situação</p>
             </div>
+            <div className="space-y-2">
+              <Label>ID Usuário Auvo</Label>
+              <Input value={newAuvoId} onChange={e => setNewAuvoId(e.target.value)} placeholder="Ex: 12345" />
+              <p className="text-xs text-muted-foreground">Obrigatório para o operador gerar OS (tarefa Auvo)</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
@@ -310,6 +327,11 @@ export default function AdminUsersPage() {
             <div className="space-y-2">
               <Label>ID Usuário GestãoClick</Label>
               <Input value={editGcId} onChange={e => setEditGcId(e.target.value)} placeholder="Ex: 1028512" />
+            </div>
+            <div className="space-y-2">
+              <Label>ID Usuário Auvo</Label>
+              <Input value={editAuvoId} onChange={e => setEditAuvoId(e.target.value)} placeholder="Ex: 12345" />
+              <p className="text-xs text-muted-foreground">Obrigatório para o operador gerar OS (tarefa Auvo)</p>
             </div>
           </div>
           <DialogFooter>

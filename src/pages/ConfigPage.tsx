@@ -37,9 +37,21 @@ function AuvoUserIdField() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Sessão expirada');
-      await (supabase.from('profiles') as any).update({ auvo_user_id: value || null }).eq('id', user.id);
+      // O client do Supabase não lança exceção: sem conferir `error` e o nº de
+      // linhas, o toast dizia "salvo!" mesmo quando nada foi gravado — e o
+      // operador só descobria na hora de gerar a OS.
+      const { data, error } = await (supabase.from('profiles') as any)
+        .update({ auvo_user_id: value.trim() || null })
+        .eq('id', user.id)
+        .select('auvo_user_id');
+      if (error) throw new Error(error.message);
+      if (!data || data.length === 0) {
+        throw new Error('Seu perfil não foi encontrado — peça ao administrador para verificar seu usuário.');
+      }
       toast.success('ID Auvo salvo!');
-    } catch { toast.error('Erro ao salvar ID Auvo'); }
+    } catch (err) {
+      toast.error(`Erro ao salvar ID Auvo: ${err instanceof Error ? err.message : String(err)}`, { duration: 8000 });
+    }
     finally { setSaving(false); }
   };
 

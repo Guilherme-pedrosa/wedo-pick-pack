@@ -1295,6 +1295,10 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Falha no GC; tarefa Auvo #${auvoTaskId} preservada. ${String(gcErr)}`);
     }
 
+    // Documento criado no GC: o vínculo pendente deixou de existir.
+    if (preservedTaskId) await clearPreservedTasks();
+
+
     // ============================================
     // STEP 6: Vincula a situação do orçamento ao tipo de documento criado.
     // ============================================

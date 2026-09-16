@@ -717,10 +717,18 @@ Deno.serve(async (req: Request) => {
     );
     if (!preservedResponse.ok) throw new Error("Não foi possível conferir tarefas Auvo preservadas.");
     const preserved = await preservedResponse.json();
-    if (preserved.length)
-      throw new Error(
-        `Há tarefa Auvo preservada de uma tentativa anterior: ${preserved.map((r: any) => r.task_id).join(", ")}. Reconcilie o vínculo antes de gerar outra.`,
-      );
+    // Tarefa criada em tentativa anterior cujo documento no GC falhou.
+    // Em vez de travar a geração, reaproveitamos a tarefa (ou descartamos se ela
+    // não existir mais no Auvo), evitando duplicidade sem exigir ação manual.
+    const preservedTaskId: string | null = Array.isArray(preserved) && preserved.length
+      ? String(preserved[0].task_id)
+      : null;
+    const clearPreservedTasks = async () => {
+      await fetch(`${SUPABASE_URL}/rest/v1/preserved_auvo_tasks?budget_id=eq.${encodeURIComponent(orcamento.id)}`, {
+        method: "DELETE",
+        headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+      }).catch((e) => console.error(`[generate-os] Falha ao limpar tarefa preservada: ${String(e)}`));
+    };
 
     const checkRes = await fetch(
       `${SUPABASE_URL}/rest/v1/os_generation_logs?orcamento_id=eq.${encodeURIComponent(orcamento.id)}&success=eq.true&select=id,os_id,os_codigo,auvo_task_id,operator_name,created_at&order=created_at.desc&limit=1`,

@@ -154,7 +154,23 @@ export async function buildOSIndex(
         vinculos++;
       }
 
-      for (const line of pendingOsLines(os)) {
+      // O registro da LISTAGEM pode vir sem situacao_estoque ou sem a lista de
+      // produtos, e pendingOsLines valida estrito (uma OS capenga derrubava o
+      // scan inteiro do Rastreador). Rebusca o detalhe — mesmo tratamento do
+      // readAllOsCommitments do Checkout — e, se nem o detalhe validar, pula a
+      // OS com aviso em vez de quebrar a tela.
+      let osLines: ReturnType<typeof pendingOsLines> = [];
+      try {
+        osLines = pendingOsLines(os);
+      } catch {
+        try {
+          const detail = (await apiRequest<{ data: any }>(`/api/ordens_servicos/${encodeURIComponent(osId || osRef)}`)).data;
+          osLines = pendingOsLines(detail || os);
+        } catch (detailErr) {
+          console.warn(`[COMPRAS] OS #${osRef} ignorada no índice de reservas (resumo e detalhe inválidos):`, detailErr);
+        }
+      }
+      for (const line of osLines) {
         const key = line.variationId ? `${line.productId}::${line.variationId}` : line.productId;
         if (!reservedDemand[key]) reservedDemand[key] = { qty: 0, orcamentos: [] };
         reservedDemand[key].qty += line.quantity;

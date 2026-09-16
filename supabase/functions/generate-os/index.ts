@@ -3,6 +3,7 @@ import { installGcUsuarioId } from "../_shared/gc-user.ts";
 import { BUDGET_GENERATION_VERSION, readAuthoritativeBudget } from "../_shared/budgetKind.ts";
 import { assertBudgetUnchanged } from "../_shared/budgetIntegrity.ts";
 import { writableDocument } from "../_shared/partialConsolidation.ts";
+import { budgetTechnicalHours } from "../_shared/technicalHours.ts";
 installGcUsuarioId();
 
 const corsHeaders = {
@@ -1089,8 +1090,20 @@ Deno.serve(async (req: Request) => {
         const ORC_HORAS_TECNICAS = "67350";
 
         upsertAttr(attrIds.tarefaOs, findOrcAttrValue(ORC_TAREFA_OS) || String(auvoTaskId));
-        upsertAttr(attrIds.localReparo, findOrcAttrValue(ORC_LOCAL_REPARO));
-        upsertAttr(attrIds.horasTecnicas, findOrcAttrValue(ORC_HORAS_TECNICAS));
+        // O GC trata atributo com conteúdo VAZIO como "não enviado" e devolve
+        // 400 "Os seguintes atributos obrigatórios não foram enviados" — era a
+        // causa das gerações de OS travadas quando o orçamento não tinha LOCAL
+        // ou HORAS TÉCNICAS preenchidos. Fallbacks: LOCAL = CLIENTE (mesmo
+        // padrão dos auxiliares); HORAS = soma das linhas de serviço "hora
+        // técnica" do orçamento, e em último caso 0 com aviso.
+        upsertAttr(attrIds.localReparo, findOrcAttrValue(ORC_LOCAL_REPARO) || 'CLIENTE');
+        let horasTecnicas = findOrcAttrValue(ORC_HORAS_TECNICAS);
+        if (!horasTecnicas) horasTecnicas = budgetTechnicalHours(orcamento) ?? '';
+        if (!horasTecnicas) {
+          horasTecnicas = '0';
+          warnings.push('Orçamento sem HORAS TÉCNICAS (campo e serviços): OS criada com 0 — ajuste na OS do GestãoClick.');
+        }
+        upsertAttr(attrIds.horasTecnicas, horasTecnicas);
 
         // Copy OS payload from orçamento as-is (to preserve values)
         const osPayload: Record<string, any> = {

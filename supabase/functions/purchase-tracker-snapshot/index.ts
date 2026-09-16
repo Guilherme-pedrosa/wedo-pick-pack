@@ -127,7 +127,10 @@ Deno.serve(async (req: Request) => {
     // Fallback padrão: sempre acompanhar "COMPRADO - AG CHEGADA" quando nada estiver configurado
     if (!ids.length) {
       try {
-        const sits = await gcGet('/api/situacoes?tipo=compra');
+        // /api/situacoes?tipo=compra não existe no GC (404) — o catálogo de
+        // situações de compra é /api/situacoes_compras, o mesmo usado pelo
+        // cliente (compras.ts) e pelo inventory-lead-time-sync.
+        const sits = await gcGet('/api/situacoes_compras?limite=100');
         const list = (sits?.data || []).map((w: any) => w?.Situacao ?? w?.situacao ?? w);
         const match = list.find((s: any) => {
           const nome = String(s?.nome ?? '').toUpperCase();

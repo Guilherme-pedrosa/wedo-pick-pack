@@ -978,6 +978,7 @@ export type Database = {
       }
       partial_writeoff_batches: {
         Row: {
+          auvo_creation_started_at: string | null
           auvo_task_error: string | null
           auvo_task_id: string | null
           auvo_task_requested: boolean | null
@@ -997,6 +998,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auvo_creation_started_at?: string | null
           auvo_task_error?: string | null
           auvo_task_id?: string | null
           auvo_task_requested?: boolean | null
@@ -1016,6 +1018,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auvo_creation_started_at?: string | null
           auvo_task_error?: string | null
           auvo_task_id?: string | null
           auvo_task_requested?: boolean | null
@@ -2126,6 +2129,83 @@ export type Database = {
           },
         ]
       }
+      toolbox_stock_issues: {
+        Row: {
+          actor_id: string
+          confirmed_at: string | null
+          created_at: string
+          id: string
+          items: Json
+          result: Json | null
+          status: string
+          technician_gc_id: string
+          technician_name: string
+          toolbox_id: string
+        }
+        Insert: {
+          actor_id: string
+          confirmed_at?: string | null
+          created_at?: string
+          id?: string
+          items: Json
+          result?: Json | null
+          status?: string
+          technician_gc_id: string
+          technician_name: string
+          toolbox_id: string
+        }
+        Update: {
+          actor_id?: string
+          confirmed_at?: string | null
+          created_at?: string
+          id?: string
+          items?: Json
+          result?: Json | null
+          status?: string
+          technician_gc_id?: string
+          technician_name?: string
+          toolbox_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "toolbox_stock_issues_toolbox_id_fkey"
+            columns: ["toolbox_id"]
+            isOneToOne: false
+            referencedRelation: "toolboxes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      toolbox_stock_returns: {
+        Row: {
+          actor_id: string
+          confirmed_at: string | null
+          created_at: string
+          reference: string
+          request_key: string
+          result: Json | null
+          status: string
+        }
+        Insert: {
+          actor_id: string
+          confirmed_at?: string | null
+          created_at?: string
+          reference: string
+          request_key: string
+          result?: Json | null
+          status?: string
+        }
+        Update: {
+          actor_id?: string
+          confirmed_at?: string | null
+          created_at?: string
+          reference?: string
+          request_key?: string
+          result?: Json | null
+          status?: string
+        }
+        Relationships: []
+      }
       toolboxes: {
         Row: {
           closed_at: string | null
@@ -2302,6 +2382,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      partial_writeoff_claim_auvo_creation: {
+        Args: { p_batch_id: string }
+        Returns: string
+      }
       partial_writeoff_claim_confirmation: {
         Args: { p_batch_id: string }
         Returns: string
@@ -2317,6 +2401,10 @@ export type Database = {
           p_operation_id: string
         }
         Returns: undefined
+      }
+      partial_writeoff_documents_executed: {
+        Args: { p_documents: Json }
+        Returns: boolean
       }
       partial_writeoff_finish_confirmation: {
         Args: {
@@ -2386,6 +2474,10 @@ export type Database = {
         Args: { p_batch_id: string; p_gc_document: Json; p_source_budget: Json }
         Returns: Json
       }
+      partial_writeoff_reconcile_return: {
+        Args: { p_batch_id: string; p_gc_document: Json }
+        Returns: Json
+      }
       partial_writeoff_record_execution: {
         Args: { p_documents: Json; p_operation_id: string }
         Returns: string
@@ -2445,6 +2537,27 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      toolbox_stock_issue_claim: {
+        Args: {
+          p_items: Json
+          p_technician_gc_id: string
+          p_technician_name: string
+          p_toolbox_id: string
+        }
+        Returns: string
+      }
+      toolbox_stock_issue_finish: {
+        Args: { p_id: string; p_result: Json }
+        Returns: undefined
+      }
+      toolbox_stock_return_claim: {
+        Args: { p_key: string; p_reference: string }
+        Returns: Json
+      }
+      toolbox_stock_return_finish: {
+        Args: { p_key: string; p_result: Json }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "user"

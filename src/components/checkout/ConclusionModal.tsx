@@ -56,6 +56,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const [submitting, setSubmitting] = useState(false);
   const [observations, setObservations] = useState('');
   const [acceptedTerm, setAcceptedTerm] = useState(false);
+  const [stockConflict, setStockConflict] = useState<string | null>(null);
 
   const statusQuery = useQuery({
     queryKey: ['statuses-conclusion', session?.tipo],

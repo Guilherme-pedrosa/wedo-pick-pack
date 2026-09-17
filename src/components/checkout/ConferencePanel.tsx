@@ -29,6 +29,10 @@ export default function ConferencePanel() {
 
 
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+  // Exceção autorizada: apenas este login pode digitar o código manualmente.
+  const allowManualEntry = (user?.email || '').toLowerCase() === 'guilherme@wedocorp.com';
+  const [manualCode, setManualCode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/hooks/useAuth';
 
 import { useCheckoutStore } from '@/store/checkoutStore';
 import { matchItemByCode } from '@/lib/scanMatcher';
@@ -29,6 +30,10 @@ export default function ConferencePanel() {
 
 
   const isMobile = useIsMobile();
+  const { user } = useAuth();
+  // Exceção autorizada: apenas este login pode digitar o código manualmente.
+  const allowManualEntry = (user?.email || '').toLowerCase() === 'guilherme@wedocorp.com';
+  const [manualCode, setManualCode] = useState('');
   const [scanQty, setScanQty] = useState('1');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [elapsed, setElapsed] = useState('00:00');
@@ -174,7 +179,7 @@ export default function ConferencePanel() {
         for (let i = 1; i < times.length; i++) {
           maxGap = Math.max(maxGap, times[i] - times[i - 1]);
         }
-        if (maxGap > MAX_GAP_MS) {
+        if (maxGap > MAX_GAP_MS && !allowManualEntry) {
           setFeedback({ type: 'error', msg: 'Digitação manual bloqueada — use o coletor de código de barras' });
           toast.error('Digitação manual não é permitida. Use o coletor.');
           return;
@@ -197,7 +202,7 @@ export default function ConferencePanel() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isMobile, session?.refId, session?.concludedAt, processScan, scanQtyValue]);
+  }, [isMobile, session?.refId, session?.concludedAt, processScan, scanQtyValue, allowManualEntry]);
 
 
 
@@ -361,9 +366,30 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                 }`}
               >
                 <Scan className={`h-5 w-5 shrink-0 ${scannerActivity ? 'text-primary animate-pulse' : ''}`} />
-                {scannerActivity ? 'Lendo código…' : 'Aguardando leitura do coletor… (a digitação manual é bloqueada)'}
+                {scannerActivity ? 'Lendo código…' : allowManualEntry ? 'Aguardando leitura do coletor… (digitação liberada para você)' : 'Aguardando leitura do coletor… (a digitação manual é bloqueada)'}
               </div>
             )}
+
+            {allowManualEntry && (
+              <form
+                className="flex gap-2"
+                onSubmit={e => {
+                  e.preventDefault();
+                  const code = manualCode.trim();
+                  if (!code) return;
+                  if (processScan(code, scanQtyValue())) setManualCode('');
+                }}
+              >
+                <Input
+                  value={manualCode}
+                  onChange={e => setManualCode(e.target.value)}
+                  placeholder="Digitar código"
+                  className="w-40 h-[52px] text-base"
+                />
+                <Button type="submit" variant="secondary" className="h-[52px]">Baixar</Button>
+              </form>
+            )}
+
 
             {showQtyField && (
               <div className="w-24">

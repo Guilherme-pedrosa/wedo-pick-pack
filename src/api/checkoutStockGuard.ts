@@ -39,13 +39,22 @@ export async function assertCheckoutStock(osId: string, expected?: GcRecord, own
     const key = `${line.productId}::${line.variationId}`;
     totals.set(key, { ...line, quantity: line.quantity + (totals.get(key)?.quantity || 0) });
   }
+  // Falta de saldo físico nunca é liberável. Disputa com outro documento é um aviso que o operador pode assumir.
+  const disputes: string[] = [];
   for (const [key, line] of totals) {
     const stock = await getProductStock(line.productId, line.variationId || undefined, { forceFresh: true });
     if (!stock) throw new Error(`Saldo indisponível para o produto ${line.productId}.`);
     const reserved = reservations.filter(r => r.product_id === line.productId && (!line.variationId || !r.variation_id || r.variation_id === line.variationId))
       .reduce((n, r) => n + Number(r.reserved_quantity), 0);
     const ownQuantity = line.variationId ? (own.get(key) || 0) : [...own].filter(([k]) => k.startsWith(`${line.productId}::`)).reduce((n, [, q]) => n + q, 0);
-    assertStockConflict(stock.estoque, line.quantity, Math.max(0, reserved - ownQuantity), external, line.productId, line.variationId, type === 'os' ? osId : undefined);
+    const localReserved = Math.max(0, reserved - ownQuantity);
+    assertStockConflict(stock.estoque, line.quantity, localReserved, [], line.productId, line.variationId, type === 'os' ? osId : undefined);
+    try {
+      assertStockConflict(stock.estoque, line.quantity, localReserved, external, line.productId, line.variationId, type === 'os' ? osId : undefined);
+    } catch (error) {
+      disputes.push(error instanceof Error ? error.message : String(error));
+    }
   }
+  if (disputes.length && !overrideConflict) throw new Error(`${STOCK_CONFLICT_PREFIX}${disputes.join(' ')}`);
   return current;
 }

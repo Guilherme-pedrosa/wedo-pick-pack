@@ -179,7 +179,7 @@ export default function ConferencePanel() {
         for (let i = 1; i < times.length; i++) {
           maxGap = Math.max(maxGap, times[i] - times[i - 1]);
         }
-        if (maxGap > MAX_GAP_MS) {
+        if (maxGap > MAX_GAP_MS && !allowManualEntry) {
           setFeedback({ type: 'error', msg: 'Digitação manual bloqueada — use o coletor de código de barras' });
           toast.error('Digitação manual não é permitida. Use o coletor.');
           return;

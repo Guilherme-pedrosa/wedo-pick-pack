@@ -366,9 +366,30 @@ ${items.map(i => `<tr><td>${i.nome_produto}</td><td>${i.codigo_produto}</td><td>
                 }`}
               >
                 <Scan className={`h-5 w-5 shrink-0 ${scannerActivity ? 'text-primary animate-pulse' : ''}`} />
-                {scannerActivity ? 'Lendo código…' : 'Aguardando leitura do coletor… (a digitação manual é bloqueada)'}
+                {scannerActivity ? 'Lendo código…' : allowManualEntry ? 'Aguardando leitura do coletor… (digitação liberada para você)' : 'Aguardando leitura do coletor… (a digitação manual é bloqueada)'}
               </div>
             )}
+
+            {allowManualEntry && (
+              <form
+                className="flex gap-2"
+                onSubmit={e => {
+                  e.preventDefault();
+                  const code = manualCode.trim();
+                  if (!code) return;
+                  if (processScan(code, scanQtyValue())) setManualCode('');
+                }}
+              >
+                <Input
+                  value={manualCode}
+                  onChange={e => setManualCode(e.target.value)}
+                  placeholder="Digitar código"
+                  className="w-40 h-[52px] text-base"
+                />
+                <Button type="submit" variant="secondary" className="h-[52px]">Baixar</Button>
+              </form>
+            )}
+
 
             {showQtyField && (
               <div className="w-24">

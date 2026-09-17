@@ -205,7 +205,10 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
-      if (msg === 'RATE_LIMIT') {
+      if (msg.startsWith(STOCK_CONFLICT_PREFIX)) {
+        setStockConflict(msg.slice(STOCK_CONFLICT_PREFIX.length));
+        toast.warning('Peça disputada por outro pedido. Confira o aviso antes de liberar.');
+      } else if (msg === 'RATE_LIMIT') {
         toast.warning('⏳ Limite da API atingido. Tente novamente em 30s.');
       } else if (msg === 'AUTH_ERROR') {
         toast.error('🔑 Credenciais inválidas. Verifique em Configurações.');

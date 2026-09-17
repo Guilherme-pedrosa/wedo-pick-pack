@@ -202,7 +202,7 @@ export default function ConferencePanel() {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isMobile, session?.refId, session?.concludedAt, processScan, scanQtyValue]);
+  }, [isMobile, session?.refId, session?.concludedAt, processScan, scanQtyValue, allowManualEntry]);
 
 
 

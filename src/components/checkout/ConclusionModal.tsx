@@ -189,6 +189,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           target_status: targetStatusName,
           partial_writeoff: session.partialWriteoff || null,
           observations: observations.trim() || null,
+          stock_conflict_override: stockConflict || null,
         },
       });
 

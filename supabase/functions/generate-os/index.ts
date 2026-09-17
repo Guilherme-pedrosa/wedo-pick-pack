@@ -1043,8 +1043,11 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!auvoTaskId) {
+      // `auvoResult` só existe dentro do bloco de criação acima — referenciá-lo
+      // aqui dava ReferenceError ("variable not defined") e o operador via um
+      // erro interno sem pista em vez da mensagem clara.
       throw new Error(
-        `Auvo task creation returned no taskID. Full response: ${JSON.stringify(auvoResult).slice(0, 500)}`,
+        "O Auvo não devolveu o número da tarefa criada. Nenhum documento foi gerado — tente novamente e, se persistir, verifique o Auvo.",
       );
     }
 

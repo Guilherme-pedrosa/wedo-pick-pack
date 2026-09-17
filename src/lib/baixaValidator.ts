@@ -26,8 +26,14 @@ export interface BaixaAlert {
 
 /**
  * Get or create the system "Pendências" box for orphan reversals.
+ *
+ * A caixa é de SISTEMA: a leitura de boxes é global, então qualquer usuário
+ * enxerga a existente. Na criação, o dono precisa ser o usuário LOGADO — o
+ * RLS de boxes exige auth.uid() = user_id no INSERT, e criar em nome do
+ * operador original era rejeitado em silêncio: o estorno era pulado e a peça
+ * devolvida não voltava para caixa nenhuma.
  */
-async function getOrCreatePendenciasBox(userId: string): Promise<{ id: string; name: string } | null> {
+async function getOrCreatePendenciasBox(): Promise<{ id: string; name: string } | null> {
   const PENDENCIAS_NAME = "⚠️ Pendências (Estornos)";
 
   const { data: existing } = await supabase
@@ -40,14 +46,21 @@ async function getOrCreatePendenciasBox(userId: string): Promise<{ id: string; n
 
   if (existing) return existing;
 
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user?.id) {
+    toast.error("Sessão expirada: estorno automático NÃO aplicado. Recarregue e valide de novo.");
+    return null;
+  }
+
   const { data: created, error } = await supabase
     .from("boxes")
-    .insert({ name: PENDENCIAS_NAME, user_id: userId })
+    .insert({ name: PENDENCIAS_NAME, user_id: auth.user.id })
     .select("id, name")
     .single();
 
   if (error) {
     console.error("Failed to create Pendências box:", error);
+    toast.error(`Estorno automático NÃO aplicado: não consegui criar a caixa "${PENDENCIAS_NAME}" (${error.message}).`, { duration: 10000 });
     return null;
   }
   return created;
@@ -180,13 +193,27 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
 
       try {
         let orderData: any = null;
+        // Estornar mexe em estoque: só pode acontecer com AUSÊNCIA CONFIRMADA
+        // (GC respondeu e o documento não está lá). Falha de consulta — sem
+        // permissão do usuário da API, rate limit, rede — NÃO é exclusão;
+        // tratar como exclusão devolvia peça para caixa com a OS/venda viva.
+        let confirmedAbsent = false;
+        let lookupFailure = "";
+        const gcFailureText = (resp: any): string => {
+          const status = resp?._proxy?.gc_http_status;
+          const msg = [resp?.mensagem, resp?.erro, resp?.error, resp?.message]
+            .map((v: unknown) => String(v ?? "").trim()).find(Boolean);
+          return `${msg || "falha na consulta"}${status ? ` (HTTP ${status})` : ""}`;
+        };
 
         // Strategy 1: search by codigo
-        const { data: searchData } = await supabase.functions.invoke("gc-proxy", {
+        const { data: searchData, error: searchErr } = await supabase.functions.invoke("gc-proxy", {
           body: { path: `/api/${endpoint}?codigo=${encodeURIComponent(numero)}`, method: "GET" },
         });
+        const searchOk = !searchErr && searchData?._proxy?.ok;
+        if (!searchOk) lookupFailure = searchErr?.message || gcFailureText(searchData);
 
-        if (searchData?._proxy?.ok && searchData?.data?.length) {
+        if (searchOk && searchData?.data?.length) {
           const match = searchData.data.find(
             (r: any) =>
               String(r.codigo).trim() === numero ||
@@ -195,26 +222,59 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
           );
           if (match) {
             const detailId = match.id || match.ordem_servico_id || match.venda_id;
-            const { data: detailData } = await supabase.functions.invoke("gc-proxy", {
+            const { data: detailData, error: detailErr } = await supabase.functions.invoke("gc-proxy", {
               body: { path: `/api/${endpoint}/${detailId}`, method: "GET" },
             });
-            if (detailData?._proxy?.ok) orderData = detailData.data;
+            if (!detailErr && detailData?._proxy?.ok) orderData = detailData.data;
+            else lookupFailure = detailErr?.message || gcFailureText(detailData);
           }
         }
 
         // Strategy 2: direct by ID if numeric
         if (!orderData && /^\d+$/.test(numero)) {
-          const { data: directData } = await supabase.functions.invoke("gc-proxy", {
+          const { data: directData, error: directErr } = await supabase.functions.invoke("gc-proxy", {
             body: { path: `/api/${endpoint}/${numero}`, method: "GET" },
           });
-          if (directData?._proxy?.ok && directData?.data) {
+          const directStatus = directData?._proxy?.gc_http_status;
+          if (!directErr && directData?._proxy?.ok && directData?.data) {
             orderData = directData.data;
+            lookupFailure = "";
+          } else if (!directErr && directStatus === 404 && searchOk) {
+            confirmedAbsent = true;
+          } else if (!lookupFailure) {
+            lookupFailure = directErr?.message || gcFailureText(directData);
           }
+        } else if (!orderData && searchOk) {
+          // Referência não numérica: a busca por código respondeu OK e não achou.
+          confirmedAbsent = true;
         }
 
         let reason = "";
         let shouldRevert = false;
         let gcAudit: { situacao?: string; modificadoEm?: string; usuarioNome?: string; obsInterna?: string } = {};
+
+        if (!orderData && !confirmedAbsent) {
+          // Consulta falhou: nada de estorno. Sinaliza para a tela e segue.
+          const firstLog = logs[0];
+          alerts.push({
+            logId: firstLog.id,
+            boxId: firstLog.box_id,
+            boxName: firstLog.box_name,
+            produtoId: firstLog.produto_id || "",
+            produtoNome: firstLog.produto_nome || "",
+            quantidade: firstLog.quantidade || 0,
+            precoUnitario: firstLog.preco_unitario || 0,
+            refTipo: tipo,
+            refNumero: numero,
+            reason: `${label} #${numero} não pôde ser conferida no GestãoClick: ${lookupFailure}. Estorno NÃO aplicado.`,
+            reverted: false,
+            revertedTo: "",
+            operatorName: firstLog.operator_name || "",
+            createdAt: firstLog.created_at,
+          });
+          console.warn(`[baixaValidator] ${label} #${numero}: consulta falhou (${lookupFailure}) — estorno pulado.`);
+          continue;
+        }
 
         if (!orderData) {
           reason = `${label} #${numero} não encontrada no GestãoClick (excluída)`;
@@ -274,8 +334,7 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
                   relinkTechnician = { gc_id: log.technician_gc_id, name: log.technician_name };
                 }
               } else {
-                const userId = log.operator_id;
-                const pendencias = await getOrCreatePendenciasBox(userId);
+                const pendencias = await getOrCreatePendenciasBox();
                 if (!pendencias) {
                   console.error("Could not create Pendências box for item reversal");
                   continue;
@@ -332,8 +391,7 @@ export async function validateActiveBaixas(): Promise<BaixaAlert[]> {
               targetBoxName = box.name;
             } else {
               // Box has no technician or is closed → move to Pendências
-              const userId = box?.user_id || log.operator_id;
-              const pendencias = await getOrCreatePendenciasBox(userId);
+              const pendencias = await getOrCreatePendenciasBox();
               if (!pendencias) {
                 console.error("Could not create Pendências box");
                 continue;

@@ -112,7 +112,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         targetStatusName = operation.checkout_confirmation.statusName;
         targetStatusId = operation.checkout_confirmation.statusId;
       } else if (session.tipo === 'os') {
-        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder);
+        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder, undefined, 'os', overrideConflict);
         await updateOSStatus(session.refId, freshOrder as GCOrdemServico, effectiveStatus, config.operatorName, config.gcUsuarioId);
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;

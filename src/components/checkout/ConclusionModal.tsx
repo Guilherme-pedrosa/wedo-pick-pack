@@ -7,7 +7,7 @@ import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from 
 import { GCOrdemServico, GCVenda, PickingItem } from '@/api/types';
 import { createSeparation, snapshotPickingItems } from '@/api/separations';
 import { confirmPartialBatch } from '@/api/partialWriteoff';
-import { assertCheckoutStock } from '@/api/checkoutStockGuard';
+import { assertCheckoutStock, STOCK_CONFLICT_PREFIX } from '@/api/checkoutStockGuard';
 import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';

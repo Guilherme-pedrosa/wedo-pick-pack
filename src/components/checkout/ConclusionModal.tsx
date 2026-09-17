@@ -85,7 +85,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
     return `${min} min ${sec} seg`;
   };
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (overrideConflict = false) => {
     if (isPartialWriteoff && (forced || session.items.some(item => !item.conferido))) {
       toast.error('A baixa parcial exige a conferência completa do lote.');
       return;

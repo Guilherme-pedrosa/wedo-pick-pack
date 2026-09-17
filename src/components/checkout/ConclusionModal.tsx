@@ -117,7 +117,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;
       } else {
-        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder, undefined, 'venda');
+        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder, undefined, 'venda', overrideConflict);
         await updateVendaStatus(session.refId, freshOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;

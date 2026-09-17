@@ -6,7 +6,9 @@ import { documentStockLines } from '../../supabase/functions/_shared/osStockComm
 import { isCancelledStatus, isExecutedStatus, type GcRecord } from './partialExecution';
 
 /** Consulta fresca antes de iniciar e antes de aplicar a baixa. */
-export async function assertCheckoutStock(osId: string, expected?: GcRecord, ownBatchId?: string, type: 'os' | 'venda' = 'os'): Promise<GcRecord> {
+export const STOCK_CONFLICT_PREFIX = 'STOCK_CONFLICT::';
+
+export async function assertCheckoutStock(osId: string, expected?: GcRecord, ownBatchId?: string, type: 'os' | 'venda' = 'os', overrideConflict = false): Promise<GcRecord> {
   const current = await (type === 'os' ? getOS(osId) : getVenda(osId)) as unknown as GcRecord;
   if (!current || String(current.id) !== osId) throw new Error('Documento inconsistente no GestãoClick. Atualize a fila.');
   if (isCancelledStatus(current.nome_situacao) || isExecutedStatus(current.nome_situacao)) throw new Error('Este documento foi cancelado ou já executado. Atualize a fila antes de conferir.');

@@ -315,15 +315,27 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           </div>
         </div>
 
+        {stockConflict && (
+          <div className="border rounded-md p-3 space-y-2 bg-amber-50 border-amber-300">
+            <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4" /> Peça disputada por outro pedido
+            </p>
+            <p className="text-[11px] leading-relaxed text-amber-900">{stockConflict}</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              A peça existe no estoque. Se você separar agora, o outro pedido ficará sem ela.
+            </p>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>
           <Button
-            onClick={handleConfirm}
+            onClick={() => handleConfirm(!!stockConflict)}
             disabled={submitting || !effectiveStatus || !acceptedTerm}
             className="bg-success text-success-foreground hover:bg-success/90"
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {hasGCConfirmation ? 'Salvar histórico pendente' : '✓ Confirmar e Atualizar'}
+            {stockConflict ? 'Separar mesmo assim' : hasGCConfirmation ? 'Salvar histórico pendente' : '✓ Confirmar e Atualizar'}
           </Button>
         </DialogFooter>
       </DialogContent>

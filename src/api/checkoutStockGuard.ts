@@ -13,16 +13,19 @@ export async function assertCheckoutStock(osId: string, expected?: GcRecord, own
   if (expected) assertDefinitiveContents(expected, current);
   const requested = documentStockLines(current);
   if (String(current.situacao_estoque) === '1') return current;
-  const external = await fetchOsStockCommitments();
-  const reservations: GcRecord[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from('partial_writeoff_reservation_sources').select('*').range(from, from + 999);
-    if (error) throw new Error('Não foi possível conferir todas as reservas locais.');
-    reservations.push(...(data || []));
-    if ((data || []).length < 1000) break;
-  }
-  const own = new Map<string, number>();
-  if (ownBatchId) {
+  const reservationsPromise = (async () => {
+    const rows: GcRecord[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from('partial_writeoff_reservation_sources').select('*').range(from, from + 999);
+      if (error) throw new Error('Não foi possível conferir todas as reservas locais.');
+      rows.push(...(data || []));
+      if ((data || []).length < 1000) break;
+    }
+    return rows;
+  })();
+  const ownPromise = (async () => {
+    const own = new Map<string, number>();
+    if (!ownBatchId) return own;
     const { data, error } = await supabase.from('partial_writeoff_batch_items')
       .select('quantity, partial_writeoff_items(product_id, variation_id)').eq('batch_id', ownBatchId);
     if (error) throw new Error('Não foi possível conferir a reserva deste lote.');
@@ -31,19 +34,28 @@ export async function assertCheckoutStock(osId: string, expected?: GcRecord, own
       const key = `${item.product_id}::${item.variation_id || ''}`;
       own.set(key, (own.get(key) || 0) + Number(entry.quantity));
     }
-  }
+    return own;
+  })();
   const totals = new Map<string, typeof requested[number]>();
   for (const line of requested) {
     const key = `${line.productId}::${line.variationId}`;
     totals.set(key, { ...line, quantity: line.quantity + (totals.get(key)?.quantity || 0) });
   }
-  for (const [key, line] of totals) {
-    const stock = await getProductStock(line.productId, line.variationId || undefined, { forceFresh: true });
+  const entries = [...totals];
+  const [external, reservations, own, stocks] = await Promise.all([
+    fetchOsStockCommitments(),
+    reservationsPromise,
+    ownPromise,
+    mapPool(entries, 5, ([, line]) => getProductStock(line.productId, line.variationId || undefined, { forceFresh: true })),
+  ]);
+  for (const [index, [key, line]] of entries.entries()) {
+    const stock = stocks[index];
     if (!stock) throw new Error(`Saldo indisponível para o produto ${line.productId}.`);
     const reserved = reservations.filter(r => r.product_id === line.productId && (!line.variationId || !r.variation_id || r.variation_id === line.variationId))
       .reduce((n, r) => n + Number(r.reserved_quantity), 0);
     const ownQuantity = line.variationId ? (own.get(key) || 0) : [...own].filter(([k]) => k.startsWith(`${line.productId}::`)).reduce((n, [, q]) => n + q, 0);
     assertStockConflict(stock.estoque, line.quantity, Math.max(0, reserved - ownQuantity), external, line.productId, line.variationId, type === 'os' ? osId : undefined);
   }
+
   return current;
 }

@@ -11,37 +11,62 @@ async function gc(path: string): Promise<GcRecord> {
   return data;
 }
 
+/** Executa em paralelo com limite, preservando a ordem das respostas. */
+export async function mapPool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, async () => {
+    for (let i = next++; i < items.length; i = next++) out[i] = await fn(items[i]);
+  }));
+  return out;
+}
+
 /** Só publica resultado após validar a paginação completa. Nunca transforma erro em estoque disponível. */
 export async function readAllOsCommitments(request: (path: string) => Promise<GcRecord>): Promise<OsStockCommitment[]> {
-  const result: OsStockCommitment[] = [];
-  const seen = new Set<string>();
-  let pages = 1;
-  let records: number | undefined;
-  for (let page = 1; page <= pages; page++) {
+  const readPage = async (page: number) => {
     const response = await request(`/api/ordens_servicos?limite=100&pagina=${page}`);
     const total = Number(response.meta?.total_paginas);
     const count = Number(response.meta?.total_registros);
     if (!Array.isArray(response.data) || !Number.isInteger(total) || total < 0 || !Number.isInteger(count) || count < 0
-      || Number(response.meta?.pagina_atual) !== page || (page > 1 && (total !== pages || count !== records))) {
-      throw new Error('Consulta incompleta das OS: envio bloqueado.');
-    }
-    pages = total; records = count;
-    for (const entry of response.data) {
-      let os = entry.OrdemServico || entry.ordem_servico || entry;
+      || Number(response.meta?.pagina_atual) !== page) throw new Error('Consulta incompleta das OS: envio bloqueado.');
+    return { data: response.data as GcRecord[], total, count };
+  };
+
+  const first = await readPage(1);
+  const rest = await mapPool(Array.from({ length: Math.max(0, first.total - 1) }, (_, i) => i + 2), 5, readPage);
+  for (const page of rest) {
+    if (page.total !== first.total || page.count !== first.count) throw new Error('Consulta incompleta das OS: envio bloqueado.');
+  }
+
+  const seen = new Set<string>();
+  const pending: GcRecord[] = [];
+  for (const page of [first, ...rest]) {
+    for (const entry of page.data) {
+      const os = entry.OrdemServico || entry.ordem_servico || entry;
       const osId = id(os.id);
       if (!osId || seen.has(osId)) throw new Error('Paginação inconsistente das OS: atualize e tente novamente.');
       seen.add(osId);
       if (excluded(os)) continue;
-      if ((!Array.isArray(os.produtos) && number(os.valor_produtos) !== 0) || os.situacao_estoque == null) {
-        os = (await request(`/api/ordens_servicos/${encodeURIComponent(osId)}`)).data;
-        if (!os || id(os.id) !== osId) throw new Error('Detalhe inconsistente da OS.');
-      }
-      result.push(...pendingOsLines(os));
+      pending.push(os);
     }
   }
-  if (seen.size !== records) throw new Error('Há OS ausentes na consulta: envio bloqueado.');
+  if (seen.size !== first.count) throw new Error('Há OS ausentes na consulta: envio bloqueado.');
+
+  const detailed = await mapPool(pending, 5, async os => {
+    if ((!Array.isArray(os.produtos) && number(os.valor_produtos) !== 0) || os.situacao_estoque == null) {
+      const osId = id(os.id);
+      const full = (await request(`/api/ordens_servicos/${encodeURIComponent(osId)}`)).data;
+      if (!full || id(full.id) !== osId) throw new Error('Detalhe inconsistente da OS.');
+      return full as GcRecord;
+    }
+    return os;
+  });
+
+  const result: OsStockCommitment[] = [];
+  for (const os of detailed) result.push(...pendingOsLines(os));
   return result;
 }
+
 
 export async function fetchOsStockCommitments(): Promise<OsStockCommitment[]> {
   const rows = await readAllOsCommitments(gc);

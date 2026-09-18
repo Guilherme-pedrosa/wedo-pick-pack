@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getOS, getVenda, getProductStock } from './gestaoclick';
 import { assertDefinitiveContents } from './partialConsolidation';
-import { assertStockConflict, fetchOsStockCommitments } from './osStockCommitments';
+import { assertStockConflict, fetchOsStockCommitments, mapPool } from './osStockCommitments';
 import { documentStockLines } from '../../supabase/functions/_shared/osStockCommitments';
 import { isCancelledStatus, isExecutedStatus, type GcRecord } from './partialExecution';
 

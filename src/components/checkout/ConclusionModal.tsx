@@ -7,7 +7,7 @@ import { getStatusOS, getStatusVendas, updateOSStatus, updateVendaStatus } from 
 import { GCOrdemServico, GCVenda, PickingItem } from '@/api/types';
 import { createSeparation, snapshotPickingItems } from '@/api/separations';
 import { confirmPartialBatch } from '@/api/partialWriteoff';
-import { assertCheckoutStock, STOCK_CONFLICT_PREFIX } from '@/api/checkoutStockGuard';
+import { assertCheckoutStock } from '@/api/checkoutStockGuard';
 import { logSystemAction } from '@/lib/systemLog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -56,7 +56,6 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
   const [submitting, setSubmitting] = useState(false);
   const [observations, setObservations] = useState('');
   const [acceptedTerm, setAcceptedTerm] = useState(false);
-  const [stockConflict, setStockConflict] = useState<string | null>(null);
 
   const statusQuery = useQuery({
     queryKey: ['statuses-conclusion', session?.tipo],
@@ -86,7 +85,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
     return `${min} min ${sec} seg`;
   };
 
-  const handleConfirm = async (overrideConflict = false) => {
+  const handleConfirm = async () => {
     if (isPartialWriteoff && (forced || session.items.some(item => !item.conferido))) {
       toast.error('A baixa parcial exige a conferência completa do lote.');
       return;
@@ -112,12 +111,12 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
         targetStatusName = operation.checkout_confirmation.statusName;
         targetStatusId = operation.checkout_confirmation.statusId;
       } else if (session.tipo === 'os') {
-        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder, undefined, 'os', overrideConflict);
+        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder);
         await updateOSStatus(session.refId, freshOrder as GCOrdemServico, effectiveStatus, config.operatorName, config.gcUsuarioId);
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;
       } else {
-        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder, undefined, 'venda', overrideConflict);
+        const freshOrder = await assertCheckoutStock(session.refId, session.rawOrder, undefined, 'venda');
         await updateVendaStatus(session.refId, freshOrder as GCVenda, effectiveStatus, config.operatorName, config.gcUsuarioId);
         targetStatusName = statusQuery.data?.find(s => s.id === effectiveStatus)?.nome || '';
         targetStatusId = effectiveStatus;
@@ -189,7 +188,6 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           target_status: targetStatusName,
           partial_writeoff: session.partialWriteoff || null,
           observations: observations.trim() || null,
-          stock_conflict_override: stockConflict || null,
         },
       });
 
@@ -206,10 +204,7 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
-      if (msg.startsWith(STOCK_CONFLICT_PREFIX)) {
-        setStockConflict(msg.slice(STOCK_CONFLICT_PREFIX.length));
-        toast.warning('Peça disputada por outro pedido. Confira o aviso antes de liberar.');
-      } else if (msg === 'RATE_LIMIT') {
+      if (msg === 'RATE_LIMIT') {
         toast.warning('⏳ Limite da API atingido. Tente novamente em 30s.');
       } else if (msg === 'AUTH_ERROR') {
         toast.error('🔑 Credenciais inválidas. Verifique em Configurações.');
@@ -316,27 +311,15 @@ export default function ConclusionModal({ open, onClose, forced, onConcluded }: 
           </div>
         </div>
 
-        {stockConflict && (
-          <div className="border rounded-md p-3 space-y-2 bg-amber-50 border-amber-300">
-            <p className="text-xs font-semibold text-amber-900 flex items-center gap-1.5">
-              <AlertTriangle className="h-4 w-4" /> Peça disputada por outro pedido
-            </p>
-            <p className="text-[11px] leading-relaxed text-amber-900">{stockConflict}</p>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              A peça existe no estoque. Se você separar agora, o outro pedido ficará sem ela.
-            </p>
-          </div>
-        )}
-
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancelar</Button>
           <Button
-            onClick={() => handleConfirm(!!stockConflict)}
+            onClick={handleConfirm}
             disabled={submitting || !effectiveStatus || !acceptedTerm}
             className="bg-success text-success-foreground hover:bg-success/90"
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            {stockConflict ? 'Separar mesmo assim' : hasGCConfirmation ? 'Salvar histórico pendente' : '✓ Confirmar e Atualizar'}
+            {hasGCConfirmation ? 'Salvar histórico pendente' : '✓ Confirmar e Atualizar'}
           </Button>
         </DialogFooter>
       </DialogContent>
